@@ -1,0 +1,36 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Build & Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Backend Dependencies
+        working-directory: ./Backend
+        run: npm ci || npm install
+
+      - name: Verify Backend Syntax
+        working-directory: ./Backend
+        run: node -c server.js
+
+      - name: Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm ci || npm install
+
+      - name: Build Frontend
+        working-directory: ./Frontend
+        run: npm run build

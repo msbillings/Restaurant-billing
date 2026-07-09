@@ -1,0 +1,9 @@
+node_modules
+Desktop/dist
+Desktop/release
+Frontend/node_modules
+Backend/node_modules
+SuperAdminFrontend/node_modules
+SuperAdminServer/node_modules
+.git
+.gemini

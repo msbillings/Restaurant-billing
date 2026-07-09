@@ -1,0 +1,953 @@
+{
+  "timestamp": "2026-07-09T02:56:53.211Z",
+  "bills": [
+    {
+      "_id": "6a4b558cd7345c8d197c2dbf",
+      "tableNo": "TAK-972941",
+      "items": [
+        {
+          "name": "Mutton Chilly (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 360,
+          "_id": "6a4b558cd7345c8d197c2dc0"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T07:13:16.121Z",
+      "updatedAt": "2026-07-06T09:56:52.602Z",
+      "__v": 0,
+      "billNumber": "MS0001",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b560dd7345c8d197c3162",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Fish 65",
+          "price": 340,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 340,
+          "_id": "6a4b560dd7345c8d197c3163"
+        }
+      ],
+      "subtotal": 340,
+      "tax": 5,
+      "discount": 0,
+      "total": 357,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T07:15:25.165Z",
+      "updatedAt": "2026-07-06T07:19:35.694Z",
+      "__v": 0,
+      "billNumber": "MS0002",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b5655d7345c8d197c3362",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Egg Roast",
+          "price": 180,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 180,
+          "_id": "6a4b5655d7345c8d197c3363"
+        }
+      ],
+      "subtotal": 180,
+      "tax": 5,
+      "discount": 0,
+      "total": 189,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T07:16:37.427Z",
+      "updatedAt": "2026-07-06T07:19:54.044Z",
+      "__v": 0,
+      "billNumber": "MS0003",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b5692d7345c8d197c33a5",
+      "tableNo": "Ground Floor - Cabin 1",
+      "items": [
+        {
+          "name": "Egg Manchurian",
+          "price": 180,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 180,
+          "_id": "6a4b5692d7345c8d197c33a6"
+        }
+      ],
+      "subtotal": 180,
+      "tax": 5,
+      "discount": 0,
+      "total": 189,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T07:17:38.051Z",
+      "updatedAt": "2026-07-06T07:30:50.133Z",
+      "__v": 0,
+      "billNumber": "MS0005",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b56ecd7345c8d197c3430",
+      "tableNo": "Ground Floor - table 4",
+      "items": [
+        {
+          "name": "Paneer Tikka",
+          "price": 260,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 260,
+          "_id": "6a4b56ecd7345c8d197c3431"
+        }
+      ],
+      "subtotal": 260,
+      "tax": 5,
+      "discount": 0,
+      "total": 273,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T07:19:08.859Z",
+      "updatedAt": "2026-07-06T07:29:54.168Z",
+      "__v": 0,
+      "billNumber": "MS0004",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b5988d7345c8d197c36d7",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Mutton Schezwan (Bone Less)",
+          "price": 360,
+          "quantity": 5,
+          "printedQuantity": 5,
+          "total": 1800,
+          "_id": "6a4b69296934095b4d59b7c6"
+        },
+        {
+          "name": "Mutton 65 (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b69296934095b4d59b7c7"
+        }
+      ],
+      "subtotal": 2160,
+      "tax": 5,
+      "discount": 0,
+      "total": 2268,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Schezwan (Bone Less)",
+              "quantity": 2,
+              "_id": "6a4b67036934095b4d59b58a"
+            }
+          ],
+          "createdAt": "2026-07-06T08:27:47.635Z",
+          "_id": "6a4b67036934095b4d59b589"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Mutton Schezwan (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b67bd6934095b4d59b64b"
+            }
+          ],
+          "createdAt": "2026-07-06T08:30:53.910Z",
+          "_id": "6a4b67bd6934095b4d59b64a"
+        },
+        {
+          "kotNumber": "KOT-3",
+          "items": [
+            {
+              "name": "Mutton 65 (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b67d96934095b4d59b6a7"
+            }
+          ],
+          "createdAt": "2026-07-06T08:31:21.440Z",
+          "_id": "6a4b67d96934095b4d59b6a6"
+        },
+        {
+          "kotNumber": "KOT-4",
+          "items": [
+            {
+              "name": "Mutton Schezwan (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b68e16934095b4d59b791"
+            }
+          ],
+          "createdAt": "2026-07-06T08:35:45.037Z",
+          "_id": "6a4b68e16934095b4d59b790"
+        },
+        {
+          "kotNumber": "KOT-5",
+          "items": [
+            {
+              "name": "Mutton Schezwan (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b692a6934095b4d59b7da"
+            }
+          ],
+          "createdAt": "2026-07-06T08:36:58.478Z",
+          "_id": "6a4b692a6934095b4d59b7d9"
+        }
+      ],
+      "createdAt": "2026-07-06T07:30:16.525Z",
+      "updatedAt": "2026-07-06T08:45:06.554Z",
+      "__v": 14,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0007",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b59b9d7345c8d197c3788",
+      "tableNo": "Ground Floor - Cabin 1",
+      "items": [
+        {
+          "name": "Mutton Pepper (Bone Less)",
+          "price": 360,
+          "quantity": 3,
+          "printedQuantity": 3,
+          "total": 1080,
+          "_id": "6a4b66a96934095b4d59b4c5"
+        },
+        {
+          "name": "Mutton Chilly (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b66a96934095b4d59b4c6"
+        }
+      ],
+      "subtotal": 1440,
+      "tax": 5,
+      "discount": 0,
+      "total": 1512,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Pepper (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b59d6d7345c8d197c37ab"
+            }
+          ],
+          "createdAt": "2026-07-06T07:31:34.964Z",
+          "_id": "6a4b59d6d7345c8d197c37aa"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Mutton Chilly (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b5c94d7345c8d197c390f"
+            }
+          ],
+          "createdAt": "2026-07-06T07:43:16.974Z",
+          "_id": "6a4b5c94d7345c8d197c390e"
+        },
+        {
+          "kotNumber": "KOT-3",
+          "items": [
+            {
+              "name": "Mutton Pepper (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b66886934095b4d59b47a"
+            }
+          ],
+          "createdAt": "2026-07-06T08:25:44.453Z",
+          "_id": "6a4b66886934095b4d59b479"
+        },
+        {
+          "kotNumber": "KOT-4",
+          "items": [
+            {
+              "name": "Mutton Pepper (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b66aa6934095b4d59b4dd"
+            }
+          ],
+          "createdAt": "2026-07-06T08:26:18.652Z",
+          "_id": "6a4b66aa6934095b4d59b4dc"
+        }
+      ],
+      "createdAt": "2026-07-06T07:31:05.982Z",
+      "updatedAt": "2026-07-06T08:44:35.557Z",
+      "__v": 9,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0006",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b6c146934095b4d59ba9c",
+      "tableNo": "TAK-757199",
+      "items": [
+        {
+          "name": "Fish Chilly",
+          "price": 340,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 340,
+          "_id": "6a4b6c166934095b4d59bab3"
+        }
+      ],
+      "subtotal": 340,
+      "tax": 5,
+      "discount": 0,
+      "total": 357,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Fish Chilly",
+              "quantity": 1,
+              "_id": "6a4b6c176934095b4d59babd"
+            }
+          ],
+          "createdAt": "2026-07-06T08:49:27.958Z",
+          "_id": "6a4b6c176934095b4d59babc"
+        }
+      ],
+      "createdAt": "2026-07-06T08:49:24.426Z",
+      "updatedAt": "2026-07-06T09:57:09.247Z",
+      "__v": 2,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0011",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b6c5c6934095b4d59bb32",
+      "tableNo": "TAK-826522",
+      "items": [
+        {
+          "name": "Fish Chilly",
+          "price": 340,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 340,
+          "_id": "6a4b6c5c6934095b4d59bb33"
+        }
+      ],
+      "subtotal": 340,
+      "tax": 5,
+      "discount": 0,
+      "total": 357,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T08:50:36.922Z",
+      "updatedAt": "2026-07-06T08:50:42.044Z",
+      "__v": 0,
+      "billNumber": "MS0008",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b6dc26934095b4d59bc9c",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b6dc26934095b4d59bc9d"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Roast",
+              "quantity": 1,
+              "_id": "6a4b6dc36934095b4d59bca6"
+            }
+          ],
+          "createdAt": "2026-07-06T08:56:35.686Z",
+          "_id": "6a4b6dc36934095b4d59bca5"
+        }
+      ],
+      "createdAt": "2026-07-06T08:56:34.404Z",
+      "updatedAt": "2026-07-06T08:56:49.361Z",
+      "__v": 1,
+      "billNumber": "MS0009",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b6de06934095b4d59bd36",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 2,
+          "printedQuantity": 2,
+          "total": 720,
+          "_id": "6a4b6deb6934095b4d59bd54"
+        },
+        {
+          "name": "Mutton Chilly (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b6deb6934095b4d59bd55"
+        }
+      ],
+      "subtotal": 1080,
+      "tax": 5,
+      "discount": 0,
+      "total": 1134,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Roast",
+              "quantity": 2,
+              "_id": "6a4b6de16934095b4d59bd42"
+            },
+            {
+              "name": "Mutton Chilly (Bone Less)",
+              "quantity": 2,
+              "_id": "6a4b6de16934095b4d59bd43"
+            }
+          ],
+          "createdAt": "2026-07-06T08:57:05.701Z",
+          "_id": "6a4b6de16934095b4d59bd41"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Mutton Chilly (Bone Less)",
+              "quantity": -1,
+              "_id": "6a4b6dec6934095b4d59bd67"
+            }
+          ],
+          "createdAt": "2026-07-06T08:57:16.667Z",
+          "_id": "6a4b6dec6934095b4d59bd66"
+        }
+      ],
+      "createdAt": "2026-07-06T08:57:04.427Z",
+      "updatedAt": "2026-07-06T10:32:24.075Z",
+      "__v": 3,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0016",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b6e016934095b4d59bd8c",
+      "tableNo": "Ground Floor - T-4",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b6e016934095b4d59bd8d"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Roast",
+              "quantity": 1,
+              "_id": "6a4b6e026934095b4d59bd97"
+            }
+          ],
+          "createdAt": "2026-07-06T08:57:38.361Z",
+          "_id": "6a4b6e026934095b4d59bd96"
+        }
+      ],
+      "createdAt": "2026-07-06T08:57:37.044Z",
+      "updatedAt": "2026-07-06T10:32:04.097Z",
+      "__v": 1,
+      "billNumber": "MS0014",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b709201e758795dcde9e0",
+      "tableNo": "TAK-901836",
+      "items": [
+        {
+          "name": "Mutton 65 (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 360,
+          "_id": "6a4b709201e758795dcde9e1"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T09:08:34.428Z",
+      "updatedAt": "2026-07-06T09:08:39.958Z",
+      "__v": 0,
+      "billNumber": "MS0010",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b7e0001e758795dcdee31",
+      "tableNo": "TAK-346156",
+      "items": [
+        {
+          "name": "Mutton Pepper (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 360,
+          "_id": "6a4b7e0001e758795dcdee32"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T10:05:52.648Z",
+      "updatedAt": "2026-07-06T10:06:06.954Z",
+      "__v": 0,
+      "billNumber": "MS0012",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b7e2201e758795dcdeecc",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Mutton Chilly (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b7e2201e758795dcdeecd"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Chilly (Bone Less)",
+              "quantity": 1,
+              "_id": "6a4b7e2401e758795dcdeedb"
+            }
+          ],
+          "createdAt": "2026-07-06T10:06:28.195Z",
+          "_id": "6a4b7e2401e758795dcdeeda"
+        }
+      ],
+      "createdAt": "2026-07-06T10:06:26.890Z",
+      "updatedAt": "2026-07-06T10:32:14.577Z",
+      "__v": 1,
+      "billNumber": "MS0015",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b7e9c01e758795dcdefc6",
+      "tableNo": "TAK-346156",
+      "items": [
+        {
+          "name": "Mutton Chilly (Bone Less)",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 360,
+          "_id": "6a4b7e9c01e758795dcdefc7"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T10:08:28.018Z",
+      "updatedAt": "2026-07-06T10:21:43.763Z",
+      "__v": 0,
+      "billNumber": "MS0013",
+      "paymentMode": "UPI",
+      "upiApp": "PhonePe"
+    },
+    {
+      "_id": "6a4b84b201e758795dcdf569",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Fish 65",
+          "price": 340,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 340,
+          "_id": "6a4b84dc01e758795dcdf618"
+        },
+        {
+          "name": "Water Bottle",
+          "price": 20,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 20,
+          "_id": "6a4b84dc01e758795dcdf619"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 5,
+      "discount": 0,
+      "total": 378,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T10:34:26.680Z",
+      "updatedAt": "2026-07-06T10:35:14.383Z",
+      "__v": 2,
+      "billNumber": "MS0018",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4b867a01e758795dcdf76e",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b868201e758795dcdf791"
+        }
+      ],
+      "subtotal": 360,
+      "tax": 0,
+      "discount": 0,
+      "total": 360,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Open",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Roast",
+              "quantity": 1,
+              "_id": "6a4b867b01e758795dcdf779"
+            }
+          ],
+          "createdAt": "2026-07-06T10:42:03.487Z",
+          "_id": "6a4b867b01e758795dcdf778"
+        }
+      ],
+      "createdAt": "2026-07-06T10:42:02.158Z",
+      "updatedAt": "2026-07-06T10:42:32.805Z",
+      "__v": 2,
+      "deliveryStatus": "Pending"
+    },
+    {
+      "_id": "6a4b930901e758795dcdfb2e",
+      "tableNo": "Ground Floor - my table",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 360,
+          "_id": "6a4b932c01e758795dcdfbb3"
+        },
+        {
+          "name": "Fish Manchuriya",
+          "price": 340,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 340,
+          "_id": "6a4b932c01e758795dcdfbb4"
+        }
+      ],
+      "subtotal": 700,
+      "tax": 5,
+      "discount": 0,
+      "total": 735,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Mutton Roast",
+              "quantity": 1,
+              "_id": "6a4b930a01e758795dcdfb39"
+            }
+          ],
+          "createdAt": "2026-07-06T11:35:38.442Z",
+          "_id": "6a4b930a01e758795dcdfb38"
+        }
+      ],
+      "createdAt": "2026-07-06T11:35:37.005Z",
+      "updatedAt": "2026-07-06T11:36:51.094Z",
+      "__v": 3,
+      "billNumber": "MS0019",
+      "deliveryStatus": "Pending",
+      "paymentMode": "UPI",
+      "upiApp": "PhonePe"
+    },
+    {
+      "_id": "6a4b938501e758795dcdfceb",
+      "tableNo": "Ground Floor - Table 3",
+      "items": [
+        {
+          "name": "Mutton Roast",
+          "price": 360,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 360,
+          "_id": "6a4b938501e758795dcdfcec"
+        },
+        {
+          "name": "Water Bottle",
+          "price": 20,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 20,
+          "_id": "6a4b938501e758795dcdfced"
+        }
+      ],
+      "subtotal": 380,
+      "tax": 5,
+      "discount": 0,
+      "total": 399,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-06T11:37:41.612Z",
+      "updatedAt": "2026-07-06T11:44:39.125Z",
+      "__v": 0,
+      "billNumber": "MS0020",
+      "paymentMode": "Cash"
+    }
+  ],
+  "menuItems": [],
+  "inventory": []
+}

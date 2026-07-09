@@ -1,0 +1,87 @@
+config:
+  target: 'http://localhost:5000'
+  phases:
+    # Warm-up phase
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    # Normal load - simulating 150 orders/day = ~6 orders/hour = 0.1 orders/min
+    - duration: 300
+      arrivalRate: 2
+      name: "Normal load"
+    # Peak load - simulating lunch/dinner rush
+    - duration: 180
+      arrivalRate: 10
+      name: "Peak load"
+    # Stress test
+    - duration: 120
+      arrivalRate: 20
+      name: "Stress test"
+  variables:
+    baseUrl: 'http://localhost:5000/api'
+    # You'll need to set this token after login
+    authToken: 'YOUR_AUTH_TOKEN_HERE'
+
+scenarios:
+  - name: "Billing Operations"
+    flow:
+      # Login
+      - post:
+          url: "{{ baseUrl }}/auth/login"
+          json:
+            username: "admin"
+            password: "password123"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      
+      # Create Order
+      - post:
+          url: "{{ baseUrl }}/bills/save"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            tableNo: "T{{ $randomInt(1, 20) }}"
+            items:
+              - name: "Pizza"
+                price: 500
+                quantity: {{ $randomInt(1, 3) }}
+                total: 500
+              - name: "Burger"
+                price: 200
+                quantity: {{ $randomInt(1, 2) }}
+                total: 200
+            billType: "Dine-In"
+          capture:
+            - json: "$._id"
+              as: "orderId"
+      
+      # Generate Bill
+      - post:
+          url: "{{ baseUrl }}/bills/generate/{{ orderId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            discount: {{ $randomInt(0, 100) }}
+            tax: {{ $randomInt(5, 18) }}
+      
+      # Settle Bill
+      - post:
+          url: "{{ baseUrl }}/bills/settle/{{ orderId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            paymentMode: "{{ $pick(['Cash', 'UPI', 'Card']) }}"
+      
+      # Get Daily Stats
+      - get:
+          url: "{{ baseUrl }}/bills/stats"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+      
+      # Get Bills List
+      - get:
+          url: "{{ baseUrl }}/bills?page=1&limit=50"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+

@@ -1,0 +1,56 @@
+name: Build and Release MS Billing
+
+on:
+  push:
+    tags:
+      - 'v*' # This triggers the workflow ONLY when you push a tag like v1.4.0
+  workflow_dispatch: # This adds the "Run workflow" button!
+
+jobs:
+  release:
+    name: Build & Publish for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    
+    # This permission is required for the automatic GITHUB_TOKEN to upload releases
+    permissions:
+      contents: write 
+
+    steps:
+      - name: 📥 Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 📦 Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm install
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./Frontend
+        run: npm run build
+
+      - name: 📦 Install Backend Dependencies
+        working-directory: ./Backend
+        run: npm install --omit=dev
+
+      - name: 📦 Install Desktop Dependencies
+        working-directory: ./Desktop
+        run: npm install
+
+      - name: 🔄 Run Desktop Prebuild (Combines files)
+        working-directory: ./Desktop
+        run: npm run prebuild
+
+      - name: 🚀 Build and Publish App to GitHub Releases
+        working-directory: ./Desktop
+        # Runs electron-builder on Mac to build .dmg, and on Windows to build .exe
+        # The -p always flag automatically uploads it to GitHub Releases
+        run: npx electron-builder -p always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,63 @@
+{
+  "name": "msbilling",
+  "version": "1.4.5",
+  "description": "Premium Restaurant Management System, Billing Software",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "prebuild": "node build.js",
+    "dist": "npm run prebuild && electron-builder --mac --win"
+  },
+  "build": {
+    "appId": "com.mstechhive.msbilling",
+    "productName": "msbilling",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "frontend/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["**/*", ".env"]
+      }
+    ],
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "MS Billings"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "maheer05112001-spec",
+        "repo": "MS-Restaurant-billings"
+      }
+    ]
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.2.3",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "restaurantName": "New Test Restaurant",
+    "email": "test_b430@msbillings.com",
+    "password": "password123",
+    "licenseKey": "MSBILL-2BA5-4994-6291",
+    "appUsername": "admin1",
+    "appPassword": "password123"
+  },
+  {
+    "restaurantName": "Test Restaurant 1",
+    "email": "test1@restaurant.com",
+    "password": "TestPass@1",
+    "licenseKey": "MSBILL-B1F7-D4F5-6B56",
+    "appUsername": "admin2",
+    "appPassword": "TestPass@1"
+  },
+  {
+    "restaurantName": "Test Restaurant 10",
+    "email": "test10@restaurant.com",
+    "password": "TestPass@10",
+    "licenseKey": "MSBILL-63C9-E828-D082",
+    "appUsername": "admin3",
+    "appPassword": "TestPass@10"
+  },
+  {
+    "restaurantName": "Test Restaurant 2",
+    "email": "test2@restaurant.com",
+    "password": "TestPass@2",
+    "licenseKey": "MSBILL-8447-C6A5-5771",
+    "appUsername": "admin4",
+    "appPassword": "TestPass@2"
+  },
+  {
+    "restaurantName": "Test Restaurant 3",
+    "email": "test3@restaurant.com",
+    "password": "TestPass@3",
+    "licenseKey": "MSBILL-3C66-E12C-1540",
+    "appUsername": "admin5",
+    "appPassword": "TestPass@3"
+  },
+  {
+    "restaurantName": "Test Restaurant 4",
+    "email": "test4@restaurant.com",
+    "password": "TestPass@4",
+    "licenseKey": "MSBILL-85B8-8641-0224",
+    "appUsername": "admin6",
+    "appPassword": "TestPass@4"
+  },
+  {
+    "restaurantName": "Test Restaurant 5",
+    "email": "test5@restaurant.com",
+    "password": "TestPass@5",
+    "licenseKey": "MSBILL-CBB7-63BE-4B7C",
+    "appUsername": "admin7",
+    "appPassword": "TestPass@5"
+  },
+  {
+    "restaurantName": "Test Restaurant 6",
+    "email": "test6@restaurant.com",
+    "password": "TestPass@6",
+    "licenseKey": "MSBILL-5D50-97B9-FE5D",
+    "appUsername": "admin8",
+    "appPassword": "TestPass@6"
+  },
+  {
+    "restaurantName": "Test Restaurant 7",
+    "email": "test7@restaurant.com",
+    "password": "TestPass@7",
+    "licenseKey": "MSBILL-285D-0DB1-4E0A",
+    "appUsername": "admin9",
+    "appPassword": "TestPass@7"
+  },
+  {
+    "restaurantName": "Test Restaurant 8",
+    "email": "test8@restaurant.com",
+    "password": "TestPass@8",
+    "licenseKey": "MSBILL-68B0-6516-8EDD",
+    "appUsername": "admin10",
+    "appPassword": "TestPass@8"
+  },
+  {
+    "restaurantName": "Test Restaurant 9",
+    "email": "test9@restaurant.com",
+    "password": "TestPass@9",
+    "licenseKey": "MSBILL-7498-F16F-F357",
+    "appUsername": "admin11",
+    "appPassword": "TestPass@9"
+  }
+]

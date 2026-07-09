@@ -1,0 +1,232 @@
+[
+  {
+    "restaurantName": "Test Restaurant 1",
+    "email": "test1@restaurant.com",
+    "password": "TestPass@1",
+    "licenseKey": "MSBILL-4944-A6F8-4F35",
+    "users": [
+      {
+        "username": "admin1",
+        "role": "Admin",
+        "password": "TestPass@1"
+      },
+      {
+        "username": "cashier1",
+        "role": "Cashier",
+        "password": "CashierPass@1"
+      },
+      {
+        "username": "captain1",
+        "role": "Captain",
+        "password": "CaptainPass@1"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 2",
+    "email": "test2@restaurant.com",
+    "password": "TestPass@2",
+    "licenseKey": "MSBILL-30C6-9C4E-28B6",
+    "users": [
+      {
+        "username": "admin2",
+        "role": "Admin",
+        "password": "TestPass@2"
+      },
+      {
+        "username": "cashier2",
+        "role": "Cashier",
+        "password": "CashierPass@2"
+      },
+      {
+        "username": "captain2",
+        "role": "Captain",
+        "password": "CaptainPass@2"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 3",
+    "email": "test3@restaurant.com",
+    "password": "TestPass@3",
+    "licenseKey": "MSBILL-937E-1205-0254",
+    "users": [
+      {
+        "username": "admin3",
+        "role": "Admin",
+        "password": "TestPass@3"
+      },
+      {
+        "username": "cashier3",
+        "role": "Cashier",
+        "password": "CashierPass@3"
+      },
+      {
+        "username": "captain3",
+        "role": "Captain",
+        "password": "CaptainPass@3"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 4",
+    "email": "test4@restaurant.com",
+    "password": "TestPass@4",
+    "licenseKey": "MSBILL-A51B-BE3D-9161",
+    "users": [
+      {
+        "username": "admin4",
+        "role": "Admin",
+        "password": "TestPass@4"
+      },
+      {
+        "username": "cashier4",
+        "role": "Cashier",
+        "password": "CashierPass@4"
+      },
+      {
+        "username": "captain4",
+        "role": "Captain",
+        "password": "CaptainPass@4"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 5",
+    "email": "test5@restaurant.com",
+    "password": "TestPass@5",
+    "licenseKey": "MSBILL-EF2A-3CE8-6E6E",
+    "users": [
+      {
+        "username": "admin5",
+        "role": "Admin",
+        "password": "TestPass@5"
+      },
+      {
+        "username": "cashier5",
+        "role": "Cashier",
+        "password": "CashierPass@5"
+      },
+      {
+        "username": "captain5",
+        "role": "Captain",
+        "password": "CaptainPass@5"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 6",
+    "email": "test6@restaurant.com",
+    "password": "TestPass@6",
+    "licenseKey": "MSBILL-5882-4F41-145C",
+    "users": [
+      {
+        "username": "admin6",
+        "role": "Admin",
+        "password": "TestPass@6"
+      },
+      {
+        "username": "cashier6",
+        "role": "Cashier",
+        "password": "CashierPass@6"
+      },
+      {
+        "username": "captain6",
+        "role": "Captain",
+        "password": "CaptainPass@6"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 7",
+    "email": "test7@restaurant.com",
+    "password": "TestPass@7",
+    "licenseKey": "MSBILL-02E4-B156-930D",
+    "users": [
+      {
+        "username": "admin7",
+        "role": "Admin",
+        "password": "TestPass@7"
+      },
+      {
+        "username": "cashier7",
+        "role": "Cashier",
+        "password": "CashierPass@7"
+      },
+      {
+        "username": "captain7",
+        "role": "Captain",
+        "password": "CaptainPass@7"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 8",
+    "email": "test8@restaurant.com",
+    "password": "TestPass@8",
+    "licenseKey": "MSBILL-08C6-E4E7-84A9",
+    "users": [
+      {
+        "username": "admin8",
+        "role": "Admin",
+        "password": "TestPass@8"
+      },
+      {
+        "username": "cashier8",
+        "role": "Cashier",
+        "password": "CashierPass@8"
+      },
+      {
+        "username": "captain8",
+        "role": "Captain",
+        "password": "CaptainPass@8"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 9",
+    "email": "test9@restaurant.com",
+    "password": "TestPass@9",
+    "licenseKey": "MSBILL-227D-459C-BD98",
+    "users": [
+      {
+        "username": "admin9",
+        "role": "Admin",
+        "password": "TestPass@9"
+      },
+      {
+        "username": "cashier9",
+        "role": "Cashier",
+        "password": "CashierPass@9"
+      },
+      {
+        "username": "captain9",
+        "role": "Captain",
+        "password": "CaptainPass@9"
+      }
+    ]
+  },
+  {
+    "restaurantName": "Test Restaurant 10",
+    "email": "test10@restaurant.com",
+    "password": "TestPass@10",
+    "licenseKey": "MSBILL-4FDF-4B30-40EB",
+    "users": [
+      {
+        "username": "admin10",
+        "role": "Admin",
+        "password": "TestPass@10"
+      },
+      {
+        "username": "cashier10",
+        "role": "Cashier",
+        "password": "CashierPass@10"
+      },
+      {
+        "username": "captain10",
+        "role": "Captain",
+        "password": "CaptainPass@10"
+      }
+    ]
+  }
+]

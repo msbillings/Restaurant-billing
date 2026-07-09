@@ -1,0 +1,12 @@
+{
+  "appId": "com.msbilling.app",
+  "appName": "MS Billing Restaurant",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

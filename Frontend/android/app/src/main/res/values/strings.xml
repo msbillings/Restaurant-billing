@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MS Billing Restaurant</string>
+    <string name="title_activity_main">MS Billing Restaurant</string>
+    <string name="package_name">com.msbilling.app</string>
+    <string name="custom_url_scheme">com.msbilling.app</string>
+</resources>
