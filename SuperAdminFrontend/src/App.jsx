@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import Login from './Login';
+
+// Axios Interceptor for JWT
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('superadmin_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
 
 function App() {
   const [clients, setClients] = useState([]);
@@ -11,6 +23,8 @@ function App() {
   const [filterStatus, setFilterStatus] = useState('All');
   const [signupsFilter, setSignupsFilter] = useState('7days');
   const [currentTab, setCurrentTab] = useState('Dashboard');
+  const [token, setToken] = useState(localStorage.getItem('superadmin_token'));
+  const [adminUser, setAdminUser] = useState(JSON.parse(localStorage.getItem('superadmin_user') || 'null'));
   
   // Global Analytics State
   const [globalStats, setGlobalStats] = useState(null);
@@ -47,8 +61,21 @@ function App() {
   };
 
   useEffect(() => {
-    fetchClients();
-  }, []);
+    if (token) {
+      fetchClients();
+    }
+  }, [token]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('superadmin_token');
+    localStorage.removeItem('superadmin_user');
+    setToken(null);
+    setAdminUser(null);
+  };
+
+  if (!token) {
+    return <Login onLogin={(t) => setToken(t)} />;
+  }
 
   const handleOverridePassword = async (id, name) => {
     const newPassword = prompt(`Enter new password for ${name}:`);
@@ -270,13 +297,19 @@ function App() {
               <span className="font-black text-xl tracking-tight">MS<span className="text-primary">BILLING</span> <span className="font-medium text-gray-400">SUPER ADMIN</span></span>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-full border border-border">
-                <Activity className="w-4 h-4 text-green-500 animate-pulse" />
+              <div className="bg-background/50 px-4 py-1.5 rounded-full border border-border flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                 <span className="text-sm font-medium text-gray-300">System Online</span>
               </div>
-              <button onClick={fetchClients} className="p-2 bg-surface hover:bg-gray-700 rounded-lg border border-border transition-colors">
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin text-primary' : 'text-gray-300'}`} />
-              </button>
+              <div className="flex items-center gap-3 ml-2 border-l border-border pl-4">
+                <div className="text-right">
+                  <p className="text-sm font-bold">{adminUser?.name || 'Admin'}</p>
+                  <p className="text-xs text-gray-500">{adminUser?.role || 'SuperAdmin'}</p>
+                </div>
+                <button onClick={handleLogout} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
