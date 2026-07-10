@@ -89,13 +89,13 @@ export const verifyRegistration = async (req, res) => {
     });
 
     if (verification.verified && verification.registrationInfo) {
-      const { credentialPublicKey, credentialID, counter } = verification.registrationInfo;
+      const { credential } = verification.registrationInfo;
 
       admin.passkeys.push({
-        credentialID: Buffer.from(credentialID).toString('base64url'),
-        credentialPublicKey: Buffer.from(credentialPublicKey).toString('base64url'),
-        counter,
-        transports: req.body.response.transports || [],
+        credentialID: credential.id,
+        credentialPublicKey: Buffer.from(credential.publicKey).toString('base64url'),
+        counter: credential.counter,
+        transports: credential.transports || [],
       });
 
       admin.currentChallenge = undefined;
@@ -152,9 +152,9 @@ export const verifyAuth = async (req, res) => {
       expectedChallenge: admin.currentChallenge,
       expectedOrigin: origin,
       expectedRPID: rpID,
-      authenticator: {
-        credentialID: Buffer.from(passkey.credentialID, 'base64url'),
-        credentialPublicKey: Buffer.from(passkey.credentialPublicKey, 'base64url'),
+      credential: {
+        id: passkey.credentialID, // already a base64url string
+        publicKey: Buffer.from(passkey.credentialPublicKey, 'base64url'),
         counter: passkey.counter,
         transports: passkey.transports,
       },
