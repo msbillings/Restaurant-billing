@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
+import { startRegistration } from '@simplewebauthn/browser';
 
 // Axios Interceptor for JWT
 axios.interceptors.request.use((config) => {
@@ -76,6 +77,29 @@ function App() {
   if (!token) {
     return <Login onLogin={(t) => setToken(t)} />;
   }
+
+  const handleRegisterFingerprint = async () => {
+    try {
+      // 1. Get registration options
+      const resp = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/register/generate');
+      const options = resp.data;
+
+      // 2. Start biometric prompt
+      const attResp = await startRegistration(options);
+
+      // 3. Verify registration
+      const verificationResp = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/register/verify', attResp);
+
+      if (verificationResp.data.verified) {
+        alert('🎉 Fingerprint registered successfully! You can now use TouchID to login.');
+      } else {
+        alert('Failed to register fingerprint.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error registering fingerprint. Your device may not support it, or you canceled the prompt.');
+    }
+  };
 
   const handleOverridePassword = async (id, name) => {
     const newPassword = prompt(`Enter new password for ${name}:`);
@@ -306,7 +330,10 @@ function App() {
                   <p className="text-sm font-bold">{adminUser?.name || 'Admin'}</p>
                   <p className="text-xs text-gray-500">{adminUser?.role || 'SuperAdmin'}</p>
                 </div>
-                <button onClick={handleLogout} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
+                <button onClick={handleRegisterFingerprint} title="Register Fingerprint" className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl transition">
+                  <Fingerprint className="w-5 h-5" />
+                </button>
+                <button onClick={handleLogout} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
