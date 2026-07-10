@@ -57,6 +57,7 @@ export const getRegistrationOptions = async (req, res) => {
       rpID,
       userID: Buffer.from(admin._id.toString()),
       userName: admin.email,
+      userDisplayName: admin.name,
       attestationType: 'none',
       authenticatorSelection: {
         residentKey: 'preferred',
