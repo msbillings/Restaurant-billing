@@ -97,3 +97,56 @@ export const getGlobalAnalytics = async (req, res) => {
     res.status(500).json({ message: 'Error calculating global analytics', error: error.message });
   }
 };
+
+export const exportGlobalCustomers = async (req, res) => {
+  try {
+    const clients = await Client.find({ status: 'Active' });
+    
+    if (!clients || clients.length === 0) {
+      return res.status(404).send('No active clients found');
+    }
+
+    const baseUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/restopos_superadmin';
+    const connectionPart = baseUri.split('?')[0];
+    const queryPart = baseUri.includes('?') ? `?${baseUri.split('?')[1]}` : '';
+    const lastSlashIndex = connectionPart.lastIndexOf('/');
+    const uriPrefix = connectionPart.substring(0, lastSlashIndex);
+
+    let csvContent = 'Restaurant Name,Customer Name,Phone,Email,Total Orders,Total Spent\n';
+
+    for (const client of clients) {
+      if (!client.databaseName) continue;
+      
+      const tenantUri = `${uriPrefix}/${client.databaseName}${queryPart}`;
+      
+      try {
+        const tenantConn = await mongoose.createConnection(tenantUri).asPromise();
+        const customersCollection = tenantConn.collection('customers');
+        
+        const customers = await customersCollection.find({}).toArray();
+        
+        customers.forEach(c => {
+          const name = c.name ? c.name.replace(/,/g, '') : 'Unknown';
+          const phone = c.phone || c.phoneNo || '';
+          const email = c.email ? c.email.replace(/,/g, '') : '';
+          const totalOrders = c.totalOrders || 0;
+          const totalSpent = c.totalSpent || 0;
+          
+          csvContent += `"${client.restaurantName}","${name}","${phone}","${email}",${totalOrders},${totalSpent}\n`;
+        });
+
+        await tenantConn.close();
+      } catch (err) {
+        console.error(`Error querying tenant DB ${client.databaseName}:`, err.message);
+      }
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="global_customers_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.status(200).send(csvContent);
+
+  } catch (error) {
+    console.error('Export Customers Error:', error);
+    res.status(500).send('Error exporting customers');
+  }
+};

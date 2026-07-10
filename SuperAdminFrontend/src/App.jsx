@@ -355,7 +355,7 @@ function App() {
                 <BarChart data={monthlyData}>
                   <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{fill: '#374151'}} contentStyle={{backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff'}} />
-                  <Bar dataKey="signups" fill="#ff5c35" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="signups" fill="#ff5c35" radius={[4, 4, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -549,14 +549,22 @@ function App() {
                 <h2 className="text-2xl font-black mb-2">Global Platform Analytics</h2>
                 <p className="text-gray-400 text-sm">Extracts data directly from all isolated tenant databases across the platform.</p>
               </div>
-              <button 
-                onClick={fetchGlobalStats}
-                disabled={loadingStats}
-                className="bg-primary hover:bg-primary-hover disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
-              >
-                {loadingStats ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
-                {loadingStats ? 'Calculating Global Data...' : 'Calculate Global Stats'}
-              </button>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => window.open('https://restaurant-superadmin-api-maheer.vercel.app/api/analytics/customers/export', '_blank')}
+                  className="bg-surface hover:bg-gray-700 border border-border text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+                >
+                  Export All Customers (CSV)
+                </button>
+                <button 
+                  onClick={fetchGlobalStats}
+                  disabled={loadingStats}
+                  className="bg-primary hover:bg-primary-hover disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+                >
+                  {loadingStats ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
+                  {loadingStats ? 'Calculating Global Data...' : 'Calculate Global Stats'}
+                </button>
+              </div>
             </div>
 
             {globalStats ? (
@@ -584,18 +592,15 @@ function App() {
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary">
                     Most Ordered Items Globally
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {globalStats.topItems.map((item, idx) => (
-                      <div key={idx} className="bg-background border border-border rounded-lg p-4 flex justify-between items-center">
-                        <div>
-                          <p className="font-bold">{item.name}</p>
-                          <p className="text-xs text-gray-400">Ordered {item.quantity} times</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-green-400 font-bold">₹{item.revenue.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={globalStats.topItems} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
+                        <XAxis type="number" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis type="category" dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} width={100} />
+                        <Tooltip cursor={{fill: '#374151'}} contentStyle={{backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff'}} />
+                        <Bar dataKey="quantity" fill="#10b981" radius={[0, 4, 4, 0]} maxBarSize={30} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               </div>
