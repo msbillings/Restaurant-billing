@@ -7,6 +7,7 @@ const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [bioLoading, setBioLoading] = useState(false);
   const [error, setError] = useState('');
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
 
@@ -34,7 +35,9 @@ const Login = ({ onLogin }) => {
   };
 
   const handleBiometricLogin = async () => {
+    if (bioLoading) return;
     setError('');
+    setBioLoading(true);
     try {
       // 1. Get auth options from server
       const resp = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/authenticate/generate');
@@ -57,6 +60,8 @@ const Login = ({ onLogin }) => {
       console.error(err);
       const errDetails = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || err.message;
       setError(`Biometric authentication failed: ${errDetails}`);
+    } finally {
+      setBioLoading(false);
     }
   };
 
@@ -128,21 +133,30 @@ const Login = ({ onLogin }) => {
 
           {isBiometricSupported && (
             <>
-              <div className="flex items-center gap-4 my-6">
-                <div className="h-px bg-border flex-1"></div>
-                <span className="text-gray-500 text-xs font-bold uppercase">OR UNLOCK WITH</span>
-                <div className="h-px bg-border flex-1"></div>
+              <div className="relative mb-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-surface px-4 text-gray-500 font-semibold tracking-wider">Or unlock with</span>
+                </div>
               </div>
 
               <button 
                 onClick={handleBiometricLogin}
-                type="button"
-                className="w-full group bg-background hover:bg-gray-800 border border-border text-white font-bold py-4 rounded-xl transition-all flex flex-col items-center justify-center gap-2"
+                disabled={bioLoading}
+                className={`w-full py-4 bg-background border border-border hover:border-primary/50 text-white rounded-xl font-bold flex flex-col items-center justify-center gap-2 transition-all shadow-lg hover:shadow-primary/10 group ${bioLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <div className="w-12 h-12 rounded-full bg-primary/10 group-hover:bg-primary/20 flex items-center justify-center transition-colors">
-                  <Fingerprint className="w-6 h-6 text-primary" />
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  {bioLoading ? (
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Fingerprint className="w-6 h-6 text-primary" />
+                  )}
                 </div>
-                <span>TouchID / Passkey</span>
+                <span className="text-gray-300 group-hover:text-white transition-colors">
+                  {bioLoading ? 'Waiting for Fingerprint...' : 'TouchID / Passkey'}
+                </span>
               </button>
             </>
           )}
