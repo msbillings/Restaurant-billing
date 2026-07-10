@@ -1,5 +1,6 @@
 import Client from '../models/Client.js';
 import License from '../models/License.js';
+import Broadcast from '../models/Broadcast.js';
 import crypto from 'crypto';
 
 // Get all clients (For Super Admin dashboard)
@@ -212,6 +213,9 @@ export const validateLicense = async (req, res) => {
 
     await client.save();
 
+    // Fetch active broadcasts
+    const activeBroadcasts = await Broadcast.find({ active: true }).sort({ createdAt: -1 });
+
     res.status(200).json({
       valid: true,
       message: 'License Verified',
@@ -219,7 +223,8 @@ export const validateLicense = async (req, res) => {
       validUntil: license.validUntil,
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
-      features: client.features
+      features: client.features,
+      broadcasts: activeBroadcasts
     });
 
   } catch (error) {

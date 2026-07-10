@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -36,6 +36,19 @@ function App() {
   const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly' });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
 
+  // Broadcast State
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [newBroadcast, setNewBroadcast] = useState({ title: '', message: '', imageUrl: '' });
+
+  const fetchBroadcasts = async () => {
+    try {
+      const response = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts');
+      setBroadcasts(response.data);
+    } catch (error) {
+      console.error('Error fetching broadcasts:', error);
+    }
+  };
+
   const fetchClients = async () => {
     setLoading(true);
     try {
@@ -64,6 +77,7 @@ function App() {
   useEffect(() => {
     if (token) {
       fetchClients();
+      fetchBroadcasts();
     }
   }, [token]);
 
@@ -163,6 +177,37 @@ function App() {
     } catch (error) {
       alert('Failed to update features.');
       console.error(error);
+    }
+  };
+
+  const handleCreateBroadcast = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts', newBroadcast);
+      setNewBroadcast({ title: '', message: '', imageUrl: '' });
+      fetchBroadcasts();
+      alert('Broadcast created successfully!');
+    } catch (err) {
+      alert('Failed to create broadcast');
+    }
+  };
+
+  const toggleBroadcast = async (id) => {
+    try {
+      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts/${id}/toggle`);
+      fetchBroadcasts();
+    } catch (err) {
+      alert('Failed to toggle broadcast');
+    }
+  };
+
+  const deleteBroadcast = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this broadcast?')) return;
+    try {
+      await axios.delete(`https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts/${id}`);
+      fetchBroadcasts();
+    } catch (err) {
+      alert('Failed to delete broadcast');
     }
   };
 
@@ -383,6 +428,12 @@ function App() {
             className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Insights' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
           >
             Global Insights
+          </button>
+          <button 
+            onClick={() => setCurrentTab('Broadcasts')}
+            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Broadcasts' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+          >
+            Broadcasts (In-App)
           </button>
         </div>
       </div>
@@ -751,6 +802,102 @@ function App() {
                 <p className="text-gray-500 mt-2">Click the Calculate button above to query all tenant databases.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {currentTab === 'Broadcasts' && (
+          <div className="space-y-8 animate-fade-in">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-surface p-6 rounded-2xl border border-border shadow-xl">
+              <div className="w-full xl:w-auto">
+                <h2 className="text-2xl font-black mb-2 flex items-center gap-2"><Radio className="text-primary w-6 h-6"/> Global Broadcast System</h2>
+                <p className="text-gray-400 text-sm">Push announcements, greetings, and alerts instantly to every active POS client globally.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Composer */}
+              <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1 h-fit">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5 text-primary"/> New Broadcast</h3>
+                <form onSubmit={handleCreateBroadcast} className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Title</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={newBroadcast.title}
+                      onChange={e => setNewBroadcast({...newBroadcast, title: e.target.value})}
+                      placeholder="e.g. Happy Ugadi!"
+                      className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Message</label>
+                    <textarea 
+                      required
+                      value={newBroadcast.message}
+                      onChange={e => setNewBroadcast({...newBroadcast, message: e.target.value})}
+                      placeholder="e.g. Wishing you and your family a prosperous Ugadi!"
+                      className="w-full bg-background border border-border rounded-lg p-3 text-white h-24 resize-none focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Image URL (Optional)</label>
+                    <input 
+                      type="url" 
+                      value={newBroadcast.imageUrl}
+                      onChange={e => setNewBroadcast({...newBroadcast, imageUrl: e.target.value})}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
+                  <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
+                    <Radio className="w-5 h-5" />
+                    Broadcast Now
+                  </button>
+                </form>
+              </div>
+
+              {/* Active Broadcasts List */}
+              <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-2">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts</h3>
+                <div className="space-y-4">
+                  {broadcasts.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 bg-background rounded-xl border border-border border-dashed">
+                      <Radio className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      No broadcasts found. Create one to notify your clients.
+                    </div>
+                  ) : (
+                    broadcasts.map(b => (
+                      <div key={b._id} className={`flex flex-col sm:flex-row gap-4 p-4 rounded-xl border transition-all ${b.active ? 'bg-primary/5 border-primary/30' : 'bg-background border-border opacity-60'}`}>
+                        {b.imageUrl && (
+                          <div className="w-full sm:w-32 h-24 rounded-lg bg-gray-800 overflow-hidden flex-shrink-0">
+                            <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div className="flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="flex justify-between items-start mb-1">
+                              <h4 className="font-bold text-lg">{b.title}</h4>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => toggleBroadcast(b._id)} className={`text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1 transition-colors ${b.active ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}>
+                                  {b.active ? <CheckCircle className="w-3 h-3"/> : <XCircle className="w-3 h-3"/>}
+                                  {b.active ? 'Active' : 'Inactive'}
+                                </button>
+                                <button onClick={() => deleteBroadcast(b._id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-gray-400 text-sm">{b.message}</p>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2 font-mono">{new Date(b.createdAt).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>

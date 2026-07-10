@@ -20,7 +20,7 @@ const CRM = React.lazy(() => import('./components/CRM'));
 const QRCodeGenerator = React.lazy(() => import('./components/QRCodeGenerator'));
 const StaffManagement = React.lazy(() => import('./components/StaffManagement'));
 import WhatsAppSimulator from './components/WhatsAppSimulator';
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
@@ -60,11 +60,9 @@ function App() {
       const cached = localStorage.getItem('resto_features');
       if (cached) return JSON.parse(cached);
     } catch (e) {}
-    return {
-      kds: true, inventory: true, crm: true, staff: true, 
-      analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true
-    };
+    return { kds: true, inventory: true, crm: true, staff: true, analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true };
   });
+  const [activeBroadcast, setActiveBroadcast] = useState(null);
 
   const rawRole = user?.role || 'Admin';
   const usernameLower = user?.username?.toLowerCase() || '';
@@ -156,6 +154,13 @@ function App() {
             if (saData.features) {
               setFeatures(saData.features);
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
+            }
+            if (saData.broadcasts && saData.broadcasts.length > 0) {
+              // Show the latest broadcast that hasn't been dismissed
+              const latestUnread = saData.broadcasts.find(b => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
+              if (latestUnread) {
+                setActiveBroadcast(latestUnread);
+              }
             }
           }
         }
@@ -1037,9 +1042,54 @@ function App() {
           </div>
         </div>
       )}
-      {/* WhatsApp AI Simulator - Floating */}
-      {user && <WhatsAppSimulator />}
-    </div>
+
+      {/* Global Broadcast Modal */}
+      {activeBroadcast && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] animate-fade-in p-4 backdrop-blur-sm">
+          <div className="bg-surface border border-primary/50 p-1 rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-transform overflow-hidden relative">
+            <div className="bg-background rounded-xl p-6 sm:p-8 relative">
+              <button 
+                onClick={() => {
+                  localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                  setActiveBroadcast(null);
+                }} 
+                className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+              
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
+                  <Radio className="w-8 h-8 text-primary animate-pulse" />
+                </div>
+                
+                <h3 className="text-2xl font-black mb-4 text-white">{activeBroadcast.title}</h3>
+                
+                {activeBroadcast.imageUrl && (
+                  <div className="w-full max-h-64 rounded-xl overflow-hidden mb-6 border border-border shadow-lg">
+                    <img src={activeBroadcast.imageUrl} alt={activeBroadcast.title} className="w-full h-full object-contain bg-surface" />
+                  </div>
+                )}
+                
+                <p className="text-gray-300 mb-8 leading-relaxed whitespace-pre-wrap">{activeBroadcast.message}</p>
+                
+                <button 
+                  onClick={() => {
+                    localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                    setActiveBroadcast(null);
+                  }}
+                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg"
+                >
+                  Got it, Thanks!
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <WhatsAppSimulator />
+    </>
   );
 }
 
