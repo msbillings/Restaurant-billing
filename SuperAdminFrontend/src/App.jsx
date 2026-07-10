@@ -651,25 +651,25 @@ function App() {
 
         {currentTab === 'Insights' && (
           <div className="space-y-8 animate-fade-in">
-            <div className="flex justify-between items-center bg-surface p-6 rounded-2xl border border-border shadow-xl">
-              <div>
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-surface p-6 rounded-2xl border border-border shadow-xl">
+              <div className="w-full xl:w-auto">
                 <h2 className="text-2xl font-black mb-2">Global Platform Analytics</h2>
                 <p className="text-gray-400 text-sm">Extracts data directly from all isolated tenant databases across the platform.</p>
               </div>
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
                 <button 
                   onClick={() => window.open('https://restaurant-superadmin-api-maheer.vercel.app/api/analytics/customers/export', '_blank')}
-                  className="bg-surface hover:bg-gray-700 border border-border text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+                  className="w-full sm:w-auto bg-surface hover:bg-gray-700 border border-border text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   Export All Customers (CSV)
                 </button>
                 <button 
                   onClick={fetchGlobalStats}
                   disabled={loadingStats}
-                  className="bg-primary hover:bg-primary-hover disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+                  className="w-full sm:w-auto bg-primary hover:bg-primary-hover disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
                 >
-                  {loadingStats ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
-                  {loadingStats ? 'Calculating Global Data...' : 'Calculate Global Stats'}
+                  {loadingStats ? <RefreshCw className="w-5 h-5 animate-spin flex-shrink-0" /> : <Activity className="w-5 h-5 flex-shrink-0" />}
+                  <span>{loadingStats ? 'Calculating Global Data...' : 'Calculate Global Stats'}</span>
                 </button>
               </div>
             </div>
