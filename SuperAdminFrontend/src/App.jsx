@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -180,6 +180,36 @@ function App() {
     }
   };
 
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Quick validation
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      // Compress image if it's too large (optional, but good practice for Base64)
+      const img = document.createElement('img');
+      img.src = reader.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        setNewBroadcast({ ...newBroadcast, imageUrl: compressedBase64 });
+      };
+    };
+  };
+
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
     try {
@@ -188,7 +218,8 @@ function App() {
       fetchBroadcasts();
       alert('Broadcast created successfully!');
     } catch (err) {
-      alert('Failed to create broadcast');
+      console.error(err);
+      alert('Failed to create broadcast. ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -841,14 +872,35 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1 font-medium">Image URL (Optional)</label>
-                    <input 
-                      type="url" 
-                      value={newBroadcast.imageUrl}
-                      onChange={e => setNewBroadcast({...newBroadcast, imageUrl: e.target.value})}
-                      placeholder="https://example.com/image.jpg"
-                      className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors"
-                    />
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Upload Image (Optional)</label>
+                    <div className="relative">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        id="broadcast-image-upload"
+                      />
+                      <label 
+                        htmlFor="broadcast-image-upload"
+                        className="w-full bg-background border border-border border-dashed rounded-lg p-4 text-gray-400 hover:text-white hover:border-primary transition-colors flex flex-col items-center justify-center cursor-pointer min-h-[100px]"
+                      >
+                        {newBroadcast.imageUrl ? (
+                          <div className="relative w-full h-32 rounded bg-black/50 overflow-hidden flex items-center justify-center group">
+                            <img src={newBroadcast.imageUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="text-white text-sm flex items-center gap-2"><Upload className="w-4 h-4"/> Change Image</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <Image className="w-6 h-6 mb-2" />
+                            <span className="text-sm">Click to upload image</span>
+                            <span className="text-xs opacity-50 mt-1">JPG, PNG, GIF up to 5MB</span>
+                          </>
+                        )}
+                      </label>
+                    </div>
                   </div>
                   <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
                     <Radio className="w-5 h-5" />
@@ -870,8 +922,17 @@ function App() {
                     broadcasts.map(b => (
                       <div key={b._id} className={`flex flex-col sm:flex-row gap-4 p-4 rounded-xl border transition-all ${b.active ? 'bg-primary/5 border-primary/30' : 'bg-background border-border opacity-60'}`}>
                         {b.imageUrl && (
-                          <div className="w-full sm:w-32 h-24 rounded-lg bg-gray-800 overflow-hidden flex-shrink-0">
-                            <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover" />
+                          <div className="w-full sm:w-32 h-24 rounded-lg bg-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                            <img 
+                              src={b.imageUrl} 
+                              alt={b.title} 
+                              className="w-full h-full object-cover" 
+                              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                            />
+                            <div className="hidden absolute inset-0 items-center justify-center text-red-400 flex-col gap-1">
+                              <AlertTriangle className="w-6 h-6" />
+                              <span className="text-[10px] uppercase font-bold tracking-wider">Broken Image</span>
+                            </div>
                           </div>
                         )}
                         <div className="flex-1 flex flex-col justify-between">
