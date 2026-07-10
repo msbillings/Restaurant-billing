@@ -129,8 +129,8 @@ export const exportGlobalCustomers = async (req, res) => {
           const name = c.name ? c.name.replace(/,/g, '') : 'Unknown';
           const phone = c.phone || c.phoneNo || '';
           const email = c.email ? c.email.replace(/,/g, '') : '';
-          const totalOrders = c.totalOrders || 0;
-          const totalSpent = c.totalSpent || 0;
+          const totalOrders = c.totalVisits || 0;
+          const totalSpent = c.totalSpend || 0;
           
           csvContent += `"${client.restaurantName}","${name}","${phone}","${email}",${totalOrders},${totalSpent}\n`;
         });
