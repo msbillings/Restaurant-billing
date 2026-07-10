@@ -121,7 +121,7 @@ export const getAuthOptions = async (req, res) => {
     const options = await generateAuthenticationOptions({
       rpID,
       allowCredentials: admin.passkeys.map(passkey => ({
-        id: Buffer.from(passkey.credentialID, 'base64url'),
+        id: passkey.credentialID,
         type: 'public-key',
         transports: passkey.transports,
       })),
@@ -133,8 +133,8 @@ export const getAuthOptions = async (req, res) => {
 
     res.status(200).json(options);
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error generating auth options');
+    console.error('Get Auth Options Error:', error);
+    res.status(500).json({ error: 'Failed to generate auth options', details: error.message });
   }
 };
 
