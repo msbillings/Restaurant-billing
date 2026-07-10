@@ -44,7 +44,7 @@ export const login = async (req, res) => {
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 const rpName = 'MSBILLING Super Admin';
-const rpID = process.env.NODE_ENV === 'production' ? 'restaurant-superadmin-api-maheer.vercel.app' : 'localhost';
+const rpID = process.env.NODE_ENV === 'production' ? 'msbillings-superadmin.vercel.app' : 'localhost';
 const origin = process.env.NODE_ENV === 'production' ? 'https://msbillings-superadmin.vercel.app' : 'http://localhost:5174';
 
 export const getRegistrationOptions = async (req, res) => {
