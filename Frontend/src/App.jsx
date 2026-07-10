@@ -57,7 +57,8 @@ function App() {
   const [showExpiryPopup, setShowExpiryPopup] = useState(false);
 
   const rawRole = user?.role || 'Admin';
-  const userRole = user?.username?.toLowerCase().includes('captain') ? 'Captain' : (user?.username?.toLowerCase().includes('cashier') ? 'Cashier' : rawRole);
+  const usernameLower = user?.username?.toLowerCase() || '';
+  const userRole = usernameLower.includes('captain') ? 'Captain' : (usernameLower.includes('cashier') ? 'Cashier' : rawRole);
   const isCaptain = userRole === 'Captain';
   const isCashier = userRole === 'Cashier';
   const isAdmin = userRole === 'Admin';
@@ -286,28 +287,23 @@ function App() {
     }
   }, [user]);
 
-  const handleLogout = async () => {
-    try {
-      // Call logout API to invalidate session on server
-      await logoutUser();
-    } catch (error) {
-      // Even if logout API fails, clear local state
-      console.error('Logout error:', error);
-    } finally {
-      // Clear ALL local state — both auth AND restaurant-specific data.
-      // This is critical for multi-tenant: if an MM admin logs out and a Saif admin
-      // logs in on the same terminal, old MM restaurant name/settings must be gone!
-      setUser(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      // Clear restaurant-specific cached data
-      localStorage.removeItem('resto_db_name');
-      localStorage.removeItem('resto_license');
-      localStorage.removeItem('resto_license_expiry');
-      localStorage.removeItem('restaurantSettings');
-      localStorage.removeItem('msbillings_spaces');
-    }
+  const handleLogout = () => {
+    // Fire and forget the logout API call so the UI doesn't hang if backend is down
+    logoutUser().catch(error => console.error('Logout API error:', error));
+
+    // Clear ALL local state — both auth AND restaurant-specific data IMMEDIATELY
+    // This is critical for multi-tenant: if an MM admin logs out and a Saif admin
+    // logs in on the same terminal, old MM restaurant name/settings must be gone!
+    setUser(null);
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    // Clear restaurant-specific cached data
+    localStorage.removeItem('resto_db_name');
+    localStorage.removeItem('resto_license');
+    localStorage.removeItem('resto_license_expiry');
+    localStorage.removeItem('restaurantSettings');
+    localStorage.removeItem('msbillings_spaces');
   };
 
   const handleViewChange = (newView, tableSelection = null) => {
