@@ -9,6 +9,11 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPlan, setFilterPlan] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [currentTab, setCurrentTab] = useState('Dashboard');
+  
+  // Global Analytics State
+  const [globalStats, setGlobalStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
   
   // Modal State
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
@@ -24,6 +29,19 @@ function App() {
       console.error('Error fetching clients:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchGlobalStats = async () => {
+    setLoadingStats(true);
+    try {
+      const response = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/analytics/global');
+      setGlobalStats(response.data);
+    } catch (error) {
+      console.error('Error fetching global stats:', error);
+      alert('Failed to calculate global stats.');
+    } finally {
+      setLoadingStats(false);
     }
   };
 
@@ -242,10 +260,30 @@ function App() {
         </div>
       </nav>
 
+      {/* Tabs */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="flex gap-4 border-b border-border">
+          <button 
+            onClick={() => setCurrentTab('Dashboard')}
+            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Dashboard' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+          >
+            Client Database
+          </button>
+          <button 
+            onClick={() => setCurrentTab('Insights')}
+            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Insights' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+          >
+            Global Insights
+          </button>
+        </div>
+      </div>
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Stats Row */}
+        {currentTab === 'Dashboard' && (
+          <>
+            {/* Stats Row */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -502,6 +540,74 @@ function App() {
             </tbody>
           </table>
         </div>
+        </>)}
+
+        {currentTab === 'Insights' && (
+          <div className="space-y-8 animate-fade-in">
+            <div className="flex justify-between items-center bg-surface p-6 rounded-2xl border border-border shadow-xl">
+              <div>
+                <h2 className="text-2xl font-black mb-2">Global Platform Analytics</h2>
+                <p className="text-gray-400 text-sm">Extracts data directly from all isolated tenant databases across the platform.</p>
+              </div>
+              <button 
+                onClick={fetchGlobalStats}
+                disabled={loadingStats}
+                className="bg-primary hover:bg-primary-hover disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+              >
+                {loadingStats ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Activity className="w-5 h-5" />}
+                {loadingStats ? 'Calculating Global Data...' : 'Calculate Global Stats'}
+              </button>
+            </div>
+
+            {globalStats ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total GMV Processed</p>
+                    <h3 className="text-4xl font-black text-green-400">₹{globalStats.totalGMV.toLocaleString()}</h3>
+                  </div>
+                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Orders</p>
+                    <h3 className="text-4xl font-black text-blue-400">{globalStats.totalOrders.toLocaleString()}</h3>
+                  </div>
+                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Avg Order Value</p>
+                    <h3 className="text-4xl font-black text-amber-400">₹{Math.round(globalStats.aov).toLocaleString()}</h3>
+                  </div>
+                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total End Customers</p>
+                    <h3 className="text-4xl font-black text-purple-400">{globalStats.totalCustomers.toLocaleString()}</h3>
+                  </div>
+                </div>
+
+                <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary">
+                    Most Ordered Items Globally
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {globalStats.topItems.map((item, idx) => (
+                      <div key={idx} className="bg-background border border-border rounded-lg p-4 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold">{item.name}</p>
+                          <p className="text-xs text-gray-400">Ordered {item.quantity} times</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-green-400 font-bold">₹{item.revenue.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-surface border border-border rounded-2xl p-16 text-center shadow-xl">
+                <Activity className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-gray-400">No Analytics Loaded</h3>
+                <p className="text-gray-500 mt-2">Click the Calculate button above to query all tenant databases.</p>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* License Edit Modal */}

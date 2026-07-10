@@ -54,8 +54,10 @@ if (process.env.NODE_ENV !== 'production') {
 import clientRoutes from './routes/clientRoutes.js';
 import razorpayRoutes from './routes/razorpayRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 
 app.use('/api/clients', clientRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/payment', paymentRoutes);
 
