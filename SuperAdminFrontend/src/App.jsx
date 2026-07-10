@@ -9,6 +9,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPlan, setFilterPlan] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [signupsFilter, setSignupsFilter] = useState('7days');
   const [currentTab, setCurrentTab] = useState('Dashboard');
   
   // Global Analytics State
@@ -186,11 +187,27 @@ function App() {
     let rev = 0;
     const expiring = [];
     const planCounts = { Monthly: 0, Yearly: 0, Lifetime: 0, Custom: 0 };
-    const months = {};
-
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    
     const today = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+    const mData = [];
+    if (signupsFilter === '7days') {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const name = d.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+        mData.push({ name, signups: 0, dateKey: name });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today);
+        d.setMonth(d.getMonth() - i);
+        const name = d.toLocaleDateString('default', { month: 'short', year: '2-digit' });
+        mData.push({ name, signups: 0, _month: d.getMonth(), _year: d.getFullYear() });
+      }
+    }
 
     clients.forEach(c => {
       // Revenue (Estimated placeholders: Monthly=500, Yearly=5000, Lifetime=20000)
@@ -202,23 +219,30 @@ function App() {
       if (planCounts[c.plan] !== undefined) planCounts[c.plan]++;
       else planCounts['Custom']++;
 
-      // Expiry alerts (expiring in less than 30 days and not already expired long ago)
+      // Expiry alerts
       if (c.validUntil) {
         const expiry = new Date(c.validUntil);
         if (expiry > today && expiry <= thirtyDaysFromNow) {
           expiring.push(c);
         } else if (expiry <= today) {
-          // You might also want to flag already expired ones
           expiring.push(c);
         }
       }
 
-      // Monthly Signups (based on createdAt)
+      // Signups logic
       const dateString = c.licenseCreatedAt || c.createdAt;
       if (dateString) {
         const date = new Date(dateString);
-        const monthYear = date.toLocaleString('default', { month: 'short', year: '2-digit' });
-        months[monthYear] = (months[monthYear] || 0) + 1;
+        if (signupsFilter === '7days') {
+          const name = date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+          const item = mData.find(m => m.dateKey === name);
+          if (item) item.signups++;
+        } else {
+          const m = date.getMonth();
+          const y = date.getFullYear();
+          const item = mData.find(x => x._month === m && x._year === y);
+          if (item) item.signups++;
+        }
       }
     });
 
@@ -229,17 +253,15 @@ function App() {
       { name: 'Custom', value: planCounts.Custom, color: '#8b5cf6' }
     ].filter(d => d.value > 0);
 
-    const mData = Object.keys(months).map(k => ({ name: k, signups: months[k] })).reverse();
-
     return { totalRevenue: rev, expiringSoon: expiring, planData: pData, monthlyData: mData };
-  }, [clients]);
+  }, [clients, signupsFilter]);
 
   return (
     <div className="min-h-screen bg-background text-white font-sans selection:bg-primary/30">
       
       {/* Top Navbar */}
       <nav className="bg-surface border-b border-border sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/30 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
@@ -261,7 +283,7 @@ function App() {
       </nav>
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 mt-6">
         <div className="flex gap-4 border-b border-border">
           <button 
             onClick={() => setCurrentTab('Dashboard')}
@@ -279,7 +301,7 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {currentTab === 'Dashboard' && (
           <>
@@ -348,8 +370,18 @@ function App() {
           </div>
 
           {/* Growth Chart */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1">
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><TrendingUp className="text-primary w-5 h-5"/> New Signups</h3>
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold flex items-center gap-2"><TrendingUp className="text-primary w-5 h-5"/> New Signups</h3>
+              <select 
+                value={signupsFilter} 
+                onChange={e => setSignupsFilter(e.target.value)}
+                className="bg-background border border-border rounded-lg py-1 px-2 text-xs text-white focus:outline-none focus:border-primary"
+              >
+                <option value="7days">Last 7 Days</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData}>
