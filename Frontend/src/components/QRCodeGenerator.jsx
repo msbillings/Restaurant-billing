@@ -29,7 +29,7 @@ const QRCodeGenerator = () => {
   }, []);
 
   const getQRUrl = (table) => {
-    const baseUrl = window.location.origin;
+    const baseUrl = 'https://restaurant-billing-seven.vercel.app';
     const dbName = localStorage.getItem('resto_db_name') || 'default';
     return `${baseUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
   };
