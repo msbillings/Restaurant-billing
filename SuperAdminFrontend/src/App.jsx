@@ -314,21 +314,33 @@ function App() {
       {/* Top Navbar */}
       <nav className="bg-surface border-b border-border sticky top-0 z-50">
         <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/30 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
-                <Shield className="text-primary w-5 h-5" />
+          <div className="flex flex-wrap items-center justify-between py-3 min-h-[4rem] gap-y-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/30 flex-shrink-0 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
+                  <Shield className="text-primary w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+                <span className="font-black text-lg sm:text-xl tracking-tight whitespace-nowrap">MS<span className="text-primary">BILLING</span> <span className="font-medium text-gray-400 hidden sm:inline">SUPER ADMIN</span></span>
               </div>
-              <span className="font-black text-xl tracking-tight">MS<span className="text-primary">BILLING</span> <span className="font-medium text-gray-400">SUPER ADMIN</span></span>
+              
+              <div className="flex sm:hidden items-center gap-2">
+                <button onClick={handleRegisterFingerprint} title="Register Fingerprint" className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl transition">
+                  <Fingerprint className="w-4 h-4" />
+                </button>
+                <button onClick={handleLogout} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="bg-background/50 px-4 py-1.5 rounded-full border border-border flex items-center gap-2">
+
+            <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="bg-background/50 px-3 py-1.5 rounded-full border border-border flex items-center gap-2 whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                <span className="text-sm font-medium text-gray-300">System Online</span>
+                <span className="text-xs sm:text-sm font-medium text-gray-300">System Online</span>
               </div>
-              <div className="flex items-center gap-3 ml-2 border-l border-border pl-4">
+              <div className="hidden sm:flex items-center gap-3 border-l border-border pl-4">
                 <div className="text-right">
-                  <p className="text-sm font-bold">{adminUser?.name || 'Admin'}</p>
+                  <p className="text-sm font-bold truncate max-w-[120px]">{adminUser?.name || 'Admin'}</p>
                   <p className="text-xs text-gray-500">{adminUser?.role || 'SuperAdmin'}</p>
                 </div>
                 <button onClick={handleRegisterFingerprint} title="Register Fingerprint" className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl transition">
@@ -487,38 +499,40 @@ function App() {
         </div>
 
         {/* Search Bar & Filters */}
-        <div className="bg-surface p-4 rounded-t-2xl border border-border border-b-0 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-bold">Client Management Database</h2>
-            <button onClick={exportToCSV} className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 px-3 py-1.5 rounded transition font-medium flex items-center gap-2">
+        <div className="bg-surface p-4 rounded-t-2xl border border-border border-b-0 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+          <div className="flex items-center justify-between w-full xl:w-auto">
+            <h2 className="text-lg font-bold">Client Database</h2>
+            <button onClick={exportToCSV} className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 px-3 py-1.5 rounded transition font-medium flex items-center gap-2 whitespace-nowrap">
               Export CSV
             </button>
           </div>
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <select 
-              value={filterPlan} 
-              onChange={e => setFilterPlan(e.target.value)}
-              className="bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
-            >
-              <option value="All">All Plans</option>
-              <option value="Monthly">Monthly</option>
-              <option value="Yearly">Yearly</option>
-              <option value="Lifetime">Lifetime</option>
-              <option value="Custom">Custom</option>
-            </select>
-            
-            <select 
-              value={filterStatus} 
-              onChange={e => setFilterStatus(e.target.value)}
-              className="bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Suspended">Suspended</option>
-              <option value="Expired">Expired</option>
-            </select>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
+            <div className="flex gap-3 w-full sm:w-auto">
+              <select 
+                value={filterPlan} 
+                onChange={e => setFilterPlan(e.target.value)}
+                className="w-full sm:w-auto bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
+              >
+                <option value="All">All Plans</option>
+                <option value="Monthly">Monthly</option>
+                <option value="Yearly">Yearly</option>
+                <option value="Lifetime">Lifetime</option>
+                <option value="Custom">Custom</option>
+              </select>
+              
+              <select 
+                value={filterStatus} 
+                onChange={e => setFilterStatus(e.target.value)}
+                className="w-full sm:w-auto bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Suspended">Suspended</option>
+                <option value="Expired">Expired</option>
+              </select>
+            </div>
 
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="w-4 h-4 text-gray-500" />
               </div>
