@@ -46,16 +46,17 @@ const Login = ({ onLogin }) => {
       // 3. Verify on server
       const verificationResp = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/authenticate/verify', asseResp);
       
-      if (verificationResp.data.verified) {
+      if (verificationResp.data.verified && verificationResp.data.token) {
         localStorage.setItem('superadmin_token', verificationResp.data.token);
         localStorage.setItem('superadmin_user', JSON.stringify(verificationResp.data.admin));
         onLogin(verificationResp.data.token);
       } else {
-        setError('Fingerprint verification failed.');
+        setError('Verification failed. Please try again or use password.');
       }
     } catch (err) {
       console.error(err);
-      setError('Biometric authentication failed. If you have not registered your fingerprint yet, please login with your password first.');
+      const errDetails = err.response?.data?.details || err.message;
+      setError(`Biometric authentication failed: ${errDetails}`);
     }
   };
 
