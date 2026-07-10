@@ -7,6 +7,8 @@ function App() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterPlan, setFilterPlan] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
   
   // Modal State
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
@@ -93,6 +95,48 @@ function App() {
     }
   };
 
+  const handleToggleStatus = async (id, currentStatus) => {
+    const newStatus = currentStatus === 'Active' ? 'Suspended' : 'Active';
+    if (!confirm(`Are you sure you want to change this client's status to ${newStatus}?`)) return;
+
+    try {
+      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${id}/status`, { status: newStatus });
+      fetchClients();
+    } catch (error) {
+      alert('Failed to update status.');
+      console.error(error);
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Restaurant Name', 'Email', 'License Key', 'Plan', 'Status', 'Expires At', 'Hardware ID'];
+    const csvRows = [headers.join(',')];
+
+    clients.forEach(c => {
+      const row = [
+        `"${c.restaurantName || ''}"`,
+        `"${c.email || ''}"`,
+        `"${c.licenseKey || ''}"`,
+        `"${c.plan || 'Unknown'}"`,
+        `"${c.status || 'Active'}"`,
+        `"${c.validUntil ? new Date(c.validUntil).toLocaleDateString() : 'N/A'}"`,
+        `"${c.hardwareId || 'Not Activated'}"`
+      ];
+      csvRows.push(row.join(','));
+    });
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `msbilling_clients_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleCreateClient = async (e) => {
     e.preventDefault();
     try {
@@ -105,10 +149,19 @@ function App() {
     }
   };
 
-  const filteredClients = clients.filter(c => 
-    c.restaurantName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredClients = clients.filter(c => {
+    const matchesSearch = c.restaurantName.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesPlan = filterPlan === 'All' || c.plan === filterPlan || (filterPlan === 'Custom' && !['Monthly', 'Yearly', 'Lifetime'].includes(c.plan));
+    const matchesStatus = filterStatus === 'All' || c.status === filterStatus;
+    
+    // Check expiry for "Expired" status filter if we add it, but currently using DB status which is 'Active' or 'Suspended'
+    if (filterStatus === 'Expired') {
+      const isExpired = c.validUntil && new Date(c.validUntil) < new Date();
+      return matchesSearch && matchesPlan && isExpired;
+    }
+    
+    return matchesSearch && matchesPlan && matchesStatus;
+  });
 
   // --- ANALYTICS CALCULATIONS ---
   const { totalRevenue, expiringSoon, planData, monthlyData } = useMemo(() => {
@@ -302,20 +355,50 @@ function App() {
 
         </div>
 
-        {/* Search Bar */}
-        <div className="bg-surface p-4 rounded-t-2xl border border-border border-b-0 flex justify-between items-center">
-          <h2 className="text-lg font-bold">Client Management Database</h2>
-          <div className="relative w-72">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="w-4 h-4 text-gray-500" />
+        {/* Search Bar & Filters */}
+        <div className="bg-surface p-4 rounded-t-2xl border border-border border-b-0 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-bold">Client Management Database</h2>
+            <button onClick={exportToCSV} className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 px-3 py-1.5 rounded transition font-medium flex items-center gap-2">
+              Export CSV
+            </button>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <select 
+              value={filterPlan} 
+              onChange={e => setFilterPlan(e.target.value)}
+              className="bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
+            >
+              <option value="All">All Plans</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Yearly">Yearly</option>
+              <option value="Lifetime">Lifetime</option>
+              <option value="Custom">Custom</option>
+            </select>
+            
+            <select 
+              value={filterStatus} 
+              onChange={e => setFilterStatus(e.target.value)}
+              className="bg-background border border-border rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:border-primary"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Suspended">Suspended</option>
+              <option value="Expired">Expired</option>
+            </select>
+
+            <div className="relative w-64">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="w-4 h-4 text-gray-500" />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Search restaurant or email..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
             </div>
-            <input 
-              type="text" 
-              placeholder="Search restaurant or email..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full bg-background border border-border rounded-lg py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-            />
           </div>
         </div>
 
@@ -387,6 +470,12 @@ function App() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex gap-2 justify-end">
+                        <button 
+                          onClick={() => handleToggleStatus(client._id, client.status)}
+                          className={`flex items-center gap-1 text-xs font-bold ${client.status === 'Active' ? 'bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 border-orange-500/30' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/30'} border px-3 py-1.5 rounded transition-colors`}
+                        >
+                          <Power className="w-3 h-3" /> {client.status === 'Active' ? 'Suspend' : 'Activate'}
+                        </button>
                         <button 
                           onClick={() => openLicenseModal(client)}
                           className="flex items-center gap-1 text-xs font-bold bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded transition-colors"

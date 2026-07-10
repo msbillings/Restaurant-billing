@@ -295,3 +295,25 @@ export const getLicenseInfo = async (req, res) => {
     res.status(500).json({ valid: false, message: 'Error fetching license info', error: error.message });
   }
 };
+
+// Update client status (Suspend/Activate)
+export const updateClientStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['Active', 'Suspended'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    client.status = status;
+    await client.save();
+
+    res.status(200).json({ message: `Client status updated to ${status}`, client });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating status', error: error.message });
+  }
+};
