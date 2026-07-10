@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, Wallet, CreditCard, Banknote, PieChart } from 'lucide-react';
 
-const PaymentModal = ({ total, billNumber, tableNo, onClose, onComplete }) => {
+const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComplete }) => {
   const [mode, setMode] = useState('Cash');
   const [amountPaid, setAmountPaid] = useState(total);
   const [splitPayments, setSplitPayments] = useState({ cash: 0, upi: 0, card: 0 });
@@ -204,11 +204,11 @@ const PaymentModal = ({ total, billNumber, tableNo, onClose, onComplete }) => {
         <div className="p-4 border-t border-border bg-surface">
           <button 
             className={`w-full text-white py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg ${
-              ((mode === 'Cash' && balance < 0) || (mode === 'Mixed' && !isMixedValid))
+              (isLoading || (mode === 'Cash' && balance < 0) || (mode === 'Mixed' && !isMixedValid))
                 ? 'bg-surface-hover text-text-muted shadow-none cursor-not-allowed border border-border' 
                 : 'bg-success hover:bg-green-600 shadow-success/30 hover:shadow-success/50 hover:-translate-y-0.5'
             }`}
-            disabled={(mode === 'Cash' && balance < 0) || (mode === 'Mixed' && !isMixedValid)}
+            disabled={isLoading || (mode === 'Cash' && balance < 0) || (mode === 'Mixed' && !isMixedValid)}
             onClick={() => onComplete({ mode, amountPaid, splitPayments, upiApp })}
           >
             <CheckCircle size={22} />

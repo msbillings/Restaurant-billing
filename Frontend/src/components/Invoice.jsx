@@ -83,6 +83,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             <p className="text-[15px] print:text-[15px] font-[900] font-black text-black leading-snug">Tel: {settings.phone}</p>
             {settings.email && <p className="text-[15px] print:text-[15px] font-[900] font-black text-black leading-snug">Email: {settings.email}</p>}
             {settings.gstin && <p className="text-[15px] print:text-[15px] font-[900] font-black text-black leading-snug">GSTIN: {settings.gstin}</p>}
+            {settings.fssai && <p className="text-[15px] print:text-[15px] font-[900] font-black text-black leading-snug">FSSAI: {settings.fssai}</p>}
           </div>
 
           <div className="text-center text-[20px] print:text-[20px] font-[900] font-black uppercase tracking-widest text-black mb-2 border-y-2 border-black py-1">
@@ -109,7 +110,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           {/* Items Header */}
           <div className="border-y-2 border-dashed border-black py-1 mb-1">
             <div className="flex justify-between gap-1 text-[17px] print:text-[17px] font-[900] font-black uppercase text-black">
-              <div className="flex-1">ITEM</div>
+              <div className="flex-1">ITEM (HSN)</div>
               <div className="text-right">TOTAL</div>
             </div>
           </div>
@@ -119,7 +120,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
             {bill.items && bill.items.length > 0 ? (
               bill.items.map((item, idx) => (
                 <div key={idx} className="flex flex-col gap-0.5 text-[17px] print:text-[17px] font-[900] font-black uppercase text-black pb-2 pt-1 border-b-2 border-dashed border-black last:border-0 leading-tight">
-                  <div className="break-words">{item.name || 'Unknown Item'}</div>
+                  <div className="break-words">
+                    {item.name || 'Unknown Item'}
+                    {item.hsnCode ? ` (HSN: ${item.hsnCode})` : ''}
+                  </div>
                   <div className="flex justify-between text-[16px] print:text-[16px] font-[900] font-black text-black">
                     <div>{item.quantity || 0} x Rs {(item.price || 0).toFixed(2)}</div>
                     <div>Rs {(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
@@ -153,7 +157,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
               let rate = totRate;
               let taxRupees = 0;
 
-              if (bill.tax !== undefined && Number(bill.tax) > 0) {
+              if (bill.tax !== undefined && bill.tax !== null) {
                 if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - (taxable * Number(bill.tax)) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
                   rate = Number(bill.tax);
                   taxRupees = (taxable * rate) / 100;
@@ -197,7 +201,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 const sub = Number(bill.subtotal || bill.total || 0);
                 const disc = Number(bill.discount || 0);
                 const taxable = Math.max(0, sub - disc);
-                if (bill.tax !== undefined && Number(bill.tax) > 0) {
+                if (bill.tax !== undefined && bill.tax !== null) {
                   return (bill.total || 0).toFixed(2);
                 }
                 const s = settings || {};

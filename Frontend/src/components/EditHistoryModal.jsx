@@ -70,6 +70,12 @@ const EditHistoryModal = ({ order, onClose }) => {
                         <span>Discount</span>
                         <span>-{formatCurrency(edit.previousState?.totalDiscount)}</span>
                       </div>
+                      {edit.previousState?.totalTax > 0 && (
+                        <div className="flex justify-between text-xs text-text-muted">
+                          <span>Tax</span>
+                          <span>+{formatCurrency(edit.previousState?.totalTax)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-bold text-sm text-text-main mt-1 pt-1 border-t border-border/50">
                         <span>Total</span>
                         <span className="text-red-600">{formatCurrency(edit.previousState?.total)}</span>
@@ -104,6 +110,12 @@ const EditHistoryModal = ({ order, onClose }) => {
                         <span>Discount</span>
                         <span>-{formatCurrency(edit.newState?.totalDiscount)}</span>
                       </div>
+                      {edit.newState?.totalTax > 0 && (
+                        <div className="flex justify-between text-xs text-text-muted">
+                          <span>Tax</span>
+                          <span>+{formatCurrency(edit.newState?.totalTax)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-bold text-sm text-text-main mt-1 pt-1 border-t border-border/50">
                         <span>Total</span>
                         <span className="text-green-600">{formatCurrency(edit.newState?.total)}</span>

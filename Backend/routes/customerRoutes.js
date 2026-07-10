@@ -1,11 +1,14 @@
 import express from 'express';
-import { getCustomerInfo } from '../controllers/customerController.js';
+import { getCustomerInfo, getAllCustomers } from '../controllers/customerController.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
-import { authenticateToken as protect } from '../middleware/auth.js';
+import { authenticateToken as protect, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
 router.use(tenantMiddleware);
+
+// Get all customers (Admin/CRM)
+router.get('/', protect, requireAdmin, getAllCustomers);
 
 // Get customer info for CRM/Upsell
 router.get('/:phone', protect, getCustomerInfo);

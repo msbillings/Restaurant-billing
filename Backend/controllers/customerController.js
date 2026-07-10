@@ -30,6 +30,37 @@ export const getCustomerInfo = async (req, res) => {
   }
 };
 
+export const getAllCustomers = async (req, res) => {
+  try {
+    const Customer = getTenantModel(req, 'Customer', CustomerSchema);
+    const customers = await Customer.find({}).sort({ lastVisit: -1 }).lean();
+    res.status(200).json(customers);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const syncCustomer = async (req, phone, name) => {
+  try {
+    if (!phone) return;
+    const Customer = getTenantModel(req, 'Customer', CustomerSchema);
+    let customer = await Customer.findOne({ phone });
+    
+    if (!customer) {
+      customer = new Customer({
+        phone: phone,
+        name: name || 'Guest'
+      });
+      await customer.save();
+    } else if (name && customer.name === 'Guest') {
+      customer.name = name;
+      await customer.save();
+    }
+  } catch (error) {
+    console.error('Error syncing customer CRM:', error);
+  }
+};
+
 export const updateCustomerFromBill = async (req, bill) => {
   try {
     if (!bill.customerPhone) return;

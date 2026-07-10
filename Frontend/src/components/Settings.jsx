@@ -5,14 +5,15 @@ import { apiUpdateProfile } from '../api/auth';
 
 const Settings = ({ user, setUser }) => {
   const [settings, setSettings] = useState({
-    restaurantName: 'ABC RESTAURANT',
-    restaurantType: 'South Indian & Chinese',
-    address: 'Main Road, Hyderabad - 500001',
-    phone: '9876543210',
-    email: 'support@abcrestaurant.com',
-    gstin: '36ABCDE1234F1Z5',
-    upiId: 'maheshsiva864@oksbi',
-    ownerPin: '786786',
+    restaurantName: '',
+    restaurantType: '',
+    address: '',
+    phone: '',
+    email: '',
+    gstin: '',
+    fssai: '',
+    upiId: '',
+    ownerPin: '',
     footerMessage: '*** THANK YOU! VISIT AGAIN ***',
     kotPrinter: '',
     billingPrinter: '',
@@ -37,8 +38,6 @@ const Settings = ({ user, setUser }) => {
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings);
-      if (!parsed.upiId || parsed.upiId === 'msbillings@upi') parsed.upiId = 'maheshsiva864@oksbi';
-      if (!parsed.ownerPin) parsed.ownerPin = '786786';
       setSettings(prev => ({ ...prev, ...parsed }));
     }
 
@@ -390,6 +389,21 @@ const Settings = ({ user, setUser }) => {
                 />
               </div>
 
+              {/* FSSAI */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                  <FileText size={14} />
+                  FSSAI Number
+                </label>
+                <input
+                  type="text"
+                  value={settings.fssai || ''}
+                  onChange={(e) => handleInputChange('fssai', e.target.value)}
+                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
+                  placeholder="Enter FSSAI License Number"
+                />
+              </div>
+
               {/* Individual Tax Configuration */}
               <div className="space-y-3 p-4 bg-background rounded-xl border border-border">
                 <h3 className="text-sm font-bold text-text-main flex items-center gap-2">
@@ -568,7 +582,8 @@ const Settings = ({ user, setUser }) => {
                   <div key={i}>{line}</div>
                 ))}
                 Ph: {settings.phone}<br/>
-                GSTIN: {settings.gstin}
+                {settings.gstin && `GSTIN: ${settings.gstin}`}<br/>
+                {settings.fssai && `FSSAI: ${settings.fssai}`}
               </div>
               <div className="border-t border-b border-dashed py-2 my-4 text-center font-bold">
                 RECEIPT

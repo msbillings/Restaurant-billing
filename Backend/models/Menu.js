@@ -39,6 +39,19 @@ const menuSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  hsnCode: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  variants: [{
+    name: String, // e.g. "Half", "Full"
+    price: Number
+  }],
+  modifiers: [{
+    name: String, // e.g. "Extra Cheese"
+    price: Number // e.g. 20
+  }],
   recipe: [{
     ingredientId: {
       type: mongoose.Schema.Types.ObjectId,

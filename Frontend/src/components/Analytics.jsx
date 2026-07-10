@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAnalytics, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../api/analytics';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import {
   TrendingUp,
   Receipt,
@@ -27,7 +28,8 @@ const Analytics = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [days, setDays] = useState(null); // For 7 or 30 days view
-  const [viewMode, setViewMode] = useState('month'); // 'month' or 'days'
+  const [viewMode, setViewMode] = useState('month'); // 'month', 'days', or 'day'
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [toast, setToast] = useState(null);
   const [showFraudModal, setShowFraudModal] = useState(false);
   const [fraudData, setFraudData] = useState(null);
@@ -35,7 +37,7 @@ const Analytics = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [selectedMonth, selectedYear, days, viewMode]);
+  }, [selectedMonth, selectedYear, days, viewMode, selectedDate]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -43,6 +45,8 @@ const Analytics = () => {
       let data;
       if (viewMode === 'month') {
         data = await getAnalytics(selectedMonth, selectedYear, null);
+      } else if (viewMode === 'day') {
+        data = await getAnalytics(null, null, null, selectedDate);
       } else {
         data = await getAnalytics(null, null, days);
       }
@@ -192,6 +196,19 @@ const Analytics = () => {
                 >
                   Days
                 </button>
+                <button
+                  onClick={() => {
+                    setViewMode('day');
+                    setDays(null);
+                  }}
+                  className={`px-4 py-2 rounded-md font-medium transition-all ${
+                    viewMode === 'day'
+                      ? 'bg-primary text-white shadow-md'
+                      : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                  }`}
+                >
+                  Day
+                </button>
               </div>
               
               {viewMode === 'month' ? (
@@ -213,7 +230,7 @@ const Analytics = () => {
                     ))}
                   </select>
                 </div>
-              ) : (
+              ) : viewMode === 'days' ? (
                 <div className="flex items-center gap-2 bg-surface rounded-lg p-1 border border-border/50">
                   {[7, 30].map((d) => (
                     <button
@@ -228,6 +245,17 @@ const Analytics = () => {
                       {d} Days
                     </button>
                   ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-surface rounded-lg px-4 py-2 border border-border/50">
+                  <Calendar size={16} className="text-primary" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    max={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent font-medium text-text-main focus:outline-none cursor-pointer"
+                  />
                 </div>
               )}
             </div>
@@ -350,30 +378,56 @@ const Analytics = () => {
             
             {dailyRevenue && dailyRevenue.length > 0 ? (
               <div className="space-y-4">
-                {/* Chart */}
-                <div className="flex items-end justify-between gap-2 h-64">
-                  {dailyRevenue.map((day, index) => {
-                    const height = maxRevenue > 0 ? (day.revenue / maxRevenue) * 100 : 0;
-                    return (
-                      <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                        <div className="w-full flex flex-col items-center justify-end h-full">
-                          <div
-                            className="w-full bg-gradient-to-t from-primary via-primary/80 to-primary/60 rounded-t-lg transition-all hover:from-primary hover:to-primary/70 cursor-pointer group relative shadow-sm hover:shadow-md"
-                            style={{ height: `${Math.max(height, 5)}%` }}
-                            title={`${formatDate(day._id)}: ${formatCurrency(day.revenue)}`}
-                          >
-                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-text-main text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
-                              <div className="font-bold">{formatCurrency(day.revenue)}</div>
-                              <div className="text-[10px]">Orders: {day.orders}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-text-muted font-medium">
-                          {new Date(day._id).getDate()}/{new Date(day._id).getMonth() + 1}
-                        </span>
-                      </div>
-                    );
-                  })}
+                {/* Professional Chart */}
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailyRevenue} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <XAxis 
+                        dataKey="_id" 
+                        tickFormatter={(val) => {
+                          const d = new Date(val);
+                          return `${d.getDate()}/${d.getMonth()+1}`;
+                        }}
+                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        axisLine={false}
+                        tickLine={false}
+                        dy={10}
+                      />
+                      <YAxis 
+                        tickFormatter={(val) => {
+                          if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
+                          return `₹${val}`;
+                        }}
+                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        axisLine={false}
+                        tickLine={false}
+                        dx={-10}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-lg p-3 z-50">
+                                <p className="font-bold text-slate-800 dark:text-slate-200 mb-1">{formatDate(data._id)}</p>
+                                <p className="text-orange-500 font-bold text-lg">{formatCurrency(data.revenue)}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                                  Orders: {data.orders} • Bills: {data.bills}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar dataKey="revenue" radius={[6, 6, 0, 0]} maxBarSize={50}>
+                        {dailyRevenue.map((entry, index) => (
+                          <Cell key={`cell-${index}`} className="fill-primary hover:opacity-80 transition-opacity" />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
                 
                 {/* Daily Breakdown Table */}

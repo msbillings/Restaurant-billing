@@ -867,31 +867,40 @@ const InventoryManagement = () => {
 
       {/* MODAL 1: ADD/EDIT RAW MATERIAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-bold text-gray-900">
-              {editingItem ? 'Edit Raw Material' : 'Add Raw Material'}
-            </h3>
-            <form onSubmit={handleSaveItem} className="space-y-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-3xl max-w-lg w-full shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out">
+            <div className="bg-gradient-to-r from-primary/10 to-transparent p-6 border-b border-border flex items-center gap-4">
+              <div className="p-3 bg-primary/20 rounded-2xl text-primary">
+                <Package size={24} strokeWidth={2.5} />
+              </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">Item Name *</label>
+                <h3 className="text-2xl font-black text-text-main">
+                  {editingItem ? 'Edit Raw Material' : 'Add Raw Material'}
+                </h3>
+                <p className="text-xs text-text-muted mt-1 font-medium">Track your inventory precisely to manage costs.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveItem} className="p-6 space-y-5">
+              <div>
+                <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">Item Name <span className="text-danger">*</span></label>
                 <input
                   type="text"
                   required
                   placeholder="e.g., Basmati Rice, Chicken, Cooking Oil"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full p-2.5 border rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Category</label>
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">Category</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-sm font-semibold bg-white"
+                    className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
                   >
                     {categories.filter(c => c !== 'All').map(c => (
                       <option key={c} value={c}>{c}</option>
@@ -899,11 +908,11 @@ const InventoryManagement = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Unit</label>
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">Unit</label>
                   <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-sm font-semibold bg-white"
+                    className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
                   >
                     {units.map(u => (
                       <option key={u} value={u}>{u}</option>
@@ -912,58 +921,69 @@ const InventoryManagement = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Initial Stock</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0"
-                    value={formData.currentStock}
-                    onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-sm font-bold"
-                  />
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">Initial Stock</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0"
+                      value={formData.currentStock}
+                      onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
+                      className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-bold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Min Alert Level</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="5"
-                    value={formData.minStockAlert}
-                    onChange={(e) => setFormData({ ...formData, minStockAlert: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-sm font-bold text-red-600"
-                  />
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block flex items-center gap-1 uppercase">
+                    Alert Lvl <AlertTriangle size={12} className="text-danger" />
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="5"
+                      value={formData.minStockAlert}
+                      onChange={(e) => setFormData({ ...formData, minStockAlert: e.target.value })}
+                      className="w-full p-3.5 bg-danger/5 border border-danger/20 rounded-xl text-sm font-bold text-danger focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger transition-all hover:border-danger/50 placeholder-danger/30"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 mb-1 block">Unit Cost (₹)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={formData.unitCost}
-                    onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-sm font-bold text-emerald-600"
-                  />
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block flex items-center gap-1 uppercase">
+                    Unit Cost <DollarSign size={12} className="text-success" />
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={formData.unitCost}
+                      onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
+                      className="w-full p-3.5 bg-success/5 border border-success/20 rounded-xl text-sm font-bold text-success focus:outline-none focus:ring-2 focus:ring-success/40 focus:border-success transition-all hover:border-success/50 placeholder-success/30"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-end gap-3 pt-6 mt-4">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition"
+                  className="px-6 py-3 bg-background hover:bg-surface-hover border border-border text-text-main font-bold text-sm rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl shadow transition"
+                  className="px-8 py-3 bg-primary hover:bg-primary-hover text-white font-bold text-sm rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all hover:-translate-y-0.5 flex items-center gap-2"
                 >
-                  {editingItem ? 'Update Item' : 'Save Item'}
+                  <CheckCircle size={18} />
+                  {editingItem ? 'Update Material' : 'Save Material'}
                 </button>
               </div>
             </form>

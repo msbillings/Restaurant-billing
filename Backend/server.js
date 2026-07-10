@@ -258,6 +258,7 @@ import floorRoutes from './routes/floorRoutes.js';
 import aggregatorRoutes from './routes/aggregatorRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
+import staffRoutes from './routes/staffRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -274,6 +275,7 @@ app.use('/api/floors', floorRoutes);
 app.use('/api/aggregators', aggregatorRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/staff', staffRoutes);
 
 // Start background session cleanup job
 startSessionCleanupJob();

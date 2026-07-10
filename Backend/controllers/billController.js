@@ -3,7 +3,7 @@ import cache from '../utils/cache.js';
 import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
-import { updateCustomerFromBill } from './customerController.js';
+import { updateCustomerFromBill, syncCustomer } from './customerController.js';
 
 const emitSocketEvent = (req, eventName, data) => {
   try {
@@ -49,7 +49,10 @@ export const saveOrder = async (req, res) => {
       kitchenNotes, 
       billType,
       orderSource,
-      id
+      id,
+      discountType,
+      discountValue,
+      tax
     } = req.body;
 
     // Validate required fields
@@ -101,12 +104,28 @@ export const saveOrder = async (req, res) => {
         total: order.total
       };
 
+      const dType = discountType || order.discountType || 'flat';
+      const dValue = discountValue !== undefined ? discountValue : (order.discountValue || 0);
+      let calculatedDiscount = 0;
+      if (dType === 'percentage') {
+        calculatedDiscount = (subtotal * dValue) / 100;
+      } else {
+        calculatedDiscount = dValue;
+      }
+
+      const taxableAmount = subtotal - calculatedDiscount;
+      const tRate = tax !== undefined ? tax : (order.tax || 0);
+      const calculatedTax = (taxableAmount * tRate) / 100;
+      const calculatedTotal = Math.round(taxableAmount + calculatedTax);
+
       const newState = {
         items: updatedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
         subtotal: subtotal,
-        totalDiscount: order.discount || 0,
-        totalTax: order.tax || 0,
-        total: subtotal // Before tax/discount is recalculated in generateBill
+        totalDiscount: calculatedDiscount,
+        totalTax: calculatedTax,
+        total: calculatedTotal,
+        discountType: dType,
+        discountValue: dValue
       };
 
       const hasChanged = JSON.stringify(previousState) !== JSON.stringify(newState);
@@ -125,6 +144,9 @@ export const saveOrder = async (req, res) => {
       order.customerPhone = customerPhone;
       order.kitchenNotes = kitchenNotes;
       order.billType = billType || order.billType;
+      order.discountType = dType;
+      order.discountValue = dValue;
+      order.discount = calculatedDiscount;
       
       // Update delivery fields if delivery order
       if (billType === 'Delivery') {
@@ -137,21 +159,40 @@ export const saveOrder = async (req, res) => {
       }
       
       order.subtotal = subtotal;
-      order.total = subtotal; // Tax/Discount applied at billing
+      order.tax = tRate;
+      order.total = calculatedTotal;
       
       await order.save();
     } else {
       // Create new order
+      const dType = discountType || 'flat';
+      const dValue = discountValue || 0;
+      let calculatedDiscount = 0;
+      if (dType === 'percentage') {
+        calculatedDiscount = (subtotal * dValue) / 100;
+      } else {
+        calculatedDiscount = dValue;
+      }
+
+      const taxableAmount = subtotal - calculatedDiscount;
+      const tRate = tax !== undefined ? tax : 0;
+      const calculatedTax = (taxableAmount * tRate) / 100;
+      const calculatedTotal = Math.round(taxableAmount + calculatedTax);
+
       const orderData = {
         tableNo,
         items: sanitizedItems,
         subtotal,
-        total: subtotal,
+        discount: calculatedDiscount,
+        tax: tRate,
+        total: calculatedTotal,
         status: 'Open',
         billType: billType || 'Dine-In',
         customerName,
         customerPhone,
-        kitchenNotes
+        kitchenNotes,
+        discountType: dType,
+        discountValue: dValue
       };
 
       // Add delivery fields only if delivery order
@@ -174,6 +215,10 @@ export const saveOrder = async (req, res) => {
     if (order.status === 'Open' && order.billType === 'Dine-In') {
       await updateTableStatusHelper(req, order.tableNo, 'Occupied', order._id);
     }
+    // Sync customer to CRM immediately without modifying visits/spend
+    if (order.customerPhone) {
+      syncCustomer(req, order.customerPhone, order.customerName).catch(err => console.error('Immediate CRM sync error:', err));
+    }
     
     res.status(200).json(order);
   } catch (error) {
@@ -187,7 +232,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, tax } = req.body;
+    const { discount, discountType, discountValue, tax, taxBreakdown } = req.body;
 
     const order = await Bill.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -211,7 +256,12 @@ export const generateBill = async (req, res) => {
     order.status = 'Billed';
     order.billNumber = billNumber;
     order.discount = Number(discount) || 0;
+    order.discountType = discountType || 'flat';
+    order.discountValue = Number(discountValue) || 0;
     order.tax = Number(tax) || 0;
+    if (taxBreakdown) {
+      order.taxBreakdown = taxBreakdown;
+    }
 
     // Calculate final total
     const taxableAmount = order.subtotal - order.discount;
@@ -990,5 +1040,94 @@ export const cancelOrder = async (req, res) => {
   } catch (error) {
     console.error('Error cancelling order:', error);
     res.status(500).json({ message: 'Error cancelling order', error: error.message });
+  }
+};
+
+export const refundOrder = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { id } = req.params;
+    const { refundReason } = req.body;
+
+    const bill = await Bill.findById(id);
+    if (!bill) return res.status(404).json({ message: 'Bill not found' });
+    if (bill.status !== 'Paid') return res.status(400).json({ message: 'Only paid bills can be refunded' });
+
+    bill.status = 'Refunded';
+    bill.cancelReason = refundReason || 'Customer requested refund';
+    await bill.save();
+
+    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Refunded' });
+
+    res.status(200).json({ message: 'Order refunded successfully', bill });
+  } catch (error) {
+    console.error('Error refunding order:', error);
+    res.status(500).json({ message: 'Error refunding order', error: error.message });
+  }
+};
+
+// =======================
+// KDS Controller Methods
+// =======================
+
+export const getActiveKOTs = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    // Fetch all open/billed orders that have KOTs
+    const activeOrders = await Bill.find({
+      status: { $in: ['Open', 'Billed'] },
+      kots: { $not: { $size: 0 } }
+    }).sort({ updatedAt: 1 }).lean();
+
+    const allKots = [];
+    activeOrders.forEach(order => {
+      order.kots.forEach(kot => {
+        // Only include KOTs that have pending or preparing items
+        const hasUnfinishedItems = kot.items.some(item => item.status === 'Pending' || item.status === 'Preparing');
+        if (hasUnfinishedItems) {
+          allKots.push({
+            orderId: order._id,
+            tableNo: order.tableNo,
+            billType: order.billType,
+            orderSource: order.orderSource,
+            kotId: kot._id,
+            kotNumber: kot.kotNumber,
+            items: kot.items,
+            createdAt: kot.createdAt
+          });
+        }
+      });
+    });
+
+    res.json(allKots);
+  } catch (error) {
+    console.error('Error fetching active KOTs:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const updateKOTItemStatus = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { orderId, kotId, itemId, status } = req.body;
+
+    const order = await Bill.findById(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    const kot = order.kots.id(kotId);
+    if (!kot) return res.status(404).json({ message: 'KOT not found' });
+
+    const item = kot.items.id(itemId);
+    if (!item) return res.status(404).json({ message: 'Item not found in KOT' });
+
+    item.status = status;
+    await order.save();
+
+    emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, status });
+
+    res.json({ message: 'Item status updated successfully', kot });
+  } catch (error) {
+    console.error('Error updating KOT item status:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

@@ -99,12 +99,12 @@ export const getRestaurantInfo = async (req, res) => {
     const licenseExpiry = expiryDoc?.value || '2026-07-12T23:59:59.000Z';
     
     const restaurantSettings = settingsDoc?.value || {
-      restaurantName: 'ABC RESTAURANT',
-      restaurantType: 'South Indian & Chinese',
-      address: 'Main Road, Hyderabad - 500001',
-      phone: '9876543210',
-      email: 'support@abcrestaurant.com',
-      gstin: '36ABCDE1234F1Z5'
+      restaurantName: '',
+      restaurantType: '',
+      address: '',
+      phone: '',
+      email: '',
+      gstin: ''
     };
 
     const spaces = spacesDoc?.value || null;

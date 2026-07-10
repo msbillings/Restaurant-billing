@@ -7,13 +7,17 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 export const getAnalytics = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const { month, year, days } = req.query;
+    const { month, year, days, date } = req.query;
     
     let startDate, endDate;
     
     // Use UTC dates to avoid timezone issues in production
     // MongoDB stores dates in UTC, so we need to query in UTC
-    if (month && year) {
+    if (date) {
+      const parsedDate = new Date(date);
+      startDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 0, 0, 0, 0));
+      endDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 23, 59, 59, 999));
+    } else if (month && year) {
       const monthNum = parseInt(month) - 1; // JavaScript months are 0-indexed
       const yearNum = parseInt(year);
       startDate = new Date(Date.UTC(yearNum, monthNum, 1, 0, 0, 0, 0));

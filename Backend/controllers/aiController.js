@@ -165,8 +165,16 @@ export const processWhatsAppOrder = async (req, res) => {
         price: item.price,
         quantity: item.quantity,
         total: item.total,
-        printedQuantity: 0
+        printedQuantity: item.quantity
       })),
+      kots: [{
+        kotNumber: 'KOT-1',
+        items: parsedItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity
+        })),
+        createdAt: new Date()
+      }],
       subtotal,
       total: subtotal,
       tax: 0,
@@ -183,7 +191,7 @@ export const processWhatsAppOrder = async (req, res) => {
     
     // Emit real-time event
     emitSocketEvent(req, 'orderUpdated', { tableNo: newOrder.tableNo, status: 'Open' });
-    emitSocketEvent(req, 'newKOT', { tableNo: newOrder.tableNo });
+    emitSocketEvent(req, 'newKOT', { tableNo: newOrder.tableNo, kot: newOrder.kots[0] });
     
     res.status(200).json({
       success: true,

@@ -84,6 +84,19 @@ export const apiCancelOrder = async (id, cancelReason) => {
   }
 };
 
+export const apiRefundOrder = async (id, refundReason) => {
+  try {
+    const response = await api.post(`/bills/refund/${id}`, { refundReason });
+    return response.data;
+  } catch (err) {
+    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+      await addToSyncQueue(`/bills/refund/${id}`, 'post', { refundReason });
+      return { _id: id, status: 'Refunded', _offline: true };
+    }
+    throw err;
+  }
+};
+
 export const apiTransferTable = async (id, newTableNo) => {
   const response = await api.post(`/bills/transfer/${id}`, { newTableNo });
   return response.data;

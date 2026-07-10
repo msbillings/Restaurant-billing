@@ -73,6 +73,7 @@ const MenuManagement = ({ user }) => {
     description: '',
     image: '',
     taxRate: 0,
+    hsnCode: '',
     isAvailable: true,
     recipe: []
   });
@@ -131,6 +132,7 @@ const MenuManagement = ({ user }) => {
         description: item.description || '',
         image: item.image || '',
         taxRate: item.taxRate || 0,
+        hsnCode: item.hsnCode || '',
         isAvailable: item.isAvailable !== false,
         recipe: item.recipe || []
       });
@@ -144,6 +146,7 @@ const MenuManagement = ({ user }) => {
         description: '',
         image: '',
         taxRate: 0,
+        hsnCode: '',
         isAvailable: true,
         recipe: []
       });
@@ -272,6 +275,7 @@ const MenuManagement = ({ user }) => {
       Description: item.description || '',
       'Is Available': item.isAvailable ? 'Yes' : 'No',
       'Tax Rate': item.taxRate || 0,
+      'HSN Code': item.hsnCode || '',
       'Image URL': item.image || ''
     }));
 
@@ -313,6 +317,7 @@ const MenuManagement = ({ user }) => {
                 description: row.Description || '',
                 isAvailable: row['Is Available'] ? row['Is Available'].toLowerCase() === 'yes' : true,
                 taxRate: parseFloat(row['Tax Rate']) || 0,
+                hsnCode: row['HSN Code'] || '',
                 image: row['Image URL'] || ''
               };
 
@@ -831,6 +836,33 @@ const MenuManagement = ({ user }) => {
                   {validationErrors.price && (
                     <p className="text-xs text-danger">{validationErrors.price}</p>
                   )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-text-muted">HSN Code</label>
+                  <input
+                    type="text"
+                    value={formData.hsnCode}
+                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
+                    placeholder="e.g. 2106"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-text-muted">GST Rate (%)</label>
+                  <select
+                    value={formData.taxRate}
+                    onChange={(e) => setFormData({ ...formData, taxRate: Number(e.target.value) })}
+                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
                 </div>
               </div>
 

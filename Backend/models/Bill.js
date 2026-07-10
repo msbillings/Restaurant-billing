@@ -19,6 +19,7 @@ const billSchema = new mongoose.Schema({
       default: 0,
       min: [0, 'Printed quantity cannot be negative']
     },
+    hsnCode: { type: String },
     total: { type: Number, min: [0, 'Total cannot be negative'] }
   }],
   subtotal: {
@@ -31,10 +32,24 @@ const billSchema = new mongoose.Schema({
     default: 0,
     min: [0, 'Tax cannot be negative']
   },
+  taxBreakdown: {
+    cgst: { type: Number, default: 0 },
+    sgst: { type: Number, default: 0 },
+    igst: { type: Number, default: 0 }
+  },
   discount: {
     type: Number,
     default: 0,
     min: [0, 'Discount cannot be negative']
+  },
+  discountType: {
+    type: String,
+    enum: ['percentage', 'flat'],
+    default: 'flat'
+  },
+  discountValue: {
+    type: Number,
+    default: 0
   },
   total: {
     type: Number,
@@ -56,7 +71,7 @@ const billSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Open', 'Billed', 'Paid', 'Cancelled', 'Deleted'],
+    enum: ['Open', 'Billed', 'Paid', 'Cancelled', 'Deleted', 'Refunded'],
     default: 'Open'
   },
   cancelReason: {
@@ -100,7 +115,12 @@ const billSchema = new mongoose.Schema({
     kotNumber: String,
     items: [{
       name: String,
-      quantity: Number
+      quantity: Number,
+      status: {
+        type: String,
+        enum: ['Pending', 'Preparing', 'Ready'],
+        default: 'Pending'
+      }
     }],
     createdAt: {
       type: Date,

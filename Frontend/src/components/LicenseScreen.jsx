@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Shield, Key, Loader2, ServerCrash, User } from 'lucide-react';
+import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff } from 'lucide-react';
 
 const LicenseScreen = ({ onValidLicense }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -144,13 +145,21 @@ const LicenseScreen = ({ onValidLicense }) => {
                   <Key size={18} className="text-text-muted" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-11 pr-4 py-3 bg-surface border-2 border-border rounded-xl text-lg font-bold text-text-main tracking-wider focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all placeholder:text-gray-300"
+                  className="w-full pl-11 pr-12 py-3 bg-surface border-2 border-border rounded-xl text-lg font-bold text-text-main tracking-wider focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all placeholder:text-gray-300"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-text-muted hover:text-primary transition-colors focus:outline-none"
+                  tabIndex="-1"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 

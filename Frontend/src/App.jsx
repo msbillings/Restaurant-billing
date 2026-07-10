@@ -15,8 +15,12 @@ const KOTHistory = React.lazy(() => import('./components/KOTHistory'));
 const LicenseScreen = React.lazy(() => import('./components/LicenseScreen'));
 const DayBook = React.lazy(() => import('./components/DayBook'));
 const InventoryManagement = React.lazy(() => import('./components/InventoryManagement'));
+const KDS = React.lazy(() => import('./components/KDS'));
+const CRM = React.lazy(() => import('./components/CRM'));
+const QRCodeGenerator = React.lazy(() => import('./components/QRCodeGenerator'));
+const StaffManagement = React.lazy(() => import('./components/StaffManagement'));
 import WhatsAppSimulator from './components/WhatsAppSimulator';
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
@@ -171,7 +175,12 @@ function App() {
 
     // Listen for settings updates
     const handleSettingsUpdate = (event) => {
-      loadSettings();
+      if (event.detail && event.detail.restaurantName) {
+        setRestaurantName(event.detail.restaurantName);
+        document.title = `${event.detail.restaurantName} - Restaurant Management`;
+      } else {
+        loadSettings();
+      }
     };
 
     window.addEventListener('settingsUpdated', handleSettingsUpdate);
@@ -343,7 +352,11 @@ function App() {
       case 'delivery': return 'Delivery Orders';
       case 'expenses': return 'Petty Cash & Expenses';
       case 'inventory': return 'Inventory & Stock';
+      case 'crm': return 'Customer Directory (CRM)';
+      case 'staff': return 'Staff Management';
+      case 'qrcode': return 'QR Menu Generator';
       case 'settings': return 'System Settings';
+      case 'kds': return 'Kitchen Display System';
       default: return 'Restaurant Management';
     }
   };
@@ -449,6 +462,17 @@ function App() {
             <span>KOT History</span>
           </button>
 
+          {/* 4.6 KDS - Hidden for Captain */}
+          {!isCaptain && (
+            <button
+              onClick={() => handleViewChange('kds')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'kds' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            >
+              <UtensilsCrossed size={20} />
+              <span>Kitchen Display (KDS)</span>
+            </button>
+          )}
+
           {/* 5. Petty Cash & Expenses - Hidden for Captain */}
           {!isCaptain && (
             <button
@@ -512,6 +536,37 @@ function App() {
             >
               <Package size={20} />
               <span>Inventory</span>
+            </button>
+          )}
+
+          {/* 7.7 CRM - Hidden for Captain */}
+          {!isCaptain && (
+            <button
+              onClick={() => handleViewChange('crm')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'crm' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            >
+              <UsersIcon size={20} />
+              <span>Customer CRM</span>
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              onClick={() => handleViewChange('staff')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'staff' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            >
+              <UserCheck size={20} />
+              <span>Staff HR</span>
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              onClick={() => handleViewChange('qrcode')}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'qrcode' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            >
+              <QrCode size={20} />
+              <span>QR Menu Generator</span>
             </button>
           )}
 
@@ -748,7 +803,11 @@ function App() {
                 {view === 'delivery' && <DeliveryOrders />}
                 {view === 'expenses' && <Expenses />}
                 {view === 'inventory' && <InventoryManagement />}
+                {view === 'crm' && <CRM />}
+                {view === 'staff' && <StaffManagement />}
+                {view === 'qrcode' && <QRCodeGenerator />}
                 {view === 'settings' && <Settings user={user} setUser={setUser} />}
+                {view === 'kds' && <KDS />}
               </>
             )}
           </Suspense>

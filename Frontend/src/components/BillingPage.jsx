@@ -259,7 +259,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         }
         setCustomerPhone(order.customerPhone || '');
         setCustomerName(order.customerName || '');
-        if (order.tax !== undefined && Number(order.tax) > 0) {
+        setDiscount({
+          type: order.discountType || 'percentage',
+          value: order.discountValue || ''
+        });
+        if (order.tax !== undefined && order.tax !== null) {
           setTaxRate(order.tax);
         } else {
           try {
@@ -283,6 +287,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setCustomerPhone('');
         setCustomerName('');
         setCustomerInfo(null);
+        setDiscount({ type: 'percentage', value: '' });
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           let tot = 0;
@@ -424,7 +429,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         tableNo: tableNo,
         items: cart,
         billType,
-        // Include delivery fields if delivery order
+        customerName,
+        customerPhone,
+        discountType: discount.type,
+        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        tax: taxVal,
         ...(billType === 'Delivery' && {
           orderSource
         })
@@ -462,6 +471,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             tableNo: tableToUse,
             items: cart,
             billType: billType,
+            customerName,
+            customerPhone,
             orderSource: billType === 'Delivery' ? orderSource : undefined
           };
           const savedOrder = await saveOrder(orderData);
@@ -485,11 +496,30 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   };
 
   const generateBillAfterSave = async (orderIdToUse) => {
-    setLoading(true);
     try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+      const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+      const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+      const totRate = cRate + sRate + gRate;
+      
+      let cAmt = 0, sAmt = 0, gAmt = 0;
+      if (totRate > 0) {
+        cAmt = (taxVal * (cRate / totRate)) || 0;
+        sAmt = (taxVal * (sRate / totRate)) || 0;
+        gAmt = (taxVal * (gRate / totRate)) || 0;
+      }
+
       const billData = {
         discount: discountAmount,
-        tax: taxVal
+        discountType: discount.type,
+        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        tax: taxVal,
+        taxBreakdown: {
+          cgst: cAmt,
+          sgst: sAmt,
+          igst: gAmt
+        }
       };
       const billedOrder = await generateBill(orderIdToUse, billData);
       setOrderId(billedOrder._id);
@@ -499,8 +529,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       
       showToast('Bill generated successfully!', 'success');
       if (onOrderUpdate) onOrderUpdate();
-      // Open Payment Modal immediately after generating bill
-      setShowPayment(true);
+      // Open Invoice Modal immediately after generating bill to print
+      setShowInvoice(true);
     } catch (error) {
       console.error('Error generating bill:', error);
       
@@ -537,6 +567,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   };
 
   const completeSettlement = async (paymentData) => {
+    if (orderStatus === 'Paid') {
+      showToast('Bill is already settled!', 'info');
+      setShowPayment(false);
+      return;
+    }
+    
     setLoading(true);
     try {
       let currentId = orderId;
@@ -563,6 +599,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           subtotal,
           tax: taxAmount,
           discount: discountAmount,
+          discountType: discount.type,
+          discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
           total,
           billType,
           orderSource: billType === 'Delivery' ? orderSource : undefined,
@@ -576,11 +614,31 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
       // Step 2: For Delivery or Takeaway, auto-generate bill if not billed yet
       let currentBillNum = billNumber;
-      let billDetails = completedBill;
+      let billDetails = null;
       if (orderStatus !== 'Billed' && orderStatus !== 'Paid') {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+        const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+        const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+        const totRate = cRate + sRate + gRate;
+        
+        let cAmt = 0, sAmt = 0, gAmt = 0;
+        if (totRate > 0) {
+          cAmt = (taxVal * (cRate / totRate)) || 0;
+          sAmt = (taxVal * (sRate / totRate)) || 0;
+          gAmt = (taxVal * (gRate / totRate)) || 0;
+        }
+
         const billData = {
           discount: discountAmount,
-          tax: taxVal
+          discountType: discount.type,
+          discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+          tax: taxVal,
+          taxBreakdown: {
+            cgst: cAmt,
+            sgst: sAmt,
+            igst: gAmt
+          }
         };
         const billedOrder = await generateBill(currentId, billData);
         setOrderStatus('Billed');
@@ -606,8 +664,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         items: cart, // Ensure items are preserved
         status: 'Paid', // Explicitly set status
         paymentMode: paymentData.mode, // Ensure payment mode is set
-        billNumber: currentBillNum || settledOrder.billNumber,
-        tableNo: settledOrder.tableNo || billDetails?.tableNo || activeTable // Always preserve table number
+        billNumber: currentBillNum || settledOrder?.billNumber,
+        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable // Always preserve table number
       });
       
       showToast('Bill Settled Successfully! Saved to billing history.', 'success');
@@ -616,7 +674,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       setShowInvoice(true); // Show Invoice AFTER payment
     } catch (error) {
       console.error('Error settling bill:', error);
-      setToast({ message: error.response?.data?.message || 'Failed to settle bill', type: 'error' });
+      setToast({ message: error.response?.data?.message || error.message || 'Failed to settle bill', type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -632,6 +690,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         subtotal,
         tax: taxAmount,
         discount: discountAmount,
+        discountType: discount.type,
+        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
         total,
         billType,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
@@ -1023,6 +1083,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           total={total} 
           billNumber={billNumber}
           tableNo={activeTable}
+          isLoading={loading}
           onClose={() => setShowPayment(false)} 
           onComplete={handleSettleBill}
         />

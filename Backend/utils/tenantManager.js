@@ -9,6 +9,8 @@ import InventoryItemDefault from '../models/InventoryItem.js';
 import RecipeDefault from '../models/Recipe.js';
 import StockLogDefault from '../models/StockLog.js';
 import FloorDefault from '../models/Floor.js';
+import StaffDefault from '../models/Staff.js';
+import CustomerDefault from '../models/Customer.js';
 
 const connectionPool = new Map();
 
@@ -52,6 +54,8 @@ export const getTenantModels = async (databaseName) => {
   const Recipe = conn.models.Recipe || conn.model('Recipe', RecipeDefault.schema);
   const StockLog = conn.models.StockLog || conn.model('StockLog', StockLogDefault.schema);
   const Floor = conn.models.Floor || conn.model('Floor', FloorDefault.schema);
+  const Staff = conn.models.Staff || conn.model('Staff', StaffDefault.schema);
+  const Customer = conn.models.Customer || conn.model('Customer', CustomerDefault.schema);
 
   return {
     Menu,
@@ -64,6 +68,8 @@ export const getTenantModels = async (databaseName) => {
     Recipe,
     StockLog,
     Floor,
+    Staff,
+    Customer,
     connection: conn
   };
 };

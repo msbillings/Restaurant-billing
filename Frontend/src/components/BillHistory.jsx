@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getBills, deleteBill, getBillById } from '../api/billing';
+import { Search, Eye, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
+import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
@@ -14,6 +14,7 @@ const BillHistory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null });
+  const [refundModal, setRefundModal] = useState({ isOpen: false, billId: null, reason: '' });
   const [toast, setToast] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
@@ -91,6 +92,19 @@ const BillHistory = () => {
     } catch (error) {
       console.error('Error deleting bill:', error);
       setToast({ message: error.response?.data?.message || 'Failed to delete bill', type: 'error' });
+    }
+  };
+
+  const confirmRefund = async () => {
+    if (!refundModal.billId) return;
+    try {
+      await apiRefundOrder(refundModal.billId, refundModal.reason);
+      setBills(bills.map(bill => bill._id === refundModal.billId ? { ...bill, status: 'Refunded', cancelReason: refundModal.reason || 'Customer requested refund' } : bill));
+      setRefundModal({ isOpen: false, billId: null, reason: '' });
+      setToast({ message: 'Bill refunded successfully', type: 'success' });
+    } catch (error) {
+      console.error('Error refunding bill:', error);
+      setToast({ message: error.response?.data?.message || 'Failed to refund bill', type: 'error' });
     }
   };
 
@@ -296,6 +310,15 @@ const BillHistory = () => {
                         >
                           <Eye size={18} />
                         </button>
+                        {bill.status === 'Paid' && (
+                          <button 
+                            onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
+                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-2"
+                            title="Refund Bill"
+                          >
+                            <RefreshCcw size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -366,6 +389,36 @@ const BillHistory = () => {
           bill={selectedBill} 
           onClose={() => setSelectedBill(null)} 
         />
+      )}
+
+      {refundModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+          <div className="bg-surface rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border">
+            <h3 className="text-lg font-bold text-text-main mb-2">Refund Order</h3>
+            <p className="text-text-muted text-sm mb-4">Please provide a reason for the refund.</p>
+            <input
+              type="text"
+              value={refundModal.reason}
+              onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })}
+              placeholder="e.g. Customer unhappy, wrong item"
+              className="w-full bg-background border border-border rounded-xl px-4 py-2 mb-6 text-sm focus:outline-none focus:border-primary text-text-main"
+            />
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
+                className="flex-1 py-2 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmRefund}
+                className="flex-1 py-2 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+              >
+                Confirm Refund
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (
