@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3 } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 function App() {
   const [clients, setClients] = useState([]);
@@ -109,6 +110,59 @@ function App() {
     c.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // --- ANALYTICS CALCULATIONS ---
+  const { totalRevenue, expiringSoon, planData, monthlyData } = useMemo(() => {
+    let rev = 0;
+    const expiring = [];
+    const planCounts = { Monthly: 0, Yearly: 0, Lifetime: 0, Custom: 0 };
+    const months = {};
+
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    const today = new Date();
+
+    clients.forEach(c => {
+      // Revenue (Estimated placeholders: Monthly=500, Yearly=5000, Lifetime=20000)
+      if (c.plan === 'Monthly') rev += 500;
+      else if (c.plan === 'Yearly') rev += 5000;
+      else if (c.plan === 'Lifetime') rev += 20000;
+      
+      // Plan counts
+      if (planCounts[c.plan] !== undefined) planCounts[c.plan]++;
+      else planCounts['Custom']++;
+
+      // Expiry alerts (expiring in less than 30 days and not already expired long ago)
+      if (c.validUntil) {
+        const expiry = new Date(c.validUntil);
+        if (expiry > today && expiry <= thirtyDaysFromNow) {
+          expiring.push(c);
+        } else if (expiry <= today) {
+          // You might also want to flag already expired ones
+          expiring.push(c);
+        }
+      }
+
+      // Monthly Signups (based on createdAt)
+      const dateString = c.licenseCreatedAt || c.createdAt;
+      if (dateString) {
+        const date = new Date(dateString);
+        const monthYear = date.toLocaleString('default', { month: 'short', year: '2-digit' });
+        months[monthYear] = (months[monthYear] || 0) + 1;
+      }
+    });
+
+    const pData = [
+      { name: 'Monthly', value: planCounts.Monthly, color: '#3b82f6' },
+      { name: 'Yearly', value: planCounts.Yearly, color: '#10b981' },
+      { name: 'Lifetime', value: planCounts.Lifetime, color: '#f59e0b' },
+      { name: 'Custom', value: planCounts.Custom, color: '#8b5cf6' }
+    ].filter(d => d.value > 0);
+
+    const mData = Object.keys(months).map(k => ({ name: k, signups: months[k] })).reverse();
+
+    return { totalRevenue: rev, expiringSoon: expiring, planData: pData, monthlyData: mData };
+  }, [clients]);
+
   return (
     <div className="min-h-screen bg-background text-white font-sans selection:bg-primary/30">
       
@@ -139,7 +193,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Users className="w-24 h-24 text-white" />
@@ -154,6 +208,13 @@ function App() {
             <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Active Licenses</p>
             <h3 className="text-4xl font-black text-primary">{clients.filter(c => c.status === 'Active').length}</h3>
           </div>
+          <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <TrendingUp className="w-24 h-24 text-white" />
+            </div>
+            <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Est. Revenue</p>
+            <h3 className="text-4xl font-black text-green-400">₹{totalRevenue.toLocaleString()}</h3>
+          </div>
           <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group flex items-center justify-between">
             <div>
               <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Generate New Key</p>
@@ -162,6 +223,83 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Dashboard Charts & Alerts Area */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          
+          {/* Expiry Alerts Panel */}
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl flex flex-col max-h-96">
+            <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
+              <AlertTriangle className="text-amber-500 w-5 h-5" /> 
+              Expiry Alerts
+            </h3>
+            <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+              {expiringSoon.length === 0 ? (
+                <div className="text-gray-500 text-sm text-center py-8">All subscriptions are healthy.</div>
+              ) : (
+                expiringSoon.map(client => {
+                  const isExpired = new Date(client.validUntil) < new Date();
+                  return (
+                    <div key={client._id} className="bg-background border border-border rounded-lg p-3 flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-sm">{client.restaurantName}</p>
+                        <p className={`text-xs font-mono ${isExpired ? 'text-red-400' : 'text-amber-400'}`}>
+                          {isExpired ? 'Expired' : 'Expiring'}: {new Date(client.validUntil).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <button onClick={() => openLicenseModal(client)} className="text-xs bg-surface border border-border px-2 py-1 rounded hover:bg-gray-700 transition">Extend</button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Growth Chart */}
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><TrendingUp className="text-primary w-5 h-5"/> New Signups</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData}>
+                  <XAxis dataKey="name" stroke="#6b7280" fontSize={12} tickLine={false} axisLine={false} />
+                  <Tooltip cursor={{fill: '#374151'}} contentStyle={{backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff'}} />
+                  <Bar dataKey="signups" fill="#ff5c35" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Plan Distribution */}
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Key className="text-green-500 w-5 h-5"/> Plan Distribution</h3>
+            <div className="h-64 relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={planData} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                    {planData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{backgroundColor: '#1f2937', border: 'none', borderRadius: '8px', color: '#fff'}} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Custom Legend */}
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+                <p className="text-2xl font-black">{clients.length}</p>
+                <p className="text-xs text-gray-400">Clients</p>
+              </div>
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              {planData.map(plan => (
+                <div key={plan.name} className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plan.color }}></div>
+                  <span className="text-xs text-gray-300 font-medium">{plan.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* Search Bar */}

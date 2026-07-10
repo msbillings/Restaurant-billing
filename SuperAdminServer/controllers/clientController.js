@@ -10,7 +10,12 @@ export const getAllClients = async (req, res) => {
     // Attach license info to each client
     const clientsWithLicense = await Promise.all(clients.map(async (client) => {
       const license = await License.findOne({ client: client._id });
-      return { ...client, validUntil: license ? license.validUntil : null };
+      return { 
+        ...client, 
+        validUntil: license ? license.validUntil : null,
+        plan: license ? license.plan : 'Unknown',
+        licenseCreatedAt: license ? license.createdAt : client.createdAt
+      };
     }));
 
     res.status(200).json(clientsWithLicense);
