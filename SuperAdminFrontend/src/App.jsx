@@ -473,7 +473,7 @@ function App() {
                     <td className="p-4 font-bold">{client.restaurantName}</td>
                     <td className="p-4 text-gray-300">{client.email}</td>
                     <td className="p-4">
-                      <span className="font-mono bg-background px-2 py-1 rounded text-primary text-xs font-bold border border-primary/20">
+                      <span className="font-mono bg-background px-2 py-1 rounded text-primary text-xs font-bold border border-primary/20 whitespace-nowrap">
                         {client.licenseKey}
                       </span>
                     </td>
@@ -507,7 +507,7 @@ function App() {
                       </span>
                     </td>
                     <td className="p-4 text-right">
-                      <div className="flex gap-2 justify-end">
+                      <div className="flex flex-wrap gap-2 justify-end min-w-[200px]">
                         <button 
                           onClick={() => handleToggleStatus(client._id, client.status)}
                           className={`flex items-center gap-1 text-xs font-bold ${client.status === 'Active' ? 'bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 border-orange-500/30' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/30'} border px-3 py-1.5 rounded transition-colors`}
