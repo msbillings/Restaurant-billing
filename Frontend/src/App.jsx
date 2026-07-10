@@ -55,6 +55,16 @@ function App() {
   const [licenseExpiry, setLicenseExpiry] = useState(null); // Date object
   const [daysRemaining, setDaysRemaining] = useState(null);
   const [showExpiryPopup, setShowExpiryPopup] = useState(false);
+  const [features, setFeatures] = useState(() => {
+    try {
+      const cached = localStorage.getItem('resto_features');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return {
+      kds: true, inventory: true, crm: true, staff: true, 
+      analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true
+    };
+  });
 
   const rawRole = user?.role || 'Admin';
   const usernameLower = user?.username?.toLowerCase() || '';
@@ -133,6 +143,23 @@ function App() {
           setLicenseExpiry(expiryDate);
         }
       }
+      }
+      
+      // Also fetch features from SuperAdmin
+      try {
+        const licenseKey = localStorage.getItem('resto_license');
+        if (licenseKey) {
+          const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'https://restaurant-superadmin-api-maheer.vercel.app';
+          const saRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/license/${licenseKey}`);
+          if (saRes.ok) {
+            const saData = await saRes.json();
+            if (saData.features) {
+              setFeatures(saData.features);
+              localStorage.setItem('resto_features', JSON.stringify(saData.features));
+            }
+          }
+        }
+      } catch (err) {}
     };
     syncConfigFromBackend();
   }, []);
@@ -459,7 +486,7 @@ function App() {
           </button>
 
           {/* 4.6 KDS - Hidden for Captain */}
-          {!isCaptain && (
+          {(!isCaptain && features.kds !== false) && (
             <button
               onClick={() => handleViewChange('kds')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'kds' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -470,7 +497,7 @@ function App() {
           )}
 
           {/* 5. Petty Cash & Expenses - Hidden for Captain */}
-          {!isCaptain && (
+          {(!isCaptain && features.expenses !== false) && (
             <button
               onClick={() => handleViewChange('expenses')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'expenses' ? 'bg-red-500 text-white shadow-lg shadow-red-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -481,7 +508,7 @@ function App() {
           )}
 
           {/* 6. Delivery Orders - Hidden for Captain */}
-          {!isCaptain && (
+          {(!isCaptain && features.delivery !== false) && (
             <button
               onClick={() => handleViewChange('delivery')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'delivery' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -503,7 +530,7 @@ function App() {
           )}
 
           {/* 7. Analytics - Hidden for Captain and Cashier */}
-          {isAdmin && (
+          {(isAdmin && features.analytics !== false) && (
             <button
               onClick={() => handleViewChange('analytics')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'analytics' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -514,7 +541,7 @@ function App() {
           )}
 
           {/* 7.5 DayBook - Hidden for Captain */}
-          {!isCaptain && (
+          {(!isCaptain && features.daybook !== false) && (
             <button
               onClick={() => handleViewChange('daybook')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'daybook' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -525,7 +552,7 @@ function App() {
           )}
 
           {/* 7.6 Inventory - Admin only */}
-          {isAdmin && (
+          {(isAdmin && features.inventory !== false) && (
             <button
               onClick={() => handleViewChange('inventory')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'inventory' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -536,7 +563,7 @@ function App() {
           )}
 
           {/* 7.7 CRM - Hidden for Captain */}
-          {!isCaptain && (
+          {(!isCaptain && features.crm !== false) && (
             <button
               onClick={() => handleViewChange('crm')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'crm' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -546,7 +573,7 @@ function App() {
             </button>
           )}
 
-          {isAdmin && (
+          {(isAdmin && features.staff !== false) && (
             <button
               onClick={() => handleViewChange('staff')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'staff' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
@@ -556,7 +583,7 @@ function App() {
             </button>
           )}
 
-          {isAdmin && (
+          {(isAdmin && features.qrcode !== false) && (
             <button
               onClick={() => handleViewChange('qrcode')}
               className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'qrcode' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}

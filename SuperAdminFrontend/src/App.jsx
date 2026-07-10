@@ -10,6 +10,7 @@ function App() {
   // Modal State
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
   const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly' });
+  const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
 
   const fetchClients = async () => {
     setLoading(true);
@@ -62,6 +63,31 @@ function App() {
       fetchClients();
     } catch (error) {
       alert('Failed to update license.');
+      console.error(error);
+    }
+  };
+
+  const openFeaturesModal = (client) => {
+    setFeaturesModal({
+      isOpen: true,
+      clientId: client._id,
+      features: client.features || {
+        kds: true, inventory: true, crm: true, staff: true, 
+        analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true
+      }
+    });
+  };
+
+  const handleSaveFeatures = async () => {
+    try {
+      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${featuresModal.clientId}/features`, {
+        features: featuresModal.features
+      });
+      alert('Features updated successfully!');
+      setFeaturesModal({ isOpen: false, clientId: null, features: {} });
+      fetchClients();
+    } catch (error) {
+      alert('Failed to update features.');
       console.error(error);
     }
   };
@@ -230,6 +256,12 @@ function App() {
                           <Edit3 className="w-3 h-3" /> Edit
                         </button>
                         <button 
+                          onClick={() => openFeaturesModal(client)}
+                          className="flex items-center gap-1 text-xs font-bold bg-accent hover:bg-accent/80 text-white px-3 py-1.5 rounded transition-colors"
+                        >
+                          Features
+                        </button>
+                        <button 
                           onClick={() => handleOverridePassword(client._id, client.restaurantName)}
                           className="text-xs font-bold bg-surface border border-border hover:bg-gray-700 hover:text-white px-3 py-1.5 rounded transition-colors"
                         >
@@ -380,6 +412,59 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Features Toggle Modal */}
+      {featuresModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-surface border border-border p-6 rounded-2xl shadow-2xl max-w-md w-full m-4">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Power className="text-primary w-5 h-5"/> Manage Features</h3>
+            
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {[
+                { key: 'inventory', label: 'Inventory Management' },
+                { key: 'kds', label: 'Kitchen Display (KDS)' },
+                { key: 'crm', label: 'Customer CRM' },
+                { key: 'staff', label: 'Staff HR' },
+                { key: 'analytics', label: 'Analytics' },
+                { key: 'daybook', label: 'DayBook' },
+                { key: 'qrcode', label: 'QR Menu Generator' },
+                { key: 'delivery', label: 'Delivery Orders' },
+                { key: 'expenses', label: 'Petty Cash & Expenses' }
+              ].map(feature => (
+                <div key={feature.key} className="flex items-center justify-between bg-background p-3 rounded-lg border border-border">
+                  <span className="text-sm font-bold text-gray-300">{feature.label}</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={featuresModal.features[feature.key]}
+                      onChange={(e) => setFeaturesModal({
+                        ...featuresModal, 
+                        features: { ...featuresModal.features, [feature.key]: e.target.checked }
+                      })}
+                    />
+                    <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setFeaturesModal({ isOpen: false, clientId: null, features: {} })}
+                className="px-4 py-2 bg-background border border-border rounded-lg hover:bg-gray-700 transition-colors text-sm font-bold"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveFeatures}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover rounded-lg transition-colors text-white text-sm font-bold shadow-lg shadow-primary/20"
+              >
+                Save Features
+              </button>
+            </div>
           </div>
         </div>
       )}

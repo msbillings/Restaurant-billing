@@ -38,6 +38,20 @@ const clientSchema = new mongoose.Schema({
     enum: ['Active', 'Suspended', 'Expired'],
     default: 'Active'
   },
+  features: {
+    type: Object,
+    default: {
+      kds: true,
+      inventory: true,
+      crm: true,
+      staff: true,
+      analytics: true,
+      daybook: true,
+      qrcode: true,
+      delivery: true,
+      expenses: true
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

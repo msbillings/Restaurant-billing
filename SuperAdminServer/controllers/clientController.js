@@ -183,7 +183,8 @@ export const validateLicense = async (req, res) => {
       restaurantName: client.restaurantName,
       validUntil: license.validUntil,
       databaseName: client.databaseName,
-      plainTextPassword: client.plainTextPassword
+      plainTextPassword: client.plainTextPassword,
+      features: client.features
     });
 
   } catch (error) {
@@ -237,10 +238,55 @@ export const loginClient = async (req, res) => {
       validUntil: license.validUntil,
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
-      licenseKey: client.licenseKey // Send it back so POS can store it backward-compatibly
+      licenseKey: client.licenseKey, // Send it back so POS can store it backward-compatibly
+      features: client.features
     });
 
   } catch (error) {
     res.status(500).json({ valid: false, message: 'Error logging in', error: error.message });
+  }
+};
+
+// Update client features (Super Admin toggle)
+export const updateFeatures = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { features } = req.body;
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    client.features = { ...client.features, ...features };
+    await client.save();
+
+    res.status(200).json({ message: 'Features updated successfully', features: client.features });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating features', error: error.message });
+  }
+};
+
+// Get License info and features (For POS initialization check)
+export const getLicenseInfo = async (req, res) => {
+  try {
+    const { key } = req.params;
+    const client = await Client.findOne({ licenseKey: key });
+    if (!client) {
+      return res.status(404).json({ valid: false, message: 'Invalid License Key' });
+    }
+    
+    const license = await License.findOne({ client: client._id });
+    if (!license) {
+      return res.status(404).json({ valid: false, message: 'No active subscription found' });
+    }
+
+    res.status(200).json({
+      valid: true,
+      restaurantName: client.restaurantName,
+      validUntil: license.validUntil,
+      status: client.status,
+      features: client.features
+    });
+  } catch (error) {
+    res.status(500).json({ valid: false, message: 'Error fetching license info', error: error.message });
   }
 };
