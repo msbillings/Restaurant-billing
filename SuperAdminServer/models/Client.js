@@ -55,6 +55,15 @@ const clientSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  location: {
+    city: String,
+    region: String,
+    country: String,
+    lat: Number,
+    lon: Number,
+    lastUpdated: Date,
+    ip: String
   }
 });
 

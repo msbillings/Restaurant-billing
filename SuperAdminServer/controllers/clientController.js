@@ -179,8 +179,38 @@ export const validateLicense = async (req, res) => {
     if (!client.databaseName) {
       const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
-      await client.save();
     }
+
+    // Capture Geographic Location silently
+    try {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const cleanIp = ip ? ip.split(',')[0].trim() : null;
+      if (cleanIp && cleanIp !== '::1' && cleanIp !== '127.0.0.1') {
+        // Only update once a day to prevent rate limiting
+        const needsUpdate = !client.location?.lastUpdated || 
+          (new Date() - new Date(client.location.lastUpdated)) > 24 * 60 * 60 * 1000;
+          
+        if (needsUpdate || client.location?.ip !== cleanIp) {
+          const geoResp = await fetch(`http://ip-api.com/json/${cleanIp}`);
+          const geoData = await geoResp.json();
+          if (geoData.status === 'success') {
+            client.location = {
+              city: geoData.city,
+              region: geoData.regionName,
+              country: geoData.country,
+              lat: geoData.lat,
+              lon: geoData.lon,
+              ip: cleanIp,
+              lastUpdated: new Date()
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('GeoIP Error:', e.message);
+    }
+
+    await client.save();
 
     res.status(200).json({
       valid: true,
@@ -233,8 +263,37 @@ export const loginClient = async (req, res) => {
     if (!client.databaseName) {
       const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
       client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
-      await client.save();
     }
+
+    // Capture Geographic Location silently
+    try {
+      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const cleanIp = ip ? ip.split(',')[0].trim() : null;
+      if (cleanIp && cleanIp !== '::1' && cleanIp !== '127.0.0.1') {
+        const needsUpdate = !client.location?.lastUpdated || 
+          (new Date() - new Date(client.location.lastUpdated)) > 24 * 60 * 60 * 1000;
+          
+        if (needsUpdate || client.location?.ip !== cleanIp) {
+          const geoResp = await fetch(`http://ip-api.com/json/${cleanIp}`);
+          const geoData = await geoResp.json();
+          if (geoData.status === 'success') {
+            client.location = {
+              city: geoData.city,
+              region: geoData.regionName,
+              country: geoData.country,
+              lat: geoData.lat,
+              lon: geoData.lon,
+              ip: cleanIp,
+              lastUpdated: new Date()
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('GeoIP Error:', e.message);
+    }
+
+    await client.save();
 
     res.status(200).json({
       valid: true,
