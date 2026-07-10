@@ -55,7 +55,7 @@ const Login = ({ onLogin }) => {
       }
     } catch (err) {
       console.error(err);
-      const errDetails = err.response?.data?.details || err.message;
+      const errDetails = err.response?.data?.details || err.response?.data?.error || err.response?.data?.message || err.message;
       setError(`Biometric authentication failed: ${errDetails}`);
     }
   };
