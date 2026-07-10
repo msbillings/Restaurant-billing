@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -235,10 +235,11 @@ function App() {
   });
 
   // --- ANALYTICS CALCULATIONS ---
-  const { totalRevenue, expiringSoon, planData, monthlyData } = useMemo(() => {
+  const { totalRevenue, expiringSoon, planData, monthlyData, geographicData } = useMemo(() => {
     let rev = 0;
     const expiring = [];
     const planCounts = { Monthly: 0, Yearly: 0, Lifetime: 0, Custom: 0 };
+    const geoCounts = {};
     
     const today = new Date();
     const thirtyDaysFromNow = new Date();
@@ -296,6 +297,14 @@ function App() {
           if (item) item.signups++;
         }
       }
+
+      // Geo Data
+      if (c.location && c.location.city && c.location.country) {
+        const key = `${c.location.city}, ${c.location.country}`;
+        geoCounts[key] = (geoCounts[key] || 0) + 1;
+      } else {
+        geoCounts['Unknown Location'] = (geoCounts['Unknown Location'] || 0) + 1;
+      }
     });
 
     const pData = [
@@ -305,7 +314,12 @@ function App() {
       { name: 'Custom', value: planCounts.Custom, color: '#8b5cf6' }
     ].filter(d => d.value > 0);
 
-    return { totalRevenue: rev, expiringSoon: expiring, planData: pData, monthlyData: mData };
+    const gData = Object.keys(geoCounts)
+      .map(k => ({ name: k, value: geoCounts[k] }))
+      .sort((a,b) => b.value - a.value)
+      .slice(0, 5);
+
+    return { totalRevenue: rev, expiringSoon: expiring, planData: pData, monthlyData: mData, geographicData: gData };
   }, [clients, signupsFilter]);
 
   return (
@@ -495,7 +509,26 @@ function App() {
               ))}
             </div>
           </div>
+        </div>
 
+        {/* Geographic Distribution Row */}
+        <div className="grid grid-cols-1 gap-6 mb-8">
+          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl w-full">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Globe className="text-blue-400 w-5 h-5"/> Geographic Distribution <span className="text-xs font-normal text-gray-400 ml-2">(Auto-detected via POS IP)</span></h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {geographicData.length === 0 ? (
+                 <div className="col-span-full text-center text-gray-500 py-4 text-sm">Waiting for clients to sync locations...</div>
+              ) : (
+                geographicData.map((geo, index) => (
+                  <div key={geo.name} className="bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center hover:border-blue-500/50 transition-colors">
+                    <MapPin className="text-blue-400 w-6 h-6 mb-2" />
+                    <h4 className="text-white font-bold text-sm mb-1">{geo.name}</h4>
+                    <span className="text-xs font-black bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">{geo.value} {geo.value === 1 ? 'Client' : 'Clients'}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Search Bar & Filters */}
