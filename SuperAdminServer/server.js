@@ -60,7 +60,7 @@ import broadcastRoutes from './routes/broadcastRoutes.js';
 import { protect } from './middleware/authMiddleware.js';
 
 app.use('/api/auth', authRoutes);
-app.use('/api/clients', protect, clientRoutes);
+app.use('/api/clients', clientRoutes);
 app.use('/api/analytics', protect, analyticsRoutes);
 app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/payment', paymentRoutes);
