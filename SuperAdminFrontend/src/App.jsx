@@ -97,7 +97,8 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      alert('Error registering fingerprint. Your device may not support it, or you canceled the prompt.');
+      const backendErr = err.response?.data?.details || err.message;
+      alert(`Error registering fingerprint: ${backendErr}`);
     }
   };
 

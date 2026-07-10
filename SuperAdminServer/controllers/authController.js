@@ -106,8 +106,8 @@ export const verifyRegistration = async (req, res) => {
       res.status(400).json({ verified: false });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error verifying registration');
+    console.error('Verify Registration Error:', error);
+    res.status(500).json({ message: 'Error verifying registration', details: error.message, stack: error.stack });
   }
 };
 
@@ -185,7 +185,7 @@ export const verifyAuth = async (req, res) => {
       res.status(400).json({ verified: false });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error verifying authentication');
+    console.error('Verify Auth Error:', error);
+    res.status(500).json({ message: 'Error verifying authentication', details: error.message });
   }
 };
