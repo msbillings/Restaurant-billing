@@ -25,7 +25,8 @@ const Settings = ({ user, setUser }) => {
     sgstRate: 2.5,
     enableGst: false,
     gstRate: 5,
-    logo: ''
+    logo: '',
+    printFormat: '80mm'
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -211,6 +212,20 @@ const Settings = ({ user, setUser }) => {
                     {systemPrinters.map(p => (
                       <option key={p.name} value={p.name}>{p.name}</option>
                     ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    Print Format (Receipt Layout)
+                  </label>
+                  <select
+                    value={settings.printFormat || '80mm'}
+                    onChange={(e) => handleInputChange('printFormat', e.target.value)}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
+                  >
+                    <option value="80mm">Thermal 80mm (Standard Receipt)</option>
+                    <option value="58mm">Thermal 58mm (Small Receipt)</option>
+                    <option value="A4">A4 (Full Page Invoice)</option>
                   </select>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border mt-4">

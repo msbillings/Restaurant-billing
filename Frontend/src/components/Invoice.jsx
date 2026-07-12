@@ -33,11 +33,42 @@ const Invoice = ({ bill, onClose, onSave }) => {
       window.print();
     }
   };
+  const getFormatClasses = () => {
+    switch(settings.printFormat) {
+      case 'A4':
+        return 'w-full max-w-3xl print:max-w-full';
+      case '58mm':
+        return 'w-full max-w-[240px] print:max-w-[58mm]';
+      case '80mm':
+      default:
+        return 'w-full max-w-[320px] print:max-w-[80mm]';
+    }
+  };
+
+  const getPageStyle = () => {
+    switch(settings.printFormat) {
+      case 'A4': return 'auto';
+      case '58mm': return '58mm auto';
+      case '80mm':
+      default: return '80mm auto';
+    }
+  };
 
   return (
-    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50 overflow-hidden animate-in fade-in duration-200 items-center justify-center p-4 print:p-0">
+    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50 overflow-y-auto animate-in fade-in duration-200 items-center p-4 print:p-0">
+      <style>
+        {`
+          @media print {
+            @page {
+              margin: 0 !important;
+              size: ${getPageStyle()};
+            }
+          }
+        `}
+      </style>
+      
       {/* Controls - Hidden on Print */}
-      <div className="absolute top-4 right-4 flex gap-3 print:hidden">
+      <div className="sticky top-4 right-4 flex justify-end gap-3 print:hidden w-full max-w-3xl z-10">
         {onSave && (
           <button 
             onClick={onSave}
@@ -63,9 +94,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
         </button>
       </div>
 
-
       {/* Receipt Preview */}
-      <div className="receipt-print bg-white text-black w-full max-w-[320px] mx-auto shadow-2xl print:shadow-none border border-gray-300 m-10 print:m-0 print:border-0 overflow-hidden" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+      <div className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none border border-gray-300 mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
         <div className="p-4 print:p-0 print:pb-2">
           {/* Header */}
           <div className="text-center mb-3 print:mb-2">

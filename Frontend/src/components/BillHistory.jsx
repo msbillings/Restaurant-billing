@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
@@ -13,7 +13,7 @@ const BillHistory = () => {
   const [loadingBill, setLoadingBill] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
   const [refundModal, setRefundModal] = useState({ isOpen: false, billId: null, reason: '' });
   const [toast, setToast] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -78,20 +78,25 @@ const BillHistory = () => {
   };
 
   const handleDeleteClick = (id) => {
-    setDeleteModal({ isOpen: true, billId: id });
+    setDeleteModal({ isOpen: true, billId: id, password: '', error: '', loading: false, showPassword: false });
   };
 
   const confirmDelete = async () => {
     if (!deleteModal.billId) return;
+    if (!deleteModal.password) {
+      setDeleteModal(prev => ({ ...prev, error: 'Please enter password to confirm deletion' }));
+      return;
+    }
     
+    setDeleteModal(prev => ({ ...prev, loading: true, error: '' }));
     try {
-      await deleteBill(deleteModal.billId);
+      await deleteBill(deleteModal.billId, deleteModal.password);
       setBills(bills.filter(bill => bill._id !== deleteModal.billId));
-      setDeleteModal({ isOpen: false, billId: null });
+      setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
       setToast({ message: 'Bill deleted successfully', type: 'success' });
     } catch (error) {
       console.error('Error deleting bill:', error);
-      setToast({ message: error.response?.data?.message || 'Failed to delete bill', type: 'error' });
+      setDeleteModal(prev => ({ ...prev, loading: false, error: error.response?.data?.message || 'Incorrect password or failed to delete bill' }));
     }
   };
 
@@ -319,6 +324,15 @@ const BillHistory = () => {
                             <RefreshCcw size={18} />
                           </button>
                         )}
+                        {bill.status !== 'Deleted' && (
+                          <button 
+                            onClick={() => handleDeleteClick(bill._id)}
+                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-2"
+                            title="Delete Bill (Requires Password)"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -415,6 +429,75 @@ const BillHistory = () => {
                 className="flex-1 py-2 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
               >
                 Confirm Refund
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="p-3 rounded-full shrink-0 bg-danger/10 text-danger">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-text-main mb-1">Security Verification Required</h3>
+                <p className="text-text-muted text-sm leading-relaxed">
+                  Deleting a bill cannot be undone and will update daily sales reports. Please enter your Admin/User password to authorize this action:
+                </p>
+              </div>
+            </div>
+
+            {deleteModal.error && (
+              <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-sm font-medium">
+                {deleteModal.error}
+              </div>
+            )}
+
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-text-muted uppercase mb-2">Password</label>
+              <div className="relative">
+                <input
+                  type={deleteModal.showPassword ? "text" : "password"}
+                  value={deleteModal.password}
+                  onChange={(e) => setDeleteModal(prev => ({ ...prev, password: e.target.value, error: '' }))}
+                  onKeyDown={(e) => e.key === 'Enter' && confirmDelete()}
+                  placeholder="Enter password..."
+                  autoFocus
+                  className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-sm focus:outline-none focus:border-danger text-text-main"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDeleteModal(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
+                  title={deleteModal.showPassword ? "Hide password" : "Show password"}
+                >
+                  {deleteModal.showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
+                disabled={deleteModal.loading}
+                className="flex-1 py-2.5 rounded-xl font-medium border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDelete}
+                disabled={deleteModal.loading}
+                className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-lg shadow-danger/20 transition-all transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleteModal.loading ? (
+                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <Trash2 size={18} />
+                )}
+                Confirm Delete
               </button>
             </div>
           </div>

@@ -129,8 +129,8 @@ export const getBillById = async (id) => {
   return response.data;
 };
 
-export const deleteBill = async (id) => {
-  const response = await api.delete(`/bills/${id}`);
+export const deleteBill = async (id, password) => {
+  const response = await api.delete(`/bills/${id}`, { data: { password } });
   return response.data;
 };
 
@@ -158,5 +158,15 @@ export const apiGetTodayKOTs = async (date = '', search = '') => {
   if (search) params.append('search', search);
   
   const response = await api.get(`/bills/kots/today?${params.toString()}`);
+  return response.data;
+};
+
+export const transferTableOrder = async (orderId, newTableNo) => {
+  const response = await api.post(`/bills/transfer/${orderId}`, { newTableNo });
+  return response.data;
+};
+
+export const mergeTableOrders = async (targetTableNo, sourceTableNos) => {
+  const response = await api.post('/bills/merge', { targetTableNo, sourceTableNos });
   return response.data;
 };

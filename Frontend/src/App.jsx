@@ -132,7 +132,6 @@ function App() {
           return;
         }
       } catch (err) {}
-      
       // Fallback to localStorage if offline/not synced yet (no hardcoded dates)
       let expiryStr = localStorage.getItem('resto_license_expiry');
       if (expiryStr) {
@@ -141,9 +140,10 @@ function App() {
           setLicenseExpiry(expiryDate);
         }
       }
-      }
-      
-      // Also fetch features from SuperAdmin
+      // End of syncConfigFromBackend
+    };
+
+    const fetchSuperAdminConfig = async () => {
       try {
         const licenseKey = localStorage.getItem('resto_license');
         if (licenseKey) {
@@ -156,17 +156,27 @@ function App() {
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
             }
             if (saData.broadcasts && saData.broadcasts.length > 0) {
-              // Show the latest broadcast that hasn't been dismissed
               const latestUnread = saData.broadcasts.find(b => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
               if (latestUnread) {
-                setActiveBroadcast(latestUnread);
+                setActiveBroadcast(prev => prev?._id === latestUnread._id ? prev : latestUnread);
+              } else {
+                setActiveBroadcast(null);
               }
+            } else {
+              setActiveBroadcast(null);
             }
           }
         }
       } catch (err) {}
     };
+
     syncConfigFromBackend();
+    fetchSuperAdminConfig();
+    
+    // Poll SuperAdmin for broadcasts every 60 seconds
+    const intervalId = setInterval(fetchSuperAdminConfig, 60000);
+    
+    return () => clearInterval(intervalId);
   }, []);
 
   // Calculate days remaining and auto-show popup
@@ -1089,7 +1099,7 @@ function App() {
       )}
 
       <WhatsAppSimulator />
-    </>
+    </div>
   );
 }
 

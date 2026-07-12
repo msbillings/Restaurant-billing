@@ -1,0 +1,13 @@
+{
+  "date": "2026-07-10",
+  "totalOrders": 0,
+  "totalSales": 0,
+  "totalTax": 0,
+  "totalDiscount": 0,
+  "breakdown": {
+    "cashSales": 0,
+    "cardSales": 0,
+    "upiSales": 0,
+    "onlineSales": 0
+  }
+}

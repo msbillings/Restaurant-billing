@@ -75,7 +75,8 @@ const MenuManagement = ({ user }) => {
     taxRate: 0,
     hsnCode: '',
     isAvailable: true,
-    recipe: []
+    recipe: [],
+    variants: []
   });
 
   const [categoryFormData, setCategoryFormData] = useState({
@@ -134,7 +135,8 @@ const MenuManagement = ({ user }) => {
         taxRate: item.taxRate || 0,
         hsnCode: item.hsnCode || '',
         isAvailable: item.isAvailable !== false,
-        recipe: item.recipe || []
+        recipe: item.recipe || [],
+        variants: item.variants || []
       });
     } else {
       setCurrentItem(null);
@@ -148,7 +150,8 @@ const MenuManagement = ({ user }) => {
         taxRate: 0,
         hsnCode: '',
         isAvailable: true,
-        recipe: []
+        recipe: [],
+        variants: []
       });
     }
     setIsModalOpen(true);
@@ -864,6 +867,65 @@ const MenuManagement = ({ user }) => {
                     <option value="28">28%</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Variants Section */}
+              <div className="space-y-2 p-4 bg-background rounded-xl border border-border mt-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-bold text-text-main">Item Variants (Sizes/Types)</label>
+                    <p className="text-xs text-text-muted">E.g., Mini, Half, Full. Overrides base price.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, variants: [...(formData.variants || []), { name: '', price: '' }] })}
+                    className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-colors font-bold"
+                  >
+                    <Plus size={14} /> Add Variant
+                  </button>
+                </div>
+                {formData.variants && formData.variants.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {formData.variants.map((variant, index) => (
+                      <div key={index} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Variant Name (e.g. Half)"
+                          value={variant.name}
+                          onChange={(e) => {
+                            const newVariants = [...formData.variants];
+                            newVariants[index].name = e.target.value;
+                            setFormData({ ...formData, variants: newVariants });
+                          }}
+                          className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Price (₹)"
+                          value={variant.price}
+                          min="0"
+                          step="0.01"
+                          onChange={(e) => {
+                            const newVariants = [...formData.variants];
+                            newVariants[index].price = e.target.value;
+                            setFormData({ ...formData, variants: newVariants });
+                          }}
+                          className="w-28 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newVariants = formData.variants.filter((_, i) => i !== index);
+                            setFormData({ ...formData, variants: newVariants });
+                          }}
+                          className="p-2 text-danger hover:bg-danger/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

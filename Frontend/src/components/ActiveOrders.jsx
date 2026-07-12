@@ -10,7 +10,7 @@ const ActiveOrders = ({ onSelectOrder }) => {
 
   useEffect(() => {
     fetchOrders();
-    
+
     // Set up Real-Time WebSocket connection
     const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
     const socketUrl = API_BASE_URL.replace('/api', '');
@@ -104,11 +104,10 @@ const ActiveOrders = ({ onSelectOrder }) => {
               <button
                 key={type}
                 onClick={() => setFilterType(type)}
-                className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${
-                  filterType === type 
-                    ? 'bg-primary text-white shadow-sm' 
+                className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${filterType === type
+                    ? 'bg-primary text-white shadow-sm'
                     : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                }`}
+                  }`}
               >
                 {type}
               </button>
@@ -137,68 +136,68 @@ const ActiveOrders = ({ onSelectOrder }) => {
                 if (order.orderSource === 'Swiggy') return 'border-orange-500/50 shadow-orange-500/10';
                 return 'border-border/50';
               };
-              
+
               return (
-              <div 
-                key={order._id} 
-                className={`bg-surface rounded-2xl border ${getBorderColor()} shadow-sm hover:shadow-md transition-all overflow-hidden group relative`}
-              >
-                {isOnline && (
-                  <div className={`absolute top-0 right-0 left-0 h-1.5 ${order.orderSource === 'Zomato' ? 'bg-red-500' : 'bg-orange-500'}`}></div>
-                )}
-                <div className="p-5 pt-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
-                        {order.tableNo}
-                        {isOnline && (
-                          <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${order.orderSource === 'Zomato' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
-                            {order.orderSource}
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-xs text-text-muted font-mono mt-1">
-                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                <div
+                  key={order._id}
+                  className={`bg-surface rounded-2xl border ${getBorderColor()} shadow-sm hover:shadow-md transition-all overflow-hidden group relative`}
+                >
+                  {isOnline && (
+                    <div className={`absolute top-0 right-0 left-0 h-1.5 ${order.orderSource === 'Zomato' ? 'bg-red-500' : 'bg-orange-500'}`}></div>
+                  )}
+                  <div className="p-5 pt-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
+                          {order.tableNo}
+                          {isOnline && (
+                            <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${order.orderSource === 'Zomato' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                              {order.orderSource}
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-xs text-text-muted font-mono mt-1">
+                          {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${order.status === 'Open' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                        {order.status}
+                      </span>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
-                      order.status === 'Open' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {order.status}
-                    </span>
-                  </div>
 
-                  <div className="space-y-2 mb-6">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-text-muted">Items</span>
-                      <span className="font-bold text-text-main">{order.items.length}</span>
+                    <div className="space-y-2 mb-6">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-text-muted">Items</span>
+                        <span className="font-bold text-text-main">{order.items.length}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-text-muted">Total</span>
+                        <span className="font-bold text-primary">₹{order.total.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-text-muted">Total</span>
-                      <span className="font-bold text-primary">₹{order.total.toLocaleString()}</span>
-                    </div>
-                  </div>
 
-                  <button 
-                    onClick={() => onSelectOrder(order.tableNo)}
-                    className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-primary/5 text-primary hover:bg-primary hover:text-white group-hover:shadow-lg group-hover:shadow-primary/20"
-                  >
-                    {order.status === 'Open' ? (
-                      <>
-                        <FileText size={16} />
-                        MAKE BILL
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle size={16} />
-                        SETTLE BILL
-                      </>
-                    )}
-                    <ChevronRight size={16} className="opacity-50" />
-                  </button>
+                    <button
+                      onClick={() => onSelectOrder(order.tableNo)}
+                      className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all bg-primary/5 text-primary hover:bg-primary hover:text-white group-hover:shadow-lg group-hover:shadow-primary/20"
+                    >
+                      {order.status === 'Open' ? (
+                        <>
+                          <FileText size={16} />
+                          MAKE BILL
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          SETTLE BILL
+                        </>
+                      )}
+                      <ChevronRight size={16} className="opacity-50" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )})}
+              )
+            })}
           </div>
         )}
       </div>

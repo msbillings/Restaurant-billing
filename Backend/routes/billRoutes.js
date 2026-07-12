@@ -17,7 +17,8 @@ import {
   reopenOrder,
   cancelOrder,
   refundOrder,
-  transferTable
+  transferTable,
+  mergeTableOrders
 } from '../controllers/billController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
@@ -37,12 +38,13 @@ router.post('/generate/:id', authenticateToken, generateBill);
 router.post('/reopen/:id', authenticateToken, reopenOrder);
 router.post('/cancel/:id', authenticateToken, cancelOrder);
 router.post('/settle/:id', authenticateToken, settleBill);
-router.post('/transfer/:id', authenticateToken, transferTable);
+router.post('/transfer/:id', transferTable);
+router.post('/merge', mergeTableOrders);
 router.post('/kot/:id', authenticateToken, generateKOT);
 router.post('/kot/item/status', authenticateToken, updateKOTItemStatus);
 router.post('/refund/:id', authenticateToken, refundOrder);
 
-// DELETE - Admin only
-router.delete('/:id', authenticateToken, requireAdmin, deleteBill);
+// DELETE - Requires password verification in controller
+router.delete('/:id', authenticateToken, deleteBill);
 
 export default router;

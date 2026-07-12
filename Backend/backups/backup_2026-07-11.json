@@ -1,0 +1,2316 @@
+{
+  "timestamp": "2026-07-11T17:49:15.662Z",
+  "bills": [
+    {
+      "_id": "6a463fb79e4d8b220bb1f396",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a463fb79e4d8b220bb1f397"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 229,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a463fb79e4d8b220bb1f39f"
+            }
+          ],
+          "createdAt": "2026-07-02T10:38:47.435Z",
+          "_id": "6a463fb79e4d8b220bb1f39e"
+        }
+      ],
+      "createdAt": "2026-07-02T10:38:47.306Z",
+      "updatedAt": "2026-07-02T10:52:10.150Z",
+      "__v": 1,
+      "billNumber": "MS0003",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a46416a9e4d8b220bb1f414",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a46416a9e4d8b220bb1f415"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 229,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a46416a9e4d8b220bb1f41d"
+            }
+          ],
+          "createdAt": "2026-07-02T10:46:02.307Z",
+          "_id": "6a46416a9e4d8b220bb1f41c"
+        }
+      ],
+      "createdAt": "2026-07-02T10:46:02.190Z",
+      "updatedAt": "2026-07-02T10:46:34.795Z",
+      "__v": 1,
+      "billNumber": "MS0002",
+      "paymentMode": "UPI",
+      "upiApp": "PhonePe"
+    },
+    {
+      "_id": "6a4645019e4d8b220bb1f50c",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4645019e4d8b220bb1f50d"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 227.7,
+      "total": 2,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4645019e4d8b220bb1f515"
+            }
+          ],
+          "createdAt": "2026-07-02T11:01:21.234Z",
+          "_id": "6a4645019e4d8b220bb1f514"
+        }
+      ],
+      "createdAt": "2026-07-02T11:01:21.125Z",
+      "updatedAt": "2026-07-02T11:01:33.306Z",
+      "__v": 1,
+      "billNumber": "MS0004",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4645d49e4d8b220bb1f579",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4645d49e4d8b220bb1f57a"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 229,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4645d49e4d8b220bb1f582"
+            }
+          ],
+          "createdAt": "2026-07-02T11:04:52.348Z",
+          "_id": "6a4645d49e4d8b220bb1f581"
+        }
+      ],
+      "createdAt": "2026-07-02T11:04:52.260Z",
+      "updatedAt": "2026-07-02T11:04:57.904Z",
+      "__v": 1,
+      "billNumber": "MS0005",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4646799e4d8b220bb1f62e",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4646799e4d8b220bb1f62f"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 0,
+      "discount": 449,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4646799e4d8b220bb1f637"
+            }
+          ],
+          "createdAt": "2026-07-02T11:07:37.528Z",
+          "_id": "6a4646799e4d8b220bb1f636"
+        }
+      ],
+      "createdAt": "2026-07-02T11:07:37.430Z",
+      "updatedAt": "2026-07-02T11:07:45.071Z",
+      "__v": 1,
+      "billNumber": "MS0006",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4646fa9e4d8b220bb1f6a2",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Juice Mandi (H)",
+          "price": 300,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 300,
+          "_id": "6a4646fa9e4d8b220bb1f6a3"
+        }
+      ],
+      "subtotal": 300,
+      "tax": 0,
+      "discount": 299,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Juice Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4646fa9e4d8b220bb1f6ab"
+            }
+          ],
+          "createdAt": "2026-07-02T11:09:46.624Z",
+          "_id": "6a4646fa9e4d8b220bb1f6aa"
+        }
+      ],
+      "createdAt": "2026-07-02T11:09:46.527Z",
+      "updatedAt": "2026-07-02T11:09:53.716Z",
+      "__v": 1,
+      "billNumber": "MS0007",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465493cf614cf2f212a877",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a465493cf614cf2f212a878"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 0,
+      "total": 230,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a465493cf614cf2f212a880"
+            }
+          ],
+          "createdAt": "2026-07-02T12:07:47.332Z",
+          "_id": "6a465493cf614cf2f212a87f"
+        }
+      ],
+      "createdAt": "2026-07-02T12:07:47.226Z",
+      "updatedAt": "2026-07-02T12:07:52.912Z",
+      "__v": 1,
+      "billNumber": "MS0008",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4654b6cf614cf2f212a8e9",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4654b6cf614cf2f212a8ea"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 0,
+      "total": 230,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4654b6cf614cf2f212a8f2"
+            }
+          ],
+          "createdAt": "2026-07-02T12:08:22.810Z",
+          "_id": "6a4654b6cf614cf2f212a8f1"
+        }
+      ],
+      "createdAt": "2026-07-02T12:08:22.711Z",
+      "updatedAt": "2026-07-02T12:08:33.157Z",
+      "__v": 1,
+      "billNumber": "MS0009",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465824cf614cf2f212aa18",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a465824cf614cf2f212aa19"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 0,
+      "total": 230,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a465824cf614cf2f212aa21"
+            }
+          ],
+          "createdAt": "2026-07-02T12:23:00.596Z",
+          "_id": "6a465824cf614cf2f212aa20"
+        }
+      ],
+      "createdAt": "2026-07-02T12:23:00.489Z",
+      "updatedAt": "2026-07-02T12:23:06.624Z",
+      "__v": 1,
+      "billNumber": "MS0010",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a46583ccf614cf2f212aa8b",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a46583ccf614cf2f212aa8c"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 0,
+      "discount": 0,
+      "total": 550,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a46583ccf614cf2f212aa94"
+            }
+          ],
+          "createdAt": "2026-07-02T12:23:24.807Z",
+          "_id": "6a46583ccf614cf2f212aa93"
+        }
+      ],
+      "createdAt": "2026-07-02T12:23:24.693Z",
+      "updatedAt": "2026-07-02T12:23:31.415Z",
+      "__v": 1,
+      "billNumber": "MS0011",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a46587ccf614cf2f212ab4c",
+      "tableNo": "TAK-056837",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a46587ccf614cf2f212ab4d"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 0,
+      "discount": 0,
+      "total": 550,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a46587ccf614cf2f212ab55"
+            }
+          ],
+          "createdAt": "2026-07-02T12:24:28.620Z",
+          "_id": "6a46587ccf614cf2f212ab54"
+        }
+      ],
+      "createdAt": "2026-07-02T12:24:28.512Z",
+      "updatedAt": "2026-07-02T12:24:43.720Z",
+      "__v": 1,
+      "billNumber": "MS0012",
+      "paymentMode": "UPI",
+      "upiApp": "PhonePe"
+    },
+    {
+      "_id": "6a465a61cf614cf2f212abf0",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a465a61cf614cf2f212abf1"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a465a61cf614cf2f212abf9"
+            }
+          ],
+          "createdAt": "2026-07-02T12:32:33.155Z",
+          "_id": "6a465a61cf614cf2f212abf8"
+        }
+      ],
+      "createdAt": "2026-07-02T12:32:33.048Z",
+      "updatedAt": "2026-07-02T12:32:38.635Z",
+      "__v": 1,
+      "billNumber": "MS0013",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465aa7cf614cf2f212ac64",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a465aa7cf614cf2f212ac65"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a465aa7cf614cf2f212ac6d"
+            }
+          ],
+          "createdAt": "2026-07-02T12:33:43.782Z",
+          "_id": "6a465aa7cf614cf2f212ac6c"
+        }
+      ],
+      "createdAt": "2026-07-02T12:33:43.674Z",
+      "updatedAt": "2026-07-02T12:33:50.446Z",
+      "__v": 1,
+      "billNumber": "MS0014",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465b37cf614cf2f212ad33",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a465b37cf614cf2f212ad34"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 5,
+      "discount": 229,
+      "total": 1,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a465b37cf614cf2f212ad3c"
+            }
+          ],
+          "createdAt": "2026-07-02T12:36:07.596Z",
+          "_id": "6a465b37cf614cf2f212ad3b"
+        }
+      ],
+      "createdAt": "2026-07-02T12:36:07.495Z",
+      "updatedAt": "2026-07-02T12:36:13.930Z",
+      "__v": 1,
+      "billNumber": "MS0015",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465d55cf614cf2f212aded",
+      "tableNo": "TAK-307011",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a465d55cf614cf2f212adee"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a465d56cf614cf2f212adf6"
+            }
+          ],
+          "createdAt": "2026-07-02T12:45:10.091Z",
+          "_id": "6a465d56cf614cf2f212adf5"
+        }
+      ],
+      "createdAt": "2026-07-02T12:45:09.982Z",
+      "updatedAt": "2026-07-02T12:45:15.021Z",
+      "__v": 1,
+      "billNumber": "MS0016",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465dc3cf614cf2f212ae7f",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a465dc3cf614cf2f212ae80"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a465dc3cf614cf2f212ae88"
+            }
+          ],
+          "createdAt": "2026-07-02T12:46:59.935Z",
+          "_id": "6a465dc3cf614cf2f212ae87"
+        }
+      ],
+      "createdAt": "2026-07-02T12:46:59.829Z",
+      "updatedAt": "2026-07-02T12:47:05.979Z",
+      "__v": 1,
+      "billNumber": "MS0017",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a465df3cf614cf2f212af57",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 550,
+          "_id": "6a465df3cf614cf2f212af58"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 2.5,
+      "discount": 0,
+      "total": 564,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-02T12:47:47.550Z",
+      "updatedAt": "2026-07-02T12:47:50.329Z",
+      "__v": 0,
+      "billNumber": "MS0018",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4890fd8b7142ecbfbf88d0",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4893428b7142ecbfbf8914"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 0,
+      "discount": 0,
+      "total": 230,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4890fe8b7142ecbfbf88d9"
+            }
+          ],
+          "createdAt": "2026-07-04T04:50:06.521Z",
+          "_id": "6a4890fe8b7142ecbfbf88d8"
+        }
+      ],
+      "createdAt": "2026-07-04T04:50:05.071Z",
+      "updatedAt": "2026-07-04T05:26:31.118Z",
+      "__v": 2,
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a489be68b7142ecbfbf8ac5",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 450,
+          "_id": "6a489be68b7142ecbfbf8acd"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-04T05:36:38.298Z",
+      "updatedAt": "2026-07-04T05:36:41.355Z",
+      "__v": 1,
+      "billNumber": "MS0019",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a489ef48b7142ecbfbf8b4f",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a489ef48b7142ecbfbf8b50"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 5,
+      "discount": 0,
+      "total": 242,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a489ef68b7142ecbfbf8b58"
+            }
+          ],
+          "createdAt": "2026-07-04T05:49:42.246Z",
+          "_id": "6a489ef68b7142ecbfbf8b57"
+        }
+      ],
+      "createdAt": "2026-07-04T05:49:40.804Z",
+      "updatedAt": "2026-07-04T06:01:20.146Z",
+      "__v": 1,
+      "billNumber": "MS0022",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a489fa68b7142ecbfbf8bab",
+      "tableNo": "Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a48b00097345945a69a1037"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a489fa88b7142ecbfbf8bb4"
+            }
+          ],
+          "createdAt": "2026-07-04T05:52:40.168Z",
+          "_id": "6a489fa88b7142ecbfbf8bb3"
+        }
+      ],
+      "createdAt": "2026-07-04T05:52:38.712Z",
+      "updatedAt": "2026-07-04T07:02:32.116Z",
+      "__v": 2,
+      "billNumber": "MS0027",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a48af5b97345945a69a0e07",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a48afac97345945a69a0ec5"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a48af8797345945a69a0e59"
+            }
+          ],
+          "createdAt": "2026-07-04T07:00:23.862Z",
+          "_id": "6a48af8797345945a69a0e58"
+        }
+      ],
+      "createdAt": "2026-07-04T06:59:39.816Z",
+      "updatedAt": "2026-07-04T07:01:24.761Z",
+      "__v": 3,
+      "billNumber": "MS0025",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a48af8697345945a69a0e4d",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 450,
+          "_id": "6a48afd097345945a69a0f81"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-04T07:00:22.545Z",
+      "updatedAt": "2026-07-04T07:01:45.128Z",
+      "__v": 2,
+      "billNumber": "MS0026",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a48b0a197345945a69a1109",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a48b0a597345945a69a1120"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 5,
+      "discount": 0,
+      "total": 242,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a48b0a697345945a69a112a"
+            }
+          ],
+          "createdAt": "2026-07-04T07:05:10.676Z",
+          "_id": "6a48b0a697345945a69a1129"
+        }
+      ],
+      "createdAt": "2026-07-04T07:05:05.667Z",
+      "updatedAt": "2026-07-04T07:42:53.742Z",
+      "__v": 2,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0029",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a48b18a97345945a69a11f3",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Juice Mandi (F)",
+          "price": 580,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 580,
+          "_id": "6a49015e9af0235397d3b84b"
+        }
+      ],
+      "subtotal": 580,
+      "tax": 5,
+      "discount": 0,
+      "total": 609,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Juice Mandi (F)",
+              "quantity": 1,
+              "_id": "6a48b1aa97345945a69a122e"
+            }
+          ],
+          "createdAt": "2026-07-04T07:09:30.023Z",
+          "_id": "6a48b1aa97345945a69a122d"
+        }
+      ],
+      "createdAt": "2026-07-04T07:08:58.601Z",
+      "updatedAt": "2026-07-04T12:49:42.081Z",
+      "__v": 3,
+      "billNumber": "MS0035",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a48b945107d0d6c394a54f2",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 230,
+          "_id": "6a48b958107d0d6c394a5534"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 5,
+      "discount": 0,
+      "total": 242,
+      "splitPayments": {
+        "cash": 200,
+        "upi": 42,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-04T07:41:57.742Z",
+      "updatedAt": "2026-07-04T09:38:49.377Z",
+      "__v": 2,
+      "billNumber": "MS0033",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Mixed"
+    },
+    {
+      "_id": "6a48d3f72f587e5a109d176b",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a48d44a2f587e5a109d17db"
+        },
+        {
+          "name": "Chicken Juice Mandi (B/L)",
+          "price": 600,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 600,
+          "_id": "6a48d44a2f587e5a109d17dc"
+        }
+      ],
+      "subtotal": 830,
+      "tax": 5,
+      "discount": 0,
+      "total": 872,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a48d3f92f587e5a109d1776"
+            },
+            {
+              "name": "Chicken Juice Mandi (B/L)",
+              "quantity": 1,
+              "_id": "6a48d3f92f587e5a109d1777"
+            }
+          ],
+          "createdAt": "2026-07-04T09:35:53.359Z",
+          "_id": "6a48d3f92f587e5a109d1775"
+        }
+      ],
+      "createdAt": "2026-07-04T09:35:51.997Z",
+      "updatedAt": "2026-07-04T09:37:23.235Z",
+      "__v": 2,
+      "billNumber": "MS0032",
+      "deliveryStatus": "Pending",
+      "paymentMode": "UPI",
+      "upiApp": "PhonePe"
+    },
+    {
+      "_id": "6a48d76d2f587e5a109d1933",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a48d76d2f587e5a109d1934"
+        },
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a48d76d2f587e5a109d1935"
+        }
+      ],
+      "subtotal": 680,
+      "tax": 5,
+      "discount": 0,
+      "total": 714,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a48d76f2f587e5a109d193e"
+            },
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a48d76f2f587e5a109d193f"
+            }
+          ],
+          "createdAt": "2026-07-04T09:50:39.111Z",
+          "_id": "6a48d76f2f587e5a109d193d"
+        }
+      ],
+      "createdAt": "2026-07-04T09:50:37.525Z",
+      "updatedAt": "2026-07-04T09:51:33.874Z",
+      "__v": 1,
+      "billNumber": "MS0034",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4901f59af0235397d3b8be",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4903909af0235397d3b8f0"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4901f69af0235397d3b8c7"
+            }
+          ],
+          "createdAt": "2026-07-04T12:52:06.500Z",
+          "_id": "6a4901f69af0235397d3b8c6"
+        }
+      ],
+      "createdAt": "2026-07-04T12:52:05.165Z",
+      "updatedAt": "2026-07-04T12:59:04.981Z",
+      "__v": 2,
+      "billNumber": "MS0036",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4904439af0235397d3b97c",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4906149af0235397d3b9d4"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4904459af0235397d3b986"
+            }
+          ],
+          "createdAt": "2026-07-04T13:01:57.179Z",
+          "_id": "6a4904459af0235397d3b985"
+        }
+      ],
+      "createdAt": "2026-07-04T13:01:55.691Z",
+      "updatedAt": "2026-07-04T13:09:46.682Z",
+      "__v": 4,
+      "billNumber": "MS0037",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a49070c9af0235397d3ba31",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4908539af0235397d3ba43"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a49070e9af0235397d3ba3a"
+            }
+          ],
+          "createdAt": "2026-07-04T13:13:50.281Z",
+          "_id": "6a49070e9af0235397d3ba39"
+        }
+      ],
+      "createdAt": "2026-07-04T13:13:48.827Z",
+      "updatedAt": "2026-07-04T13:19:23.400Z",
+      "__v": 2,
+      "billNumber": "MS0038",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4908fc9af0235397d3bab0",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4908fc9af0235397d3bab1"
+        }
+      ],
+      "subtotal": 230,
+      "tax": 5,
+      "discount": 0,
+      "total": 242,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4908fd9af0235397d3baba"
+            }
+          ],
+          "createdAt": "2026-07-04T13:22:05.928Z",
+          "_id": "6a4908fd9af0235397d3bab9"
+        }
+      ],
+      "createdAt": "2026-07-04T13:22:04.631Z",
+      "updatedAt": "2026-07-04T13:37:27.203Z",
+      "__v": 1,
+      "billNumber": "MS0039",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a49354d45a665c515974b35",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 550,
+          "_id": "6a49354d45a665c515974b36"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a49354e45a665c515974b3e"
+            }
+          ],
+          "createdAt": "2026-07-04T16:31:10.679Z",
+          "_id": "6a49354e45a665c515974b3d"
+        }
+      ],
+      "createdAt": "2026-07-04T16:31:09.487Z",
+      "updatedAt": "2026-07-04T16:31:56.982Z",
+      "__v": 1,
+      "billNumber": "MS0041",
+      "paymentMode": "UPI",
+      "upiApp": "Amazon Pay"
+    },
+    {
+      "_id": "6a495186e694a72a16294d96",
+      "tableNo": "TAK-874366",
+      "items": [
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 2,
+          "printedQuantity": 0,
+          "total": 1100,
+          "_id": "6a4f32fd3fedc2b129b2f982"
+        }
+      ],
+      "subtotal": 550,
+      "tax": 5,
+      "discount": 0,
+      "total": 578,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Open",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-04T18:31:34.016Z",
+      "updatedAt": "2026-07-09T05:34:53.149Z",
+      "__v": 2,
+      "billNumber": "MS0042",
+      "editHistory": [],
+      "isEdited": false
+    },
+    {
+      "_id": "6a495226e694a72a16294eb3",
+      "tableNo": "Ground Floor - Table 3",
+      "items": [
+        {
+          "name": "Al Faham (H)",
+          "price": 250,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 250,
+          "_id": "6a495226e694a72a16294eb4"
+        }
+      ],
+      "subtotal": 250,
+      "tax": 5,
+      "discount": 0,
+      "total": 263,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (H)",
+              "quantity": 1,
+              "_id": "6a495227e694a72a16294ebc"
+            }
+          ],
+          "createdAt": "2026-07-04T18:34:15.887Z",
+          "_id": "6a495227e694a72a16294ebb"
+        }
+      ],
+      "createdAt": "2026-07-04T18:34:14.553Z",
+      "updatedAt": "2026-07-04T18:34:51.262Z",
+      "__v": 1,
+      "billNumber": "MS0043",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a495258e694a72a16294f3a",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 2,
+          "printedQuantity": 2,
+          "total": 900,
+          "_id": "6a49526ee694a72a16294f65"
+        }
+      ],
+      "subtotal": 900,
+      "tax": 5,
+      "discount": 0,
+      "total": 945,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a49525ae694a72a16294f43"
+            }
+          ],
+          "createdAt": "2026-07-04T18:35:06.270Z",
+          "_id": "6a49525ae694a72a16294f42"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a49526fe694a72a16294f6f"
+            }
+          ],
+          "createdAt": "2026-07-04T18:35:27.559Z",
+          "_id": "6a49526fe694a72a16294f6e"
+        }
+      ],
+      "createdAt": "2026-07-04T18:35:04.941Z",
+      "updatedAt": "2026-07-04T19:10:25.733Z",
+      "__v": 3,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0044",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4952aee694a72a16294fdc",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4952dce694a72a16295059"
+        },
+        {
+          "name": "Chicken Juice Mandi (H)",
+          "price": 300,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 300,
+          "_id": "6a4952dce694a72a1629505a"
+        },
+        {
+          "name": "Mutton Kunda Mandi",
+          "price": 800,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 800,
+          "_id": "6a4952dce694a72a1629505b"
+        }
+      ],
+      "subtotal": 1330,
+      "tax": 5,
+      "discount": 0,
+      "total": 1397,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4952b0e694a72a16294feb"
+            }
+          ],
+          "createdAt": "2026-07-04T18:36:32.383Z",
+          "_id": "6a4952b0e694a72a16294fea"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Chicken Juice Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4952c7e694a72a16295028"
+            }
+          ],
+          "createdAt": "2026-07-04T18:36:55.308Z",
+          "_id": "6a4952c7e694a72a16295027"
+        },
+        {
+          "kotNumber": "KOT-3",
+          "items": [
+            {
+              "name": "Mutton Kunda Mandi",
+              "quantity": 1,
+              "_id": "6a4952dee694a72a16295069"
+            }
+          ],
+          "createdAt": "2026-07-04T18:37:18.036Z",
+          "_id": "6a4952dee694a72a16295068"
+        }
+      ],
+      "createdAt": "2026-07-04T18:36:30.927Z",
+      "updatedAt": "2026-07-04T19:06:38.361Z",
+      "__v": 5,
+      "deliveryStatus": "Pending",
+      "billNumber": "MS0045",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a495387e694a72a1629513c",
+      "tableNo": "Ground Floor - Table 3",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 450,
+          "_id": "6a49555ce694a72a162953f8"
+        },
+        {
+          "name": "Al Faham (F)",
+          "price": 550,
+          "quantity": 5,
+          "printedQuantity": 0,
+          "total": 2750,
+          "_id": "6a49555ce694a72a162953f9"
+        },
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 230,
+          "_id": "6a49555ce694a72a162953fa"
+        }
+      ],
+      "subtotal": 3430,
+      "tax": 5,
+      "discount": 0,
+      "total": 3602,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Cancelled",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a495388e694a72a16295149"
+            },
+            {
+              "name": "Al Faham (F)",
+              "quantity": 1,
+              "_id": "6a495388e694a72a1629514a"
+            }
+          ],
+          "createdAt": "2026-07-04T18:40:08.874Z",
+          "_id": "6a495388e694a72a16295148"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4953e2e694a72a162951cc"
+            }
+          ],
+          "createdAt": "2026-07-04T18:41:38.641Z",
+          "_id": "6a4953e2e694a72a162951cb"
+        },
+        {
+          "kotNumber": "KOT-3",
+          "items": [
+            {
+              "name": "Al Faham (F)",
+              "quantity": 4,
+              "_id": "6a495548e694a72a162953e6"
+            }
+          ],
+          "createdAt": "2026-07-04T18:47:36.247Z",
+          "_id": "6a495548e694a72a162953e5"
+        },
+        {
+          "kotNumber": "CANCEL-4",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": -1,
+              "_id": "6a495585e694a72a162954a8"
+            },
+            {
+              "name": "Al Faham (F)",
+              "quantity": -5,
+              "_id": "6a495585e694a72a162954a9"
+            },
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": -1,
+              "_id": "6a495585e694a72a162954aa"
+            }
+          ],
+          "createdAt": "2026-07-04T18:48:37.195Z",
+          "_id": "6a495585e694a72a162954a7"
+        }
+      ],
+      "createdAt": "2026-07-04T18:40:07.594Z",
+      "updatedAt": "2026-07-04T18:48:37.197Z",
+      "__v": 12,
+      "billNumber": "MS0048",
+      "deliveryStatus": "Pending"
+    },
+    {
+      "_id": "6a4959e2e694a72a16295696",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4959e2e694a72a16295697"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4959e3e694a72a1629569f"
+            }
+          ],
+          "createdAt": "2026-07-04T19:07:15.634Z",
+          "_id": "6a4959e3e694a72a1629569e"
+        }
+      ],
+      "createdAt": "2026-07-04T19:07:14.258Z",
+      "updatedAt": "2026-07-04T19:08:54.346Z",
+      "__v": 1,
+      "billNumber": "MS0049",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a495fb31151d0a6868759de",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4960151151d0a686875a0c"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a495fb51151d0a6868759e7"
+            }
+          ],
+          "createdAt": "2026-07-04T19:32:05.207Z",
+          "_id": "6a495fb51151d0a6868759e6"
+        }
+      ],
+      "createdAt": "2026-07-04T19:32:03.897Z",
+      "updatedAt": "2026-07-04T19:33:51.257Z",
+      "__v": 2,
+      "billNumber": "MS0050",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a49604d1151d0a686875ace",
+      "tableNo": "TAK-671989",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 0,
+          "total": 450,
+          "_id": "6a49604d1151d0a686875acf"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [],
+      "createdAt": "2026-07-04T19:34:37.979Z",
+      "updatedAt": "2026-07-04T19:34:43.104Z",
+      "__v": 0,
+      "billNumber": "MS0051",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4963c31151d0a686875b44",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4963ed1151d0a686875b79"
+        },
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 230,
+          "_id": "6a4963ed1151d0a686875b7a"
+        }
+      ],
+      "subtotal": 680,
+      "tax": 5,
+      "discount": 0,
+      "total": 714,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4963c41151d0a686875b4f"
+            },
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4963c41151d0a686875b50"
+            }
+          ],
+          "createdAt": "2026-07-04T19:49:24.550Z",
+          "_id": "6a4963c41151d0a686875b4e"
+        }
+      ],
+      "createdAt": "2026-07-04T19:49:23.280Z",
+      "updatedAt": "2026-07-04T19:50:16.361Z",
+      "__v": 2,
+      "billNumber": "MS0052",
+      "deliveryStatus": "Pending",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4964151151d0a686875be3",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4964151151d0a686875be4"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 5,
+      "discount": 0,
+      "total": 473,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Paid",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4964171151d0a686875bec"
+            }
+          ],
+          "createdAt": "2026-07-04T19:50:47.428Z",
+          "_id": "6a4964171151d0a686875beb"
+        }
+      ],
+      "createdAt": "2026-07-04T19:50:45.988Z",
+      "updatedAt": "2026-07-04T19:51:13.847Z",
+      "__v": 1,
+      "billNumber": "MS0053",
+      "paymentMode": "Cash"
+    },
+    {
+      "_id": "6a4964591151d0a686875c5e",
+      "tableNo": "TAK-706496",
+      "items": [
+        {
+          "name": "Al Faham (H)",
+          "price": 250,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 250,
+          "_id": "6a4964591151d0a686875c5f"
+        }
+      ],
+      "subtotal": 250,
+      "tax": 0,
+      "discount": 0,
+      "total": 250,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Open",
+      "billType": "Takeaway",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Al Faham (H)",
+              "quantity": 1,
+              "_id": "6a49645a1151d0a686875c67"
+            }
+          ],
+          "createdAt": "2026-07-04T19:51:54.340Z",
+          "_id": "6a49645a1151d0a686875c66"
+        }
+      ],
+      "createdAt": "2026-07-04T19:51:53.056Z",
+      "updatedAt": "2026-07-04T19:51:54.341Z",
+      "__v": 1
+    },
+    {
+      "_id": "6a4965461151d0a686875cdd",
+      "tableNo": "Ground Floor - Table 1",
+      "items": [
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 450,
+          "_id": "6a4965461151d0a686875cde"
+        }
+      ],
+      "subtotal": 450,
+      "tax": 0,
+      "discount": 0,
+      "total": 450,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Open",
+      "billType": "Dine-In",
+      "deliveryStatus": "Pending",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4965471151d0a686875ce7"
+            }
+          ],
+          "createdAt": "2026-07-04T19:55:51.861Z",
+          "_id": "6a4965471151d0a686875ce6"
+        }
+      ],
+      "createdAt": "2026-07-04T19:55:50.525Z",
+      "updatedAt": "2026-07-04T19:55:51.862Z",
+      "__v": 1
+    },
+    {
+      "_id": "6a4b4aa2d7345c8d197c285a",
+      "tableNo": "Ground Floor - Table 2",
+      "items": [
+        {
+          "name": "Chicken Mandi (H)",
+          "price": 230,
+          "quantity": 3,
+          "printedQuantity": 3,
+          "total": 690,
+          "_id": "6a4b652c1f2ccf344c031eb9"
+        },
+        {
+          "name": "Chicken Mandi (F)",
+          "price": 450,
+          "quantity": 4,
+          "printedQuantity": 4,
+          "total": 1800,
+          "_id": "6a4b652c1f2ccf344c031eba"
+        },
+        {
+          "name": "Al Faham (H)",
+          "price": 250,
+          "quantity": 1,
+          "printedQuantity": 1,
+          "total": 250,
+          "_id": "6a4b652c1f2ccf344c031ebb"
+        }
+      ],
+      "subtotal": 2740,
+      "tax": 5,
+      "discount": 0,
+      "total": 2740,
+      "splitPayments": {
+        "cash": 0,
+        "upi": 0,
+        "card": 0
+      },
+      "status": "Open",
+      "billType": "Dine-In",
+      "platformCommission": 0,
+      "packagingCharges": 0,
+      "kots": [
+        {
+          "kotNumber": "KOT-1",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 2,
+              "_id": "6a4b611535008c6d775d7639"
+            },
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 2,
+              "_id": "6a4b611535008c6d775d763a"
+            }
+          ],
+          "createdAt": "2026-07-06T08:02:29.234Z",
+          "_id": "6a4b611535008c6d775d7638"
+        },
+        {
+          "kotNumber": "KOT-2",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4b62ca35008c6d775d768c"
+            }
+          ],
+          "createdAt": "2026-07-06T08:09:46.902Z",
+          "_id": "6a4b62ca35008c6d775d768b"
+        },
+        {
+          "kotNumber": "KOT-3",
+          "items": [
+            {
+              "name": "Al Faham (H)",
+              "quantity": 1,
+              "_id": "6a4b64151f2ccf344c031df5"
+            }
+          ],
+          "createdAt": "2026-07-06T08:15:17.959Z",
+          "_id": "6a4b64151f2ccf344c031df4"
+        },
+        {
+          "kotNumber": "KOT-4",
+          "items": [
+            {
+              "name": "Chicken Mandi (H)",
+              "quantity": 1,
+              "_id": "6a4b65201f2ccf344c031e5b"
+            }
+          ],
+          "createdAt": "2026-07-06T08:19:44.816Z",
+          "_id": "6a4b65201f2ccf344c031e5a"
+        },
+        {
+          "kotNumber": "KOT-5",
+          "items": [
+            {
+              "name": "Chicken Mandi (F)",
+              "quantity": 1,
+              "_id": "6a4b652e1f2ccf344c031ece"
+            }
+          ],
+          "createdAt": "2026-07-06T08:19:58.033Z",
+          "_id": "6a4b652e1f2ccf344c031ecd"
+        }
+      ],
+      "createdAt": "2026-07-06T06:26:42.035Z",
+      "updatedAt": "2026-07-06T08:19:58.034Z",
+      "__v": 14,
+      "billNumber": "MS0054",
+      "deliveryStatus": "Pending"
+    }
+  ],
+  "menuItems": [],
+  "inventory": []
+}

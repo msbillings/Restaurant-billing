@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getMenuItems } from '../api/menu';
+import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, X } from 'lucide-react';
 
 const formatImageUrl = (url) => {
   if (!url) return '';
@@ -42,6 +42,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('All');
+  const [selectedItemVariants, setSelectedItemVariants] = useState(null);
   const scrollContainerRef = useRef(null);
 
   const scroll = (direction) => {
@@ -79,11 +80,18 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
     }
   };
 
-  const categoryOptions = ['All', ...categories.map(cat => cat.name)];
+  const categoryOptions = ['All', '⭐ Favourites', ...categories.map(cat => cat.name)];
   
   const filteredItems = items.filter(item => {
-    const itemCategory = item.category?.name || item.category;
-    const matchesCategory = category === 'All' || itemCategory === category;
+    let matchesCategory = false;
+    if (category === 'All') {
+      matchesCategory = true;
+    } else if (category === '⭐ Favourites') {
+      matchesCategory = item.isFavorite === true;
+    } else {
+      const itemCategory = item.category?.name || item.category;
+      matchesCategory = itemCategory === category;
+    }
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
@@ -142,14 +150,23 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
             {categoryOptions.map(cat => (
               <button 
                 key={cat}
-                className={`px-6 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all transform hover:scale-105 ${
+                className={`px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all transform hover:scale-105 flex items-center gap-1.5 ${
                   category === cat 
                     ? 'bg-primary text-white shadow-lg shadow-primary/25 ring-2 ring-primary/20' 
+                    : cat === '⭐ Favourites'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/30'
                     : 'bg-background text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
                 }`}
                 onClick={() => setCategory(cat)}
               >
-                {cat}
+                {cat === '⭐ Favourites' ? (
+                  <>
+                    <Star size={15} className="fill-amber-500 text-amber-500 shrink-0" />
+                    <span>Favourites</span>
+                  </>
+                ) : (
+                  cat
+                )}
               </button>
             ))}
           </div>
@@ -172,9 +189,38 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
             <div
               key={item._id}
               className="bg-surface rounded-xl sm:rounded-2xl p-3 sm:p-5 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 group relative overflow-hidden flex flex-col h-full border border-border/50 hover:border-primary/20"
-              onClick={() => onSelectItem(item)}
+              onClick={() => {
+                if (item.variants && item.variants.length > 0) {
+                  setSelectedItemVariants(item);
+                } else {
+                  onSelectItem(item);
+                }
+              }}
             >
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-[4rem] -mr-8 -mt-8 transition-transform group-hover:scale-110 pointer-events-none" />
+
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const newFavStatus = !item.isFavorite;
+                  setItems(prev => prev.map(i => i._id === item._id ? { ...i, isFavorite: newFavStatus } : i));
+                  try {
+                    await updateMenuItem(item._id, { isFavorite: newFavStatus });
+                  } catch (err) {
+                    console.error('Error updating favorite status:', err);
+                    setItems(prev => prev.map(i => i._id === item._id ? { ...i, isFavorite: item.isFavorite } : i));
+                  }
+                }}
+                className={`absolute top-2 right-2 z-20 p-2 rounded-xl transition-all transform hover:scale-125 ${
+                  item.isFavorite 
+                    ? 'text-amber-500 bg-amber-500/15 shadow-sm opacity-100' 
+                    : 'text-text-muted/40 hover:text-amber-500 bg-background/80 opacity-0 group-hover:opacity-100'
+                }`}
+                title={item.isFavorite ? "Remove from Favourites" : "Add to Favourites"}
+              >
+                <Star size={18} className={item.isFavorite ? "fill-amber-500" : ""} />
+              </button>
 
               {formatImageUrl(item.image) && (
                 <div className="w-full h-24 sm:h-36 mb-2 sm:mb-4 rounded-lg sm:rounded-xl overflow-hidden relative shrink-0 bg-background/60 border border-border/40 shadow-sm">
@@ -209,8 +255,62 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
               </div>
             </div>
           ))}
+
+          {category === '⭐ Favourites' && filteredItems.length === 0 && (
+            <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-surface rounded-2xl border border-dashed border-border/60">
+              <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 mb-4">
+                <Star size={32} className="fill-amber-500/20" />
+              </div>
+              <h3 className="text-lg font-bold text-text-main mb-1">No Favourites Added Yet</h3>
+              <p className="text-text-muted text-sm max-w-md">
+                Hover over any menu item under "All" or other categories and click the <Star size={14} className="inline text-amber-500 fill-amber-500 mx-0.5" /> star icon in the top right corner to add it right here for instant billing!
+              </p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Variant Selection Modal */}
+      {selectedItemVariants && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-sm rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
+              <h2 className="text-xl font-bold text-text-main pr-4 leading-tight">Select Size <br/><span className="text-sm font-normal text-text-muted">{selectedItemVariants.name}</span></h2>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedItemVariants(null);
+                }}
+                className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
+              {selectedItemVariants.variants.map((variant, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectItem({
+                      ...selectedItemVariants,
+                      _id: `${selectedItemVariants._id}-${variant.name}`,
+                      originalId: selectedItemVariants._id,
+                      name: `${selectedItemVariants.name} (${variant.name})`,
+                      price: variant.price
+                    });
+                    setSelectedItemVariants(null);
+                  }}
+                  className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md"
+                >
+                  <span className="font-bold text-lg text-text-main group-hover:text-primary transition-colors">{variant.name}</span>
+                  <span className="font-black text-xl text-text-main bg-background px-3 py-1 rounded-lg border border-border group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-colors">₹{variant.price}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

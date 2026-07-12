@@ -34,6 +34,10 @@ const menuSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isFavorite: {
+    type: Boolean,
+    default: false
+  },
   taxRate: {
     type: Number,
     default: 0,

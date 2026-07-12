@@ -62,6 +62,15 @@ export const updateMenuItem = async (req, res) => {
     const Category = getTenantModel(req, 'Category', CategoryDefault);
     let updateData = req.body;
 
+    // Security check: If non-Admin user (e.g. cashier/POS user), restrict updates exclusively to isFavorite status
+    if (req.user && req.user.role !== 'Admin') {
+      if (typeof updateData.isFavorite === 'boolean') {
+        updateData = { isFavorite: updateData.isFavorite };
+      } else {
+        return res.status(403).json({ message: 'Only Admins can modify item details other than Favourites' });
+      }
+    }
+
     // If category is a string, find the category by name
     if (typeof updateData.category === 'string') {
       let category = await Category.findOne({ name: updateData.category });

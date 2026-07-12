@@ -84,16 +84,9 @@
   background: var(--color-primary-hover);
 }
 
-/* Print Styles for 80mm Thermal Printers */
+/* Print Styles for Dynamic Printers */
 @media print {
-  @page {
-    size: 80mm auto; /* Forces dynamic height cropping based on content */
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  
   html, body {
-    width: 80mm;
     margin: 0 !important;
     padding: 0 !important;
     background: white;
@@ -112,9 +105,8 @@
 
   .receipt-print {
     visibility: visible;
-    width: 80mm !important;
-    max-width: 80mm !important;
-    margin: 0 !important;
+    width: 100% !important;
+    margin: 0 auto !important;
     padding: 2mm !important;
     box-shadow: none !important;
     border: none !important;

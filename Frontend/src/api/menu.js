@@ -63,12 +63,20 @@ export const addMenuItem = async (itemData) => {
 export const updateMenuItem = async (id, itemData) => {
   try {
     const response = await api.put(`/menu/${id}`, itemData);
-    menuCache = null; // Clear cache
+    if (Array.isArray(menuCache)) {
+      menuCache = menuCache.map(m => m._id === id ? { ...m, ...response.data } : m);
+      cacheMenuItems(menuCache).catch(() => {});
+    } else {
+      menuCache = null;
+    }
     return response.data;
   } catch (err) {
     if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
       await addToSyncQueue(`/menu/${id}`, 'put', itemData);
-      menuCache = null;
+      if (Array.isArray(menuCache)) {
+        menuCache = menuCache.map(m => m._id === id ? { ...m, ...itemData } : m);
+        cacheMenuItems(menuCache).catch(() => {});
+      }
       return { ...itemData, _id: id, _offline: true };
     }
     throw err;

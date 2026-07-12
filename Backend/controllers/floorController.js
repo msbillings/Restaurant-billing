@@ -79,6 +79,7 @@ export const updateTableStatus = async (req, res) => {
 
 // Helper function for other controllers to update table status
 export const updateTableStatusHelper = async (req, tableIdentifier, status, currentOrderId = null) => {
+  if (!tableIdentifier || typeof tableIdentifier !== 'string') return;
   try {
     const Floor = getTenantModel(req, 'Floor', FloorDefault);
     const floors = await Floor.find();
@@ -94,8 +95,14 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
         if (floor[arrayName]) {
           for (let item of floor[arrayName]) {
             const uniqueSpaceName = `${floor.name} - ${item.name}`;
-            // Match exactly or uniquely
-            if (item.name === tableIdentifier || uniqueSpaceName === tableIdentifier || item.id === tableIdentifier) {
+            const cleanIdentifier = tableIdentifier.includes(' - ') ? tableIdentifier.split(' - ').slice(1).join(' - ').trim() : tableIdentifier.trim();
+            const cleanItemName = item.name.trim();
+            // Match exactly or uniquely case-insensitively
+            if (
+              cleanItemName.toLowerCase() === cleanIdentifier.toLowerCase() ||
+              uniqueSpaceName.toLowerCase() === tableIdentifier.toLowerCase() ||
+              item.id === tableIdentifier
+            ) {
               item.status = status;
               item.currentOrderId = currentOrderId;
               tableFound = true;

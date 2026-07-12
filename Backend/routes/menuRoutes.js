@@ -9,7 +9,7 @@ router.get('/', getAllMenuItems);
 // POST, PUT, DELETE - Admin only
 router.post('/', authenticateToken, requireAdmin, addMenuItem);
 router.delete('/all', authenticateToken, requireAdmin, deleteAllMenuItems);
-router.put('/:id', authenticateToken, requireAdmin, updateMenuItem);
+router.put('/:id', authenticateToken, updateMenuItem);
 router.delete('/:id', authenticateToken, requireAdmin, deleteMenuItem);
 
 export default router;
