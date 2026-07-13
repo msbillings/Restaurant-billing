@@ -72,7 +72,7 @@ export const updateLicense = async (req, res) => {
 // Create a new client and generate a license
 export const createClient = async (req, res) => {
   try {
-    const { restaurantName, ownerName, email, password, plan, staffAccounts } = req.body;
+    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts } = req.body;
 
     // Check if email exists
     const existingClient = await Client.findOne({ email });
@@ -101,6 +101,9 @@ export const createClient = async (req, res) => {
     if (plan === 'Monthly') validUntil.setMonth(validUntil.getMonth() + 1);
     else if (plan === 'Yearly') validUntil.setFullYear(validUntil.getFullYear() + 1);
     else if (plan === 'Lifetime') validUntil.setFullYear(validUntil.getFullYear() + 100);
+    else if (plan === 'Custom' && customDays) {
+      validUntil.setDate(validUntil.getDate() + parseInt(customDays, 10));
+    }
 
     // Save license to DB
     const newLicense = new License({

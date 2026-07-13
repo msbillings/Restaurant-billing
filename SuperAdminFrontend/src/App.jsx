@@ -33,7 +33,7 @@ function App() {
   
   // Modal State
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
-  const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] });
+  const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
   const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, staffAccounts: [], restaurantName: '' });
 
@@ -290,7 +290,7 @@ function App() {
     try {
       await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/clients', createClientModal);
       alert('Client and License generated successfully!');
-      setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] });
+      setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
       fetchClients();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to create client');
@@ -1086,8 +1086,24 @@ function App() {
                   <option value="Monthly">Monthly (Demo - 30 Days)</option>
                   <option value="Yearly">Yearly</option>
                   <option value="Lifetime">Lifetime</option>
+                  <option value="Custom">Custom (Specify Days)</option>
                 </select>
               </div>
+
+              {createClientModal.plan === 'Custom' && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-400 mb-1">Custom Days</label>
+                  <input 
+                    type="number" 
+                    min="1"
+                    required
+                    placeholder="e.g. 15, 45, 90"
+                    value={createClientModal.customDays}
+                    onChange={e => setCreateClientModal({...createClientModal, customDays: e.target.value})}
+                    className="w-full bg-background border border-border rounded-lg p-3 text-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+              )}
 
               {/* Staff Accounts Dynamic Section */}
               <div className="border border-border p-4 rounded-xl bg-background mt-4">
@@ -1165,7 +1181,7 @@ function App() {
               <div className="flex gap-4 pt-4">
                 <button 
                   type="button"
-                  onClick={() => setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] })} 
+                  onClick={() => setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] })} 
                   className="flex-1 bg-background hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl transition-all border border-border"
                 >
                   Cancel
