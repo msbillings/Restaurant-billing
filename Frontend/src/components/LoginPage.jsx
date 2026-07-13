@@ -18,7 +18,11 @@ const LoginPage = ({ onLoginSuccess }) => {
       const data = await loginUser({ username, password });
       onLoginSuccess(data);
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      if (!err.response) {
+        setError('Network Error: Cannot connect to server. Please check your network connection or API URL.');
+      } else {
+        setError(err.response?.data?.message || 'Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

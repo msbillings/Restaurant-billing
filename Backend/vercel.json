@@ -11,5 +11,17 @@
       "src": "/(.*)",
       "dest": "/server.js"
     }
-  ]
+  ],
+  "env": {
+    "MONGO_URI": "mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0",
+    "JWT_SECRET": "super_secret_jwt_key_123",
+    "JWT_REFRESH_SECRET": "super_secret_refresh_key_456",
+    "ADMIN_USERNAME": "Mahesh",
+    "ADMIN_PASSWORD": "Mahesh@666",
+    "ADMIN_MAX_CONCURRENT_LOGINS": "99999",
+    "CUSTOMER_MAX_CONCURRENT_LOGINS": "99999",
+    "CAPTAIN_MAX_CONCURRENT_LOGINS": "99999",
+    "FRONTEND_URL": "https://restaurant-billing-frontend-main.vercel.app",
+    "CORS_ORIGIN": "https://restaurant-billing-frontend-main.vercel.app"
+  }
 }
