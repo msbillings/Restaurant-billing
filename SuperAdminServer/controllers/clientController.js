@@ -354,12 +354,15 @@ export const getLicenseInfo = async (req, res) => {
       return res.status(404).json({ valid: false, message: 'No active subscription found' });
     }
 
+    const activeBroadcasts = await Broadcast.find({ active: true }).sort({ createdAt: -1 });
+
     res.status(200).json({
       valid: true,
       restaurantName: client.restaurantName,
       validUntil: license.validUntil,
       status: client.status,
-      features: client.features
+      features: client.features,
+      broadcasts: activeBroadcasts
     });
   } catch (error) {
     res.status(500).json({ valid: false, message: 'Error fetching license info', error: error.message });
