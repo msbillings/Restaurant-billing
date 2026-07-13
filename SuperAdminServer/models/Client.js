@@ -25,6 +25,16 @@ const clientSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  staffAccounts: {
+    type: [
+      {
+        role: String,
+        username: String,
+        plainTextPassword: String
+      }
+    ],
+    default: []
+  },
   licenseKey: {
     type: String,
     default: null

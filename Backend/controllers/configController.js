@@ -9,9 +9,10 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 
 export const setupDatabase = async (req, res) => {
   try {
-    const { databaseName, username, password } = req.body;
+    const { databaseName, username, password, staffAccounts } = req.body;
     
-    if (!databaseName || !username || !password) {
+    // We only strictly need databaseName now, but we check if either username/password OR staffAccounts is provided
+    if (!databaseName || (!username && !staffAccounts)) {
       return res.status(400).json({ message: 'Missing required configuration fields.' });
     }
 
@@ -53,18 +54,32 @@ export const setupDatabase = async (req, res) => {
       console.log(`Switched to new client database: ${databaseName}`);
     }
 
-    // 5. Seed initial admin user if the database is empty
+    // 5. Seed initial users if the database is empty
     const userCount = await User.countDocuments();
     if (userCount === 0) {
-      // We pass plain password; the Mongoose pre-save hook automatically hashes it!
-      const newUser = new User({
-        username: username,
-        password: password,
-        role: 'Admin',
-        activeSessions: []
-      });
-      await newUser.save();
-      console.log(`Created initial admin user: ${username} in database ${databaseName}`);
+      if (staffAccounts && Array.isArray(staffAccounts) && staffAccounts.length > 0) {
+        // Multi-staff injection from Super Admin
+        for (const staff of staffAccounts) {
+          const newUser = new User({
+            username: staff.username,
+            password: staff.plainTextPassword, // Schema pre-save hook handles hashing
+            role: staff.role,
+            activeSessions: []
+          });
+          await newUser.save();
+        }
+        console.log(`Seeded ${staffAccounts.length} staff accounts in database ${databaseName}`);
+      } else {
+        // Fallback for traditional single-admin setup via POS Screen
+        const newUser = new User({
+          username: username,
+          password: password,
+          role: 'Admin',
+          activeSessions: []
+        });
+        await newUser.save();
+        console.log(`Created initial admin user: ${username} in database ${databaseName}`);
+      }
     }
 
     res.status(200).json({ message: 'Database configured successfully' });

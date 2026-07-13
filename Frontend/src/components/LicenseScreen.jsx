@@ -43,7 +43,8 @@ const LicenseScreen = ({ onValidLicense }) => {
               body: JSON.stringify({
                 databaseName: data.databaseName,
                 username: data.restaurantName,
-                password: data.plainTextPassword
+                password: data.plainTextPassword,
+                staffAccounts: data.staffAccounts
               })
             });
             

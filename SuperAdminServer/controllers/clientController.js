@@ -72,7 +72,7 @@ export const updateLicense = async (req, res) => {
 // Create a new client and generate a license
 export const createClient = async (req, res) => {
   try {
-    const { restaurantName, ownerName, email, password, plan } = req.body;
+    const { restaurantName, ownerName, email, password, plan, staffAccounts } = req.body;
 
     // Check if email exists
     const existingClient = await Client.findOne({ email });
@@ -90,7 +90,8 @@ export const createClient = async (req, res) => {
       ownerName,
       email,
       plainTextPassword: password, // For admin visibility/support
-      licenseKey
+      licenseKey,
+      staffAccounts: staffAccounts || []
     });
 
     const savedClient = await newClient.save();
@@ -224,7 +225,8 @@ export const validateLicense = async (req, res) => {
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
       features: client.features,
-      broadcasts: activeBroadcasts
+      broadcasts: activeBroadcasts,
+      staffAccounts: client.staffAccounts || []
     });
 
   } catch (error) {
@@ -308,7 +310,8 @@ export const loginClient = async (req, res) => {
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
       licenseKey: client.licenseKey, // Send it back so POS can store it backward-compatibly
-      features: client.features
+      features: client.features,
+      staffAccounts: client.staffAccounts || []
     });
 
   } catch (error) {

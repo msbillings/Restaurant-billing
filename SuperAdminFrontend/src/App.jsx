@@ -33,8 +33,9 @@ function App() {
   
   // Modal State
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
-  const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly' });
+  const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
+  const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, staffAccounts: [], restaurantName: '' });
 
   // Broadcast State
   const [broadcasts, setBroadcasts] = useState([]);
@@ -289,7 +290,7 @@ function App() {
     try {
       await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/clients', createClientModal);
       alert('Client and License generated successfully!');
-      setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly' });
+      setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] });
       fetchClients();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to create client');
@@ -749,6 +750,12 @@ function App() {
                           Features
                         </button>
                         <button 
+                          onClick={() => setViewStaffModal({ isOpen: true, staffAccounts: client.staffAccounts || [], restaurantName: client.restaurantName })}
+                          className="flex items-center gap-1 text-xs font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-3 py-1.5 rounded transition-colors"
+                        >
+                          <Users className="w-3 h-3" /> Staff
+                        </button>
+                        <button 
                           onClick={() => handleOverridePassword(client._id, client.restaurantName)}
                           className="text-xs font-bold bg-surface border border-border hover:bg-gray-700 hover:text-white px-3 py-1.5 rounded transition-colors"
                         >
@@ -1081,11 +1088,84 @@ function App() {
                   <option value="Lifetime">Lifetime</option>
                 </select>
               </div>
+
+              {/* Staff Accounts Dynamic Section */}
+              <div className="border border-border p-4 rounded-xl bg-background mt-4">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-bold text-gray-400">POS Staff Accounts (Optional)</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setCreateClientModal({
+                      ...createClientModal, 
+                      staffAccounts: [...(createClientModal.staffAccounts || []), { role: 'Cashier', username: '', plainTextPassword: '' }]
+                    })}
+                    className="text-xs bg-primary/20 text-primary px-2 py-1 rounded hover:bg-primary/30"
+                  >
+                    + Add Staff
+                  </button>
+                </div>
+                {createClientModal.staffAccounts?.map((staff, index) => (
+                  <div key={index} className="flex gap-2 mb-2 items-end border-b border-border/50 pb-2">
+                    <div className="flex-1">
+                      <select 
+                        value={staff.role} 
+                        onChange={(e) => {
+                          const newStaff = [...createClientModal.staffAccounts];
+                          newStaff[index].role = e.target.value;
+                          setCreateClientModal({...createClientModal, staffAccounts: newStaff});
+                        }}
+                        className="w-full bg-surface border border-border rounded p-2 text-xs text-white"
+                      >
+                        <option value="Admin">Admin</option>
+                        <option value="Cashier">Cashier</option>
+                        <option value="Captain">Captain</option>
+                        <option value="Waiter">Waiter</option>
+                        <option value="KDS">KDS</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <input 
+                        type="text" placeholder="Username" required value={staff.username}
+                        onChange={(e) => {
+                          const newStaff = [...createClientModal.staffAccounts];
+                          newStaff[index].username = e.target.value;
+                          setCreateClientModal({...createClientModal, staffAccounts: newStaff});
+                        }}
+                        className="w-full bg-surface border border-border rounded p-2 text-xs text-white"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <input 
+                        type="text" placeholder="Password" required value={staff.plainTextPassword}
+                        onChange={(e) => {
+                          const newStaff = [...createClientModal.staffAccounts];
+                          newStaff[index].plainTextPassword = e.target.value;
+                          setCreateClientModal({...createClientModal, staffAccounts: newStaff});
+                        }}
+                        className="w-full bg-surface border border-border rounded p-2 text-xs text-white"
+                      />
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const newStaff = createClientModal.staffAccounts.filter((_, i) => i !== index);
+                        setCreateClientModal({...createClientModal, staffAccounts: newStaff});
+                      }}
+                      className="p-2 text-red-400 hover:bg-red-400/10 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {(!createClientModal.staffAccounts || createClientModal.staffAccounts.length === 0) && (
+                  <p className="text-xs text-gray-500 italic">No additional staff accounts will be created automatically.</p>
+                )}
+              </div>
               
               <div className="flex gap-4 pt-4">
                 <button 
                   type="button"
-                  onClick={() => setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly' })} 
+                  onClick={() => setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', staffAccounts: [] })} 
                   className="flex-1 bg-background hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-xl transition-all border border-border"
                 >
                   Cancel
@@ -1149,6 +1229,42 @@ function App() {
                 className="px-4 py-2 bg-primary hover:bg-primary-hover rounded-lg transition-colors text-white text-sm font-bold shadow-lg shadow-primary/20"
               >
                 Save Features
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* View Staff Modal */}
+      {viewStaffModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+          <div className="bg-surface border border-border p-6 rounded-2xl shadow-2xl max-w-md w-full m-4">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-primary w-5 h-5"/> Staff Accounts</h3>
+            <p className="text-sm text-gray-400 mb-4">Accounts for {viewStaffModal.restaurantName}</p>
+            
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              {viewStaffModal.staffAccounts.length === 0 ? (
+                <p className="text-gray-500 italic text-center py-4">No pre-configured staff accounts found.</p>
+              ) : (
+                viewStaffModal.staffAccounts.map((staff, idx) => (
+                  <div key={idx} className="bg-background border border-border p-3 rounded-lg flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-sm text-white">{staff.username}</span>
+                      <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded uppercase tracking-wider">{staff.role}</span>
+                    </div>
+                    <div className="text-xs font-mono text-gray-400 flex items-center gap-2">
+                      Password: <span className="text-white">{staff.plainTextPassword}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setViewStaffModal({ isOpen: false, staffAccounts: [], restaurantName: '' })}
+                className="px-4 py-2 bg-primary hover:bg-primary-hover rounded-lg transition-colors text-white text-sm font-bold shadow-lg shadow-primary/20"
+              >
+                Close
               </button>
             </div>
           </div>
