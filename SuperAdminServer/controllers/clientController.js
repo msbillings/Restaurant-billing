@@ -188,7 +188,7 @@ export const validateLicense = async (req, res) => {
 
     // Capture Geographic Location silently
     try {
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const ip = req.headers['x-vercel-forwarded-for'] || req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       const cleanIp = ip ? ip.split(',')[0].trim() : null;
       if (cleanIp && cleanIp !== '::1' && cleanIp !== '127.0.0.1') {
         // Only update once a day to prevent rate limiting
@@ -277,7 +277,7 @@ export const loginClient = async (req, res) => {
 
     // Capture Geographic Location silently
     try {
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+      const ip = req.headers['x-vercel-forwarded-for'] || req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
       const cleanIp = ip ? ip.split(',')[0].trim() : null;
       if (cleanIp && cleanIp !== '::1' && cleanIp !== '127.0.0.1') {
         const needsUpdate = !client.location?.lastUpdated || 
