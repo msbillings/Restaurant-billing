@@ -633,16 +633,17 @@ function App() {
                       className={`relative bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center transition-all ${!isUnknown ? 'hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer shadow-sm hover:shadow-blue-500/20 hover:-translate-y-1' : 'hover:border-blue-500/50 cursor-default'}`}
                     >
                       {!isUnknown && (
-                        <a 
-                          href={mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const clientsInLoc = clients.filter(c => c.location && c.location.city === geo.name.split(',')[0]);
+                            setMapModal({ isOpen: true, locationName: geo.name, clients: clientsInLoc });
+                          }}
                           className="absolute top-2 right-2 text-gray-500 hover:text-blue-400 transition-colors"
-                          title="View on Google Maps"
+                          title="View on Interactive Map"
                         >
                           <ExternalLink className="w-4 h-4" />
-                        </a>
+                        </button>
                       )}
                       <MapPin className="text-blue-400 w-6 h-6 mb-2" />
                       <h4 className={`text-white font-bold text-sm mb-1`}>{geo.name}</h4>
