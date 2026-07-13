@@ -1348,17 +1348,23 @@ function App() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  {mapModal.clients.map(client => client.location && (
-                    <Marker key={client._id} position={[client.location.lat, client.location.lon]}>
-                      <Popup>
-                        <div className="text-gray-900 font-sans">
-                            <strong className="text-base">{client.restaurantName}</strong><br/>
-                            <span className="text-xs text-gray-500">{client.email}</span><br/>
-                            <span className={`text-xs font-bold ${client.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>{client.status}</span>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
+                  {mapModal.clients.map((client, idx) => {
+                    if (!client.location) return null;
+                    // Add a tiny deterministic jitter (approx 200m-500m) so pins from the same city IP don't stack perfectly on top of each other
+                    const jitterLat = client.location.lat + (idx * 0.002) * (idx % 2 === 0 ? 1 : -1);
+                    const jitterLon = client.location.lon + (idx * 0.003) * (idx % 3 === 0 ? 1 : -1);
+                    return (
+                      <Marker key={client._id} position={[jitterLat, jitterLon]}>
+                        <Popup>
+                          <div className="text-gray-900 font-sans">
+                              <strong className="text-base">{client.restaurantName}</strong><br/>
+                              <span className="text-xs text-gray-500">{client.email}</span><br/>
+                              <span className={`text-xs font-bold ${client.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>{client.status}</span>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  })}
                 </MapContainer>
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-400">Location data unavailable for rendering map.</div>
