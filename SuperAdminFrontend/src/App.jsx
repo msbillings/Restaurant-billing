@@ -4,6 +4,22 @@ import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 // Axios Interceptor for JWT
 axios.interceptors.request.use((config) => {
@@ -36,6 +52,7 @@ function App() {
   const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
   const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, staffAccounts: [], restaurantName: '' });
+  const [mapModal, setMapModal] = useState({ isOpen: false, locationName: '', clients: [] });
 
   // Broadcast State
   const [broadcasts, setBroadcasts] = useState([]);
@@ -1306,6 +1323,45 @@ function App() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Map Modal */}
+      {mapModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border p-6 rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold flex items-center gap-2 text-white"><MapPin className="text-blue-400 w-6 h-6"/> Clients in {mapModal.locationName}</h3>
+              <button 
+                onClick={() => setMapModal({ isOpen: false, locationName: '', clients: [] })}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="flex-1 rounded-xl overflow-hidden border border-border bg-gray-900 relative">
+              {mapModal.clients.length > 0 && mapModal.clients[0].location ? (
+                <MapContainer center={[mapModal.clients[0].location.lat, mapModal.clients[0].location.lon]} zoom={12} scrollWheelZoom={true} style={{ height: '100%', width: '100%', zIndex: 0 }}>
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {mapModal.clients.map(client => client.location && (
+                    <Marker key={client._id} position={[client.location.lat, client.location.lon]}>
+                      <Popup>
+                        <div className="text-gray-900 font-sans">
+                            <strong className="text-base">{client.restaurantName}</strong><br/>
+                            <span className="text-xs text-gray-500">{client.email}</span><br/>
+                            <span className={`text-xs font-bold ${client.status === 'Active' ? 'text-green-600' : 'text-red-600'}`}>{client.status}</span>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">Location data unavailable for rendering map.</div>
+              )}
             </div>
           </div>
         </div>
