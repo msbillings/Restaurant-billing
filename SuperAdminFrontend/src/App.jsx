@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -298,7 +298,10 @@ function App() {
   };
 
   const filteredClients = clients.filter(c => {
-    const matchesSearch = c.restaurantName.toLowerCase().includes(searchTerm.toLowerCase()) || c.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const locString = c.location ? `${c.location.city}, ${c.location.country}`.toLowerCase() : 'unknown location';
+    const matchesSearch = c.restaurantName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          locString.includes(searchTerm.toLowerCase());
     const matchesPlan = filterPlan === 'All' || c.plan === filterPlan || (filterPlan === 'Custom' && !['Monthly', 'Yearly', 'Lifetime'].includes(c.plan));
     const matchesStatus = filterStatus === 'All' || c.status === filterStatus;
     
@@ -607,17 +610,27 @@ function App() {
                   const mapsUrl = isUnknown ? '#' : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.name)}`;
                   
                   return (
-                    <a 
+                    <div 
                       key={geo.name} 
-                      href={mapsUrl}
-                      target={isUnknown ? "_self" : "_blank"}
-                      rel={isUnknown ? "" : "noopener noreferrer"}
-                      className={`bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center transition-all ${!isUnknown ? 'hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer shadow-sm hover:shadow-blue-500/20 hover:-translate-y-1' : 'hover:border-blue-500/50 cursor-default'}`}
+                      onClick={() => !isUnknown && setSearchTerm(geo.name.split(',')[0])}
+                      className={`relative bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center transition-all ${!isUnknown ? 'hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer shadow-sm hover:shadow-blue-500/20 hover:-translate-y-1' : 'hover:border-blue-500/50 cursor-default'}`}
                     >
+                      {!isUnknown && (
+                        <a 
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="absolute top-2 right-2 text-gray-500 hover:text-blue-400 transition-colors"
+                          title="View on Google Maps"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
                       <MapPin className="text-blue-400 w-6 h-6 mb-2" />
-                      <h4 className={`text-white font-bold text-sm mb-1 ${!isUnknown && 'hover:underline decoration-blue-400'}`}>{geo.name}</h4>
+                      <h4 className={`text-white font-bold text-sm mb-1`}>{geo.name}</h4>
                       <span className="text-xs font-black bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">{geo.value} {geo.value === 1 ? 'Client' : 'Clients'}</span>
-                    </a>
+                    </div>
                   );
                 })
               )}
