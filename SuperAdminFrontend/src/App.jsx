@@ -602,13 +602,24 @@ function App() {
               {geographicData.length === 0 ? (
                  <div className="col-span-full text-center text-gray-500 py-4 text-sm">Waiting for clients to sync locations...</div>
               ) : (
-                geographicData.map((geo, index) => (
-                  <div key={geo.name} className="bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center hover:border-blue-500/50 transition-colors">
-                    <MapPin className="text-blue-400 w-6 h-6 mb-2" />
-                    <h4 className="text-white font-bold text-sm mb-1">{geo.name}</h4>
-                    <span className="text-xs font-black bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">{geo.value} {geo.value === 1 ? 'Client' : 'Clients'}</span>
-                  </div>
-                ))
+                geographicData.map((geo, index) => {
+                  const isUnknown = geo.name === 'Unknown Location';
+                  const mapsUrl = isUnknown ? '#' : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(geo.name)}`;
+                  
+                  return (
+                    <a 
+                      key={geo.name} 
+                      href={mapsUrl}
+                      target={isUnknown ? "_self" : "_blank"}
+                      rel={isUnknown ? "" : "noopener noreferrer"}
+                      className={`bg-background border border-border rounded-xl p-4 flex flex-col justify-center items-center text-center transition-all ${!isUnknown ? 'hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer shadow-sm hover:shadow-blue-500/20 hover:-translate-y-1' : 'hover:border-blue-500/50 cursor-default'}`}
+                    >
+                      <MapPin className="text-blue-400 w-6 h-6 mb-2" />
+                      <h4 className={`text-white font-bold text-sm mb-1 ${!isUnknown && 'hover:underline decoration-blue-400'}`}>{geo.name}</h4>
+                      <span className="text-xs font-black bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full">{geo.value} {geo.value === 1 ? 'Client' : 'Clients'}</span>
+                    </a>
+                  );
+                })
               )}
             </div>
           </div>
