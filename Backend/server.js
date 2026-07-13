@@ -277,14 +277,18 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/staff', staffRoutes);
 
-// Start background session cleanup job
-startSessionCleanupJob();
+const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 
-// Start data vault backup job (Daily at 3:00 AM)
-startBackupCron();
+if (!isServerless) {
+  // Start background session cleanup job
+  startSessionCleanupJob();
 
-// Start EOD Report job (Daily at 11:59 PM)
-startReportCron();
+  // Start data vault backup job (Daily at 3:00 AM)
+  startBackupCron();
+
+  // Start EOD Report job (Daily at 11:59 PM)
+  startReportCron();
+}
 
 // Initialize connection for serverless (non-blocking)
 // Connection will be established on first request via middleware
