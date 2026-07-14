@@ -146,22 +146,22 @@ const Invoice = ({ bill, onClose, onSave }) => {
           </div>
 
           {/* Items List */}
-          <div className="mb-1 border-b-2 border-dashed border-black pb-2">
+          <div className="mb-1 border-b-2 border-dashed border-black pb-1">
             {bill.items && bill.items.length > 0 ? (
               bill.items.map((item, idx) => (
-                <div key={idx} className="flex flex-col gap-0.5 text-[17px] print:text-[17px] font-[900] font-black uppercase text-black pb-2 pt-1 border-b-2 border-dashed border-black last:border-0 leading-tight">
+                <div key={idx} className="flex flex-col text-[16px] print:text-[16px] font-[900] font-black uppercase text-black pb-1 leading-tight">
                   <div className="break-words">
                     {item.name || 'Unknown Item'}
                     {item.hsnCode ? ` (HSN: ${item.hsnCode})` : ''}
                   </div>
-                  <div className="flex justify-between text-[16px] print:text-[16px] font-[900] font-black text-black">
-                    <div>{item.quantity || 0} x Rs {(item.price || 0).toFixed(2)}</div>
-                    <div>Rs {(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
+                  <div className="flex justify-between">
+                    <div>{item.quantity || 0} x {(item.price || 0).toFixed(2)}</div>
+                    <div>{(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-sm text-center text-black font-[900] font-black py-2">No items</div>
+              <div className="text-sm text-center text-black font-[900] font-black py-1">No items</div>
             )}
           </div>
 
