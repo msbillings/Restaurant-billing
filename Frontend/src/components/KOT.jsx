@@ -81,66 +81,71 @@ const KOT = ({ order, onClose }) => {
 
       {/* KOT Preview */}
       <div className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none border border-gray-300 mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        <div className="p-4 print:p-0 print:pb-2">
+        <div className="p-3 print:p-0 print:pb-2 leading-tight" style={{ color: '#000' }}>
           {/* Header */}
-          <div className="text-center mb-3 print:mb-0">
-            <h1 className="text-[26px] print:text-[26px] font-[900] font-black uppercase tracking-tight leading-tight text-black">{settings.restaurantName}</h1>
-            <div className="text-[22px] print:text-[22px] font-[900] font-black uppercase tracking-widest text-black mt-1 print:mt-0 mb-1">
+          <div className="text-center mb-1">
+            <h1 className="text-[14px] print:text-[14px] font-bold uppercase tracking-tight leading-none text-black mb-0.5">{settings.restaurantName}</h1>
+            <div className="text-[16px] print:text-[16px] font-bold uppercase tracking-widest text-black">
               K.O.T
             </div>
             {order.kotNumber ? (
-              <p className="text-[20px] print:text-[20px] font-[900] font-black text-black border-b-2 border-dashed border-black pb-1">#{order.kotNumber}</p>
+              <p className="text-[14px] print:text-[14px] font-bold text-black border-b border-dashed border-black pb-0.5">#{order.kotNumber}</p>
             ) : (
-              <p className="text-[17px] print:text-[17px] font-[900] font-black text-black border-b-2 border-dashed border-black pb-1">(Kitchen Order Ticket)</p>
+              <p className="text-[12px] print:text-[12px] font-medium text-black border-b border-dashed border-black pb-0.5">(Kitchen Order Ticket)</p>
             )}
           </div>
 
           {/* Info */}
-          <div className="flex justify-between items-center text-[16px] print:text-[16px] font-[900] font-black text-black mb-1">
-            <span>{new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '-')} {new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span>TYPE: {order.billType || order.orderType || 'Dine-In'}</span>
+          <div className="text-[12px] print:text-[12px] font-medium text-black mb-1 flex flex-col gap-0.5">
+            <div className="flex justify-between">
+              <span>Date: {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
+              <span>Time: {new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Type: {order.billType || order.orderType || 'Dine-In'}</span>
+              <span>{order.orderSource && order.orderSource !== 'Direct' ? `Source: ${order.orderSource}` : ''}</span>
+            </div>
           </div>
-          <div className="text-[22px] print:text-[22px] font-[900] font-black text-black mb-1 border-b-2 border-dashed border-black pb-1">
+          
+          <div className="text-[16px] print:text-[16px] font-bold text-black mb-1 border-y border-dashed border-black py-0.5 text-center uppercase">
             TABLE: {order.tableNo || 'N/A'}
           </div>
-          {order.orderSource && order.orderSource !== 'Direct' && (
-            <p className="text-[18px] print:text-[18px] font-[900] font-black text-black mb-1">{order.orderSource} ORDER</p>
-          )}
+
           {order.customerName && (
-            <p className="text-[17px] print:text-[17px] font-[900] font-black text-black mb-1">CUSTOMER: {order.customerName}</p>
+            <p className="text-[12px] print:text-[12px] font-medium text-black mb-1">Customer: {order.customerName}</p>
           )}
 
           {/* Items Header */}
-          <div className="border-y-2 border-dashed border-black py-1 mb-1">
-            <div className="flex justify-between gap-1 text-[18px] print:text-[18px] font-[900] font-black uppercase text-black">
-              <div className="w-[45px] text-center">QTY</div>
-              <div className="flex-1">ITEM</div>
+          <div className="border-b border-dashed border-black pb-0.5 mb-1">
+            <div className="flex text-[12px] print:text-[12px] font-bold uppercase text-black">
+              <div className="w-8 text-center">Qty</div>
+              <div className="flex-1 pl-1">Item</div>
             </div>
           </div>
 
           {/* Items List */}
-          <div className="mb-2 border-b-2 border-dashed border-black pb-2">
+          <div className="mb-1 border-b border-dashed border-black pb-1">
             {order.items && order.items.length > 0 ? (
               order.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between gap-2 text-[20px] print:text-[20px] font-[900] font-black uppercase text-black pb-2 pt-1 border-b-2 border-dashed border-black last:border-0 leading-tight">
-                  <div className="w-[45px] text-center text-[22px] print:text-[22px] font-[900] font-black">{item.quantity || 0}</div>
-                  <div className="flex-1 break-words font-[900] font-black">{item.name || 'Unknown Item'}</div>
+                <div key={idx} className="flex text-[14px] print:text-[14px] font-bold uppercase text-black pb-0.5 items-start">
+                  <div className="w-8 text-center">{item.quantity || 0}</div>
+                  <div className="flex-1 pl-1 break-words leading-tight">{item.name || 'Unknown Item'}</div>
                 </div>
               ))
             ) : (
-              <div className="text-sm text-center text-black font-[900] font-black py-2">No items</div>
+              <div className="text-[12px] text-center font-medium py-1">No items</div>
             )}
           </div>
 
           {/* Footer */}
-          <div className="text-center text-[16px] print:text-[16px] font-[900] font-black text-black pt-1">
+          <div className="text-center text-[12px] print:text-[12px] font-medium text-black pt-0.5">
             <p>*** END OF KOT ***</p>
           </div>
           
           {/* Cut Line Visual (Screen only) */}
-          <div className="mt-8 border-b-4 border-dotted border-gray-300 print:hidden relative">
-             <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-black/80 rounded-full"></div>
-             <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-4 h-4 bg-black/80 rounded-full"></div>
+          <div className="mt-6 border-b border-dotted border-gray-400 print:hidden relative">
+             <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
+             <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
           </div>
         </div>
       </div>

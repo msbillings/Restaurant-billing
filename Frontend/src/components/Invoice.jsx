@@ -96,7 +96,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
       {/* Receipt Preview */}
       <div className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none border border-gray-300 mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        <div className="p-3 print:p-0 print:pb-2 leading-tight" style={{ color: '#000' }}>
+        <div className="p-2 print:p-0 print:pb-2 leading-tight" style={{ color: '#000' }}>
           {/* Header */}
           <div className="text-center mb-2">
             {settings.logo && (
@@ -104,8 +104,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 <img src={settings.logo} alt="Restaurant Logo" className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
               </div>
             )}
-            <h1 className="text-[18px] print:text-[18px] font-bold uppercase tracking-tight text-black m-0 p-0 leading-tight">{settings.restaurantName}</h1>
-            <div className="text-[12px] print:text-[12px] font-medium text-black leading-tight mt-0.5">
+            <h1 className="text-[16px] print:text-[16px] font-bold uppercase tracking-tight text-black m-0 p-0 leading-tight">{settings.restaurantName}</h1>
+            <div className="text-[10px] print:text-[10px] font-medium text-black leading-tight mt-0.5">
               {settings.address.split('\n').map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
@@ -116,14 +116,14 @@ const Invoice = ({ bill, onClose, onSave }) => {
             </div>
           </div>
 
-          <div className="text-center text-[14px] print:text-[14px] font-bold uppercase tracking-wide text-black border-y border-black border-dashed py-0.5 mb-1">
+          <div className="text-center text-[12px] print:text-[12px] font-bold uppercase tracking-wide text-black border-y border-black border-dashed py-0.5 mb-1">
             {bill.billType === 'Delivery' && bill.orderSource && bill.orderSource !== 'Direct' 
               ? `${bill.orderSource} INVOICE` 
               : 'INVOICE'}
           </div>
 
           {/* Bill Info */}
-          <div className="text-[12px] print:text-[12px] font-medium text-black mb-1.5 flex flex-col gap-0.5">
+          <div className="text-[10px] print:text-[10px] font-medium text-black mb-1.5 flex flex-col gap-0.5">
             <div className="flex justify-between">
               <span>Bill No: {bill.billNumber || 'PREVIEW'}</span>
               <span>Date: {new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
@@ -139,7 +139,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* Items Header */}
           <div className="border-y border-dashed border-black py-0.5 mb-1">
-            <div className="flex text-[12px] print:text-[12px] font-bold uppercase text-black">
+            <div className="flex text-[10px] print:text-[10px] font-bold uppercase text-black">
               <div className="flex-1">Item</div>
               <div className="w-8 text-center">Qty</div>
               <div className="w-16 text-right">Amount</div>
@@ -150,22 +150,22 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <div className="mb-1 border-b border-dashed border-black pb-1">
             {bill.items && bill.items.length > 0 ? (
               bill.items.map((item, idx) => (
-                <div key={idx} className="flex text-[12px] print:text-[12px] font-medium uppercase text-black pb-0.5 items-start">
+                <div key={idx} className="flex text-[10px] print:text-[10px] font-medium uppercase text-black pb-0.5 items-start">
                   <div className="flex-1 pr-1 break-words">
                     {item.name || 'Unknown Item'}
-                    {item.hsnCode ? <span className="text-[10px]"> (HSN:{item.hsnCode})</span> : ''}
+                    {item.hsnCode ? <span className="text-[9px]"> (HSN:{item.hsnCode})</span> : ''}
                   </div>
                   <div className="w-8 text-center">{item.quantity || 0}</div>
                   <div className="w-16 text-right">{(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
                 </div>
               ))
             ) : (
-              <div className="text-[12px] text-center font-medium py-1">No items</div>
+              <div className="text-[10px] text-center font-medium py-1">No items</div>
             )}
           </div>
 
           {/* Tax / Discount / Items summary */}
-          <div className="border-b border-dashed border-black pb-1 mb-1 flex flex-col items-end text-[12px] print:text-[12px] font-medium text-black gap-0.5">
+          <div className="border-b border-dashed border-black pb-1 mb-1 flex flex-col items-end text-[10px] print:text-[10px] font-medium text-black gap-0.5">
             <div className="w-full flex justify-between">
               <span>Items: {bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
               <span>Sub Total: {(bill.subtotal || bill.total || 0).toFixed(2)}</span>
@@ -219,7 +219,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           </div>
 
           {/* Total */}
-          <div className="flex justify-between items-center text-[16px] print:text-[16px] font-bold text-black border-b border-dashed border-black pb-1 mb-1">
+          <div className="flex justify-between items-center text-[14px] print:text-[14px] font-bold text-black border-b border-dashed border-black pb-1 mb-1">
             <span>GRAND TOTAL</span>
             <span>Rs {(() => {
               const sub = Number(bill.subtotal || bill.total || 0);
@@ -240,7 +240,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* Payment Mode */}
           {bill.paymentMode && (
-            <div className="text-[12px] print:text-[12px] font-medium text-black text-center mb-2">
+            <div className="text-[10px] print:text-[10px] font-medium text-black text-center mb-2">
               Paid via {bill.paymentMode}
             </div>
           )}
@@ -248,11 +248,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
           {/* UPI Scan to Pay QR Code on Invoice */}
           {settings.enableQrPayment !== false && (
             <div className="my-2 text-center flex flex-col items-center justify-center">
-              <div className="text-[11px] print:text-[11px] font-bold uppercase text-black mb-0.5">
+              <div className="text-[10px] print:text-[10px] font-bold uppercase text-black mb-0.5">
                 SCAN TO PAY VIA UPI
               </div>
               <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent((() => {
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent((() => {
                   const pa = (settings.upiId || 'maheshsiva864@oksbi').trim();
                   const pn = (settings.restaurantName || 'MSBILLINGS').trim();
                   const am = (bill.total || 0).toFixed(2);
@@ -261,21 +261,21 @@ const Invoice = ({ bill, onClose, onSave }) => {
                   return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
                 })())}`} 
                 alt="UPI QR" 
-                className="w-20 h-20 mx-auto border border-black p-0.5 bg-white object-contain"
+                className="w-16 h-16 mx-auto border border-black p-0.5 bg-white object-contain"
               />
-              <div className="text-[11px] print:text-[11px] font-medium text-black mt-0.5">
+              <div className="text-[10px] print:text-[10px] font-medium text-black mt-0.5">
                 UPI ID: {settings.upiId || 'maheshsiva864@oksbi'}
               </div>
             </div>
           )}
 
           {/* Footer */}
-          <div className="mt-1 text-center text-[12px] print:text-[12px] font-bold text-black">
+          <div className="mt-1 text-center text-[10px] print:text-[10px] font-bold text-black">
             <p>{settings.footerMessage || 'Thank You'}</p>
           </div>
           
           {/* Cut Line Visual (Screen only) */}
-          <div className="mt-6 border-b border-dotted border-gray-400 print:hidden relative">
+          <div className="mt-4 border-b border-dotted border-gray-400 print:hidden relative">
              <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
              <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
           </div>
