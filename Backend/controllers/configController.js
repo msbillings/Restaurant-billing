@@ -57,28 +57,40 @@ export const setupDatabase = async (req, res) => {
     // 5. Seed initial users if the database is empty
     const userCount = await User.countDocuments();
     if (userCount === 0) {
-      if (staffAccounts && Array.isArray(staffAccounts) && staffAccounts.length > 0) {
-        // Multi-staff injection from Super Admin
-        for (const staff of staffAccounts) {
-          const newUser = new User({
-            username: staff.username,
-            password: staff.plainTextPassword, // Schema pre-save hook handles hashing
-            role: staff.role,
-            activeSessions: []
-          });
-          await newUser.save();
-        }
-        console.log(`Seeded ${staffAccounts.length} staff accounts in database ${databaseName}`);
-      } else {
-        // Fallback for traditional single-admin setup via POS Screen
-        const newUser = new User({
+      // 1. Always create the main Admin user
+      if (username && password) {
+        const adminUser = new User({
           username: username,
           password: password,
           role: 'Admin',
           activeSessions: []
         });
-        await newUser.save();
+        await adminUser.save();
         console.log(`Created initial admin user: ${username} in database ${databaseName}`);
+      }
+
+      // 2. Inject staff accounts if provided
+      if (staffAccounts && Array.isArray(staffAccounts) && staffAccounts.length > 0) {
+        for (const staff of staffAccounts) {
+          // Skip if staff username is same as admin username to avoid Duplicate Key error
+          if (staff.username === username) continue;
+          
+          const staffPassword = staff.plainTextPassword || staff.password || password || '123456';
+          
+          const newUser = new User({
+            username: staff.username || 'staff',
+            password: staffPassword,
+            role: staff.role || 'Cashier',
+            activeSessions: []
+          });
+          
+          try {
+            await newUser.save();
+          } catch (err) {
+            console.error(`Failed to save staff account ${staff.username}:`, err.message);
+          }
+        }
+        console.log(`Seeded ${staffAccounts.length} staff accounts in database ${databaseName}`);
       }
     }
 
