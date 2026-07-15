@@ -182,7 +182,7 @@ export const validateLicense = async (req, res) => {
 
     // Generate Database Name if missing (for Multi-Tenancy)
     if (!client.databaseName) {
-      const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
       client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
     }
 
@@ -271,7 +271,7 @@ export const loginClient = async (req, res) => {
 
     // Generate Database Name if missing (for Multi-Tenancy)
     if (!client.databaseName) {
-      const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const sanitizedName = client.restaurantName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
       client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
     }
 
