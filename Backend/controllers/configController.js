@@ -7,8 +7,11 @@ import SettingDefault from '../models/Setting.js';
 import { getTenantModels } from '../utils/tenantManager.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 
+export let isSettingUpDB = false;
+
 export const setupDatabase = async (req, res) => {
   try {
+    isSettingUpDB = true;
     const { databaseName, username, password, staffAccounts } = req.body;
     
     // We only strictly need databaseName now, but we check if either username/password OR staffAccounts is provided
@@ -17,8 +20,9 @@ export const setupDatabase = async (req, res) => {
     }
 
     // If running in cloud environment (Render, Vercel, or production), do NOT disconnect global database!
-    // Instead, initialize tenant pool for this database.
-    const isCloud = process.env.VERCEL || process.env.VERCEL_ENV || process.env.RENDER || process.env.NODE_ENV === 'production' || process.env.MONGO_URI?.includes('mongodb+srv');
+    // Instead, initialize tenant pool for this database. (Desktop app provides APP_USER_DATA_PATH, so it is never cloud)
+    const isDesktop = !!process.env.APP_USER_DATA_PATH;
+    const isCloud = !isDesktop && (process.env.VERCEL || process.env.VERCEL_ENV || process.env.RENDER || process.env.NODE_ENV === 'production' || process.env.MONGO_URI?.includes('mongodb+srv'));
     
     let User = UserDefault;
     if (isCloud) {
@@ -98,6 +102,8 @@ export const setupDatabase = async (req, res) => {
   } catch (error) {
     console.error('Error in setupDatabase:', error);
     res.status(500).json({ message: 'Failed to configure database', error: error.message });
+  } finally {
+    isSettingUpDB = false;
   }
 };
 

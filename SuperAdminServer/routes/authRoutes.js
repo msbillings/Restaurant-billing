@@ -3,7 +3,15 @@ import { login, getRegistrationOptions, verifyRegistration, getAuthOptions, veri
 
 const router = express.Router();
 
-router.post('/login', login);
+import rateLimit from 'express-rate-limit';
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login requests per windowMs
+  message: 'Too many login attempts from this IP, please try again after 15 minutes'
+});
+
+router.post('/login', loginLimiter, login);
 router.get('/webauthn/register/generate', getRegistrationOptions);
 router.post('/webauthn/register/verify', verifyRegistration);
 router.get('/webauthn/authenticate/generate', getAuthOptions);

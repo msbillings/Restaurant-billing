@@ -48,7 +48,8 @@ if (fs.existsSync(assetsDir)) {
     if (file.endsWith('.js')) {
       const filePath = path.join(assetsDir, file);
       let content = fs.readFileSync(filePath, 'utf8');
-      // Replace network IP with localhost for both ports 5002 and 4000
+      // Replace Vercel URL with localhost for Desktop
+      content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://localhost:5002/api');
       content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://localhost:5002');
       fs.writeFileSync(filePath, content);
     }

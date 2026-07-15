@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "1.4.5",
+  "version": "1.4.9",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -24,7 +24,10 @@
       {
         "from": "backend",
         "to": "backend",
-        "filter": ["**/*", ".env"]
+        "filter": [
+          "**/*",
+          ".env"
+        ]
       }
     ],
     "mac": {

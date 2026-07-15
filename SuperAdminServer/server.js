@@ -13,6 +13,86 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Security Middleware Imports
+import rateLimit from 'express-rate-limit';
+import xssFilter from 'xss';
+import hpp from 'hpp';
+
+// 2. Limit requests from same API (Rate Limiting)
+const limiter = rateLimit({
+  max: 1000,
+  windowMs: 60 * 60 * 1000,
+  message: 'Too many requests from this IP, please try again in an hour!'
+});
+app.use('/api', limiter);
+
+// 3. Data sanitization against NoSQL query injection
+// Custom middleware to handle Express 5 read-only properties (req.query)
+import sanitizeMongo from 'mongo-sanitize';
+app.use((req, res, next) => {
+  try {
+    if (req.body) req.body = sanitizeMongo(req.body);
+    if (req.query) {
+      const cleanedQuery = sanitizeMongo(req.query);
+      try {
+        req.query = cleanedQuery;
+      } catch (err) {
+        Object.defineProperty(req, 'query', {
+          value: cleanedQuery,
+          writable: true,
+          configurable: true
+        });
+      }
+    }
+    if (req.params) {
+      const cleanedParams = sanitizeMongo(req.params);
+      try {
+        req.params = cleanedParams;
+      } catch (err) {
+        Object.defineProperty(req, 'params', {
+          value: cleanedParams,
+          writable: true,
+          configurable: true
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Security Sanitization Error:', error);
+  }
+  next();
+});
+
+// 4. Data sanitization against XSS
+app.use((req, res, next) => {
+  try {
+    const sanitizeObject = (obj) => {
+      if (!obj) return obj;
+      for (const key in obj) {
+        if (typeof obj[key] === 'string') {
+          obj[key] = xssFilter(obj[key]);
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          sanitizeObject(obj[key]);
+        }
+      }
+      return obj;
+    };
+
+    if (req.body) sanitizeObject(req.body);
+    if (req.query) sanitizeObject(req.query);
+    if (req.params) sanitizeObject(req.params);
+  } catch (error) {
+    console.error('XSS Sanitization Error:', error);
+  }
+  next();
+});
+
+// 5. Prevent parameter pollution
+app.use(hpp());
+
+// Enforce Mongoose strict mode for queries
+mongoose.set('strictQuery', true);
+
+
 // Basic route to check if server is running
 app.get('/api/health', (req, res) => {
   res.json({ status: 'SuperAdmin Server Online', version: '1.0.0' });

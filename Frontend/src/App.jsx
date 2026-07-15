@@ -77,6 +77,47 @@ function App() {
     }
   }, [isCaptain, view]);
 
+  // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
+  const syncConfigFromBackend = async () => {
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const res = await fetch(`${API_BASE_URL}/config/info`, {
+        headers: {
+          'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.licenseExpiry) {
+          localStorage.setItem('resto_license_expiry', data.licenseExpiry);
+          const expiryDate = new Date(data.licenseExpiry);
+          if (!isNaN(expiryDate.getTime())) {
+            setLicenseExpiry(expiryDate);
+          }
+        }
+        if (data.restaurantSettings) {
+          localStorage.setItem('restaurantSettings', JSON.stringify(data.restaurantSettings));
+          setRestaurantName(data.restaurantSettings.restaurantName || 'msbillings');
+          document.title = `${data.restaurantSettings.restaurantName || 'msbillings'} - Restaurant Management`;
+        }
+        if (data.spaces) {
+          localStorage.setItem('msbillings_spaces', JSON.stringify(data.spaces));
+          window.dispatchEvent(new Event('spacesUpdated'));
+        }
+        return;
+      }
+    } catch (err) {}
+    // Fallback to localStorage if offline/not synced yet (no hardcoded dates)
+    let expiryStr = localStorage.getItem('resto_license_expiry');
+    if (expiryStr) {
+      const expiryDate = new Date(expiryStr);
+      if (!isNaN(expiryDate.getTime())) {
+        setLicenseExpiry(expiryDate);
+      }
+    }
+  };
+
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
@@ -101,47 +142,7 @@ function App() {
     // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue)
     initSyncEngine();
 
-    // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
-    const syncConfigFromBackend = async () => {
-      try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
-        const res = await fetch(`${API_BASE_URL}/config/info`, {
-          headers: {
-            'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
-            'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-          }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.licenseExpiry) {
-            localStorage.setItem('resto_license_expiry', data.licenseExpiry);
-            const expiryDate = new Date(data.licenseExpiry);
-            if (!isNaN(expiryDate.getTime())) {
-              setLicenseExpiry(expiryDate);
-            }
-          }
-          if (data.restaurantSettings) {
-            localStorage.setItem('restaurantSettings', JSON.stringify(data.restaurantSettings));
-            setRestaurantName(data.restaurantSettings.restaurantName || 'msbillings');
-            document.title = `${data.restaurantSettings.restaurantName || 'msbillings'} - Restaurant Management`;
-          }
-          if (data.spaces) {
-            localStorage.setItem('msbillings_spaces', JSON.stringify(data.spaces));
-            window.dispatchEvent(new Event('spacesUpdated'));
-          }
-          return;
-        }
-      } catch (err) {}
-      // Fallback to localStorage if offline/not synced yet (no hardcoded dates)
-      let expiryStr = localStorage.getItem('resto_license_expiry');
-      if (expiryStr) {
-        const expiryDate = new Date(expiryStr);
-        if (!isNaN(expiryDate.getTime())) {
-          setLicenseExpiry(expiryDate);
-        }
-      }
-      // End of syncConfigFromBackend
-    };
+    syncConfigFromBackend();
 
     const fetchSuperAdminConfig = async () => {
       try {
@@ -299,9 +300,13 @@ function App() {
         setLicenseExpiry(expiryDate);
       }
     }
-    // Reset to default view so the user lands on dashboard after login
-    setView('floor');
-    setActiveOrdersCount(0);
+
+    // Now fetch the configuration before going to dashboard
+    syncConfigFromBackend().then(() => {
+      // Reset to default view so the user lands on dashboard after login
+      setView('floor');
+      setActiveOrdersCount(0);
+    });
   };
 
   useEffect(() => {

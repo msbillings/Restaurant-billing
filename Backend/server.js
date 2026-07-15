@@ -1,3 +1,5 @@
+import { isSettingUpDB } from "./controllers/configController.js";
+
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -141,9 +143,35 @@ app.use((req, res, next) => {
   next();
 });
 
-// 4. Data sanitization against XSS (removed due to Express 5 compatibility)
+// 4. Data sanitization against XSS
+import xssFilter from 'xss';
 
-// 5. Prevent parameter pollution
+app.use((req, res, next) => {
+  try {
+    const sanitizeObject = (obj) => {
+      if (!obj) return obj;
+      for (const key in obj) {
+        if (typeof obj[key] === 'string') {
+          obj[key] = xssFilter(obj[key]);
+        } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+          sanitizeObject(obj[key]);
+        }
+      }
+      return obj;
+    };
+
+    if (req.body) sanitizeObject(req.body);
+    if (req.query) sanitizeObject(req.query);
+    if (req.params) sanitizeObject(req.params);
+  } catch (error) {
+    console.error('XSS Sanitization Error:', error);
+  }
+  next();
+});
+
+// Enforce Mongoose strict mode for queries to prevent unexpected schema fields
+mongoose.set('strictQuery', true);
+
 app.use(hpp());
 
 // Enable Gzip compression for better performance
@@ -226,6 +254,11 @@ const connectDB = async () => {
 // Middleware to ensure DB connection before handling requests (for serverless)
 const ensureDBConnection = async (req, res, next) => {
   try {
+    if (isSettingUpDB) {
+      // If the database is currently being configured, skip the connection check 
+      // for other routes so we don't cause a concurrent connection race condition
+      return next();
+    }
     if (mongoose.connection.readyState !== 1) {
       await connectDB();
     }
