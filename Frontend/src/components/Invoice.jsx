@@ -96,7 +96,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
       {/* Receipt Preview */}
       <div className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none border border-gray-300 mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        <div className="p-2 print:p-0 print:pb-2 leading-tight" style={{ color: '#000' }}>
+        <div className="p-2 print:p-0 print:pb-2 leading-tight" style={{ color: '#000', fontFamily: 'monospace' }}>
           {/* Header */}
           <div className="text-center mb-2">
             {settings.logo && (
@@ -104,41 +104,50 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 <img src={settings.logo} alt="Restaurant Logo" className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
               </div>
             )}
-            <h1 className="text-[16px] print:text-[16px] font-bold uppercase tracking-tight text-black m-0 p-0 leading-tight">{settings.restaurantName}</h1>
-            <div className="text-[10px] print:text-[10px] font-medium text-black leading-tight mt-0.5">
+            <h1 className="text-[14px] print:text-[14px] font-bold uppercase text-black m-0 p-0 leading-tight">{settings.restaurantName}</h1>
+            <div className="text-[12px] print:text-[12px] font-medium text-black leading-tight mt-0.5">
               {settings.address.split('\n').map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
-              <div>Tel: {settings.phone}</div>
-              {settings.email && <div>Email: {settings.email}</div>}
-              {settings.gstin && <div>GSTIN: {settings.gstin}</div>}
-              {settings.fssai && <div>FSSAI: {settings.fssai}</div>}
+              {settings.gstin && <div>GSTIN : {settings.gstin}</div>}
+              <div>PH : {settings.phone}</div>
+              {settings.fssai && <div>FSSAI : {settings.fssai}</div>}
             </div>
           </div>
 
-          <div className="text-center text-[12px] print:text-[12px] font-bold uppercase tracking-wide text-black border-y border-black border-dashed py-0.5 mb-1">
-            {bill.billType === 'Delivery' && bill.orderSource && bill.orderSource !== 'Direct' 
-              ? `${bill.orderSource} INVOICE` 
-              : 'INVOICE'}
+          <div className="border-t border-black my-1"></div>
+          
+          <div className="text-[12px] print:text-[12px] font-medium text-black text-left">
+            Name: {bill.customerName || ''}
+          </div>
+          
+          <div className="border-t border-black my-1"></div>
+
+          {/* Bill Info Grid */}
+          <div className="text-[12px] print:text-[12px] font-medium text-black mb-1 flex justify-between">
+            <div className="flex flex-col">
+              <div>Date: {new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
+              <div>{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+              <div>Cashier: {bill.cashierName || 'admin'}</div>
+              {bill.tokenNumber && <div className="font-bold">Token No.: {bill.tokenNumber}</div>}
+            </div>
+            <div className="flex flex-col text-right">
+              <div className="font-bold">{bill.billType === 'Dine In' ? `Dine In: ${bill.tableNo || ''}` : bill.billType}</div>
+              <div>Bill No.: {bill.billNumber || 'PREVIEW'}</div>
+            </div>
           </div>
 
-          {/* Bill Info */}
-          <div className="text-[10px] print:text-[10px] font-medium text-black mb-1.5 flex flex-col gap-0.5">
-            <div className="flex justify-between">
-              <span>Bill No: {bill.billNumber || 'PREVIEW'}</span>
-              <span>Date: {new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '-')}</span>
-            </div>
-            <div className="flex justify-between uppercase">
-              <span>{bill.tableNo ? `Table: ${bill.tableNo}` : (bill.billType || '')}</span>
-              <span>Time: {new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-            {bill.customerName && (
-               <div>Customer: {bill.customerName}</div>
-            )}
-          </div>
+          <div className="border-t border-black my-1"></div>
 
           {/* Items Header */}
-          <div className="border-y border-dashed border-black py-0.5 mb-1">
+          <div className="flex text-[12px] print:text-[12px] font-medium text-black">
+            <div className="flex-1">Item</div>
+            <div className="w-8 text-center">Qty.</div>
+            <div className="w-12 text-right">Price</div>
+            <div className="w-16 text-right">Amount</div>
+          </div>
+
+          <div className="border-t border-black my-1"></div>
             <div className="flex text-[10px] print:text-[10px] font-bold uppercase text-black">
               <div className="flex-1">Item</div>
               <div className="w-8 text-center">Qty</div>
@@ -147,30 +156,42 @@ const Invoice = ({ bill, onClose, onSave }) => {
           </div>
 
           {/* Items List */}
-          <div className="mb-1 border-b border-dashed border-black pb-1">
+          <div className="mb-1">
             {bill.items && bill.items.length > 0 ? (
               bill.items.map((item, idx) => (
-                <div key={idx} className="flex text-[10px] print:text-[10px] font-medium uppercase text-black pb-0.5 items-start">
+                <div key={idx} className="flex text-[12px] print:text-[12px] font-medium text-black items-start mb-0.5">
                   <div className="flex-1 pr-1 break-words">
                     {item.name || 'Unknown Item'}
-                    {item.hsnCode ? <span className="text-[9px]"> (HSN:{item.hsnCode})</span> : ''}
+                    {item.hsnCode ? <span className="text-[10px]"> (HSN:{item.hsnCode})</span> : ''}
                   </div>
                   <div className="w-8 text-center">{item.quantity || 0}</div>
+                  <div className="w-12 text-right">{(item.price || 0).toFixed(2)}</div>
                   <div className="w-16 text-right">{(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
                 </div>
               ))
             ) : (
-              <div className="text-[10px] text-center font-medium py-1">No items</div>
+              <div className="text-[12px] text-center font-medium py-1">No items</div>
             )}
           </div>
 
           {/* Tax / Discount / Items summary */}
-          <div className="border-b border-dashed border-black pb-1 mb-1 flex flex-col items-end text-[10px] print:text-[10px] font-medium text-black gap-0.5">
-            <div className="w-full flex justify-between">
-              <span>Items: {bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
-              <span>Sub Total: {(bill.subtotal || bill.total || 0).toFixed(2)}</span>
+          <div className="flex flex-col text-[12px] print:text-[12px] font-medium text-black gap-0.5 mt-2">
+            <div className="flex justify-between w-full">
+              <span className="w-24 text-right pr-2">Total Qty: {bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
+              <div className="flex-1 flex justify-between pl-4">
+                <span className="text-center flex-1">Sub<br/>Total</span>
+                <span className="w-16 text-right mt-3">{(bill.subtotal || bill.total || 0).toFixed(2)}</span>
+              </div>
             </div>
-            {bill.discount > 0 && <div>Discount: -{(bill.discount || 0).toFixed(2)}</div>}
+            {bill.discount > 0 && 
+              <div className="flex justify-between w-full">
+                <span className="w-24 text-right pr-2"></span>
+                <div className="flex-1 flex justify-between pl-4">
+                  <span className="text-center flex-1">Discount</span>
+                  <span className="w-16 text-right">-{(bill.discount || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            }
             
             {(() => {
               const s = settings || {};
@@ -210,40 +231,86 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
               return (
                 <>
-                  {cRate > 0 && <div>CGST ({cEff.toFixed(2)}%): {cAmt.toFixed(2)}</div>}
-                  {sRate > 0 && <div>SGST ({sEff.toFixed(2)}%): {sAmt.toFixed(2)}</div>}
-                  {gRate > 0 && <div>GST ({gEff.toFixed(2)}%): {gAmt.toFixed(2)}</div>}
+                  {cRate > 0 && 
+                    <div className="flex justify-between w-full">
+                      <span className="w-24 text-right pr-2">CGST@{cEff.toFixed(1)}</span>
+                      <div className="flex-1 flex justify-between pl-4">
+                        <span className="text-center flex-1">{cEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right">{cAmt.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  }
+                  {sRate > 0 && 
+                    <div className="flex justify-between w-full">
+                      <span className="w-24 text-right pr-2">SGST@{sEff.toFixed(1)}</span>
+                      <div className="flex-1 flex justify-between pl-4">
+                        <span className="text-center flex-1">{sEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right">{sAmt.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  }
+                  {gRate > 0 && 
+                    <div className="flex justify-between w-full">
+                      <span className="w-24 text-right pr-2">GST@{gEff.toFixed(1)}</span>
+                      <div className="flex-1 flex justify-between pl-4">
+                        <span className="text-center flex-1">{gEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right">{gAmt.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  }
+                </>
+              );
+            })()}
+          </div>
+          
+          <div className="border-t border-black my-1"></div>
+
+          {/* Total & Round off */}
+          <div className="flex flex-col text-[12px] print:text-[12px] font-medium text-black">
+            {(() => {
+              const sub = Number(bill.subtotal || bill.total || 0);
+              const disc = Number(bill.discount || 0);
+              const taxable = Math.max(0, sub - disc);
+              let finalTotal = bill.total;
+              
+              if (bill.tax === undefined || bill.tax === null) {
+                const s = settings || {};
+                const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+                const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+                const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+                const taxRupees = totRate > 0 ? (taxable * totRate) / 100 : 0;
+                finalTotal = taxable + taxRupees;
+              }
+              
+              const roundedTotal = Math.round(finalTotal);
+              const roundOff = roundedTotal - finalTotal;
+
+              return (
+                <>
+                  <div className="flex justify-between items-center w-full">
+                    <span className="flex-1 text-center pr-8">Round off</span>
+                    <span className="w-16 text-right">{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center w-full font-bold text-[14px] mt-1">
+                    <span className="flex-1 text-center pr-8">Grand Total</span>
+                    <span className="w-16 text-right">₹{roundedTotal.toFixed(2)}</span>
+                  </div>
                 </>
               );
             })()}
           </div>
 
-          {/* Total */}
-          <div className="flex justify-between items-center text-[14px] print:text-[14px] font-bold text-black border-b border-dashed border-black pb-1 mb-1">
-            <span>GRAND TOTAL</span>
-            <span>Rs {(() => {
-              const sub = Number(bill.subtotal || bill.total || 0);
-              const disc = Number(bill.discount || 0);
-              const taxable = Math.max(0, sub - disc);
-              if (bill.tax !== undefined && bill.tax !== null) {
-                return (bill.total || 0).toFixed(2);
-              }
-              const s = settings || {};
-              const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
-              const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
-              const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
-              const totRate = cRate + sRate + gRate;
-              const taxRupees = totRate > 0 ? (taxable * totRate) / 100 : 0;
-              return (taxable + taxRupees).toFixed(2);
-            })()}</span>
-          </div>
+          <div className="border-t border-black my-1"></div>
 
           {/* Payment Mode */}
           {bill.paymentMode && (
-            <div className="text-[10px] print:text-[10px] font-medium text-black text-center mb-2">
-              Paid via {bill.paymentMode}
+            <div className="text-[12px] print:text-[12px] font-medium text-black text-left">
+              Paid via {bill.paymentMode} {bill.paymentMethod ? `[${bill.paymentMethod}]` : ''}
             </div>
           )}
+          
+          <div className="border-t border-black my-1"></div>
 
           {/* UPI Scan to Pay QR Code on Invoice */}
           {settings.enableQrPayment !== false && (
@@ -270,8 +337,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
           )}
 
           {/* Footer */}
-          <div className="mt-1 text-center text-[10px] print:text-[10px] font-bold text-black">
-            <p>{settings.footerMessage || 'Thank You'}</p>
+          <div className="mt-1 mb-2 text-center text-[12px] print:text-[12px] font-medium text-black">
+            <p>Thank You | Please visit Again</p>
           </div>
           
           {/* Cut Line Visual (Screen only) */}
