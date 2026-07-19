@@ -33,9 +33,9 @@ const FloorManagement = ({ onNavigate }) => {
     return [{
       id: 'f-1',
       name: 'Ground Floor',
-      tables: [{ id: 't1', name: 'Table 1' }, { id: 't2', name: 'Table 2' }, { id: 't3', name: 'Table 3' }],
-      cabins: [{ id: 'c1', name: 'Cabin 1' }, { id: 'c2', name: 'Cabin 2' }],
-      sofas: [{ id: 's1', name: 'Sofa 1' }]
+      tables: [{ id: 't1', name: 'Table 1', type: 'table' }, { id: 't2', name: 'Table 2', type: 'table' }, { id: 't3', name: 'Table 3', type: 'table' }],
+      cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin' }, { id: 'c2', name: 'Cabin 2', type: 'cabin' }],
+      sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa' }]
     }];
   });
 
@@ -203,7 +203,7 @@ const FloorManagement = ({ onNavigate }) => {
                 const key = type + 's';
                 return {
                   ...floor,
-                  [key]: [...(floor[key] || []), { id: Date.now().toString(), name: name.trim() }]
+                  [key]: [...(floor[key] || []), { id: Date.now().toString(), name: name.trim(), type: type }]
                 };
               }
               return floor;
