@@ -10,6 +10,9 @@ on:
       - 'Backend/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-release:
     runs-on: windows-latest
