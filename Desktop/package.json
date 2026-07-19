@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -32,7 +32,8 @@
     ],
     "mac": {
       "target": "dmg",
-      "icon": "icon.png"
+      "icon": "icon.png",
+      "identity": null
     },
     "win": {
       "target": "nsis",

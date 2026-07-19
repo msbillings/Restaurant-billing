@@ -3,28 +3,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const slides = [
   {
-    image: '/bg1.jpg',
+    image: './bg1.jpg',
     titleStart: 'Smart ',
     highlight: 'Ordering',
     titleEnd: '',
     subtitle: 'Streamline your restaurant order management with our intuitive digital menu.'
   },
   {
-    image: '/bg2.jpg',
+    image: './bg2.jpg',
     titleStart: 'Real-Time ',
     highlight: 'Analytics',
     titleEnd: '',
     subtitle: 'Track your business performance instantly and make data-driven decisions.'
   },
   {
-    image: '/bg3.jpg',
+    image: './bg3.jpg',
     titleStart: '',
     highlight: 'AI Face',
     titleEnd: ' Attendance',
     subtitle: 'Touchless, secure clock-ins for your staff using advanced facial recognition.'
   },
   {
-    image: '/bg4.jpg',
+    image: './bg4.jpg',
     titleStart: 'Seamless ',
     highlight: 'Billing',
     titleEnd: '',
