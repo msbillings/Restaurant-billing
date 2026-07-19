@@ -137,7 +137,7 @@ function createMenu() {
             dialog.showMessageBox({
               type: 'info',
               title: 'About MS Billing',
-              message: 'MS Billing (RestoPOS)\\nVersion: 6.0.0\\n\\nPremium Restaurant Management Software.\\n© 2026 MS Tech Hive. All rights reserved.',
+              message: `MS Billing (RestoPOS)\nVersion: ${app.getVersion()}\n\nPremium Restaurant Management Software.\n© 2026 MS Tech Hive. All rights reserved.`,
               buttons: ['OK']
             });
           }
