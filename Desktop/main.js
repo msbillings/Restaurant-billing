@@ -71,11 +71,32 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { 
+          label: 'Reset Zoom',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.setZoomLevel(0);
+          }
+        },
+        { 
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+=', // Note: Shift+= is Plus
+          click: () => {
+            if (mainWindow) mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() + 0.5);
+          }
+        },
+        { 
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() - 0.5);
+          }
+        },
         { type: 'separator' },
-        { role: 'togglefullscreen' }
+        { 
+          role: 'togglefullscreen',
+          accelerator: 'F11'
+        }
       ]
     },
     // { role: 'windowMenu' }
@@ -101,20 +122,15 @@ function createMenu() {
       submenu: [
         {
           label: '📖 User Manual / Guide',
-          click: async () => {
-            await shell.openExternal('https://docs.google.com/document/d/1your-google-doc-link-here');
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('show-user-manual');
           }
         },
         { type: 'separator' },
         {
           label: '📞 Contact Support',
-          click: async () => {
-            dialog.showMessageBox({
-              type: 'info',
-              title: 'Contact Support',
-              message: 'For immediate assistance, please contact our support team:\\n\\nPhone 1: +91 9701800140\\nPhone 2: +91 9032223352\\n\\nWe are available 24/7 to help you.',
-              buttons: ['OK']
-            });
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('show-contact-support');
           }
         },
         { type: 'separator' },

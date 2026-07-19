@@ -22,6 +22,8 @@ const StaffManagement = React.lazy(() => import('./components/StaffManagement'))
 const CustomerMenu = React.lazy(() => import('./components/CustomerMenu'));
 const AIClockIn = React.lazy(() => import('./components/AIClockIn'));
 const ServiceRequestAlert = React.lazy(() => import('./components/ServiceRequestAlert'));
+const ContactSupportModal = React.lazy(() => import('./components/ContactSupportModal'));
+const UserManualModal = React.lazy(() => import('./components/UserManualModal'));
 
 import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
@@ -40,6 +42,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
   const [sectionLoading, setSectionLoading] = useState(false);
+  
+  // Help Modals State
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
   
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
@@ -241,6 +247,18 @@ function App() {
     if (window.electronAPI && window.electronAPI.onForceSync) {
       window.electronAPI.onForceSync(() => {
         fetchSuperAdminConfig();
+      });
+    }
+
+    if (window.electronAPI && window.electronAPI.onShowContactSupport) {
+      window.electronAPI.onShowContactSupport(() => {
+        setShowContactModal(true);
+      });
+    }
+
+    if (window.electronAPI && window.electronAPI.onShowUserManual) {
+      window.electronAPI.onShowUserManual(() => {
+        setShowManualModal(true);
       });
     }
     
@@ -735,9 +753,15 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background">
-        
+        {/* Service Request Alert Overlay */}
         <Suspense fallback={null}>
           <ServiceRequestAlert />
+        </Suspense>
+
+        {/* Global Modals */}
+        <Suspense fallback={null}>
+          <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+          <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
         </Suspense>
 
         {/* Topbar */}
