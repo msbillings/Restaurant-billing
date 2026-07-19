@@ -50,8 +50,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "maheer05112001-spec",
-        "repo": "MS-Restaurant-billings"
+        "owner": "msbillings",
+        "repo": "Restaurant-billing"
       }
     ]
   },

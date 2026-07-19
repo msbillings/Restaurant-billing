@@ -1,0 +1,38 @@
+name: Build and Release Auto-Updater
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Desktop/**'
+      - 'Frontend/**'
+      - 'Backend/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm install
+
+      - name: Install Desktop Dependencies
+        working-directory: ./Desktop
+        run: npm install
+
+      - name: Build and Publish Electron App
+        working-directory: ./Desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run dist -p always
