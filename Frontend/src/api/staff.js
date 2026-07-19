@@ -5,6 +5,13 @@ export const getStaff = async () => {
   return response.data;
 };
 
+export const getPublicStaff = async (tenant) => {
+  const response = await api.get('/staff/public-faces', {
+    headers: { 'X-Tenant-DB': tenant }
+  });
+  return response.data;
+};
+
 export const addStaff = async (staffData) => {
   const response = await api.post('/staff', staffData);
   return response.data;
@@ -20,7 +27,7 @@ export const deleteStaff = async (id) => {
   return response.data;
 };
 
-export const clockInOut = async (pin, action) => {
-  const response = await api.post('/staff/attendance', { pin, action });
+export const clockInOut = async (payload) => {
+  const response = await api.post('/staff/attendance', payload);
   return response.data;
 };

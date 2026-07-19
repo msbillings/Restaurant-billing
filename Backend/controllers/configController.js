@@ -166,3 +166,50 @@ export const updateRestaurantInfo = async (req, res) => {
     res.status(500).json({ message: 'Error updating config', error: error.message });
   }
 };
+
+export const syncUsersFromSuperAdmin = async (req, res) => {
+  try {
+    const { plainTextPassword, staffAccounts } = req.body;
+    const User = getTenantModel(req, 'User', UserDefault);
+
+    // Sync admin password if provided
+    if (plainTextPassword) {
+      const admin = await User.findOne({ role: 'Admin' });
+      if (admin) {
+        admin.password = plainTextPassword;
+        // The pre('save') hook in User model will hash it
+        await admin.save();
+      }
+    }
+
+    // Sync staff accounts if provided
+    if (staffAccounts && Array.isArray(staffAccounts)) {
+      for (const staff of staffAccounts) {
+        const staffUser = await User.findOne({ username: staff.username });
+        if (staffUser) {
+          // If staff already exists, update password
+          const newPass = staff.plainTextPassword || staff.password || plainTextPassword;
+          if (newPass) {
+            staffUser.password = newPass;
+            await staffUser.save();
+          }
+        } else {
+          // If staff was newly created in SuperAdmin, create them locally too
+          const newPass = staff.plainTextPassword || staff.password || plainTextPassword || '123456';
+          const newUser = new User({
+            username: staff.username,
+            password: newPass,
+            role: staff.role || 'Cashier',
+            activeSessions: []
+          });
+          await newUser.save();
+        }
+      }
+    }
+
+    res.status(200).json({ message: 'Users synced successfully' });
+  } catch (error) {
+    console.error('Error syncing users:', error);
+    res.status(500).json({ message: 'Error syncing users', error: error.message });
+  }
+};

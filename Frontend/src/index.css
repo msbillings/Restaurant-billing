@@ -111,14 +111,10 @@
     box-shadow: none !important;
     border: none !important;
     color: #000 !important;
-    font-weight: 900 !important;
-    font-family: Arial, Helvetica, sans-serif !important;
   }
 
   .receipt-print * {
     color: #000 !important;
-    font-weight: 900 !important;
-    font-family: Arial, Helvetica, sans-serif !important;
   }
 
   /* Force hidden elements to stay hidden */

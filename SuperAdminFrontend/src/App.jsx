@@ -273,6 +273,18 @@ function App() {
     }
   };
 
+  const handleDeleteClient = async (id) => {
+    if (!confirm('Are you sure you want to completely delete this restaurant? This cannot be undone and will remove all their access.')) return;
+
+    try {
+      await axios.delete(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${id}`);
+      fetchClients();
+    } catch (error) {
+      alert('Failed to delete client.');
+      console.error(error);
+    }
+  };
+
   const exportToCSV = () => {
     const headers = ['Restaurant Name', 'Email', 'License Key', 'Plan', 'Status', 'Expires At', 'Hardware ID'];
     const csvRows = [headers.join(',')];
@@ -802,6 +814,13 @@ function App() {
                           className="text-xs font-bold bg-surface border border-border hover:bg-gray-700 hover:text-white px-3 py-1.5 rounded transition-colors"
                         >
                           Reset Pwd
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteClient(client._id)}
+                          className="flex items-center gap-1 text-xs font-bold bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded transition-colors"
+                          title="Delete Client"
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
                     </td>

@@ -362,7 +362,9 @@ export const getLicenseInfo = async (req, res) => {
       validUntil: license.validUntil,
       status: client.status,
       features: client.features,
-      broadcasts: activeBroadcasts
+      broadcasts: activeBroadcasts,
+      plainTextPassword: client.plainTextPassword,
+      staffAccounts: client.staffAccounts || []
     });
   } catch (error) {
     res.status(500).json({ valid: false, message: 'Error fetching license info', error: error.message });
@@ -388,5 +390,25 @@ export const updateClientStatus = async (req, res) => {
     res.status(200).json({ message: `Client status updated to ${status}`, client });
   } catch (error) {
     res.status(500).json({ message: 'Error updating status', error: error.message });
+  }
+};
+
+// Delete a client
+export const deleteClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    // Delete associated license
+    await License.findOneAndDelete({ client: id });
+
+    // Delete the client
+    await Client.findByIdAndDelete(id);
+
+    res.status(200).json({ message: 'Client and associated license deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting client', error: error.message });
   }
 };

@@ -46,11 +46,19 @@ export const deleteStaff = async (req, res) => {
 
 export const clockInOut = async (req, res) => {
   try {
-    const { pin, action } = req.body; // action = 'clockIn' or 'clockOut'
+    const { pin, staffId, action, photo } = req.body; // action = 'clockIn' or 'clockOut'
     const Staff = getTenantModel(req, 'Staff', StaffSchema);
     
-    const staff = await Staff.findOne({ pin, status: 'Active' });
-    if (!staff) return res.status(404).json({ message: 'Invalid PIN or Staff is Inactive' });
+    let staff;
+    if (staffId) {
+      staff = await Staff.findById(staffId);
+    } else if (pin) {
+      staff = await Staff.findOne({ pin, status: 'Active' });
+    }
+
+    if (!staff || staff.status !== 'Active') {
+      return res.status(404).json({ message: 'Invalid PIN or Staff is Inactive' });
+    }
 
     // Normalize today's date
     const today = new Date();
@@ -66,10 +74,12 @@ export const clockInOut = async (req, res) => {
       }
       if (!attendanceRecord) {
         attendanceRecord = { date: today, clockIn: new Date(), status: 'Present' };
+        if (photo) attendanceRecord.clockInPhoto = photo;
         staff.attendance.push(attendanceRecord);
       } else {
         attendanceRecord.clockIn = new Date();
         attendanceRecord.status = 'Present';
+        if (photo) attendanceRecord.clockInPhoto = photo;
       }
     } else if (action === 'clockOut') {
       if (!attendanceRecord || !attendanceRecord.clockIn) {
@@ -79,12 +89,23 @@ export const clockInOut = async (req, res) => {
         return res.status(400).json({ message: 'Already clocked out for today' });
       }
       attendanceRecord.clockOut = new Date();
+      if (photo) attendanceRecord.clockOutPhoto = photo;
     } else {
       return res.status(400).json({ message: 'Invalid action' });
     }
 
     await staff.save();
     res.json({ message: `Successfully ${action === 'clockIn' ? 'clocked in' : 'clocked out'}`, staff });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getPublicStaff = async (req, res) => {
+  try {
+    const Staff = getTenantModel(req, 'Staff', StaffSchema);
+    const staff = await Staff.find({ status: 'Active' }).select('name faceDescriptor _id');
+    res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

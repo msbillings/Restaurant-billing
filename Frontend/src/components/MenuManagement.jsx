@@ -279,7 +279,8 @@ const MenuManagement = ({ user }) => {
       'Is Available': item.isAvailable ? 'Yes' : 'No',
       'Tax Rate': item.taxRate || 0,
       'HSN Code': item.hsnCode || '',
-      'Image URL': item.image || ''
+      'Image URL': item.image || '',
+      Variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => `${v.name}:${v.price}`).join('|') : ''
     }));
 
     const csv = Papa.unparse(csvData);
@@ -312,6 +313,14 @@ const MenuManagement = ({ user }) => {
             try {
               if (!row.Name || !row.Price || !row.Category) continue;
 
+              let parsedVariants = [];
+              if (row.Variants) {
+                parsedVariants = row.Variants.split('|').map(v => {
+                  const parts = v.split(':');
+                  return { name: parts[0] ? parts[0].trim() : '', price: parseFloat(parts[1]) || 0 };
+                });
+              }
+
               const itemData = {
                 name: row.Name.trim(),
                 price: parseFloat(row.Price) || 0,
@@ -321,7 +330,8 @@ const MenuManagement = ({ user }) => {
                 isAvailable: row['Is Available'] ? row['Is Available'].toLowerCase() === 'yes' : true,
                 taxRate: parseFloat(row['Tax Rate']) || 0,
                 hsnCode: row['HSN Code'] || '',
-                image: row['Image URL'] || ''
+                image: row['Image URL'] || '',
+                variants: parsedVariants
               };
 
               await addMenuItem(itemData);

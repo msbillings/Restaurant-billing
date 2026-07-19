@@ -1,10 +1,154 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let backendProcess;
+
+function createMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // { role: 'fileMenu' }
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Clear Cache & Restart',
+          click: async () => {
+            const { session } = require('electron');
+            await session.defaultSession.clearCache();
+            app.relaunch();
+            app.exit(0);
+          }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    // { role: 'editMenu' }
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac
+          ? [
+              { role: 'pasteAndMatchStyle' },
+              { role: 'delete' },
+              { role: 'selectAll' },
+              { type: 'separator' },
+              {
+                label: 'Speech',
+                submenu: [
+                  { role: 'startSpeaking' },
+                  { role: 'stopSpeaking' }
+                ]
+              }
+            ]
+          : [
+              { role: 'delete' },
+              { type: 'separator' },
+              { role: 'selectAll' }
+            ])
+      ]
+    },
+    // { role: 'viewMenu' }
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Force Sync with Cloud',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('force-sync-cloud');
+            }
+          }
+        },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    // { role: 'windowMenu' }
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac
+          ? [
+              { type: 'separator' },
+              { role: 'front' },
+              { type: 'separator' },
+              { role: 'window' }
+            ]
+          : [
+              { role: 'close' }
+            ])
+      ]
+    },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: '📖 User Manual / Guide',
+          click: async () => {
+            await shell.openExternal('https://docs.google.com/document/d/1your-google-doc-link-here');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: '📞 Contact Support',
+          click: async () => {
+            dialog.showMessageBox({
+              type: 'info',
+              title: 'Contact Support',
+              message: 'For immediate assistance, please contact our support team:\\n\\nPhone 1: +91 9701800140\\nPhone 2: +91 9032223352\\n\\nWe are available 24/7 to help you.',
+              buttons: ['OK']
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: '🔄 Check for Updates',
+          click: () => {
+            autoUpdater.checkForUpdatesAndNotify();
+            dialog.showMessageBox({
+              type: 'info',
+              title: 'Check for Updates',
+              message: 'Checking for updates in the background. You will be notified if a new version is available.',
+              buttons: ['OK']
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'ℹ️ About MS Billing',
+          click: async () => {
+            dialog.showMessageBox({
+              type: 'info',
+              title: 'About MS Billing',
+              message: 'MS Billing (RestoPOS)\\nVersion: 6.0.0\\n\\nPremium Restaurant Management Software.\\n© 2026 MS Tech Hive. All rights reserved.',
+              buttons: ['OK']
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -118,6 +262,13 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
               height: auto !important;
               overflow: visible !important;
             }
+            body > * {
+              margin: 0 !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              transform: none !important;
+            }
             .print\\:hidden { display: none !important; }
             .print\\:p-0 { padding: 0 !important; }
             .print\\:m-0 { margin: 0 !important; }
@@ -135,7 +286,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
 
   printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`);
   
-  printWindow.webContents.on('did-finish-load', () => {
+  printWindow.webContents.once('did-finish-load', () => {
     // Slight delay to ensure CSS is fully painted before sending to printer spooler
     setTimeout(() => {
       printWindow.webContents.print({
@@ -180,6 +331,7 @@ app.on('ready', () => {
   startBackend();
   // Wait a little bit for the backend to initialize
   setTimeout(() => {
+    createMenu();
     createWindow();
     setupAutoUpdater();
     autoUpdater.checkForUpdatesAndNotify();

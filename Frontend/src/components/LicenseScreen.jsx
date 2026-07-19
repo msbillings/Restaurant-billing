@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff } from 'lucide-react';
+import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles } from 'lucide-react';
+import BackgroundSlideshow from './BackgroundSlideshow';
 
 const LicenseScreen = ({ onValidLicense }) => {
   const [email, setEmail] = useState('');
@@ -29,7 +30,6 @@ const LicenseScreen = ({ onValidLicense }) => {
       const data = await response.json();
 
       if (response.ok && data.valid) {
-        // Login Successful!
         // Setup local database configuration
         if (data.databaseName && data.plainTextPassword) {
           try {
@@ -48,23 +48,19 @@ const LicenseScreen = ({ onValidLicense }) => {
               })
             });
             
-            if (!setupResponse.ok) {
-              throw new Error('Database setup failed on backend');
-            }
+            if (!setupResponse.ok) throw new Error('Database setup failed on backend');
           } catch (setupErr) {
             console.error('Failed to configure local database:', setupErr);
             setError('Failed to setup local database. Please try again or contact support.');
             setLoading(false);
-            return; // STOP! Don't save login!
+            return; 
           }
         }
 
-        // We save the license key locally so old code still works, but activation was via email/password!
         localStorage.setItem('resto_license', data.licenseKey || 'ACCOUNT-LOGIN');
         localStorage.setItem('resto_license_expiry', data.validUntil);
-        if (data.databaseName) {
-          localStorage.setItem('resto_db_name', data.databaseName);
-        }
+        if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
+        
         try {
           const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
           await fetch(`${API_BASE_URL}/config/info`, {
@@ -76,6 +72,7 @@ const LicenseScreen = ({ onValidLicense }) => {
             body: JSON.stringify({ licenseExpiry: data.validUntil })
           });
         } catch (e) {}
+        
         onValidLicense();
       } else {
         setError(data.message || 'Invalid email or password.');
@@ -95,124 +92,137 @@ const LicenseScreen = ({ onValidLicense }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-500">
+    <BackgroundSlideshow formPosition="left">
+      <div className="w-full max-w-md relative z-10 animate-fade-in mx-auto">
         
-        {/* Header Header */}
-        <div className="bg-primary p-8 text-center text-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-          <div className="relative z-10 flex justify-center mb-4">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30 shadow-xl">
-              <Shield size={32} className="text-white" />
-            </div>
+        {/* Logo Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-2xl rounded-full relative">
+            <img src="/logo.png" alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
+            <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={20} />
           </div>
-          <h1 className="text-3xl font-black relative z-10">msbilling</h1>
-          <p className="text-primary-100 mt-2 font-medium relative z-10">Software Activation Required</p>
+          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">
+            msbillings
+          </h1>
+          <p className="text-gray-300 font-bold uppercase tracking-widest text-sm">
+            Software Activation
+          </p>
         </div>
 
-        {/* Form */}
-        <div className="p-8">
-          <p className="text-center text-text-muted mb-6 text-sm">
-            Please enter your registered Email and Password to activate the POS terminal.
-          </p>
+        {/* Activation Form (Premium Glassmorphism) */}
+        <div className="bg-white/10 backdrop-blur-xl p-8 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative overflow-hidden w-full" style={{ borderRadius: '24px' }}>
+          
+          <div className="relative z-10">
+            <p className="text-center text-gray-300 mb-8 font-medium">
+              Please enter your registered Email and Password to activate your terminal.
+            </p>
 
-          <form onSubmit={handleActivate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-text-main mb-2 uppercase tracking-wide">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <User size={18} className="text-text-muted" />
+            <form onSubmit={handleActivate} className="space-y-6">
+              <div>
+                <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
+                  <User size={16} />
+                  Email Address
+                </label>
+                <div className="relative">
+                  <User size={20} className="absolute left-4 top-4 text-gray-400" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="restaurant@example.com"
+                    className="w-full py-4 px-4 pl-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                    style={{ borderRadius: '16px' }}
+                    autoFocus
+                    required
+                  />
                 </div>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="restaurant@example.com"
-                  className="w-full pl-11 pr-4 py-3 bg-surface border-2 border-border rounded-xl text-lg font-bold text-text-main tracking-wider focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all placeholder:text-gray-300 placeholder:font-normal"
-                  autoFocus
-                  required
-                />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-bold text-text-main mb-2 uppercase tracking-wide">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Key size={18} className="text-text-muted" />
+              <div>
+                <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
+                  <Key size={16} />
+                  Password
+                </label>
+                <div className="relative">
+                  <Key size={20} className="absolute left-4 top-4 text-gray-400" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full py-4 px-4 pl-12 pr-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                    style={{ borderRadius: '16px' }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-11 pr-12 py-3 bg-surface border-2 border-border rounded-xl text-lg font-bold text-text-main tracking-wider focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/20 transition-all placeholder:text-gray-300"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-text-muted hover:text-primary transition-colors focus:outline-none"
-                  tabIndex="-1"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
               </div>
-            </div>
 
-            {error && (
-              <div className="bg-danger/10 border border-danger/20 text-danger p-4 rounded-xl flex items-start gap-3 animate-in slide-in-from-top-2">
-                <ServerCrash size={20} className="shrink-0 mt-0.5" />
-                <p className="text-sm font-bold">{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || !email.trim() || !password.trim()}
-              className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span>Verifying License...</span>
-                </>
-              ) : (
-                <>
-                  <Shield size={20} />
-                  <span>Activate Software</span>
-                </>
+              {error && (
+                <div className="bg-red-500/20 backdrop-blur-sm border border-red-500/50 text-red-100 p-4 text-sm font-bold flex items-start gap-3 animate-shake" style={{ borderRadius: '16px' }}>
+                  <ServerCrash size={20} className="shrink-0" />
+                  <p>{error}</p>
+                </div>
               )}
-            </button>
 
-            <div className="relative flex py-2 items-center">
-              <div className="flex-grow border-t border-border"></div>
-              <span className="flex-shrink mx-4 text-xs font-bold text-text-muted uppercase">Or for presentations</span>
-              <div className="flex-grow border-t border-border"></div>
+              <button
+                type="submit"
+                disabled={loading || !email.trim() || !password.trim()}
+                className="w-full py-4 px-6 font-black text-white bg-orange-500 hover:bg-orange-600 transition-all duration-300 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                style={{ borderRadius: '16px' }}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    <span>Verifying License...</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield size={20} />
+                    <span>Activate Software</span>
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="relative flex py-6 items-center">
+              <div className="flex-grow border-t border-white/20"></div>
+              <span className="flex-shrink mx-4 text-xs font-bold text-gray-400 uppercase tracking-widest">Or try it out</span>
+              <div className="flex-grow border-t border-white/20"></div>
             </div>
 
             <button
               type="button"
               onClick={handleQuickDemo}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-extrabold py-3.5 rounded-xl shadow-md shadow-orange-500/20 transition-all flex items-center justify-center gap-2 hover:-translate-y-0.5"
+              className="w-full py-4 px-6 font-bold text-white border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2"
+              style={{ borderRadius: '16px' }}
             >
-              <span className="text-lg">🚀</span>
-              <span>Quick Demo Mode (No License Required)</span>
+              🚀 Quick Demo Mode (No License Required)
             </button>
-          </form>
-        </div>
-
-        <div className="bg-surface p-4 text-center border-t border-border">
-          <p className="text-xs text-text-muted font-medium">
-            Need a license? Visit <a href="https://mstechhive.com" className="text-primary hover:underline font-bold">mstechhive.com</a>
-          </p>
+          </div>
         </div>
       </div>
-    </div>
+
+      <style>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-5px); }
+          75% { transform: translateX(5px); }
+        }
+        .animate-fade-in { animation: fade-in 0.6s ease-out; }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
+      `}</style>
+    </BackgroundSlideshow>
   );
 };
 

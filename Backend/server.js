@@ -292,6 +292,8 @@ import aggregatorRoutes from './routes/aggregatorRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
+import publicRoutes from './routes/publicRoutes.js';
+import serviceRequestRoutes from './routes/serviceRequestRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -309,6 +311,8 @@ app.use('/api/aggregators', aggregatorRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/service-requests', serviceRequestRoutes);
 
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 

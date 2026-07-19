@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Users, Plus, Edit2, Trash2, Clock, CheckCircle } from 'lucide-react';
 import { getStaff, addStaff, updateStaff, deleteStaff } from '../api/staff';
 import Toast from './Toast';
+import FaceRegistration from './FaceRegistration';
+import { Camera, Image as ImageIcon } from 'lucide-react';
 
 const StaffManagement = () => {
   const [staff, setStaff] = useState([]);
@@ -10,6 +12,9 @@ const StaffManagement = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
+  
+  const [registeringFace, setRegisteringFace] = useState(null);
+  const [viewingLog, setViewingLog] = useState(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -123,15 +128,18 @@ const StaffManagement = () => {
                   <td className="p-4">
                     {todayAttendance ? (
                       todayAttendance.clockOut ? (
-                        <span className="text-xs bg-gray-500/10 text-gray-500 px-2 py-1 rounded-md">Clocked Out</span>
+                        <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-gray-500/10 text-gray-500 px-2 py-1 rounded-md hover:bg-gray-500/20 flex items-center gap-1"><ImageIcon size={12}/> Clocked Out</button>
                       ) : (
-                        <span className="text-xs bg-success/10 text-success px-2 py-1 rounded-md">Clocked In</span>
+                        <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-success/10 text-success px-2 py-1 rounded-md hover:bg-success/20 flex items-center gap-1"><ImageIcon size={12}/> Clocked In</button>
                       )
                     ) : (
                       <span className="text-xs bg-danger/10 text-danger px-2 py-1 rounded-md">Not Clocked In</span>
                     )}
                   </td>
                   <td className="p-4 text-center flex justify-center gap-2">
+                    <button onClick={() => setRegisteringFace(s)} className={`p-2 rounded-lg ${s.faceDescriptor && s.faceDescriptor.length > 0 ? 'text-success bg-success/10' : 'text-orange-500 bg-orange-500/10'}`} title={s.faceDescriptor?.length > 0 ? 'Update Face' : 'Register Face'}>
+                      <Camera size={16} />
+                    </button>
                     <button onClick={() => openEditModal(s)} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg"><Edit2 size={16} /></button>
                     <button onClick={() => handleDelete(s._id)} className="p-2 text-danger hover:bg-danger/10 rounded-lg"><Trash2 size={16} /></button>
                   </td>
@@ -171,6 +179,58 @@ const StaffManagement = () => {
                 <button type="submit" className="px-4 py-2 bg-primary text-white rounded-xl font-bold">Save</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {registeringFace && (
+        <FaceRegistration 
+          staff={registeringFace}
+          onClose={() => setRegisteringFace(null)}
+          onSave={async (descriptor) => {
+            try {
+              await updateStaff(registeringFace._id, { faceDescriptor: descriptor });
+              setToast({ message: 'Face mapped successfully!', type: 'success' });
+              setRegisteringFace(null);
+              fetchStaff();
+            } catch(e) {
+              setToast({ message: 'Error saving face data', type: 'error' });
+            }
+          }}
+        />
+      )}
+
+      {viewingLog && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-surface p-6 rounded-2xl w-full max-w-md border border-border shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Attendance Log</h2>
+              <button onClick={() => setViewingLog(null)} className="p-2 text-text-muted hover:bg-background rounded-full"><X size={20} /></button>
+            </div>
+            <p className="font-bold text-text-main mb-4">{viewingLog.staff.name}</p>
+            
+            <div className="space-y-4">
+              {viewingLog.log.clockIn && (
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <p className="text-sm font-bold text-success mb-2">Clocked In: {new Date(viewingLog.log.clockIn).toLocaleTimeString()}</p>
+                  {viewingLog.log.clockInPhoto ? (
+                    <img src={viewingLog.log.clockInPhoto} alt="Clock In" className="w-full rounded-lg shadow-sm" />
+                  ) : (
+                    <p className="text-xs text-text-muted italic">No photo captured (PIN used without camera)</p>
+                  )}
+                </div>
+              )}
+              {viewingLog.log.clockOut && (
+                <div className="bg-background p-4 rounded-xl border border-border">
+                  <p className="text-sm font-bold text-gray-500 mb-2">Clocked Out: {new Date(viewingLog.log.clockOut).toLocaleTimeString()}</p>
+                  {viewingLog.log.clockOutPhoto ? (
+                    <img src={viewingLog.log.clockOutPhoto} alt="Clock Out" className="w-full rounded-lg shadow-sm" />
+                  ) : (
+                    <p className="text-xs text-text-muted italic">No photo captured</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

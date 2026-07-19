@@ -33,10 +33,16 @@ const staffSchema = new mongoose.Schema({
     enum: ['Active', 'Inactive'],
     default: 'Active'
   },
+  faceDescriptor: {
+    type: [Number],
+    default: []
+  },
   attendance: [{
     date: { type: Date, required: true }, // Start of the day
     clockIn: { type: Date },
     clockOut: { type: Date },
+    clockInPhoto: { type: String }, // Base64 image
+    clockOutPhoto: { type: String }, // Base64 image
     status: { type: String, enum: ['Present', 'Absent', 'Half-Day', 'Leave'], default: 'Present' }
   }]
 }, {

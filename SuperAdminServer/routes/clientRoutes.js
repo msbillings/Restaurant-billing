@@ -1,5 +1,5 @@
 import express from 'express';
-import { getAllClients, createClient, updateClientPassword, validateLicense, updateLicense, loginClient, updateFeatures, getLicenseInfo, updateClientStatus } from '../controllers/clientController.js';
+import { getAllClients, createClient, updateClientPassword, validateLicense, updateLicense, loginClient, updateFeatures, getLicenseInfo, updateClientStatus, deleteClient } from '../controllers/clientController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -12,6 +12,7 @@ router.put('/:id/password', protect, updateClientPassword);
 router.put('/:id/license', protect, updateLicense);
 router.put('/:id/features', protect, updateFeatures);
 router.put('/:id/status', protect, updateClientStatus);
+router.delete('/:id', protect, deleteClient);
 
 // PUBLIC ROUTES (For POS Client Software)
 router.post('/validate', validateLicense);

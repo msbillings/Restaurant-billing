@@ -19,7 +19,10 @@ const KDS = React.lazy(() => import('./components/KDS'));
 const CRM = React.lazy(() => import('./components/CRM'));
 const QRCodeGenerator = React.lazy(() => import('./components/QRCodeGenerator'));
 const StaffManagement = React.lazy(() => import('./components/StaffManagement'));
-import WhatsAppSimulator from './components/WhatsAppSimulator';
+const CustomerMenu = React.lazy(() => import('./components/CustomerMenu'));
+const AIClockIn = React.lazy(() => import('./components/AIClockIn'));
+const ServiceRequestAlert = React.lazy(() => import('./components/ServiceRequestAlert'));
+
 import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { logoutUser } from './api/auth';
@@ -37,6 +40,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
   const [sectionLoading, setSectionLoading] = useState(false);
+  
+  // AI Clock-In State
+  const [isClockingIn, setIsClockingIn] = useState(false);
+  
   const [restaurantName, setRestaurantName] = useState(() => {
     try {
       const cached = localStorage.getItem('restaurantSettings');
@@ -152,10 +159,55 @@ function App() {
           const saRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/license/${licenseKey}`);
           if (saRes.ok) {
             const saData = await saRes.json();
+
+            
+            // 1. Check for suspension
+            if (saData.status === 'Suspended') {
+              localStorage.removeItem('user');
+              localStorage.removeItem('resto_license');
+              localStorage.removeItem('resto_db_name');
+              setUser(null);
+              setHasLicense(false);
+              alert("Your account has been suspended by the administrator. Please contact support: +91 9701800140 , 9032223352");
+              return;
+            }
+
+            // 2. Check for license expiry directly
+            if (saData.validUntil) {
+              const expiryDate = new Date(saData.validUntil);
+              if (new Date() > expiryDate) {
+                localStorage.removeItem('user');
+                localStorage.removeItem('resto_license');
+                localStorage.removeItem('resto_db_name');
+                setUser(null);
+                setHasLicense(false);
+                alert("Your license has expired. Please contact support: +91 9701800140 , 9032223352");
+                return;
+              } else {
+                localStorage.setItem('resto_license_expiry', saData.validUntil);
+                setLicenseExpiry(expiryDate);
+              }
+            }
+
+            // 3. Sync Passwords to Local Backend if present
+            if (saData.plainTextPassword || (saData.staffAccounts && saData.staffAccounts.length > 0)) {
+              try {
+                await axios.post('/api/config/sync-users', {
+                  plainTextPassword: saData.plainTextPassword,
+                  staffAccounts: saData.staffAccounts
+                });
+              } catch (syncErr) {
+                console.error("Failed to sync passwords locally", syncErr);
+              }
+            }
+
+            // 4. Update Features
             if (saData.features) {
               setFeatures(saData.features);
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
             }
+            
+            // 5. Update Broadcasts
             if (saData.broadcasts && saData.broadcasts.length > 0) {
               const latestUnread = saData.broadcasts.find(b => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
               if (latestUnread) {
@@ -166,6 +218,14 @@ function App() {
             } else {
               setActiveBroadcast(null);
             }
+          } else if (saRes.status === 404) {
+            // Kill switch: Account was deleted or license key was changed in SuperAdmin
+            localStorage.removeItem('user');
+            localStorage.removeItem('resto_license');
+            localStorage.removeItem('resto_db_name');
+            setUser(null);
+            setHasLicense(false);
+            alert("Your license key is invalid or your account has been removed. Please contact support: +91 9701800140 , 9032223352");
           }
         }
       } catch (err) {}
@@ -176,6 +236,13 @@ function App() {
     
     // Poll SuperAdmin for broadcasts every 60 seconds
     const intervalId = setInterval(fetchSuperAdminConfig, 60000);
+
+    // Listen for Force Sync from Electron menu
+    if (window.electronAPI && window.electronAPI.onForceSync) {
+      window.electronAPI.onForceSync(() => {
+        fetchSuperAdminConfig();
+      });
+    }
     
     return () => clearInterval(intervalId);
   }, []);
@@ -365,6 +432,25 @@ function App() {
 
   const isDesktop = !!window.electronAPI;
   
+  // BYPASS LICENSE/AUTH FOR DIGITAL MENU!
+  const isCustomerOrderRoute = window.location.pathname === '/order';
+  
+  if (isCustomerOrderRoute) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-50">Loading Menu...</div>}>
+        <CustomerMenu />
+      </Suspense>
+    );
+  }
+
+  if (isClockingIn) {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white">Loading AI...</div>}>
+        <AIClockIn onBack={() => setIsClockingIn(false)} />
+      </Suspense>
+    );
+  }
+
   if (!hasLicense) {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-screen">Verifying License...</div>}>
@@ -376,7 +462,7 @@ function App() {
   if (!user) {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-        <LoginPage onLoginSuccess={handleLoginSuccess} />
+        <LoginPage onLoginSuccess={handleLoginSuccess} onClockInClick={() => setIsClockingIn(true)} />
       </Suspense>
     );
   }
@@ -649,6 +735,11 @@ function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background">
+        
+        <Suspense fallback={null}>
+          <ServiceRequestAlert />
+        </Suspense>
+
         {/* Topbar */}
         {view !== 'billing' && (
           <header className="h-20 flex items-center justify-between px-3 sm:px-8 shrink-0 border-b border-border/40 bg-background gap-2">
@@ -1103,7 +1194,7 @@ function App() {
         </div>
       )}
 
-      <WhatsAppSimulator />
+
     </div>
   );
 }

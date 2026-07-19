@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, ArrowLeft, Download, Save } from 'lucide-react';
+import { Printer, ArrowLeft, Save } from 'lucide-react';
 
 const Invoice = ({ bill, onClose, onSave }) => {
   const [settings, setSettings] = useState({
@@ -14,7 +14,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
   });
 
   useEffect(() => {
-    // Load settings from localStorage
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings);
@@ -22,9 +21,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
       setSettings(prev => ({ ...prev, ...parsed }));
     }
   }, []);
+  
   const handlePrint = () => {
     if (window.electronAPI && settings.billingPrinter) {
-      const htmlContent = document.getElementById('invoice-print-area').outerHTML;
+      const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
+      const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
       const isSilent = settings.silentPrinting !== false;
       window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, isSilent);
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
@@ -33,35 +34,28 @@ const Invoice = ({ bill, onClose, onSave }) => {
       window.print();
     }
   };
+  
   const getFormatClasses = () => {
     switch(settings.printFormat) {
-      case 'A4':
-        return 'w-full max-w-3xl print:max-w-full';
-      case '58mm':
-        return 'w-full max-w-[240px] print:max-w-[58mm]';
+      case 'A4': return 'w-full max-w-3xl print:w-full print:max-w-full';
+      case '58mm': return 'w-[200px] print:w-[185px] mx-auto print:m-0';
       case '80mm':
-      default:
-        return 'w-full max-w-[320px] print:max-w-[80mm]';
-    }
-  };
-
-  const getPageStyle = () => {
-    switch(settings.printFormat) {
-      case 'A4': return 'auto';
-      case '58mm': return '58mm auto';
-      case '80mm':
-      default: return '80mm auto';
+      default: return 'w-[280px] print:w-[255px] mx-auto print:m-0';
     }
   };
 
   return (
-    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50 overflow-y-auto animate-in fade-in duration-200 items-center p-4 print:p-0">
+    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50 overflow-y-auto animate-in fade-in duration-200 items-center p-4 print:p-0 print:block print:w-full print:h-full">
       <style>
         {`
           @media print {
             @page {
               margin: 0 !important;
-              size: ${getPageStyle()};
+            }
+            body {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              margin: 0;
             }
           }
         `}
@@ -72,7 +66,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
         {onSave && (
           <button 
             onClick={onSave}
-            className="flex items-center gap-2 px-4 py-2 bg-success text-white rounded-full hover:bg-success-hover transition-colors font-bold shadow-lg shadow-success/20"
+            className="flex items-center gap-2 px-4 py-2 bg-success text-white rounded-full hover:bg-success-hover transition-colors shadow-lg shadow-success/20"
           >
             <Save size={18} />
             <span>Finish</span>
@@ -80,14 +74,14 @@ const Invoice = ({ bill, onClose, onSave }) => {
         )}
         <button 
           onClick={handlePrint}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors font-bold shadow-lg"
+          className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors shadow-lg"
         >
           <Printer size={18} />
           <span>Print</span>
         </button>
         <button 
           onClick={onClose}
-          className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors font-medium backdrop-blur-md"
+          className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors backdrop-blur-md"
         >
           <ArrowLeft size={18} />
           <span>Close</span>
@@ -95,8 +89,18 @@ const Invoice = ({ bill, onClose, onSave }) => {
       </div>
 
       {/* Receipt Preview */}
-      <div className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none border border-gray-300 mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
-        <div className="p-2 print:p-0 print:pb-2 leading-tight" style={{ color: '#000', fontFamily: 'monospace' }}>
+      <div 
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`} 
+        style={{ 
+          fontFamily: "Arial, Helvetica, sans-serif", 
+          color: '#000', 
+          fontWeight: 'normal',
+          fontSize: '14px',
+          lineHeight: '1.3'
+        }}
+      >
+        <div className="p-3 print:pl-4 print:pr-2 print:py-0 print:pb-2">
+          
           {/* Header */}
           <div className="text-center mb-2">
             {settings.logo && (
@@ -104,8 +108,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 <img src={settings.logo} alt="Restaurant Logo" className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
               </div>
             )}
-            <h1 className="text-[14px] print:text-[14px] font-bold uppercase text-black m-0 p-0 leading-tight">{settings.restaurantName}</h1>
-            <div className="text-[12px] print:text-[12px] font-medium text-black leading-tight mt-0.5">
+            <div style={{ fontSize: '20px', lineHeight: '1.1', marginBottom: '4px', fontWeight: 'bold' }}>
+              {settings.restaurantName.toUpperCase()}
+            </div>
+            <div style={{ fontSize: '14px', lineHeight: '1.2', fontWeight: 'normal' }}>
               {settings.address.split('\n').map((line, i) => (
                 <div key={i}>{line}</div>
               ))}
@@ -115,79 +121,83 @@ const Invoice = ({ bill, onClose, onSave }) => {
             </div>
           </div>
 
-          <div className="border-t border-black my-1"></div>
+          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
           
-          <div className="text-[12px] print:text-[12px] font-medium text-black text-left">
-            Name: {bill.customerName || ''}
+          <div style={{ fontSize: '18px', textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
+            {bill.discount === 100 || bill.total === 0 ? 'Complimentary Bill' : 'Tax Invoice'}
           </div>
+
+          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
           
-          <div className="border-t border-black my-1"></div>
+          {bill.customerName && (
+            <>
+              <div style={{ fontSize: '14px', fontWeight: 'normal' }}>
+                Name: {bill.customerName}
+              </div>
+              <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+            </>
+          )}
 
           {/* Bill Info Grid */}
-          <div className="text-[12px] print:text-[12px] font-medium text-black mb-1 flex justify-between">
-            <div className="flex flex-col">
+          <div className="flex justify-between mb-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
+            <div className="flex flex-col gap-0.5">
               <div>Date: {new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
               <div>{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
               <div>Cashier: {bill.cashierName || 'admin'}</div>
-              {bill.tokenNumber && <div className="font-bold">Token No.: {bill.tokenNumber}</div>}
+              {bill.tokenNumber && <div style={{ fontWeight: 'bold' }}>Token No.: {bill.tokenNumber}</div>}
             </div>
-            <div className="flex flex-col text-right">
-              <div className="font-bold">{bill.billType === 'Dine In' ? `Dine In: ${bill.tableNo || ''}` : bill.billType}</div>
-              <div>Bill No.: {bill.billNumber || 'PREVIEW'}</div>
+            <div className="flex flex-col text-right gap-0.5">
+              <div style={{ fontWeight: 'bold' }}>{bill.tableNo ? `Dine-In: ${bill.tableNo}` : (bill.billType || 'Dine-In')}</div>
+              <div style={{ fontWeight: 'bold' }}>Bill No.: {bill.billNumber || 'PREVIEW'}</div>
+              {bill.captainName && <div>Assign to: {bill.captainName}</div>}
             </div>
           </div>
 
-          <div className="border-t border-black my-1"></div>
+          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
 
           {/* Items Header */}
-          <div className="flex text-[12px] print:text-[12px] font-medium text-black">
+          <div className="flex pb-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>
             <div className="flex-1">Item</div>
-            <div className="w-8 text-center">Qty.</div>
-            <div className="w-12 text-right">Price</div>
+            <div className="w-8 text-right">Qty.</div>
+            <div className="w-14 text-right">Price</div>
             <div className="w-16 text-right">Amount</div>
           </div>
 
-          <div className="border-t border-black my-1"></div>
-            <div className="flex text-[10px] print:text-[10px] font-bold uppercase text-black">
-              <div className="flex-1">Item</div>
-              <div className="w-8 text-center">Qty</div>
-              <div className="w-16 text-right">Amount</div>
-            </div>
-          </div>
+          <div style={{ borderTop: '1px solid black', margin: '2px 0 4px 0' }}></div>
 
           {/* Items List */}
-          <div className="mb-1">
+          <div className="mb-1 pb-1" style={{ borderBottom: '1px solid black' }}>
             {bill.items && bill.items.length > 0 ? (
               bill.items.map((item, idx) => (
-                <div key={idx} className="flex text-[12px] print:text-[12px] font-medium text-black items-start mb-0.5">
+                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontSize: '14px', fontWeight: 'normal' }}>
                   <div className="flex-1 pr-1 break-words">
                     {item.name || 'Unknown Item'}
-                    {item.hsnCode ? <span className="text-[10px]"> (HSN:{item.hsnCode})</span> : ''}
+                    {item.hsnCode ? <span style={{ fontSize: '12px' }}> (HSN:{item.hsnCode})</span> : ''}
                   </div>
-                  <div className="w-8 text-center">{item.quantity || 0}</div>
-                  <div className="w-12 text-right">{(item.price || 0).toFixed(2)}</div>
+                  <div className="w-8 text-right">{item.quantity || 0}</div>
+                  <div className="w-14 text-right">{(item.price || 0).toFixed(2)}</div>
                   <div className="w-16 text-right">{(item.total || (item.price * item.quantity) || 0).toFixed(2)}</div>
                 </div>
               ))
             ) : (
-              <div className="text-[12px] text-center font-medium py-1">No items</div>
+              <div className="text-center py-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>No items</div>
             )}
           </div>
 
           {/* Tax / Discount / Items summary */}
-          <div className="flex flex-col text-[12px] print:text-[12px] font-medium text-black gap-0.5 mt-2">
+          <div className="flex flex-col gap-0.5 mt-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
             <div className="flex justify-between w-full">
-              <span className="w-24 text-right pr-2">Total Qty: {bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
-              <div className="flex-1 flex justify-between pl-4">
-                <span className="text-center flex-1">Sub<br/>Total</span>
-                <span className="w-16 text-right mt-3">{(bill.subtotal || bill.total || 0).toFixed(2)}</span>
+              <span className="text-left w-24">Total Qty: {bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
+              <div className="flex-1 flex justify-between pl-2">
+                <span className="text-left">Sub Total</span>
+                <span className="w-16 text-right">{(bill.subtotal || bill.total || 0).toFixed(2)}</span>
               </div>
             </div>
             {bill.discount > 0 && 
               <div className="flex justify-between w-full">
-                <span className="w-24 text-right pr-2"></span>
-                <div className="flex-1 flex justify-between pl-4">
-                  <span className="text-center flex-1">Discount</span>
+                <span className="w-24"></span>
+                <div className="flex-1 flex justify-between pl-2">
+                  <span className="text-left">Discount</span>
                   <span className="w-16 text-right">-{(bill.discount || 0).toFixed(2)}</span>
                 </div>
               </div>
@@ -233,27 +243,27 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 <>
                   {cRate > 0 && 
                     <div className="flex justify-between w-full">
-                      <span className="w-24 text-right pr-2">CGST@{cEff.toFixed(1)}</span>
-                      <div className="flex-1 flex justify-between pl-4">
-                        <span className="text-center flex-1">{cEff.toFixed(1)}%</span>
+                      <span className="w-24"></span>
+                      <div className="flex-1 flex justify-between pl-2">
+                        <span className="text-left">CGST@{cEff.toFixed(1)}%</span>
                         <span className="w-16 text-right">{cAmt.toFixed(2)}</span>
                       </div>
                     </div>
                   }
                   {sRate > 0 && 
                     <div className="flex justify-between w-full">
-                      <span className="w-24 text-right pr-2">SGST@{sEff.toFixed(1)}</span>
-                      <div className="flex-1 flex justify-between pl-4">
-                        <span className="text-center flex-1">{sEff.toFixed(1)}%</span>
+                      <span className="w-24"></span>
+                      <div className="flex-1 flex justify-between pl-2">
+                        <span className="text-left">SGST@{sEff.toFixed(1)}%</span>
                         <span className="w-16 text-right">{sAmt.toFixed(2)}</span>
                       </div>
                     </div>
                   }
                   {gRate > 0 && 
                     <div className="flex justify-between w-full">
-                      <span className="w-24 text-right pr-2">GST@{gEff.toFixed(1)}</span>
-                      <div className="flex-1 flex justify-between pl-4">
-                        <span className="text-center flex-1">{gEff.toFixed(1)}%</span>
+                      <span className="w-24"></span>
+                      <div className="flex-1 flex justify-between pl-2">
+                        <span className="text-left">GST@{gEff.toFixed(1)}%</span>
                         <span className="w-16 text-right">{gAmt.toFixed(2)}</span>
                       </div>
                     </div>
@@ -263,10 +273,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
             })()}
           </div>
           
-          <div className="border-t border-black my-1"></div>
+          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
 
           {/* Total & Round off */}
-          <div className="flex flex-col text-[12px] print:text-[12px] font-medium text-black">
+          <div className="flex flex-col pb-1" style={{ fontSize: '14px' }}>
             {(() => {
               const sub = Number(bill.subtotal || bill.total || 0);
               const disc = Number(bill.discount || 0);
@@ -288,34 +298,35 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
               return (
                 <>
-                  <div className="flex justify-between items-center w-full">
-                    <span className="flex-1 text-center pr-8">Round off</span>
-                    <span className="w-16 text-right">{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  <div className="flex justify-between w-full">
+                    <span className="w-24"></span>
+                    <div className="flex-1 flex justify-between pl-2" style={{ fontWeight: 'normal' }}>
+                      <span className="text-left">Round off</span>
+                      <span className="w-16 text-right">{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center w-full font-bold text-[14px] mt-1">
-                    <span className="flex-1 text-center pr-8">Grand Total</span>
-                    <span className="w-16 text-right">₹{roundedTotal.toFixed(2)}</span>
+                  <div className="flex justify-between items-center w-full mt-2" style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    <span>Grand Total</span>
+                    <span>₹{roundedTotal.toFixed(2)}</span>
                   </div>
                 </>
               );
             })()}
           </div>
 
-          <div className="border-t border-black my-1"></div>
+          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
 
           {/* Payment Mode */}
           {bill.paymentMode && (
-            <div className="text-[12px] print:text-[12px] font-medium text-black text-left">
+            <div className="text-center mt-1 pb-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
               Paid via {bill.paymentMode} {bill.paymentMethod ? `[${bill.paymentMethod}]` : ''}
             </div>
           )}
-          
-          <div className="border-t border-black my-1"></div>
 
           {/* UPI Scan to Pay QR Code on Invoice */}
           {settings.enableQrPayment !== false && (
             <div className="my-2 text-center flex flex-col items-center justify-center">
-              <div className="text-[10px] print:text-[10px] font-bold uppercase text-black mb-0.5">
+              <div className="uppercase mb-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>
                 SCAN TO PAY VIA UPI
               </div>
               <img 
@@ -328,24 +339,19 @@ const Invoice = ({ bill, onClose, onSave }) => {
                   return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
                 })())}`} 
                 alt="UPI QR" 
-                className="w-16 h-16 mx-auto border border-black p-0.5 bg-white object-contain"
+                className="w-24 h-24 mx-auto p-0.5 bg-white object-contain"
               />
-              <div className="text-[10px] print:text-[10px] font-medium text-black mt-0.5">
+              <div className="mt-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>
                 UPI ID: {settings.upiId || 'maheshsiva864@oksbi'}
               </div>
             </div>
           )}
 
           {/* Footer */}
-          <div className="mt-1 mb-2 text-center text-[12px] print:text-[12px] font-medium text-black">
+          <div className="mt-2 mb-2 text-center" style={{ fontSize: '14px', fontWeight: 'bold' }}>
             <p>Thank You | Please visit Again</p>
           </div>
           
-          {/* Cut Line Visual (Screen only) */}
-          <div className="mt-4 border-b border-dotted border-gray-400 print:hidden relative">
-             <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
-             <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 bg-black/50 rounded-full"></div>
-          </div>
         </div>
       </div>
     </div>
