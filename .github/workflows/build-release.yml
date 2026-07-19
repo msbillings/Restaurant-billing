@@ -35,4 +35,4 @@ jobs:
         working-directory: ./Desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist -p always
+        run: npm run prebuild && npx electron-builder --win -p always
