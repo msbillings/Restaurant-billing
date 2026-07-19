@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LogIn, User, Lock, Eye, EyeOff, Sparkles, RefreshCw, Camera } from 'lucide-react';
 import { loginUser } from '../api/auth';
 import BackgroundSlideshow from './BackgroundSlideshow';
+import logoImg from '../assets/images/logo.png';
 
 const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
   const [username, setUsername] = useState('');
@@ -36,7 +37,7 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
         {/* Mobile Logo */}
         <div className="lg:hidden text-center mb-8">
           <div className="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-2xl rounded-full relative">
-            <img src="./logo.png" alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
+            <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
             <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={20} />
           </div>
           <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">

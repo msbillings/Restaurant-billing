@@ -1,30 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import bg1 from '../assets/images/bg1.jpg';
+import bg2 from '../assets/images/bg2.jpg';
+import bg3 from '../assets/images/bg3.jpg';
+import bg4 from '../assets/images/bg4.jpg';
 
 const slides = [
   {
-    image: './bg1.jpg',
+    image: bg1,
     titleStart: 'Smart ',
     highlight: 'Ordering',
     titleEnd: '',
     subtitle: 'Streamline your restaurant order management with our intuitive digital menu.'
   },
   {
-    image: './bg2.jpg',
+    image: bg2,
     titleStart: 'Real-Time ',
     highlight: 'Analytics',
     titleEnd: '',
     subtitle: 'Track your business performance instantly and make data-driven decisions.'
   },
   {
-    image: './bg3.jpg',
+    image: bg3,
     titleStart: '',
     highlight: 'AI Face',
     titleEnd: ' Attendance',
     subtitle: 'Touchless, secure clock-ins for your staff using advanced facial recognition.'
   },
   {
-    image: './bg4.jpg',
+    image: bg4,
     titleStart: 'Seamless ',
     highlight: 'Billing',
     titleEnd: '',
