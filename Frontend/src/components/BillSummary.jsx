@@ -22,6 +22,7 @@ if (typeof document !== 'undefined') {
 const BillSummary = ({
   cart,
   updateQuantity,
+  updateItemNote,
   subtotal,
   taxAmount,
   discountAmount,
@@ -162,32 +163,44 @@ const BillSummary = ({
           </div>
         ) : (
           cart.map(item => (
-            <div key={item._id || item.name} className="flex items-center justify-between group p-3 sm:p-3 bg-surface sm:bg-transparent hover:bg-background/50 rounded-xl transition-colors border sm:border-0 border-border/50 sm:border-b sm:border-dashed sm:border-border/30 last:border-0 shadow-xs sm:shadow-none mb-1.5 sm:mb-0">
-              <div className="flex-1 pr-2">
-                <h4 className="font-bold text-text-main text-sm sm:text-sm font-mono">{item.name}</h4>
-                <p className="text-xs text-text-muted font-mono">@ ₹{item.price}</p>
-              </div>
+            <div key={item._id || item.name} className="flex flex-col group p-3 sm:p-3 bg-surface sm:bg-transparent hover:bg-background/50 rounded-xl transition-colors border sm:border-0 border-border/50 sm:border-b sm:border-dashed sm:border-border/30 last:border-0 shadow-xs sm:shadow-none mb-1.5 sm:mb-0">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 pr-2">
+                  <h4 className="font-bold text-text-main text-sm sm:text-sm font-mono">{item.name}</h4>
+                  <p className="text-xs text-text-muted font-mono">@ ₹{item.price}</p>
+                </div>
 
-              <div className="flex items-center gap-2 sm:gap-3 bg-background rounded-xl sm:rounded border border-border px-2 py-1.5 sm:px-2 sm:py-1 mx-2 sm:mx-4 shadow-sm">
-                <button
-                  onClick={() => updateQuantity(item._id || item.name, -1)}
-                  disabled={isLocked || loading}
-                  className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-lg sm:rounded hover:bg-danger hover:text-white text-text-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-surface sm:bg-transparent shadow-sm sm:shadow-none"
-                >
-                  {item.quantity === 1 ? <Trash2 size={14} /> : <Minus size={14} />}
-                </button>
-                <span className="text-sm sm:text-sm font-bold w-6 text-center font-mono">{item.quantity}</span>
-                <button
-                  onClick={() => updateQuantity(item._id || item.name, 1)}
-                  disabled={isLocked || loading}
-                  className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-lg sm:rounded hover:bg-success hover:text-white text-text-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-surface sm:bg-transparent shadow-sm sm:shadow-none"
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
+                <div className="flex items-center gap-2 sm:gap-3 bg-background rounded-xl sm:rounded border border-border px-2 py-1.5 sm:px-2 sm:py-1 mx-2 sm:mx-4 shadow-sm">
+                  <button
+                    onClick={() => updateQuantity(item._id || item.name, -1)}
+                    disabled={isLocked || loading}
+                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-lg sm:rounded hover:bg-danger hover:text-white text-text-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-surface sm:bg-transparent shadow-sm sm:shadow-none"
+                  >
+                    {item.quantity === 1 ? <Trash2 size={14} /> : <Minus size={14} />}
+                  </button>
+                  <span className="text-sm sm:text-sm font-bold w-6 text-center font-mono">{item.quantity}</span>
+                  <button
+                    onClick={() => updateQuantity(item._id || item.name, 1)}
+                    disabled={isLocked || loading}
+                    className="w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center rounded-lg sm:rounded hover:bg-success hover:text-white text-text-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-surface sm:bg-transparent shadow-sm sm:shadow-none"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
 
-              <div className="font-bold text-text-main text-base sm:text-sm w-16 sm:w-16 text-right font-mono">
-                ₹{item.price * item.quantity}
+                <div className="font-bold text-text-main text-base sm:text-sm w-16 sm:w-16 text-right font-mono">
+                  ₹{item.price * item.quantity}
+                </div>
+              </div>
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Special notes (e.g. spicy, less salt)"
+                  value={item.specialNote || ''}
+                  onChange={(e) => updateItemNote && updateItemNote(item._id || item.name, e.target.value)}
+                  disabled={isLocked || loading}
+                  className="w-full bg-background border border-border rounded px-2 py-1 text-[10px] focus:outline-none focus:border-primary text-text-main font-mono placeholder:text-text-muted/50 disabled:opacity-50"
+                />
               </div>
             </div>
           ))

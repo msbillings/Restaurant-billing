@@ -396,6 +396,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     return val;
   };
 
+  const updateItemNote = (identifier, specialNote) => {
+    if (orderStatus !== 'Open') {
+      showToast('Order is locked. Cannot modify items.', 'error');
+      return;
+    }
+    setCart(prev => prev.map(i => {
+      const match = (i._id && identifier === i._id) || (!i._id && i.name === identifier);
+      if (match) return { ...i, specialNote };
+      return i;
+    }));
+  };
+
   const subtotal = calculateSubtotal();
   const discountAmount = calculateDiscount(subtotal);
   const taxableAmount = subtotal - discountAmount;
@@ -1021,6 +1033,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             <BillSummary
               cart={cart}
               updateQuantity={updateQuantity}
+              updateItemNote={updateItemNote}
               subtotal={subtotal}
               taxAmount={taxAmount}
               discountAmount={discountAmount}

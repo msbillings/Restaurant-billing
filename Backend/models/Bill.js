@@ -20,6 +20,7 @@ const billSchema = new mongoose.Schema({
       min: [0, 'Printed quantity cannot be negative']
     },
     hsnCode: { type: String },
+    specialNote: { type: String },
     total: { type: Number, min: [0, 'Total cannot be negative'] }
   }],
   subtotal: {
@@ -116,6 +117,7 @@ const billSchema = new mongoose.Schema({
     items: [{
       name: String,
       quantity: Number,
+      specialNote: String,
       status: {
         type: String,
         enum: ['Pending', 'Preparing', 'Ready'],
