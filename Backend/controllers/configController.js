@@ -127,9 +127,10 @@ export const resetLicense = async (req, res) => {
 export const getRestaurantInfo = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const Floor = getTenantModel(req, 'Floor', (await import('../models/Floor.js')).default);
     const expiryDoc = await Setting.findOne({ key: 'licenseExpiry' });
     const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
-    const spacesDoc = await Setting.findOne({ key: 'spaces' });
+    const spacesDoc = await Floor.find().sort({ createdAt: 1 }).lean();
     
     // Default to July 12, 2026 (Demo Expiry) if not set in DB
     const licenseExpiry = expiryDoc?.value || '2026-07-12T23:59:59.000Z';
@@ -143,7 +144,7 @@ export const getRestaurantInfo = async (req, res) => {
       gstin: ''
     };
 
-    const spaces = spacesDoc?.value || null;
+    const spaces = spacesDoc && spacesDoc.length > 0 ? spacesDoc : null;
 
     res.status(200).json({ licenseExpiry, restaurantSettings, spaces });
   } catch (error) {
