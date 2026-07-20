@@ -190,6 +190,10 @@ function startBackend() {
     backendPath = backendPath.replace('app.asar', 'app.asar.unpacked');
   }
   
+  const fs = require('fs');
+  const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
+  let logStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+
   // Start the backend Node server using Electron's bundled Node process
   backendProcess = fork(serverPath, [], {
     cwd: backendPath,
@@ -198,12 +202,30 @@ function startBackend() {
       ELECTRON_RUN_AS_NODE: '1',
       APP_USER_DATA_PATH: app.getPath('userData')
     },
-    stdio: 'inherit'
+    stdio: 'pipe'
+  });
+
+  backendProcess.stdout.on('data', (data) => {
+    logStream.write(data);
+    console.log(`[BACKEND]: ${data}`);
+  });
+
+  backendProcess.stderr.on('data', (data) => {
+    logStream.write(data);
+    console.error(`[BACKEND ERR]: ${data}`);
   });
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start backend server.', err);
-    dialog.showErrorBox('Backend Error', `Failed to start the local database server.\\nPath: ${serverPath}\\nError: ${err.message}\\n\\nPlease make sure you have an active internet connection for the database.`);
+    dialog.showErrorBox('Backend Error', `Failed to start the local database server.\nPath: ${serverPath}\nError: ${err.message}\n\nPlease make sure you have an active internet connection for the database.`);
+  });
+
+  backendProcess.on('exit', (code, signal) => {
+    if (code !== 0 && code !== null) {
+      console.error(`Backend process exited with code ${code}`);
+      const tailLogs = fs.readFileSync(backendLogPath, 'utf8').split('\n').slice(-20).join('\n');
+      dialog.showErrorBox('Backend Crashed', `The background database server crashed unexpectedly.\nExit Code: ${code}\n\nLast Logs:\n${tailLogs}\n\nPlease contact support with this screenshot.`);
+    }
   });
 }
 
