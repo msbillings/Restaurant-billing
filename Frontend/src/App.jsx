@@ -25,6 +25,7 @@ const ServiceRequestAlert = React.lazy(() => import('./components/ServiceRequest
 const ContactSupportModal = React.lazy(() => import('./components/ContactSupportModal'));
 const UserManualModal = React.lazy(() => import('./components/UserManualModal'));
 const AboutModal = React.lazy(() => import('./components/AboutModal'));
+const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 
 import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
@@ -48,6 +49,7 @@ function App() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [appVersion, setAppVersion] = useState('6.0.0');
   
   // AI Clock-In State
@@ -271,6 +273,12 @@ function App() {
         setShowAboutModal(true);
       });
     }
+
+    if (window.electronAPI && window.electronAPI.onUpdateReady) {
+      window.electronAPI.onUpdateReady(() => {
+        setShowUpdateModal(true);
+      });
+    }
     
     return () => clearInterval(intervalId);
   }, []);
@@ -473,6 +481,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
       </>
     );
@@ -488,6 +497,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
       </>
     );
@@ -503,6 +513,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
       </>
     );
@@ -518,6 +529,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
       </>
     );

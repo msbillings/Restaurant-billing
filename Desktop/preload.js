@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onForceSync: (callback) => ipcRenderer.on('force-sync-cloud', () => callback()),
   onShowContactSupport: (callback) => ipcRenderer.on('show-contact-support', () => callback()),
   onShowUserManual: (callback) => ipcRenderer.on('show-user-manual', () => callback()),
-  onShowAbout: (callback) => ipcRenderer.on('show-about', (event, version) => callback(version))
+  onShowAbout: (callback) => ipcRenderer.on('show-about', (event, version) => callback(version)),
+  onUpdateReady: (callback) => ipcRenderer.on('update-ready', () => callback()),
+  installUpdate: () => ipcRenderer.send('install-update')
 });

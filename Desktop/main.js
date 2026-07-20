@@ -305,14 +305,22 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', () => {
-    dialog.showMessageBox({
-      type: 'info',
-      title: 'Update Ready',
-      message: 'A new version of MS Billing has been downloaded. The application will now restart to apply the updates.',
-      buttons: ['Restart Now']
-    }).then(() => {
-      autoUpdater.quitAndInstall(false, true);
-    });
+    if (mainWindow) {
+      mainWindow.webContents.send('update-ready');
+    } else {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update Ready',
+        message: 'A new version of MS Billing has been downloaded. The application will now restart to apply the updates.',
+        buttons: ['Restart Now']
+      }).then(() => {
+        autoUpdater.quitAndInstall(false, true);
+      });
+    }
+  });
+
+  ipcMain.on('install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
   });
 
   autoUpdater.on('error', (err) => {
