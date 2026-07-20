@@ -78,7 +78,8 @@ export const saveOrder = async (req, res) => {
       name: item.name,
       price: Number(item.price),
       quantity: Number(item.quantity),
-      total: Number(item.price) * Number(item.quantity)
+      total: Number(item.price) * Number(item.quantity),
+      specialNote: item.specialNote || ''
     }));
 
     let order;
@@ -98,7 +99,7 @@ export const saveOrder = async (req, res) => {
       const updatedItems = sanitizedItems.map(newItem => {
         const existingItem = order.items.find(i => i.name === newItem.name);
         if (existingItem && existingItem.printedQuantity !== undefined) {
-          return { ...newItem, printedQuantity: existingItem.printedQuantity };
+          return { ...newItem, printedQuantity: existingItem.printedQuantity, specialNote: newItem.specialNote || existingItem.specialNote || '' };
         }
         return newItem;
       });
@@ -999,7 +1000,8 @@ export const generateKOT = async (req, res) => {
       if (newQty !== 0) {
         kotItems.push({
           name: item.name,
-          quantity: newQty // Can be negative for cancellations
+          quantity: newQty, // Can be negative for cancellations
+          specialNote: item.specialNote || ''
         });
         // Update printed quantity
         item.printedQuantity = item.quantity;
