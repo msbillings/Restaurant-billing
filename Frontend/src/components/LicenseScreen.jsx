@@ -49,10 +49,19 @@ const LicenseScreen = ({ onValidLicense }) => {
               })
             });
             
-            if (!setupResponse.ok) throw new Error('Database setup failed on backend');
+            if (!setupResponse.ok) {
+              let errText = 'Backend Error';
+              try {
+                const errObj = await setupResponse.json();
+                errText = errObj.message || errObj.error || JSON.stringify(errObj);
+              } catch (e) {
+                errText = await setupResponse.text().catch(() => setupResponse.statusText);
+              }
+              throw new Error(`[${setupResponse.status}] ${errText}`);
+            }
           } catch (setupErr) {
             console.error('Failed to configure local database:', setupErr);
-            setError('Failed to setup local database. Please try again or contact support.');
+            setError(`Failed to setup database: ${setupErr.message}`);
             setLoading(false);
             return; 
           }

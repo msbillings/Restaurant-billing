@@ -32,6 +32,9 @@ export const setupDatabase = async (req, res) => {
     } else {
       // 1. Write config for local desktop POS app
       const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
       const configPath = path.join(configDir, 'client-config.json');
       fs.writeFileSync(configPath, JSON.stringify({ databaseName }), 'utf8');
 
