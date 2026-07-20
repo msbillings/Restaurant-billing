@@ -21,7 +21,7 @@ const LicenseScreen = ({ onValidLicense }) => {
     setError(null);
 
     try {
-      const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'http://localhost:4000';
+      const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'https://restaurant-superadmin-api-maheer.vercel.app';
       const response = await fetch(`${SUPERADMIN_API_URL}/api/clients/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
