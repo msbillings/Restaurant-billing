@@ -110,9 +110,20 @@ let isConnected = false;
 const connectDB = async () => {
   if (isConnected) return;
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restopos_superadmin');
+    let uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/restopos_superadmin';
+    
+    // Force connection to mscurechain where the clients are actually provisioned
+    if (uri.includes('mongodb+srv')) {
+      const parts = uri.split('?');
+      const connectionPart = parts[0];
+      const lastSlashIndex = connectionPart.lastIndexOf('/');
+      uri = connectionPart.substring(0, lastSlashIndex) + '/mscurechain';
+      if (parts[1]) uri += '?' + parts[1];
+    }
+    
+    await mongoose.connect(uri);
     isConnected = true;
-    console.log('Connected to SuperAdmin Database');
+    console.log('Connected to SuperAdmin Database (mscurechain)');
   } catch (err) {
     console.error('Database connection error:', err);
   }
