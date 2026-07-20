@@ -1,10 +1,8 @@
 import api from './axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-
 export const getExpenses = async (startDate, endDate) => {
   try {
-    let url = `${API_URL}/expenses`;
+    let url = '/expenses';
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
@@ -23,7 +21,7 @@ export const getExpenses = async (startDate, endDate) => {
 
 export const addExpense = async (expenseData) => {
   try {
-    const response = await api.post(`${API_URL}/expenses`, expenseData);
+    const response = await api.post('/expenses', expenseData);
     return response.data;
   } catch (error) {
     console.error('Error adding expense:', error);
@@ -33,7 +31,7 @@ export const addExpense = async (expenseData) => {
 
 export const deleteExpense = async (id) => {
   try {
-    const response = await api.delete(`${API_URL}/expenses/${id}`);
+    const response = await api.delete(`/expenses/${id}`);
     return response.data;
   } catch (error) {
     console.error('Error deleting expense:', error);
