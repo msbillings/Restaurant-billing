@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "6.0.8",
+  "version": "6.0.9",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
