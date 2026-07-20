@@ -1,7 +1,12 @@
-// FIX for Electron Node environment missing global crypto in some MongoDB driver versions
+// Fix for Electron missing crypto in old Node versions, but safe for Node 20+
 import _crypto from 'crypto';
-global.crypto = _crypto;
-globalThis.crypto = _crypto;
+if (!globalThis.crypto) {
+  try {
+    Object.defineProperty(globalThis, 'crypto', { value: _crypto });
+  } catch (e) {
+    // Ignore if already has a getter
+  }
+}
 
 import { isSettingUpDB } from "./controllers/configController.js";
 
