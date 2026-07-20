@@ -1,3 +1,8 @@
+// FIX for Electron Node environment missing global crypto in some MongoDB driver versions
+import _crypto from 'crypto';
+global.crypto = _crypto;
+globalThis.crypto = _crypto;
+
 import { isSettingUpDB } from "./controllers/configController.js";
 
 import express from 'express';
