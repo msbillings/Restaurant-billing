@@ -39,7 +39,7 @@ export const setupDatabase = async (req, res) => {
       await mongoose.disconnect();
 
       // 3. Generate new URI
-      const baseUri = process.env.MONGO_URI || 'mongodb://localhost:27017/restaurantbilling';
+      const baseUri = process.env.MONGO_URI || 'mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0';
       const parts = baseUri.split('?');
       const connectionPart = parts[0];
       const queryPart = parts.length > 1 ? `?${parts[1]}` : '';

@@ -192,7 +192,7 @@ import path from 'path';
 
 // Database Connection
 // SECURITY: Do not default to a production database. Use an isolated temp DB.
-let MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/unconfigured_client_db';
+let MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0';
 
 // Read client-config.json if it exists to override the database name dynamically
 // If APP_USER_DATA_PATH is provided (via Electron), use it. Otherwise fallback to process.cwd()
