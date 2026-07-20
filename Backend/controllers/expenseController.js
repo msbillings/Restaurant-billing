@@ -7,12 +7,23 @@ export const addExpense = async (req, res) => {
     const Expense = getTenantModel(req, 'Expense', ExpenseDefault);
     const { amount, description, category, paymentMode, date } = req.body;
     
+    let parsedDate = new Date();
+    if (date) {
+      if (typeof date === 'string' && date.split('-')[0].length === 2) {
+        // Handle DD-MM-YYYY
+        const [day, month, year] = date.split('-');
+        parsedDate = new Date(`${year}-${month}-${day}`);
+      } else {
+        parsedDate = new Date(date);
+      }
+    }
+
     const newExpense = new Expense({
       amount: Number(amount),
       description,
       category,
       paymentMode,
-      date: date ? new Date(date) : new Date()
+      date: parsedDate
     });
 
     const savedExpense = await newExpense.save();
