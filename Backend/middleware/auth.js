@@ -14,7 +14,7 @@ const authenticateToken = async (req, res, next) => {
     // Verify JWT token
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026');
     } catch (err) {
       if (err.name === 'TokenExpiredError') {
         return res.status(403).json({ message: 'Token expired. Please login again.' });
@@ -91,7 +91,7 @@ const optionalAuthenticateToken = (req, res, next) => {
     return next();
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026', (err, user) => {
     if (err) {
       // Invalid token, continue without setting req.user
       return next();

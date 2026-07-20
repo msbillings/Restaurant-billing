@@ -79,13 +79,13 @@ export const login = async (req, res) => {
 
     const accessToken = jwt.sign(
       { id: userId, role: user.role, db: databaseName },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'fallback_secret_msbillings_2026',
       { expiresIn: '3650d' }
     );
 
     const refreshToken = jwt.sign(
       { id: userId, role: user.role, db: databaseName },
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_secret_msbillings_2026',
       { expiresIn: '3650d' }
     );
 
@@ -188,7 +188,7 @@ export const refreshToken = async (req, res) => {
     try { User = getTenantModel(req, 'User', UserDefault); } catch (err) { return handleTenantError(err, res); }
     let decoded;
     try {
-      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+      decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_secret_msbillings_2026');
     } catch (err) {
       if (err.name === 'TokenExpiredError') {
         return res.status(403).json({ message: 'Refresh token expired. Please login again.' });
@@ -214,14 +214,14 @@ export const refreshToken = async (req, res) => {
     // Generate new access token — CRITICAL: Include db field for tenant isolation!
     const newAccessToken = jwt.sign(
       { id: decoded.id, role: decoded.role, db: decoded.db },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || 'fallback_secret_msbillings_2026',
       { expiresIn: '3650d' }
     );
 
     // Generate new refresh token — CRITICAL: Include db field for tenant isolation!
     const newRefreshToken = jwt.sign(
       { id: decoded.id, role: decoded.role, db: decoded.db },
-      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'fallback_secret_msbillings_2026',
       { expiresIn: '3650d' }
     );
 

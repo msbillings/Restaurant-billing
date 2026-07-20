@@ -81,7 +81,7 @@ io.on('connection', (socket) => {
 
     if (token) {
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026');
         if (decoded && decoded.db) {
           tenantDb = decoded.db;
         }
