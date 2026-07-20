@@ -24,6 +24,7 @@ const AIClockIn = React.lazy(() => import('./components/AIClockIn'));
 const ServiceRequestAlert = React.lazy(() => import('./components/ServiceRequestAlert'));
 const ContactSupportModal = React.lazy(() => import('./components/ContactSupportModal'));
 const UserManualModal = React.lazy(() => import('./components/UserManualModal'));
+const AboutModal = React.lazy(() => import('./components/AboutModal'));
 
 import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
@@ -46,6 +47,8 @@ function App() {
   // Help Modals State
   const [showContactModal, setShowContactModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [appVersion, setAppVersion] = useState('6.0.0');
   
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
@@ -261,6 +264,13 @@ function App() {
         setShowManualModal(true);
       });
     }
+
+    if (window.electronAPI && window.electronAPI.onShowAbout) {
+      window.electronAPI.onShowAbout((version) => {
+        if (version) setAppVersion(version);
+        setShowAboutModal(true);
+      });
+    }
     
     return () => clearInterval(intervalId);
   }, []);
@@ -455,33 +465,61 @@ function App() {
   
   if (isCustomerOrderRoute) {
     return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-50">Loading Menu...</div>}>
-        <CustomerMenu />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-50">Loading Menu...</div>}>
+          <CustomerMenu />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+          <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+          <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+        </Suspense>
+      </>
     );
   }
 
   if (isClockingIn) {
     return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white">Loading AI...</div>}>
-        <AIClockIn onBack={() => setIsClockingIn(false)} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white">Loading AI...</div>}>
+          <AIClockIn onBack={() => setIsClockingIn(false)} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+          <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+          <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+        </Suspense>
+      </>
     );
   }
 
   if (!hasLicense) {
     return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen">Verifying License...</div>}>
-        <LicenseScreen onValidLicense={() => setHasLicense(true)} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen">Verifying License...</div>}>
+          <LicenseScreen onValidLicense={() => setHasLicense(true)} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+          <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+          <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+        </Suspense>
+      </>
     );
   }
 
   if (!user) {
     return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
-        <LoginPage onLoginSuccess={handleLoginSuccess} onClockInClick={() => setIsClockingIn(true)} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+          <LoginPage onLoginSuccess={handleLoginSuccess} onClockInClick={() => setIsClockingIn(true)} />
+        </Suspense>
+        <Suspense fallback={null}>
+          <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+          <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+          <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+        </Suspense>
+      </>
     );
   }
 
@@ -762,6 +800,7 @@ function App() {
         <Suspense fallback={null}>
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+          <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
         </Suspense>
 
         {/* Topbar */}

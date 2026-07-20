@@ -71,27 +71,9 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        { 
-          label: 'Reset Zoom',
-          accelerator: 'CmdOrCtrl+0',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.setZoomLevel(0);
-          }
-        },
-        { 
-          label: 'Zoom In',
-          accelerator: 'CmdOrCtrl+=', // Note: Shift+= is Plus
-          click: () => {
-            if (mainWindow) mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() + 0.5);
-          }
-        },
-        { 
-          label: 'Zoom Out',
-          accelerator: 'CmdOrCtrl+-',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.setZoomLevel(mainWindow.webContents.getZoomLevel() - 0.5);
-          }
-        },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
         { type: 'separator' },
         { 
           role: 'togglefullscreen',
@@ -149,13 +131,8 @@ function createMenu() {
         { type: 'separator' },
         {
           label: 'ℹ️ About MS Billing',
-          click: async () => {
-            dialog.showMessageBox({
-              type: 'info',
-              title: 'About MS Billing',
-              message: `MS Billing (RestoPOS)\nVersion: ${app.getVersion()}\n\nPremium Restaurant Management Software.\n© 2026 MS Tech Hive. All rights reserved.`,
-              buttons: ['OK']
-            });
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('show-about', app.getVersion());
           }
         }
       ]

@@ -106,17 +106,105 @@ const UserManualModal = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {activeTab !== 'getting-started' && (
-              <div className="max-w-3xl animate-fade-in flex flex-col items-center justify-center h-full text-center py-20">
-                <div className="w-24 h-24 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-400 mb-6">
-                  {tabs.find(t => t.id === activeTab)?.icon}
+            {activeTab === 'billing' && (
+              <div className="max-w-3xl animate-fade-in">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Billing & Orders</h2>
+                
+                <div className="space-y-6">
+                  <div className="bg-white dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-blue-600 dark:text-blue-400 mb-3">Taking an Order</h3>
+                    <p className="text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
+                      To take a new order, navigate to the <span className="font-semibold text-slate-800 dark:text-slate-200">New Order</span> tab.
+                      Select the items from the menu, adjust quantities using the + and - buttons, and click <span className="font-semibold text-orange-500">Save KOT</span> to send it to the kitchen.
+                    </p>
+                    <ul className="list-disc list-inside space-y-2 text-sm text-slate-500 dark:text-slate-400">
+                      <li>Use the Search Bar to quickly find items by name.</li>
+                      <li>Filter items by clicking on the category tabs on the left.</li>
+                      <li>Click on a cart item to add special instructions (e.g., "Less spicy").</li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mb-3">Settling a Bill</h3>
+                    <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+                      Go to the <span className="font-semibold text-slate-800 dark:text-slate-200">Active Orders</span> tab to see all unpaid tables.
+                      Click on a table, review the KOTs, apply any discounts, select the Payment Method (Cash, Card, UPI), and click <span className="font-semibold text-emerald-500">Settle Bill</span>.
+                    </p>
+                  </div>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                  {tabs.find(t => t.id === activeTab)?.label}
-                </h2>
-                <p className="text-slate-500 dark:text-slate-400 max-w-md">
-                  This section of the documentation is currently being updated by the MS Tech Hive team to include the latest features of version 6.0.
+              </div>
+            )}
+
+            {activeTab === 'floor' && (
+              <div className="max-w-3xl animate-fade-in">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Floor Management</h2>
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/50 mb-6">
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                    The Floor Management screen is your bird's-eye view of the restaurant. Colors indicate table status:
+                  </p>
+                  <div className="flex flex-wrap gap-4 mt-6">
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-emerald-500"></div><span className="text-sm font-medium">Available</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-orange-500"></div><span className="text-sm font-medium">Occupied</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-blue-500"></div><span className="text-sm font-medium">Bill Printed</span></div>
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-3">Managing Spaces</h3>
+                <p className="text-slate-600 dark:text-slate-400 mb-4">As an Admin, you can add new Spaces (like "AC Section", "Rooftop") and configure how many tables belong to each space from the Settings menu.</p>
+              </div>
+            )}
+
+            {activeTab === 'staff' && (
+              <div className="max-w-3xl animate-fade-in">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Staff & AI Attendance</h2>
+                <div className="bg-white dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <h3 className="text-xl font-bold text-purple-600 dark:text-purple-400 mb-3">Facial Recognition Setup</h3>
+                  <p className="text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+                    MS Billing features a state-of-the-art AI Face Recognition system for staff clock-ins to prevent buddy-punching.
+                  </p>
+                  <ol className="list-decimal list-inside space-y-3 text-slate-700 dark:text-slate-300">
+                    <li>Go to <span className="font-semibold text-blue-500">Staff HR</span>.</li>
+                    <li>Click <span className="font-semibold text-emerald-500">Add Staff</span> and fill in their details (Name, Role, PIN).</li>
+                    <li>Click the Camera icon next to their profile to capture their facial biometrics.</li>
+                    <li>They can now use the <strong>AI Clock-In</strong> button on the login screen to start their shift!</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'reports' && (
+              <div className="max-w-3xl animate-fade-in">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Reports & Analytics</h2>
+                <p className="text-slate-600 dark:text-slate-400 mb-6 text-lg">
+                  Make data-driven decisions with real-time insights into your business performance.
                 </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-50 dark:bg-slate-800/30 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-800 dark:text-white mb-2">DayBook</h4>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">View daily cash flow, total sales, expenses, and net profit at a glance.</p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/30 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h4 className="font-bold text-slate-800 dark:text-white mb-2">Analytics Dashboard</h4>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Deep dive into Top Selling Items, Revenue by Time, and Payment Methods breakdowns.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="max-w-3xl animate-fade-in">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">System Settings</h2>
+                <div className="bg-orange-50 dark:bg-orange-900/20 p-6 rounded-2xl border border-orange-200 dark:border-orange-800/50">
+                  <h3 className="text-xl font-bold text-orange-700 dark:text-orange-400 mb-3">Admin Only Access</h3>
+                  <p className="text-slate-700 dark:text-slate-300 mb-4">
+                    The Settings panel controls the core configuration of your restaurant. From here you can:
+                  </p>
+                  <ul className="list-disc list-inside space-y-2 text-slate-600 dark:text-slate-400">
+                    <li>Change the Restaurant Name, Address, and FSSAI number for Bill Printing.</li>
+                    <li>Configure Tax Rates (GST, CGST, SGST).</li>
+                    <li>Add/Remove Printers for KOTs and Bills.</li>
+                    <li>Manage License and Cloud Sync Status.</li>
+                  </ul>
+                </div>
               </div>
             )}
           </div>
