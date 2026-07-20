@@ -34,7 +34,7 @@ const LicenseScreen = ({ onValidLicense }) => {
         // Setup local database configuration
         if (data.databaseName && data.plainTextPassword) {
           try {
-            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+            const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002/api';
             const setupResponse = await fetch(`${API_BASE_URL}/config/setup`, {
               method: 'POST',
               headers: { 
@@ -63,7 +63,7 @@ const LicenseScreen = ({ onValidLicense }) => {
         if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
         
         try {
-          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+          const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002/api';
           await fetch(`${API_BASE_URL}/config/info`, {
             method: 'POST',
             headers: {

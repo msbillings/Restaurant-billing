@@ -48,9 +48,10 @@ if (fs.existsSync(assetsDir)) {
     if (file.endsWith('.js')) {
       const filePath = path.join(assetsDir, file);
       let content = fs.readFileSync(filePath, 'utf8');
-      // Replace Vercel URL with localhost for Desktop
-      content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://localhost:5002/api');
-      content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://localhost:5002');
+      // Replace Vercel URL with 127.0.0.1 for Desktop to avoid IPv6 issues
+      content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://127.0.0.1:5002/api');
+      content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
+      content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
       fs.writeFileSync(filePath, content);
     }
   });

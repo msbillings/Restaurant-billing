@@ -341,8 +341,8 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   // The Desktop app's frontend falls back to localhost:5002 when process.env.VITE_API_URL is undefined
   const PORT = process.env.PORT || 5002;
   connectDB().then(() => {
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server & Socket.io running on 0.0.0.0:${PORT}`);
+    server.listen(PORT, '127.0.0.1', () => {
+      console.log(`Server & Socket.io running on 127.0.0.1:${PORT}`);
     });
   }).catch((err) => {
     console.error('Failed to start server:', err);
