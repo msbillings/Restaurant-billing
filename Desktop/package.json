@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "6.0.7",
+  "version": "6.0.8",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -52,7 +52,8 @@
       {
         "provider": "github",
         "owner": "msbillings",
-        "repo": "Restaurant-billing"
+        "repo": "Restaurant-billing",
+        "releaseType": "release"
       }
     ]
   },
