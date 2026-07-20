@@ -338,7 +338,8 @@ if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) {
 
 // Only start server if not in serverless environment (local development)
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
-  const PORT = process.env.PORT || 5000;
+  // The Desktop app's frontend falls back to localhost:5002 when process.env.VITE_API_URL is undefined
+  const PORT = process.env.PORT || 5002;
   connectDB().then(() => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server & Socket.io running on 0.0.0.0:${PORT}`);
