@@ -180,11 +180,15 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
           {filteredItems.map(item => {
             const typeColor = item.type === 'veg' ? 'border-l-green-500' : (item.type === 'non-veg' ? 'border-l-red-500' : 'border-l-gray-300');
+            const isAvailable = item.isAvailable !== false; // default to true if undefined
             return (
             <div
               key={item._id}
-              className={`bg-white cursor-pointer transition-all hover:bg-gray-50 border border-gray-200 border-l-[3px] ${typeColor} flex flex-col h-[90px] p-2 relative`}
+              className={`bg-white transition-all border border-gray-200 border-l-[3px] flex flex-col h-[90px] p-2 relative ${
+                isAvailable ? `cursor-pointer hover:bg-gray-50 ${typeColor}` : 'cursor-not-allowed opacity-50 bg-gray-100 border-l-gray-300'
+              }`}
               onClick={() => {
+                if (!isAvailable) return;
                 if (item.variants && item.variants.length > 0) {
                   setSelectedItemVariants(item);
                 } else {
@@ -192,11 +196,12 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
                 }
               }}
             >
-              <div className="flex-1 text-[13px] font-semibold text-gray-700 leading-tight">
+              <div className={`flex-1 text-[13px] font-semibold leading-tight ${isAvailable ? 'text-gray-700' : 'text-gray-500 line-through'}`}>
                 {item.name}
               </div>
-              <div className="text-xs font-bold text-gray-500 flex justify-end">
-                {item.price ? `${item.price.toFixed(2)}` : ''}
+              <div className="text-xs font-bold text-gray-500 flex justify-between items-end">
+                {!isAvailable && <span className="text-[9px] text-red-500 font-bold uppercase">Out of Stock</span>}
+                <span className="ml-auto">{item.price ? `${item.price.toFixed(2)}` : ''}</span>
               </div>
             </div>
             );

@@ -9,6 +9,32 @@ const Analytics = React.lazy(() => import('./components/Analytics'));
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
 const FloorManagement = React.lazy(() => import('./components/FloorManagement'));
 const Settings = React.lazy(() => import('./components/Settings'));
+const Operations = React.lazy(() => import('./components/Operations'));
+const TaxConfig = React.lazy(() => import('./components/TaxConfig'));
+const DiscountConfig = React.lazy(() => import('./components/DiscountConfig'));
+const CashOperations = React.lazy(() => import('./components/CashOperations'));
+const DuePayment = React.lazy(() => import('./components/DuePayment'));
+const Reservation = React.lazy(() => import('./components/Reservation'));
+const Feedback = React.lazy(() => import('./components/Feedback'));
+const PushOrders = React.lazy(() => import('./components/PushOrders'));
+const PrinterConfig = React.lazy(() => import('./components/PrinterConfig'));
+const OnlineConfig = React.lazy(() => import('./components/OnlineConfig'));
+const OnlineOrders = React.lazy(() => import('./components/OnlineOrders'));
+const ManualSync = React.lazy(() => import('./components/ManualSync'));
+const LanguageSwitcher = React.lazy(() => import('./components/LanguageSwitcher'));
+const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
+const PlaceholderScreen = React.lazy(() => import('./components/PlaceholderScreen'));
+const MenuToggle = React.lazy(() => import('./components/MenuToggle'));
+const NotificationCenter = React.lazy(() => import('./components/NotificationCenter'));
+const CustomStatus = React.lazy(() => import('./components/CustomStatus'));
+const LanguageProfile = React.lazy(() => import('./components/LanguageProfile'));
+const CurrencyConversion = React.lazy(() => import('./components/CurrencyConversion'));
+const BillingScreenSettings = React.lazy(() => import('./components/BillingScreenSettings'));
+const LiveView = React.lazy(() => import('./components/LiveView'));
+const HelpSupport = React.lazy(() => import('./components/HelpSupport'));
+const ServiceRenewal = React.lazy(() => import('./components/ServiceRenewal'));
+const LoyaltyProgram = React.lazy(() => import('./components/LoyaltyProgram'));
+const SalesForecasting = React.lazy(() => import('./components/AIForecasting'));
 const Expenses = React.lazy(() => import('./components/Expenses'));
 const DeliveryOrders = React.lazy(() => import('./components/DeliveryOrders'));
 const KOTHistory = React.lazy(() => import('./components/KOTHistory'));
@@ -706,6 +732,13 @@ function App() {
                   <Lock size={12} /> Lock
                 </button>
               )}
+              
+              <div className="hidden sm:block">
+                <React.Suspense fallback={<div className="w-16 h-8 bg-gray-100 rounded"></div>}>
+                  <LanguageSwitcher />
+                </React.Suspense>
+              </div>
+
               <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative">
                 <Calculator size={20} />
               </button>
@@ -958,6 +991,15 @@ function App() {
             </button>
           )}
 
+          {/* 7.9 Operations */}
+          <button
+            onClick={() => handleViewChange('operations')}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'operations' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+          >
+            <LayoutGrid size={20} />
+            <span>Operations</span>
+          </button>
+
           {/* 8. Menu - Hidden for Captain */}
           {!isCaptain && (
             <button
@@ -1090,6 +1132,19 @@ function App() {
                 {view === 'kothistory' && <KOTHistory />}
                 {view === 'analytics' && <Analytics />}
                 {view === 'daybook' && <DayBook />}
+                {view === 'operations' && <Operations onNavigate={handleViewChange} userRole={user?.role?.toLowerCase()} />}
+                {view === 'tax' && <TaxConfig onNavigate={handleViewChange} />}
+                {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} />}
+                {(view === 'withdrawal' || view === 'cash-topup') && <CashOperations onNavigate={handleViewChange} />}
+                {view === 'due-payment' && <DuePayment onNavigate={handleViewChange} />}
+                {view === 'reservation' && <Reservation onNavigate={handleViewChange} />}
+                {view === 'feedback' && <Feedback onNavigate={handleViewChange} />}
+                {view === 'push-orders' && <PushOrders onNavigate={handleViewChange} />}
+                {view === 'bill-print' && <PrinterConfig onNavigate={handleViewChange} />}
+                {view === 'online-config' && <OnlineConfig onNavigate={handleViewChange} />}
+                {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} />}
+                {view === 'sync' && <ManualSync onNavigate={handleViewChange} />}
+                {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} />}
                 {view === 'menu' && <MenuManagement user={user} />}
                 {view === 'delivery' && <DeliveryOrders />}
                 {view === 'expenses' && <Expenses />}
@@ -1099,6 +1154,19 @@ function App() {
                 {view === 'qrcode' && <QRCodeGenerator />}
                 {view === 'settings' && <Settings user={user} setUser={setUser} />}
                 {view === 'kds' && <KDS />}
+
+                {/* Placeholder Routes */}
+                {view === 'notification' && <NotificationCenter onNavigate={handleViewChange} />}
+                {view === 'help' && <HelpSupport onNavigate={handleViewChange} />}
+                {view === 'live-view' && <LiveView onNavigate={handleViewChange} />}
+                {view === 'language' && <LanguageProfile onNavigate={handleViewChange} />}
+                {view === 'currency' && <CurrencyConversion onNavigate={handleViewChange} />}
+                {view === 'billing-screen' && <BillingScreenSettings onNavigate={handleViewChange} />}
+                {view === 'menu-toggle' && <MenuToggle onNavigate={handleViewChange} />}
+                {view === 'renewal' && <ServiceRenewal onNavigate={handleViewChange} />}
+                {view === 'custom-status' && <CustomStatus onNavigate={handleViewChange} />}
+                {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} />}
+                {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} />}
               </>
             )}
           </Suspense>

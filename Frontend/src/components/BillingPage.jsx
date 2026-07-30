@@ -11,8 +11,10 @@ import Invoice from './Invoice';
 import CancelOrderModal from './CancelOrderModal';
 import TransferTableModal from './TransferTableModal';
 import { io } from 'socket.io-client';
+import { useLanguage } from '../context/LanguageContext';
 
 const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admin', onToggleMenu }) => {
+  const { t } = useLanguage();
   const [activeTable, setActiveTable] = useState(initialTable || '');
   const [floors, setFloors] = useState([]);
   const [openOrdersList, setOpenOrdersList] = useState([]);
@@ -105,26 +107,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     window.addEventListener('spacesUpdated', loadSpaces);
     return () => window.removeEventListener('spacesUpdated', loadSpaces);
   }, []);
-  // ... (rest of state)
 
-  // ... (rest of code)
-
-        {/* Table Selector */}
-        <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5">
-          <LayoutGrid size={16} className="text-text-muted" />
-          <select 
-            value={activeTable} 
-            onChange={(e) => setActiveTable(e.target.value)}
-            className="bg-transparent font-bold text-text-main focus:outline-none text-sm"
-          >
-            <option value="">Select Table</option>
-            {[...Array(20)].map((_, i) => (
-              <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                Table {String(i + 1).padStart(2, '0')}
-              </option>
-            ))}
-          </select>
-        </div>
   const [cart, setCart] = useState([]);
   const [mobileTab, setMobileTab] = useState('menu'); // 'menu' or 'cart'
   const [orderId, setOrderId] = useState(null);
@@ -164,7 +147,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // Sync when initialTable changes from parent (e.g. clicking an order in Active Orders)
   useEffect(() => {
     if (initialTable) {
       setActiveTable(initialTable);
@@ -178,7 +160,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     }
   }, [initialTable]);
 
-  // Auto-select existing or generate delivery/takeaway order number when Delivery or Takeaway is selected
   useEffect(() => {
     if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
@@ -196,12 +177,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     }
   }, [billType, openOrdersList]);
 
-  // Fetch active order when table changes
   useEffect(() => {
     if (activeTable && !newlyGeneratedTables.current.has(activeTable)) {
       fetchActiveOrder();
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
-      // It's a new table, make sure the cart is clear initially (unless user already added items)
       if (cart.length === 0) {
         setOrderId(null);
         setOrderStatus('Open');
@@ -254,7 +233,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setOrderStatus(order.status);
         setBillNumber(order.billNumber);
         setBillType(order.billType || 'Dine-In');
-        // Restore delivery fields if delivery order
         if (order.billType === 'Delivery') {
           setOrderSource(order.orderSource || 'Direct');
         }
@@ -277,7 +255,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           } catch (e) {}
         }
       } else {
-        // Reset for new order
         setCart([]);
         setOrderId(null);
         setOrderStatus('Open');
@@ -314,7 +291,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       setDailyStats(stats);
     } catch (error) {
       console.error('Error fetching daily stats:', error);
-      // Fallback to 0 if API fails
       setDailyStats({ sales: 0, orders: 0 });
     }
   };
@@ -341,21 +317,21 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         newlyGeneratedTables.current.add(currentTable);
         setActiveTable(currentTable);
       } else {
-        showToast('Please select a table first', 'error');
+        showToast(t('pleaseSelectTable'), 'error');
         return;
       }
     }
     if (orderStatus !== 'Open') {
-      showToast('Order is locked. Cannot add items.', 'error');
+      showToast(t('orderLocked'), 'error');
       return;
     }
     setCart(prev => {
-      const existing = prev.find(i => i.name === item.name); // Match by name for now, ideally ID
+      const existing = prev.find(i => i.name === item.name);
       if (existing) {
-        showToast(`Increased quantity for ${item.name}`, 'success');
+        showToast(`${t('increasedQty')} ${item.name}`, 'success');
         return prev.map(i => i.name === item.name ? { ...i, quantity: i.quantity + 1 } : i);
       }
-      showToast(`Added ${item.name} to order`, 'success');
+      showToast(`${t('addedToOrder')} ${item.name}`, 'success');
       return [...prev, { ...item, quantity: 1 }];
     });
   };
@@ -369,18 +345,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         currentTable = `${prefix}${timestamp}`;
         setActiveTable(currentTable);
       } else {
-        showToast('Please select a table first', 'error');
+        showToast(t('pleaseSelectTable'), 'error');
         return;
       }
     }
     if (orderStatus !== 'Open') {
-      showToast('Order is locked. Cannot modify items.', 'error');
+      showToast(t('orderLocked'), 'error');
       return;
     }
     setCart(prev => prev.map(i => {
-      if (i._id === id || i.name === id) { // Handle both ID and Name matching
+      if (i._id === id || i.name === id) {
         const newQty = Math.max(0, i.quantity + delta);
-        if (newQty === 0) showToast(`${i.name} removed from order`, 'info');
+        if (newQty === 0) showToast(`${i.name} ${t('removedFromOrder')}`, 'info');
         return { ...i, quantity: newQty };
       }
       return i;
@@ -399,7 +375,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   const updateItemNote = (identifier, specialNote) => {
     if (orderStatus !== 'Open') {
-      showToast('Order is locked. Cannot modify items.', 'error');
+      showToast(t('orderLocked'), 'error');
       return;
     }
     setCart(prev => prev.map(i => {
@@ -416,7 +392,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   const taxAmount = (taxableAmount * taxVal) / 100;
   const total = Math.round(taxableAmount + taxAmount);
 
-  // Action Handlers
   const handleSaveOrder = async () => {
     if (!activeTable) {
       if (billType === 'Delivery' || billType === 'Takeaway') {
@@ -427,7 +402,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setTimeout(() => handleSaveOrderWithTable(generatedOrderNo), 100);
         return;
       } else {
-        showToast('Please select a table first', 'error');
+        showToast(t('pleaseSelectTable'), 'error');
         return;
       }
     }
@@ -453,22 +428,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       };
       const savedOrder = await saveOrder(orderData);
       setOrderId(savedOrder._id);
-      setActiveTable(tableNo); // Ensure table is set
-      showToast('Order saved successfully!', 'success');
+      setActiveTable(tableNo);
+      showToast(t('orderSaved'), 'success');
       fetchActiveOrder();
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error saving order:', error);
       const errorMessage = error.response?.data?.message || error.message;
-      const errorDetails = error.response?.data?.details ? JSON.stringify(error.response.data.details) : '';
-      showToast(`Failed to save order: ${errorMessage}`, 'error');
+      showToast(`${t('failedToSave')}: ${errorMessage}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleGenerateBill = async () => {
-    // For Delivery or Takeaway orders, auto-save if order doesn't exist
     if (!orderId) {
       if (billType === 'Delivery' || billType === 'Takeaway') {
         let tableToUse = activeTable;
@@ -494,17 +467,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         } catch (error) {
           console.error('Error saving order:', error);
           const errorMessage = error.response?.data?.message || error.message;
-          showToast(`Failed to save order: ${errorMessage}`, 'error');
+          showToast(`${t('failedToSave')}: ${errorMessage}`, 'error');
           setLoading(false);
         }
         return;
       } else {
-        showToast('Please save the order first.', 'error');
+        showToast(t('pleaseSaveOrderFirst'), 'error');
         return;
       }
     }
-    
-    // Generate bill for existing order
     await generateBillAfterSave(orderId);
   };
 
@@ -540,14 +511,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       setBillNumber(billedOrder.billNumber);
       setCompletedBill(billedOrder);
       
-      showToast('Bill generated successfully!', 'success');
+      showToast(t('billGenerated'), 'success');
       if (onOrderUpdate) onOrderUpdate();
-      // Open Invoice Modal immediately after generating bill to print
       setShowInvoice(true);
     } catch (error) {
       console.error('Error generating bill:', error);
       
-      // Graceful handling for "Order already billed" (e.g. double click or network retry)
       if (error.response?.status === 400 && error.response?.data?.message?.includes('already billed')) {
          try {
            const order = await getActiveOrder(activeTable);
@@ -560,7 +529,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               } else {
                 setShowInvoice(true);
               }
-              showToast('Recovered existing bill status.', 'info');
+              showToast(t('recoveredExistingBill'), 'info');
               return;
            }
          } catch (fetchError) {
@@ -569,7 +538,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       }
 
       const errorMessage = error.response?.data?.message || error.message;
-      showToast(`Failed to generate bill: ${errorMessage}`, 'error');
+      showToast(`${t('failedToGenerateBill')}: ${errorMessage}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -581,7 +550,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   const completeSettlement = async (paymentData) => {
     if (orderStatus === 'Paid') {
-      showToast('Bill is already settled!', 'info');
+      showToast(t('billAlreadySettled'), 'info');
       setShowPayment(false);
       return;
     }
@@ -590,14 +559,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     try {
       let currentId = orderId;
       
-      // Enforce golden restaurant rule: Dine-In tables MUST fire KOT and generate Bill first!
       if (billType === 'Dine-In' && (!currentId || orderStatus === 'Open')) {
-        showToast('Please fire KOT and generate Bill first for Dine-In tables.', 'error');
+        showToast(t('pleaseFireKOTFirst'), 'error');
         setLoading(false);
         return;
       }
       
-      // Step 1: For Delivery or Takeaway orders, auto-save if not saved yet
       if (!currentId) {
         let tableToUse = activeTable;
         if (!tableToUse) {
@@ -625,7 +592,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setOrderId(savedOrder._id);
       }
 
-      // Step 2: For Delivery or Takeaway, auto-generate bill if not billed yet
       let currentBillNum = billNumber;
       let billDetails = null;
       if (orderStatus !== 'Billed' && orderStatus !== 'Paid') {
@@ -661,7 +627,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setCompletedBill(billedOrder);
       }
 
-      // Step 3: Now settle the official bill!
       const settledOrder = await settleBill(currentId, { 
         paymentMode: paymentData.mode,
         splitPayments: paymentData.splitPayments,
@@ -670,24 +635,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       setOrderStatus('Paid');
       setShowPayment(false);
       
-      // Update completed bill with paid status and all details
       setCompletedBill({ 
         ...(billDetails || settledOrder), 
         ...settledOrder,
-        items: cart, // Ensure items are preserved
-        status: 'Paid', // Explicitly set status
-        paymentMode: paymentData.mode, // Ensure payment mode is set
+        items: cart,
+        status: 'Paid',
+        paymentMode: paymentData.mode,
         billNumber: currentBillNum || settledOrder?.billNumber,
-        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable // Always preserve table number
+        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable
       });
       
-      showToast('Bill Settled Successfully! Saved to billing history.', 'success');
+      showToast(t('billSettled'), 'success');
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
-      setShowInvoice(true); // Show Invoice AFTER payment
+      setShowInvoice(true);
     } catch (error) {
       console.error('Error settling bill:', error);
-      setToast({ message: error.response?.data?.message || error.message || 'Failed to settle bill', type: 'error' });
+      setToast({ message: error.response?.data?.message || error.message || t('failedToSettle'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -696,7 +660,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   const handlePrintKOT = async () => {
     try {
       setLoading(true);
-      // Ensure order is saved first
       const orderData = {
         tableNo: activeTable,
         items: cart,
@@ -721,10 +684,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
          await saveOrder({ id: currentId, ...orderData });
       }
 
-      // Generate Delta KOT
       const response = await apiGenerateKOT(currentId, cart);
       
-      // Update local cart state to reflect printed quantity
       if (response.bill && response.bill.items) {
         setCart(response.bill.items);
       }
@@ -739,36 +700,29 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       
     } catch (error) {
       console.error('Error generating KOT:', error);
-      showToast(error.response?.data?.message || 'Failed to generate KOT', 'error');
+      showToast(error.response?.data?.message || t('failedToGenerateKOT'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleFinish = () => {
-    // Verify bill is saved before closing
     if (completedBill && completedBill.status === 'Paid') {
-      // Bill is already saved to history (status is 'Paid')
-      // Show confirmation message
-      showToast(`Bill ${completedBill.billNumber || 'saved'} has been saved to billing history!`, 'success');
+      showToast(`${t('billSaved')} ${completedBill.billNumber || ''}`, 'success');
     }
     
-    // Close invoice and reset state
     setShowInvoice(false);
     setCart([]);
     setOrderId(null);
     setOrderStatus('Open');
     setBillNumber(null);
     setCompletedBill(null);
-    fetchActiveOrder(); // Refresh to ensure clean state
+    fetchActiveOrder();
     
-    // Refresh daily stats to reflect the new bill
     fetchDailyStats();
     
-    // Notify parent component to refresh active orders
     if (onOrderUpdate) onOrderUpdate();
 
-    // Redirect to floor management after finishing the bill
     if (onNavigate) {
       onNavigate('floor');
     }
@@ -779,11 +733,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       setLoading(true);
       await apiReopenOrder(orderId);
       setOrderStatus('Open');
-      showToast('Order reopened successfully', 'success');
+      showToast(t('orderReopened'), 'success');
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error reopening order:', error);
-      showToast(error.response?.data?.message || 'Failed to reopen order', 'error');
+      showToast(error.response?.data?.message || t('failedToReopenOrder'), 'error');
     } finally {
       setLoading(false);
     }
@@ -791,7 +745,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   const handleCancelOrder = () => {
     if (!orderId) {
-      // Just clear local cart
       setCart([]);
       return;
     }
@@ -807,7 +760,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       const response = await apiCancelOrder(orderId, cancelReason);
       
       if (response.kot) {
-        // Show cancellation KOT
         setActiveKOTData({
           ...response.kot,
           tableNo: activeTable,
@@ -817,9 +769,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         setShowKOT(true);
       }
 
-      showToast('Order cancelled successfully', 'success');
+      showToast(t('orderCancelled'), 'success');
       
-      // Reset state
       setCart([]);
       setOrderId(null);
       setOrderStatus('Open');
@@ -828,7 +779,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error cancelling order:', error);
-      showToast(error.response?.data?.message || 'Failed to cancel order', 'error');
+      showToast(error.response?.data?.message || t('failedToCancelOrder'), 'error');
     } finally {
       setLoading(false);
     }
@@ -839,13 +790,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     try {
       setLoading(true);
       await apiTransferTable(orderId, newTableNo);
-      showToast(`Bill successfully transferred to ${newTableNo}`, 'success');
+      showToast(`${t('billTransferred')} ${newTableNo}`, 'success');
       setShowTransfer(false);
-      setActiveTable(newTableNo); // This will automatically re-fetch the order for the new table
+      setActiveTable(newTableNo);
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error transferring table:', error);
-      showToast(error.response?.data?.message || 'Failed to transfer table', 'error');
+      showToast(error.response?.data?.message || t('failedToTransferTable'), 'error');
     } finally {
       setLoading(false);
     }
@@ -853,10 +804,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      {/* Secondary Toolbar for Billing Page */}
       <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 z-10">
 
-        {/* Table Selector */}
         <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5">
           <LayoutGrid size={16} className="text-text-muted" />
           {(billType === 'Delivery' || billType === 'Takeaway') ? (
@@ -873,7 +822,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               }}
               className="bg-transparent font-bold text-text-main focus:outline-none text-sm cursor-pointer"
             >
-              <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ New {billType} Order</option>
+              <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
               {openOrdersList
                 .filter(o => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))
                 .map(o => (
@@ -884,7 +833,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               }
               {activeTable && !openOrdersList.some(o => o.tableNo === activeTable) && (
                 <option value={activeTable} className="bg-surface text-white">
-                  {activeTable} (New/Current)
+                  {activeTable} ({t('newCurrent')})
                 </option>
               )}
             </select>
@@ -894,7 +843,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               onChange={(e) => setActiveTable(e.target.value)}
               className="bg-transparent font-bold text-text-main focus:outline-none text-sm"
             >
-              <option value="" >Select Table</option>
+              <option value="" >{t('selectTable')}</option>
               {floors.map(floor => {
                 const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
                 if (!hasItems) return null;
@@ -906,20 +855,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
                   </optgroup>
                 );
               })}
-              {/* Fallback to default tables if completely empty */}
               {floors.length === 0 && [...Array(20)].map((_, i) => (
                 <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                  Table {String(i + 1).padStart(2, '0')}
+                  {t('table')} {String(i + 1).padStart(2, '0')}
                 </option>
               ))}
             </select>
           )}
           
-          {/* Transfer Table Button */}
           {activeTable && orderStatus === 'Open' && orderId && billType !== 'Delivery' && (
             <button
               onClick={() => setShowTransfer(true)}
-              title="Transfer Bill to Another Table"
+              title={t('transferBill')}
               className="ml-2 p-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors border border-primary/20 flex items-center justify-center"
             >
               <ArrowRightLeft size={16} />
@@ -932,7 +879,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={18} />
             <input 
               type="text" 
-              placeholder="Search items..." 
+              placeholder={t('searchItems')} 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-12 pr-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 text-text-main transition-all shadow-inner"
@@ -944,7 +891,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
             <div className="flex flex-col items-end">
               <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1">
-                Sales <TrendingUp size={10} className="text-success" />
+                {t('sales')} <TrendingUp size={10} className="text-success" />
               </p>
               <p className="text-sm font-bold text-text-main font-mono">₹{dailyStats.sales.toLocaleString()}</p>
             </div>
@@ -959,7 +906,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         </div>
       </div>
 
-      {/* Mobile Tab Switcher & Search */}
       <div className="flex flex-col md:hidden px-3 pt-2 gap-2 shrink-0 bg-background border-b border-border/50 pb-2.5">
         <div className="flex gap-2">
           <button
@@ -970,7 +916,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
                 : 'bg-surface text-text-muted border border-border hover:bg-surface-hover'
             }`}
           >
-            <span>🍽️ Menu Items</span>
+            <span>🍽️ {t('menuItems')}</span>
           </button>
           <button
             onClick={() => setMobileTab('cart')}
@@ -980,7 +926,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
                 : 'bg-surface text-text-muted border border-border hover:bg-surface-hover'
             }`}
           >
-            <span>🛒 Current Order</span>
+            <span>🛒 {t('currentOrder')}</span>
             {cart.length > 0 && (
               <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
                 {cart.length}
@@ -989,13 +935,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           </button>
         </div>
 
-        {/* Mobile Search Bar (Only shown when on Menu tab) */}
         {mobileTab === 'menu' && (
           <div className="relative group w-full mt-0.5">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={16} />
             <input 
               type="text" 
-              placeholder="Search dishes, categories..." 
+              placeholder={t('searchDishes')} 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner"
@@ -1006,23 +951,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-          {/* Left Panel: Menu */}
           <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
             mobileTab === 'cart' ? 'hidden md:flex' : 'flex'
           } flex-1 transition-all duration-300`}>
             <MenuGrid onSelectItem={addToCart} searchTerm={debouncedSearchTerm} />
           </div>
 
-          {/* Right Panel: Summary */}
           <div className={`flex flex-col overflow-hidden bg-surface ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'
           } ${isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100' : 'w-full md:w-[380px] lg:w-[400px] border-l border-border/50'} shrink-0 transition-all duration-300 relative`}>
             
-            {/* Collapse/Expand Toggle Button */}
             <button 
               onClick={() => setIsCartCollapsed(!isCartCollapsed)}
               className="hidden md:flex absolute top-1/2 -translate-y-1/2 -left-3.5 z-30 bg-white border border-border shadow-md rounded-full p-1.5 hover:bg-gray-50 transition-all text-gray-500 hover:text-primary"
-              title={isCartCollapsed ? "Expand Cart" : "Collapse Cart"}
+              title={isCartCollapsed ? t('expandCart') : t('collapseCart')}
             >
               {isCartCollapsed ? <ChevronLeft size={14} className="ml-0.5" /> : <ChevronRight size={14} className="mr-0.5" />}
             </button>
@@ -1036,7 +978,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               total={total}
               userRole={userRole}
 
-              // Lifecycle Props
               orderStatus={orderStatus}
               activeTable={activeTable}
               onSaveOrder={handleSaveOrder}
@@ -1055,11 +996,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               setBillType={setBillType}
               loading={loading}
 
-              // Delivery Props
               orderSource={orderSource}
               setOrderSource={setOrderSource}
               
-              // CRM Props
               customerPhone={customerPhone}
               setCustomerPhone={setCustomerPhone}
               customerName={customerName}
@@ -1069,18 +1008,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           </div>
         </div>
 
-        {/* Mobile Floating Cart Bar */}
         {cart.length > 0 && mobileTab === 'menu' && (
           <div className="md:hidden p-3 bg-surface border border-border rounded-2xl shadow-xl flex items-center justify-between shrink-0 animate-bounce-short">
             <div className="flex flex-col">
-              <span className="text-[10px] text-text-muted font-bold uppercase">Total ({cart.reduce((sum, item) => sum + item.quantity, 0)} items)</span>
+              <span className="text-[10px] text-text-muted font-bold uppercase">{t('total')} ({cart.reduce((sum, item) => sum + item.quantity, 0)} {t('items')})</span>
               <span className="text-base font-black text-primary">₹{total.toFixed(2)}</span>
             </div>
             <button
               onClick={() => setMobileTab('cart')}
               className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary-hover flex items-center gap-2"
             >
-              <span>View Order</span>
+              <span>{t('viewOrder')}</span>
               <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">➔</span>
             </button>
           </div>
