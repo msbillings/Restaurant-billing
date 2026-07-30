@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Search, ChevronLeft, ChevronRight, Star, X, ChevronDown } from 'lucide-react';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
-import { ChevronLeft, ChevronRight, Star, X } from 'lucide-react';
 
 const formatImageUrl = (url) => {
   if (!url) return '';
@@ -130,65 +130,60 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
   );
 
   return (
-    <div className="flex flex-col h-full bg-surface overflow-hidden">
-      {/* Top Bar: Categories */}
-      <div className="p-4 border-b border-border bg-surface z-10 flex flex-col gap-4 shrink-0">
-        <div className="flex items-center gap-2 w-full">
-          {/* Scroll Left Button */}
-          <button
-            onClick={() => scroll('left')}
-            className="p-2 rounded-xl bg-background hover:bg-surface-hover border border-border shadow-sm transition-all duration-200 text-text-muted hover:text-text-main hover:scale-105 shrink-0 cursor-pointer flex items-center justify-center"
-            title="Scroll Left"
-          >
-            <ChevronLeft size={20} className="stroke-[2.5]" />
-          </button>
-          
-          <div 
-            ref={scrollContainerRef}
-            className="flex-1 flex items-center gap-4 overflow-x-auto pb-2 category-scroll"
-          >
-            {categoryOptions.map(cat => (
+    <div className="flex flex-row h-full bg-white overflow-hidden">
+      {/* Left Sidebar: Categories */}
+      <div className="w-[120px] md:w-[140px] lg:w-[150px] flex flex-col bg-[#636c75] shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar border-r border-gray-400">
+        <div className="flex flex-col w-full">
+          {categoryOptions.map((cat, idx) => {
+            const isSelected = category === cat;
+            // First item (Fast Food) gets blue, second gets green in Petpooja, but let's just make selected blue.
+            const bgClass = isSelected ? (idx % 2 === 0 ? 'bg-[#00bcd4]' : 'bg-[#4caf50]') : 'bg-transparent hover:bg-white/10';
+            return (
               <button 
                 key={cat}
-                className={`px-5 py-2.5 rounded-full font-bold text-sm whitespace-nowrap transition-all transform hover:scale-105 flex items-center gap-1.5 ${
-                  category === cat 
-                    ? 'bg-primary text-white shadow-lg shadow-primary/25 ring-2 ring-primary/20' 
-                    : cat === '⭐ Favourites'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/30'
-                    : 'bg-background text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
-                }`}
+                className={`w-full text-left px-2 py-3 font-semibold text-[13px] transition-colors border-b border-gray-500 flex items-center justify-between ${bgClass} text-white`}
                 onClick={() => setCategory(cat)}
               >
-                {cat === '⭐ Favourites' ? (
-                  <>
-                    <Star size={15} className="fill-amber-500 text-amber-500 shrink-0" />
-                    <span>Favourites</span>
-                  </>
-                ) : (
-                  cat
-                )}
+                <span className="truncate pr-1">{cat === '⭐ Favourites' ? 'Favorite Items' : cat}</span>
+                {isSelected && <ChevronDown size={14} className="text-white shrink-0" />}
               </button>
-            ))}
-          </div>
-
-          {/* Scroll Right Button */}
-          <button
-            onClick={() => scroll('right')}
-            className="p-2 rounded-xl bg-background hover:bg-surface-hover border border-border shadow-sm transition-all duration-200 text-text-muted hover:text-text-main hover:scale-105 shrink-0 cursor-pointer flex items-center justify-center"
-            title="Scroll Right"
-          >
-            <ChevronRight size={20} className="stroke-[2.5]" />
-          </button>
+            );
+          })}
         </div>
       </div>
       
-      {/* Items Grid */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-background/50">
-        <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3 sm:gap-6">
-          {filteredItems.map(item => (
+      {/* Items Grid Area */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-[#e0e0e0]">
+        
+        {/* Search Bar Row */}
+        <div className="flex items-center bg-white border-b border-gray-300 h-12 shrink-0">
+          <div className="flex-1 flex items-center h-full px-3 border-r border-gray-300">
+            <Search size={16} className="text-gray-400 mr-2" />
+            <input 
+              type="text"
+              placeholder="Search item"
+              value={searchTerm}
+              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+              className="w-full h-full bg-transparent outline-none text-sm font-medium text-gray-700 placeholder-gray-400"
+            />
+          </div>
+          <div className="w-[140px] flex items-center h-full px-3 bg-gray-100">
+            <input 
+              type="text"
+              placeholder="Short Code"
+              className="w-full h-full bg-transparent outline-none text-sm font-medium text-gray-600 placeholder-gray-400"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-2 relative">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+          {filteredItems.map(item => {
+            const typeColor = item.type === 'veg' ? 'border-l-green-500' : (item.type === 'non-veg' ? 'border-l-red-500' : 'border-l-gray-300');
+            return (
             <div
               key={item._id}
-              className="bg-surface rounded-xl sm:rounded-2xl p-3 sm:p-5 cursor-pointer transition-all hover:shadow-xl hover:-translate-y-1 group relative overflow-hidden flex flex-col h-full border border-border/50 hover:border-primary/20"
+              className={`bg-white cursor-pointer transition-all hover:bg-gray-50 border border-gray-200 border-l-[3px] ${typeColor} flex flex-col h-[90px] p-2 relative`}
               onClick={() => {
                 if (item.variants && item.variants.length > 0) {
                   setSelectedItemVariants(item);
@@ -197,64 +192,15 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
                 }
               }}
             >
-              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-[4rem] -mr-8 -mt-8 transition-transform group-hover:scale-110 pointer-events-none" />
-
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const newFavStatus = !item.isFavorite;
-                  setItems(prev => prev.map(i => i._id === item._id ? { ...i, isFavorite: newFavStatus } : i));
-                  try {
-                    await updateMenuItem(item._id, { isFavorite: newFavStatus });
-                  } catch (err) {
-                    console.error('Error updating favorite status:', err);
-                    setItems(prev => prev.map(i => i._id === item._id ? { ...i, isFavorite: item.isFavorite } : i));
-                  }
-                }}
-                className={`absolute top-2 right-2 z-20 p-2 rounded-xl transition-all transform hover:scale-125 ${
-                  item.isFavorite 
-                    ? 'text-amber-500 bg-amber-500/15 shadow-sm opacity-100' 
-                    : 'text-text-muted/40 hover:text-amber-500 bg-background/80 opacity-0 group-hover:opacity-100'
-                }`}
-                title={item.isFavorite ? "Remove from Favourites" : "Add to Favourites"}
-              >
-                <Star size={18} className={item.isFavorite ? "fill-amber-500" : ""} />
-              </button>
-
-              {formatImageUrl(item.image) && (
-                <div className="w-full h-24 sm:h-36 mb-2 sm:mb-4 rounded-lg sm:rounded-xl overflow-hidden relative shrink-0 bg-background/60 border border-border/40 shadow-sm">
-                  <img
-                    src={formatImageUrl(item.image)}
-                    alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      e.target.parentElement.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-
-              <div className="flex flex-col h-full justify-between relative z-10">
-                <div>
-                  <div className="flex justify-between items-start mb-1.5 sm:mb-3">
-                    <h3 className="font-bold text-xs sm:text-lg text-text-main leading-tight pr-1 sm:pr-2 group-hover:text-primary transition-colors line-clamp-2">{item.name}</h3>
-                    {item.type && (
-                      <span className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0 mt-1 ring-2 ring-white ${item.type === 'veg' ? 'bg-success' : 'bg-danger'}`} />
-                    )}
-                  </div>
-                  <p className="text-[11px] sm:text-sm text-text-muted line-clamp-1 sm:line-clamp-2 leading-relaxed mb-2 sm:mb-4">{item.description || item.category?.name}</p>
-                </div>
-
-                <div className="flex items-center justify-between mt-auto pt-2 sm:pt-4 border-t border-dashed border-border/50">
-                  <span className="font-bold text-sm sm:text-xl text-text-main">₹{item.price}</span>
-                  <button className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-primary text-white flex items-center justify-center opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all shadow-md sm:shadow-lg shadow-primary/20 hover:scale-110 hover:bg-primary-hover transform translate-y-0 sm:translate-y-2 group-hover:translate-y-0 text-sm sm:text-base">
-                    +
-                  </button>
-                </div>
+              <div className="flex-1 text-[13px] font-semibold text-gray-700 leading-tight">
+                {item.name}
+              </div>
+              <div className="text-xs font-bold text-gray-500 flex justify-end">
+                {item.price ? `${item.price.toFixed(2)}` : ''}
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {category === '⭐ Favourites' && filteredItems.length === 0 && (
             <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-surface rounded-2xl border border-dashed border-border/60">
@@ -269,6 +215,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '' }) => {
           )}
         </div>
       </div>
+    </div>
 
       {/* Variant Selection Modal */}
       {selectedItemVariants && (

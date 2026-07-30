@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders } from '../api/billing';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye } from 'lucide-react';
 import { io } from 'socket.io-client';
 import Toast from './Toast';
 
@@ -13,7 +13,9 @@ const FloorManagement = ({ onNavigate }) => {
   const [promptInput, setPromptInput] = useState('');
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [mergeModal, setMergeModal] = useState({ isOpen: false, targetSpace: '', sourceSpaces: [] });
+  const [addSpaceModal, setAddSpaceModal] = useState({ isOpen: false, name: '', type: 'Table' });
   const [merging, setMerging] = useState(false);
+  const [showAIInsights, setShowAIInsights] = useState(false);
 
   const [floors, setFloors] = useState(() => {
     const saved = localStorage.getItem('msbillings_spaces');
@@ -188,33 +190,30 @@ const FloorManagement = ({ onNavigate }) => {
     });
   };
 
-  const handleAddSpace = (type) => {
+  const handleAddSpace = () => {
     if (!activeFloorId) return;
-    setPromptInput('');
-    setPromptModal({
-      isOpen: true,
-      title: `Add New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
-      placeholder: `Enter name for new ${type}`,
-      onConfirm: (name) => {
-        if (name && name.trim() !== '') {
-          setFloors(prev => {
-            const next = prev.map(floor => {
-              if (floor.id === activeFloorId) {
-                const key = type + 's';
-                return {
-                  ...floor,
-                  [key]: [...(floor[key] || []), { id: Date.now().toString(), name: name.trim(), type: type }]
-                };
-              }
-              return floor;
-            });
-            saveSpacesToCloud(next);
-            return next;
-          });
-          setToast({ message: `${type} added successfully!`, type: 'success' });
-        }
-      }
-    });
+    setAddSpaceModal({ isOpen: true, name: '', type: 'Table' });
+  };
+
+  const submitAddSpace = () => {
+    const { name, type } = addSpaceModal;
+    if (name && name.trim() !== '' && type && type.trim() !== '') {
+      setFloors(prev => {
+        const next = prev.map(floor => {
+          if (floor.id === activeFloorId) {
+            return {
+              ...floor,
+              spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim() }]
+            };
+          }
+          return floor;
+        });
+        saveSpacesToCloud(next);
+        return next;
+      });
+      setAddSpaceModal({ isOpen: false, name: '', type: 'Table' });
+      setToast({ message: `${type} added successfully!`, type: 'success' });
+    }
   };
 
   const handleRemoveSpace = (e, type, id) => {
@@ -228,10 +227,42 @@ const FloorManagement = ({ onNavigate }) => {
           const next = prev.map(floor => {
             if (floor.id === activeFloorId) {
               const key = type + 's';
-              return {
-                ...floor,
-                [key]: floor[key].filter(item => item.id !== id)
-              };
+              const newFloor = { ...floor };
+              if (newFloor[key]) {
+                newFloor[key] = newFloor[key].filter(item => item.id !== id);
+              }
+              if (newFloor.spaces) {
+                newFloor.spaces = newFloor.spaces.filter(item => item.id !== id);
+              }
+              return newFloor;
+            }
+            return floor;
+          });
+          saveSpacesToCloud(next);
+          return next;
+        });
+      }
+    });
+  };
+
+  const handleRemoveSpaceCategory = (e, typeName) => {
+    e.stopPropagation();
+    setConfirmModal({
+      isOpen: true,
+      title: `Remove ${typeName} Category`,
+      message: `Are you sure you want to delete ALL spaces inside the ${typeName} category?`,
+      onConfirm: () => {
+        setFloors(prev => {
+          const next = prev.map(floor => {
+            if (floor.id === activeFloorId) {
+              const newFloor = { ...floor };
+              if (typeName.toLowerCase() === 'table' && newFloor.tables) newFloor.tables = [];
+              if (typeName.toLowerCase() === 'cabin' && newFloor.cabins) newFloor.cabins = [];
+              if (typeName.toLowerCase() === 'sofa' && newFloor.sofas) newFloor.sofas = [];
+              if (newFloor.spaces) {
+                newFloor.spaces = newFloor.spaces.filter(s => (s.type || '').toUpperCase() !== typeName.toUpperCase());
+              }
+              return newFloor;
             }
             return floor;
           });
@@ -255,7 +286,7 @@ const FloorManagement = ({ onNavigate }) => {
   const getActiveSpacesForMerge = () => {
     const activeSpaces = [];
     floors.forEach(floor => {
-      ['tables', 'cabins', 'sofas'].forEach(type => {
+      ['tables', 'cabins', 'sofas', 'spaces'].forEach(type => {
         if (floor[type]) {
           floor[type].forEach(item => {
             const uniqueSpaceName = `${floor.name} - ${item.name}`;
@@ -308,64 +339,115 @@ const FloorManagement = ({ onNavigate }) => {
     const activeOrder = getSpaceOrder(uniqueSpaceName);
     const isOccupied = !!activeOrder;
 
-    let statusColor = 'emerald';
+    let statusColorClass = 'text-emerald-600';
+    let statusBgClass = 'bg-emerald-50';
+    let statusBorderClass = 'border-emerald-200';
+    let statusBadgeClass = 'bg-emerald-100 text-emerald-700';
     let statusText = 'Available';
+    let Icon = null;
+    let SmallIcon = CheckCircle;
+
+    if (type.toLowerCase() === 'table') Icon = Coffee;
+    else if (type.toLowerCase() === 'cabin') Icon = Home;
+    else if (type.toLowerCase() === 'sofa') Icon = Sofa;
+    else Icon = Utensils; // fallback
 
     if (activeOrder) {
       if (activeOrder.status === 'Open') {
-        statusColor = 'orange';
-        statusText = 'Occupied';
+        statusBgClass = 'bg-blue-50';
+        statusBorderClass = 'border-blue-300';
+        statusColorClass = 'text-blue-600';
+        statusBadgeClass = 'bg-blue-200 text-blue-800';
+        statusText = 'Running';
+        SmallIcon = Clock;
+      } else if (activeOrder.status === 'Printed') {
+        statusBgClass = 'bg-orange-50';
+        statusBorderClass = 'border-orange-300';
+        statusColorClass = 'text-orange-600';
+        statusBadgeClass = 'bg-orange-200 text-orange-800';
+        statusText = 'Printed';
+        SmallIcon = Printer;
       } else if (activeOrder.status === 'Billed') {
-        statusColor = 'red';
-        statusText = 'Billed';
+        statusBgClass = 'bg-gray-50';
+        statusBorderClass = 'border-gray-300';
+        statusColorClass = 'text-gray-600';
+        statusBadgeClass = 'bg-gray-200 text-gray-800';
+        statusText = 'Paid';
+        SmallIcon = CheckCircle;
       }
     } else if (item.status === 'Reserved') {
-      statusColor = 'gray';
+      statusBgClass = 'bg-amber-50';
+      statusBorderClass = 'border-amber-300';
+      statusColorClass = 'text-amber-600';
+      statusBadgeClass = 'bg-amber-200 text-amber-800';
       statusText = 'Reserved';
+      SmallIcon = Clock;
     }
+
+    // AI Insight logic
+    let insightBadge = null;
+    if (showAIInsights && isOccupied && activeOrder.createdAt) {
+      const minutesOccupied = Math.floor((new Date() - new Date(activeOrder.createdAt)) / 60000);
+      if (minutesOccupied >= 0) {
+        // Just simulating the AI insight based on duration
+        insightBadge = <div className="absolute -top-3 -right-3 bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg z-20 whitespace-nowrap animate-pulse">✨ Clearing in {Math.max(1, 45 - minutesOccupied)}m</div>;
+      }
+    } else if (showAIInsights && !isOccupied) {
+      // Simulate "High Demand" predictions
+      const randomChance = item.name.length % 3 === 0;
+      if (randomChance) {
+        insightBadge = <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg z-20 whitespace-nowrap">🔥 High Demand Next</div>;
+      }
+    }
+
     return (
       <div
         key={item.id}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
-        className={`group relative flex flex-col justify-between p-3.5 sm:p-5 rounded-2xl border-2 transition-all cursor-pointer shadow-sm hover:shadow-lg hover:-translate-y-1 ${isOccupied
-          ? `bg-${statusColor}-50/80 border-${statusColor}-200 hover:border-${statusColor}-400`
-          : 'bg-emerald-50/80 border-emerald-200 hover:border-emerald-400'
-          }`}
+        className={`group relative flex flex-col justify-between w-[160px] h-[130px] p-3 rounded-2xl border-2 transition-all cursor-pointer shadow-sm ${statusBgClass} ${statusBorderClass} hover:shadow-md hover:opacity-90`}
       >
-        <div className="flex justify-between items-start mb-3 sm:mb-4">
-          <div className={`p-2 sm:p-2.5 rounded-xl ${isOccupied ? `bg-${statusColor}-200/50 text-${statusColor}-600` : 'bg-emerald-200/50 text-emerald-600'}`}>
-            <IconComponent size={20} className="sm:w-6 sm:h-6" />
+        {insightBadge}
+
+        {/* Top Row: Icon and Badge */}
+        <div className="flex justify-between items-start w-full">
+          <div className={`p-1.5 rounded-lg bg-white/60 ${statusColorClass} shadow-sm`}>
+            <Icon size={20} strokeWidth={2.5} />
           </div>
-          <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wider ${isOccupied ? `bg-${statusColor}-100 text-${statusColor}-700` : 'bg-emerald-100 text-emerald-700'
-            }`}>
+          <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${statusBadgeClass}`}>
             {statusText}
-          </span>
+          </div>
         </div>
 
-        <div>
-          <h3 className="text-base sm:text-lg font-bold text-text-main mb-1 truncate">{item.name}</h3>
-          {isOccupied ? (
-            <div className={`flex flex-col gap-1 text-xs sm:text-sm text-${statusColor}-700 font-semibold mt-1`}>
-              <div className="flex items-center justify-between bg-white/80 dark:bg-black/30 px-2.5 py-1.5 rounded-lg border border-border/40 shadow-2xs">
-                <span className="font-extrabold text-base text-text-main">₹{activeOrder.total?.toLocaleString() || 0}</span>
-                <span className="text-[11px] font-bold opacity-85">({activeOrder.items?.reduce((s, i) => s + (Number(i.quantity) || 1), 0) || activeOrder.items?.length || 0} items)</span>
-              </div>
-              <div className="flex items-center gap-1.5 opacity-80 text-[11px] mt-0.5">
-                <Clock size={12} />
-                <span>Active Table</span>
-              </div>
+        {/* Middle/Bottom Row: Name, Status, Amount */}
+        <div className="w-full mt-2 flex flex-col gap-0.5">
+          <h3 className="text-[17px] font-extrabold text-gray-800 leading-tight">
+            {item.name}
+          </h3>
+          
+          {!isOccupied ? (
+            <div className={`flex items-center gap-1.5 mt-1 text-[12px] font-bold ${statusColorClass}`}>
+              <SmallIcon size={14} strokeWidth={3} />
+              <span>{statusText}</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-emerald-600 font-medium mt-2">
-              <CheckCircle size={13} className="sm:w-3.5 sm:h-3.5" />
-              <span>Available</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="font-black text-[16px] text-gray-900">₹{activeOrder.total?.toLocaleString() || 0}</span>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); /* Print */ }}
+                  className="bg-white/80 border border-gray-200 rounded p-1 hover:text-blue-600 transition-colors shadow-sm"
+                  title="Print Bill directly"
+                >
+                  <Printer size={14} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         <button
           onClick={(e) => handleRemoveSpace(e, type, item.id)}
-          className="absolute -top-3 -right-3 bg-danger text-white rounded-full p-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg hover:scale-110"
+          className="absolute -top-2 -left-2 bg-red-500 text-white rounded-full p-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg hover:scale-110 z-30"
         >
           <Trash2 size={14} />
         </button>
@@ -374,105 +456,134 @@ const FloorManagement = ({ onNavigate }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5 flex justify-between items-center shrink-0">
-        <div>
-          <h2 className="text-2xl font-bold text-text-main flex items-center gap-3">
-            <Home className="text-primary" />
-            Floor Management
-          </h2>
-          <p className="text-text-muted mt-1 text-sm">Manage your tables, cabins, and see real-time occupancy.</p>
+    <div className="h-full flex flex-col bg-white">
+      {/* Top Header */}
+      <div className="px-6 py-4 flex flex-wrap gap-4 justify-between items-center shrink-0">
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500 tracking-tight">Table View</h2>
         </div>
-        {getActiveSpacesForMerge().length >= 2 && (
+        
+        <div className="flex items-center gap-3 flex-wrap">
+          <button 
+            onClick={() => setShowAIInsights(!showAIInsights)}
+            className={`px-3 py-1.5 rounded shadow transition-colors text-sm font-bold flex items-center gap-2 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
+          >
+            ✨ AI Predictor
+          </button>
+          
+          <button onClick={fetchOrders} className="p-2 text-gray-700 font-bold hover:bg-gray-100 rounded-full transition-colors" title="Refresh">
+            <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+          </button>
+          
           <button
             onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })}
-            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all transform hover:-translate-y-0.5"
+            className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded shadow transition-colors text-sm"
           >
-            <Utensils size={18} />
-            <span>Merge Table Bills</span>
+            Merge Bills
           </button>
-        )}
-      </div>
 
-      <div className="px-6 pt-4 border-b border-border bg-background flex gap-2 overflow-x-auto">
+          <button onClick={() => onNavigate('delivery')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
+            Delivery
+          </button>
+          
+          <button onClick={() => onNavigate('delivery')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
+            Pick Up
+          </button>
+
+          <button onClick={() => handleAddSpace()} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
+            + Add Space
+          </button>
+        </div>
+      </div>
+      
+      {/* Status Legend */}
+      <div className="px-6 flex items-center gap-4 text-xs font-medium text-gray-500 overflow-x-auto hide-scrollbar pb-2">
+          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-emerald-50 shadow-sm border-2 border-emerald-200"></span> Available</div>
+          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-blue-50 shadow-sm border-2 border-blue-300"></span> Running Table</div>
+          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-orange-50 shadow-sm border-2 border-orange-300"></span> Printed Table</div>
+          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-gray-50 shadow-sm border-2 border-gray-300"></span> Paid Table</div>
+          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-amber-50 shadow-sm border-2 border-amber-300"></span> Reserved KOT</div>
+        </div>
+
+      {/* Floor Tabs */}
+      <div className="px-6 pt-3 border-b border-gray-100 bg-white flex gap-2 overflow-x-auto">
         {floors.map(floor => (
           <div
             key={floor.id}
             onClick={() => setActiveFloorId(floor.id)}
-            className={`group relative flex items-center gap-2 px-5 py-3 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap ${activeFloorId === floor.id
-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
-              : 'border-transparent text-text-muted hover:text-text-main hover:bg-surface-hover rounded-t-xl'
+            className={`group relative flex items-center gap-2 px-5 py-2.5 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-[16px] ${activeFloorId === floor.id
+              ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
+              : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
               }`}
           >
             {floor.name}
             {floors.length > 1 && (
               <button
                 onClick={(e) => handleRemoveFloor(e, floor.id)}
-                className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-primary/20 text-primary' : 'hover:bg-border text-text-muted'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}
+                className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}
               >
-                <Trash2 size={14} />
+                <Trash2 size={12} />
               </button>
             )}
           </div>
         ))}
         <button
           onClick={handleAddFloor}
-          className="flex items-center gap-2 px-5 py-3 border-b-2 border-transparent text-text-muted hover:text-primary font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl"
+          className="flex items-center gap-1.5 px-4 py-2.5 border-b-2 border-transparent text-gray-500 hover:bg-gray-50 font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl text-[16px]"
         >
           <Plus size={16} /> Add Floor
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 bg-white">
+        {/* Dynamic Spaces Rendering */}
+        {(() => {
+          const currentFloor = floors.find(f => f.id === activeFloorId);
+          if (!currentFloor) return null;
+          
+          const allSpaces = [
+            ...(currentFloor.tables || []).map(t => ({ ...t, _origType: 'table' })),
+            ...(currentFloor.cabins || []).map(c => ({ ...c, _origType: 'cabin' })),
+            ...(currentFloor.sofas || []).map(s => ({ ...s, _origType: 'sofa' })),
+            ...(currentFloor.spaces || []).map(sp => ({ ...sp, _origType: 'space' }))
+          ];
+          
+          const grouped = allSpaces.reduce((acc, space) => {
+             const rawType = space.type || 'Table';
+             const typeName = rawType.toUpperCase();
+             if (!acc[typeName]) acc[typeName] = [];
+             acc[typeName].push(space);
+             return acc;
+          }, {});
 
-        {/* Tables Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
-              <Coffee className="text-primary" size={20} />
-              Dining Tables
-            </h3>
-            <button onClick={() => handleAddSpace('table')} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors font-semibold text-sm">
-              <Plus size={16} /> Add Table
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {floors.find(f => f.id === activeFloorId)?.tables?.map(table => renderSpaceCard(table, 'table', Coffee))}
-          </div>
-        </section>
-
-        {/* Cabins Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
-              <Home className="text-accent" size={20} />
-              Private Cabins
-            </h3>
-            <button onClick={() => handleAddSpace('cabin')} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 text-accent hover:bg-accent hover:text-white rounded-lg transition-colors font-semibold text-sm">
-              <Plus size={16} /> Add Cabin
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {floors.find(f => f.id === activeFloorId)?.cabins?.map(cabin => renderSpaceCard(cabin, 'cabin', Home))}
-          </div>
-        </section>
-
-        {/* Sofas Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
-              <Sofa className="text-secondary" size={20} />
-              Sofa Lounge
-            </h3>
-            <button onClick={() => handleAddSpace('sofa')} className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary/10 text-secondary hover:bg-secondary hover:text-white rounded-lg transition-colors font-semibold text-sm">
-              <Plus size={16} /> Add Sofa
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {floors.find(f => f.id === activeFloorId)?.sofas?.map(sofa => renderSpaceCard(sofa, 'sofa', Sofa))}
-          </div>
-        </section>
-
+          return Object.entries(grouped).map(([typeName, items]) => (
+            <section key={typeName}>
+              <div className="flex items-center gap-3 mb-4 group/section w-max">
+                <h3 className="text-[11px] font-bold text-[#d32f2f] uppercase tracking-wider">
+                  {typeName}
+                </h3>
+                <button 
+                  onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
+                  className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50"
+                  title={`Delete all ${typeName}s`}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {items.map(item => renderSpaceCard(item, item._origType, Coffee))}
+                {/* Inline Add Button for this category */}
+                <button
+                  onClick={() => setAddSpaceModal({ isOpen: true, name: '', type: typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase() })}
+                  className="w-[160px] h-[130px] rounded-[16px] border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-emerald-600 transition-colors"
+                >
+                  <Plus size={24} />
+                  <span className="text-[12px] font-bold uppercase tracking-wider text-center px-1 leading-tight">Add<br/>{typeName}</span>
+                </button>
+              </div>
+            </section>
+          ));
+        })()}
       </div>
 
       {/* Custom Prompt Modal */}
@@ -510,6 +621,78 @@ const FloorManagement = ({ onNavigate }) => {
                 className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Space Modal */}
+      {addSpaceModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
+            <h3 className="text-xl font-bold text-text-main mb-2">Add New Space</h3>
+            <p className="text-sm text-text-muted mb-6">Customize the space type and name.</p>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">Space Type</label>
+                <div className="flex flex-col gap-3">
+                  <input
+                    type="text"
+                    value={addSpaceModal.type}
+                    onChange={(e) => setAddSpaceModal(prev => ({ ...prev, type: e.target.value }))}
+                    placeholder="e.g. Table, AC Hall, Cabin..."
+                    className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {['Table', 'Cabin', 'Sofa', 'AC Hall', 'Non AC', 'Garden'].map(suggestion => (
+                      <button
+                        key={suggestion}
+                        onClick={() => setAddSpaceModal(prev => ({ ...prev, type: suggestion }))}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setAddSpaceModal(prev => ({ ...prev, type: '' }))}
+                      className="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all"
+                    >
+                      + Custom
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">Space Name / Number</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={addSpaceModal.name}
+                  onChange={(e) => setAddSpaceModal(prev => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitAddSpace();
+                  }}
+                  placeholder="e.g. 1, T1, VIP-1"
+                  className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setAddSpaceModal({ isOpen: false, name: '', type: 'Table' })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitAddSpace}
+                className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all"
+              >
+                Save Space
               </button>
             </div>
           </div>

@@ -11,6 +11,17 @@ const ServiceRequestAlert = () => {
   // Track previous request IDs to know if we got a new one
   const prevRequestIds = useRef(new Set());
 
+  const playChime = () => {
+    if (audioRef.current && !playingAudio) {
+      setPlayingAudio(true);
+      audioRef.current.play().catch(e => console.error("Audio play failed (maybe require user interaction):", e));
+      
+      audioRef.current.onended = () => {
+        setPlayingAudio(false);
+      };
+    }
+  };
+
   useEffect(() => {
     // Create an audio element for the chime (ding sound)
     audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'); // A nice pleasant bell
@@ -47,17 +58,6 @@ const ServiceRequestAlert = () => {
 
     return () => clearInterval(interval);
   }, []);
-
-  const playChime = () => {
-    if (audioRef.current && !playingAudio) {
-      setPlayingAudio(true);
-      audioRef.current.play().catch(e => console.error("Audio play failed (maybe require user interaction):", e));
-      
-      audioRef.current.onended = () => {
-        setPlayingAudio(false);
-      };
-    }
-  };
 
   const handleResolve = async (id) => {
     try {

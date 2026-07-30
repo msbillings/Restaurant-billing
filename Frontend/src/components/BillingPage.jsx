@@ -5,7 +5,7 @@ import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
-import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu } from 'lucide-react';
+import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
 import CancelOrderModal from './CancelOrderModal';
@@ -157,6 +157,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   const [searchTerm, setSearchTerm] = useState('');
   const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isCartCollapsed, setIsCartCollapsed] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const newlyGeneratedTables = useRef(new Set());
@@ -852,22 +853,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      {/* Custom Header for Billing Page */}
-      <div className="h-16 flex items-center justify-between px-3 sm:px-6 bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 border-b border-border shrink-0 z-20 shadow-sm">
-        <div className="flex items-center gap-2 sm:gap-3 font-bold text-lg sm:text-xl text-primary">
-          {onToggleMenu && (
-            <button
-              onClick={onToggleMenu}
-              className="p-1.5 rounded-lg bg-surface border border-border text-text-main hover:bg-surface-hover md:hidden shadow-sm"
-            >
-              <Menu size={20} />
-            </button>
-          )}
-          <div className="w-8 h-8 bg-primary text-white rounded-lg items-center justify-center shadow-lg shadow-primary/20 shrink-0 hidden sm:flex">
-            <UtensilsCrossed size={18} />
-          </div>
-          <span className="tracking-tight hidden sm:inline">msbillings</span>
-        </div>
+      {/* Secondary Toolbar for Billing Page */}
+      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 z-10">
 
         {/* Table Selector */}
         <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5">
@@ -1017,19 +1004,28 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
         )}
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 gap-4">
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_380px] lg:grid-cols-[1fr_400px] gap-4 overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
           {/* Left Panel: Menu */}
-          <div className={`flex flex-col overflow-hidden bg-surface rounded-2xl shadow-sm border border-border/50 ${
+          <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
             mobileTab === 'cart' ? 'hidden md:flex' : 'flex'
-          }`}>
+          } flex-1 transition-all duration-300`}>
             <MenuGrid onSelectItem={addToCart} searchTerm={debouncedSearchTerm} />
           </div>
 
           {/* Right Panel: Summary */}
-          <div className={`flex flex-col overflow-hidden rounded-2xl shadow-xl shadow-primary/5 ring-1 ring-black/5 bg-surface ${
+          <div className={`flex flex-col overflow-hidden bg-surface ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'
-          }`}>
+          } ${isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100' : 'w-full md:w-[380px] lg:w-[400px] border-l border-border/50'} shrink-0 transition-all duration-300 relative`}>
+            
+            {/* Collapse/Expand Toggle Button */}
+            <button 
+              onClick={() => setIsCartCollapsed(!isCartCollapsed)}
+              className="hidden md:flex absolute top-1/2 -translate-y-1/2 -left-3.5 z-30 bg-white border border-border shadow-md rounded-full p-1.5 hover:bg-gray-50 transition-all text-gray-500 hover:text-primary"
+              title={isCartCollapsed ? "Expand Cart" : "Collapse Cart"}
+            >
+              {isCartCollapsed ? <ChevronLeft size={14} className="ml-0.5" /> : <ChevronRight size={14} className="mr-0.5" />}
+            </button>
             <BillSummary
               cart={cart}
               updateQuantity={updateQuantity}

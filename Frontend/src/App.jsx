@@ -26,14 +26,17 @@ const ContactSupportModal = React.lazy(() => import('./components/ContactSupport
 const UserManualModal = React.lazy(() => import('./components/UserManualModal'));
 const AboutModal = React.lazy(() => import('./components/AboutModal'));
 const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
+const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
+import GlobalHeader from './components/GlobalHeader';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
 import { io } from 'socket.io-client';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import './App.css';
+import logoImg from './assets/images/logo.png';
 
 function App() {
   const onlineStatus = useOnlineStatus();
@@ -44,6 +47,49 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
   const [sectionLoading, setSectionLoading] = useState(false);
+  
+  // Tools state
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Keyboard shortcut for Calculator (Alt + C or Ctrl + Alt + C)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.altKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setShowCalculator(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+  
+  // Dummy notifications
+  const notifications = [
+    { id: 1, title: 'Captain Activity', message: 'Captain Rahul took a new order for Table 4.', time: '2 mins ago', type: 'success' },
+    { id: 2, title: 'KDS Alert', message: 'Chef accepted the KOT for Table 2.', time: '5 mins ago', type: 'info' },
+    { id: 3, title: 'Waiter Activity', message: 'Waiter Suresh cleared Table 8.', time: '12 mins ago', type: 'warning' }
+  ];
+  
+  // Search Bill
+  const [searchBillNo, setSearchBillNo] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchBillNo.trim().length > 0) {
+        window.dispatchEvent(new CustomEvent('billSearch', { detail: searchBillNo }));
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchBillNo]);
+
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter' && searchBillNo.trim()) {
+      handleViewChange('history');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('executeBillSearch', { detail: searchBillNo }));
+      }, 300);
+    }
+  };
   
   // Help Modals State
   const [showContactModal, setShowContactModal] = useState(false);
@@ -530,6 +576,7 @@ function App() {
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
+          <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
         </Suspense>
       </>
     );
@@ -582,35 +629,179 @@ function App() {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      {/* NEW PETPOOJA STYLE TOP HEADER */}
+      {true && (
+        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
+          <div className="flex items-center min-w-0 flex-shrink-0">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors z-10 relative shrink-0 mr-1 sm:mr-2"
+            >
+              <Menu size={24} />
+            </button>
+            <div className="flex items-center cursor-pointer" onClick={() => handleViewChange('floor')}>
+              <div className="relative w-40 sm:w-56 h-10 sm:h-16 flex items-center overflow-visible">
+                <img src={logoImg} alt="msbillings" className="absolute left-[-20px] sm:left-[-35px] w-[200px] sm:w-[300px] max-w-none object-contain" />
+              </div>
+            </div>
+          </div>
 
-      {/* Mobile Backdrop Overlay */}
+          <div className="hidden md:flex items-center gap-4 flex-1 max-w-xl ml-4">
+            <button
+              onClick={() => handleViewChange('billing')}
+              className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition-colors whitespace-nowrap"
+            >
+              New Order
+            </button>
+            
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search size={16} className="text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Bill No"
+                value={searchBillNo}
+                onChange={(e) => setSearchBillNo(e.target.value)}
+                onKeyDown={handleSearchKeyPress}
+                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-sm transition-all text-gray-800"
+              />
+            </div>
+
+            {/* License Expiry Badge */}
+            {daysRemaining !== null && (
+              <button
+                onClick={() => setShowExpiryPopup(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap ${
+                  daysRemaining <= 0
+                    ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
+                    : daysRemaining <= 15
+                    ? 'bg-amber-50 text-amber-600 border border-amber-200'
+                    : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                }`}
+              >
+                <CalendarClock size={12} />
+                <span>
+                  {daysRemaining <= 0 ? 'Expired!' : daysRemaining > 365 ? 'Lifetime' : `${daysRemaining}d left`}
+                </span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+              <PhoneCall size={16} className="text-red-500" />
+              <div className="flex flex-col leading-none">
+                <span className="text-[10px] text-gray-500 font-semibold uppercase">Call For Support</span>
+                <span className="text-sm font-bold text-gray-800">9701800140</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3 text-gray-600">
+              {['dashboard', 'analytics', 'daybook'].includes(view) && ownerUnlocked && (
+                <button
+                  onClick={() => setOwnerUnlocked(false)}
+                  className="hidden md:flex items-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[10px] font-bold hover:bg-amber-100 transition-all shadow-sm"
+                >
+                  <Lock size={12} /> Lock
+                </button>
+              )}
+              <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative">
+                <Calculator size={20} />
+              </button>
+              
+              <div className="relative hidden sm:block">
+                <button 
+                  onClick={() => setShowNotifications(!showNotifications)} 
+                  className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative"
+                >
+                  <Bell size={20} />
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                </button>
+                
+                {/* Notifications Dropdown */}
+                {showNotifications && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
+                    <div className="absolute right-0 top-10 mt-1 w-80 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
+                      <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                        <span className="font-bold text-gray-800">Notifications</span>
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">3 New</span>
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {notifications.map(n => (
+                          <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
+                            <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-800 leading-tight">{n.title}</p>
+                              <p className="text-xs text-gray-500 mt-1">{n.message}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
+                        <button className="text-xs font-bold text-red-600 hover:text-red-700">Mark all as read</button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
+                <User size={20} />
+              </button>
+              <button onClick={handleLogout} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 ml-1">
+                <Power size={20} />
+              </button>
+            </div>
+            
+            {/* Profile Dropdown */}
+            {profileOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)}></div>
+                <div className="absolute right-4 top-14 mt-1 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
+                  <div className="px-4 py-2 border-b border-border/50 bg-gray-50/50">
+                    <span className="block text-sm font-bold text-text-main">{user.username}</span>
+                    <span className="block text-xs text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
+                  </div>
+                  <button 
+                    onClick={() => { handleViewChange('settings'); setProfileOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1"
+                  >
+                    <SettingsIcon size={16} className="text-text-muted" /> Settings
+                  </button>
+                  <button 
+                    onClick={() => { handleLogout(); setProfileOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
+                  >
+                    <LogOut size={16} /> Logout
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </header>
+      )}
+
+      <div className="flex-1 flex overflow-hidden relative">
+
+      {/* Drawer Backdrop Overlay (Mobile only) */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden transition-opacity"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity lg:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`fixed md:relative inset-y-0 left-0 z-40 w-64 bg-surface flex flex-col shrink-0 shadow-2xl md:shadow-xl transform transition-transform duration-300 ease-in-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
-        <div className="h-20 flex items-center justify-between px-6 border-b border-border/40 md:border-b-0">
-          <div className="flex items-center gap-3 font-bold text-xl text-primary">
-            <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <UtensilsCrossed size={22} />
-            </div>
-            <span className="tracking-tight">{restaurantName}</span>
-          </div>
-          <button onClick={() => setMobileMenuOpen(false)} className="p-2 text-text-muted hover:text-text-main md:hidden">
-            <X size={20} />
-          </button>
-        </div>
+      {/* Sidebar Drawer */}
+      <aside className={`fixed lg:relative inset-y-0 left-0 z-50 bg-surface flex flex-col shrink-0 shadow-2xl lg:shadow-none lg:border-r lg:border-border/40 transition-all duration-300 ease-in-out overflow-hidden ${mobileMenuOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-0 lg:translate-x-0'}`}>
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {/* 1. Floor Management - Available to all */}
           <button
             onClick={() => handleViewChange('floor')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'floor' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'floor' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
           >
             <LayoutGrid size={20} />
             <span>Floor Management</span>
@@ -619,7 +810,7 @@ function App() {
           {/* 2. New Orders / Table Order - Available to all */}
           <button
             onClick={() => handleViewChange('billing')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'billing' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'billing' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
           >
             <LayoutDashboard size={20} />
             <span>{isCaptain ? 'Captain Order' : 'New Order'}</span>
@@ -628,7 +819,7 @@ function App() {
           {/* 3. Active Orders - Available to all */}
           <button
             onClick={() => handleViewChange('orders')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium relative ${view === 'orders' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] relative ${view === 'orders' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
           >
             <ClipboardList size={20} />
             <span>Active Orders</span>
@@ -643,7 +834,7 @@ function App() {
           {!isCaptain && (
             <button
               onClick={() => handleViewChange('history')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'history' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'history' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <History size={20} />
               <span>Bill History</span>
@@ -653,7 +844,7 @@ function App() {
           {/* 4.5 KOT History - Available to all */}
           <button
             onClick={() => handleViewChange('kothistory')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'kothistory' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'kothistory' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
           >
             <Printer size={20} />
             <span>KOT History</span>
@@ -663,7 +854,7 @@ function App() {
           {(!isCaptain && features.kds !== false) && (
             <button
               onClick={() => handleViewChange('kds')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'kds' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'kds' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <UtensilsCrossed size={20} />
               <span>Kitchen Display (KDS)</span>
@@ -674,7 +865,7 @@ function App() {
           {(!isCaptain && features.expenses !== false) && (
             <button
               onClick={() => handleViewChange('expenses')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'expenses' ? 'bg-red-500 text-white shadow-lg shadow-red-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'expenses' ? 'bg-red-500 text-white shadow-lg shadow-red-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <Wallet size={20} />
               <span>Petty Cash & Expenses</span>
@@ -685,7 +876,7 @@ function App() {
           {(!isCaptain && features.delivery !== false) && (
             <button
               onClick={() => handleViewChange('delivery')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'delivery' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'delivery' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <Truck size={20} />
               <span>Delivery Orders</span>
@@ -696,7 +887,7 @@ function App() {
           {!isCaptain && (
             <button
               onClick={() => handleViewChange('dashboard')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <Home size={20} />
               <span>Dashboard</span>
@@ -707,7 +898,7 @@ function App() {
           {(isAdmin && features.analytics !== false) && (
             <button
               onClick={() => handleViewChange('analytics')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'analytics' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'analytics' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <BarChart3 size={20} />
               <span>Analytics</span>
@@ -718,7 +909,7 @@ function App() {
           {(!isCaptain && features.daybook !== false) && (
             <button
               onClick={() => handleViewChange('daybook')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'daybook' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'daybook' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <BookOpen size={20} />
               <span>DayBook</span>
@@ -729,7 +920,7 @@ function App() {
           {(isAdmin && features.inventory !== false) && (
             <button
               onClick={() => handleViewChange('inventory')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'inventory' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'inventory' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <Package size={20} />
               <span>Inventory</span>
@@ -740,7 +931,7 @@ function App() {
           {(!isCaptain && features.crm !== false) && (
             <button
               onClick={() => handleViewChange('crm')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'crm' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'crm' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <UsersIcon size={20} />
               <span>Customer CRM</span>
@@ -750,7 +941,7 @@ function App() {
           {(isAdmin && features.staff !== false) && (
             <button
               onClick={() => handleViewChange('staff')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'staff' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'staff' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <UserCheck size={20} />
               <span>Staff HR</span>
@@ -760,7 +951,7 @@ function App() {
           {(isAdmin && features.qrcode !== false) && (
             <button
               onClick={() => handleViewChange('qrcode')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'qrcode' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'qrcode' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <QrCode size={20} />
               <span>QR Menu Generator</span>
@@ -771,7 +962,7 @@ function App() {
           {!isCaptain && (
             <button
               onClick={() => handleViewChange('menu')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'menu' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'menu' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <UtensilsCrossed size={20} />
               <span>Menu</span>
@@ -782,7 +973,7 @@ function App() {
           {isAdmin && (
             <button
               onClick={() => handleViewChange('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium ${view === 'settings' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'settings' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
             >
               <SettingsIcon size={20} />
               <span>Settings</span>
@@ -815,118 +1006,9 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
         </Suspense>
 
-        {/* Topbar */}
-        {view !== 'billing' && (
-          <header className="h-20 flex items-center justify-between px-3 sm:px-8 shrink-0 border-b border-border/40 bg-background gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <button
-                onClick={() => setMobileMenuOpen(true)}
-                className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border text-text-main hover:bg-surface-hover md:hidden shadow-sm shrink-0"
-              >
-                <Menu size={20} className="sm:w-[22px] sm:h-[22px]" />
-              </button>
-              <div className="min-w-0 truncate">
-                <h1 className="text-base sm:text-2xl font-bold text-text-main tracking-tight truncate">
-                  {getTitle()}
-                </h1>
-                <p className="text-[11px] sm:text-sm text-text-muted hidden sm:block truncate">Welcome back, {user.username}</p>
-              </div>
-            </div>
 
-            {/* License Expiry Badge */}
-            {daysRemaining !== null && (
-              <button
-                onClick={() => setShowExpiryPopup(true)}
-                className={`flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer shrink-0 ${
-                  daysRemaining <= 0
-                    ? 'bg-red-500/15 text-red-600 border border-red-500/30 animate-pulse'
-                    : daysRemaining <= 15
-                    ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30'
-                    : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                }`}
-              >
-                <CalendarClock size={14} />
-                <span className="hidden sm:inline">
-                  {daysRemaining <= 0
-                    ? 'License Expired!'
-                    : daysRemaining > 365
-                    ? 'Lifetime License'
-                    : `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} left`}
-                </span>
-                <span className="sm:hidden text-[11px]">
-                  {daysRemaining <= 0 
-                    ? 'Expired' 
-                    : daysRemaining > 365
-                    ? 'Lifetime'
-                    : `${daysRemaining}d`}
-                </span>
-                {licenseExpiry && daysRemaining <= 365 && (
-                  <span className="opacity-60 hidden md:inline">
-                    (Exp: {licenseExpiry.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })})
-                  </span>
-                )}
-              </button>
-            )}
 
-            <div className="flex items-center gap-2 sm:gap-4 relative shrink-0">
-              {['dashboard', 'analytics', 'daybook'].includes(view) && ownerUnlocked && (
-                <button
-                  onClick={() => setOwnerUnlocked(false)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 bg-amber-500/10 text-amber-600 border border-amber-500/30 rounded-xl text-xs font-bold hover:bg-amber-500/20 transition-all shadow-sm"
-                >
-                  <Lock size={14} />
-                  <span className="hidden sm:inline">Lock Reports</span>
-                </button>
-              )}
-              <button 
-                onClick={() => setProfileOpen(!profileOpen)}
-                className="flex items-center gap-2 sm:gap-3 p-1 sm:px-2 sm:py-1.5 bg-surface rounded-full shadow-sm sm:pr-4 hover:bg-surface-hover transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
-              >
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-md shrink-0">
-                  <User size={18} className="sm:w-5 sm:h-5" />
-                </div>
-                <div className="hidden sm:flex flex-col leading-none text-left">
-                  <span className="text-sm font-bold text-text-main">{user.username}</span>
-                  <span className="text-[10px] text-text-muted uppercase tracking-wider font-bold">{user.role}</span>
-                </div>
-              </button>
-              
-              {/* Profile Dropdown */}
-              {profileOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setProfileOpen(false)}
-                  ></div>
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
-                    <button 
-                      onClick={() => {
-                        handleViewChange('settings');
-                        setProfileOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-text-main hover:bg-surface-hover flex items-center gap-2"
-                    >
-                      <SettingsIcon size={16} className="text-text-muted" />
-                      Settings
-                    </button>
-                    <button 
-                      onClick={() => {
-                        handleLogout();
-                        setProfileOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
-                    >
-                      <LogOut size={16} />
-                      Logout
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </header>
-        )}
-
-        <main className="flex-1 overflow-hidden p-2 sm:p-6 pb-[calc(76px+env(safe-area-inset-bottom,0px))] md:pb-6">
+        <main className={`flex-1 overflow-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
           <Suspense fallback={
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-4">
@@ -1269,6 +1351,10 @@ function App() {
         </div>
       )}
 
+      {/* Tools Modals */}
+      <Suspense fallback={null}>
+        <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
+      </Suspense>
 
     </div>
   );

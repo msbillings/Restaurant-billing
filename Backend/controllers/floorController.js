@@ -48,7 +48,7 @@ export const updateTableStatus = async (req, res) => {
     if (!floor) return res.status(404).json({ message: 'Floor not found' });
 
     let itemFound = false;
-    const arraysToCheck = ['tables', 'cabins', 'sofas'];
+    const arraysToCheck = ['tables', 'cabins', 'sofas', 'spaces'];
     
     for (let arrayName of arraysToCheck) {
       if (floor[arrayName]) {
@@ -90,7 +90,7 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
 
     // We only have the table name string like "Ground Floor - Table 1" OR just "Table 1"
     for (let floor of floors) {
-      const arraysToCheck = ['tables', 'cabins', 'sofas'];
+      const arraysToCheck = ['tables', 'cabins', 'sofas', 'spaces'];
       for (let arrayName of arraysToCheck) {
         if (floor[arrayName]) {
           for (let item of floor[arrayName]) {
