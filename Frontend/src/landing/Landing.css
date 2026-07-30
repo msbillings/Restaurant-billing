@@ -1,0 +1,239 @@
+/* 
+  Landing Page Styles
+  Luxury, Premium, Modern, Minimal
+  Colors: Warm Ivory, Soft Cream, Champagne, Sand, Beige, Light Gold, Copper, Wood Brown, Olive Green Accents
+*/
+
+:root {
+  --color-primary: #c8963e;
+  --color-primary-dark: #b87333;
+  --color-primary-light: #e8b96a;
+
+  --color-bg-base: #f2e3cf;
+  --color-bg-alt: #faf8f5;
+  --color-text-main: #2c1e10;
+  --color-text-muted: #7a5c40;
+
+  --shadow-glass: 0 12px 32px rgba(62, 47, 31, 0.08);
+  --shadow-glass-hover: 0 24px 48px rgba(62, 47, 31, 0.12);
+
+  --radius-lg: 32px;
+  --radius-md: 24px;
+  --radius-sm: 16px;
+
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Accessibility: Global Focus & Skip Link */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+  transition: none !important;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 16px;
+  z-index: 9999;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.2s var(--ease-spring);
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+.lazy-fallback {
+  min-height: 400px;
+  width: 100%;
+  background: linear-gradient(90deg,
+      rgba(238, 218, 204, 0.4) 0%,
+      rgba(242, 227, 207, 0.6) 50%,
+      rgba(238, 218, 204, 0.4) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.landing-layout {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-main);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.landing-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 5vw, 2rem);
+  width: 100%;
+}
+
+.landing-navbar {
+  background-color: rgba(250, 248, 245, 0.9);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid rgba(139, 115, 85, 0.1);
+  padding: 1rem 0;
+}
+
+.landing-navbar .landing-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #b87333;
+  /* Copper */
+}
+
+.navbar-links {
+  display: flex;
+  gap: 2rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar-links a {
+  text-decoration: none;
+  color: #3e332a;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.navbar-links a:hover {
+  color: #b87333;
+}
+
+.navbar-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.btn-login {
+  text-decoration: none;
+  color: #3e332a;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #b87333;
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-primary:hover {
+  background-color: #a0632a;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: #b87333;
+  border: 1px solid #b87333;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(184, 115, 51, 0.1);
+}
+
+.landing-section {
+  padding: clamp(3rem, 8vw, 6rem) 0;
+}
+
+.landing-section h2 {
+  font-size: 2.5rem;
+  margin-bottom: 1.5rem;
+  color: #556b2f;
+  /* Olive Green Accent */
+}
+
+.landing-section p {
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+/* Hero section styles are in Hero.css — managed by Hero component */
+
+.landing-footer {
+  background-color: #3e332a;
+  color: #ebe3d5;
+  padding: 4rem 0;
+  text-align: center;
+}
+
+.landing-footer h2 {
+  color: #d4af37;
+  /* Light Gold */
+}
+
+/* Responsive foundation */
+@media (max-width: 1024px) {
+  .navbar-links {
+    display: none;
+    /* Hide on smaller screens for now, prepare mobile menu later */
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-section h1 {
+    font-size: clamp(2rem, 6vw, 2.5rem);
+  }
+}
+
+@media (max-width: 580px) {
+  .landing-container {
+    padding: 2px 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar-logo {
+    font-size: 1.25rem;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.6rem 1.2rem;
+    font-size: 0.9rem;
+  }
+}

@@ -1,0 +1,73 @@
+/* ═══════════════════════════════════════════════════════════════════
+   FloatingNav.css
+   Fixed scroll controls for Top and Bottom navigation
+   ═══════════════════════════════════════════════════════════════════ */
+
+.floating-nav {
+  position: fixed;
+  bottom: 2.5rem;
+  right: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(251, 248, 241, 0.8) 100%);
+  border: 1px solid rgba(200, 150, 62, 0.3);
+  border-radius: 999px;
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    0 12px 32px rgba(62, 47, 31, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  padding: 0.5rem;
+  gap: 0.3rem;
+  z-index: 1000;
+  
+  /* Initial state (hidden) */
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-nav.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.floating-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #b87333;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.floating-btn:hover {
+  background: rgba(200, 150, 62, 0.1);
+  color: #a0632a;
+}
+
+.floating-divider {
+  width: 24px;
+  height: 1px;
+  background: rgba(200, 150, 62, 0.2);
+  margin: 0 auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .floating-nav {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    padding: 0.4rem;
+  }
+  .floating-btn {
+    width: 38px;
+    height: 38px;
+  }
+}

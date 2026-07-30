@@ -1,0 +1,402 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Testimonials.css — Statistics & Customer Reviews
+   Palette: Warm Ivory · Cream · Champagne · Soft Beige
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Section & Background ───────────────────────────────────────── */
+.t-section {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-bg-base) 0%, var(--color-bg-alt) 30%, #fdfcfa 70%, #f2e3cf 100%);
+  padding: 8rem 0 10rem;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.t-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+.t-bg__gradient--top {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 150px;
+  background: linear-gradient(180deg, rgba(244, 232, 216, 1) 0%, transparent 100%);
+}
+.t-bg__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  mix-blend-mode: multiply;
+  opacity: 0.12;
+}
+.t-bg__glow--1 {
+  width: 700px; height: 700px;
+  top: 10%; right: -200px;
+  background: radial-gradient(circle, #e8b96a 0%, transparent 70%);
+}
+.t-bg__glow--2 {
+  width: 800px; height: 800px;
+  bottom: 0%; left: -300px;
+  background: radial-gradient(circle, #c8963e 0%, transparent 70%);
+}
+.t-bg__grid {
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(184, 115, 51, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(184, 115, 51, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+/* ── 1. Statistics Section ──────────────────────────────────────── */
+.t-stats-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4rem;
+  margin-bottom: 8rem;
+}
+
+.t-stats-header {
+  flex: 0 0 350px;
+}
+.t-stats-heading {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  color: var(--color-text-main);
+  line-height: 1.15;
+  margin: 0 0 1rem;
+}
+.t-stats-subheading {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.t-stats-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+}
+
+/* Statistic Card */
+.t-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2rem;
+  padding: 2rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.8) 0%, rgba(251, 248, 241, 0.5) 100%);
+  border: 1px solid rgba(200, 150, 62, 0.15);
+  border-radius: 24px;
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    0 10px 30px rgba(62, 47, 31, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+.t-stat:hover {
+  transform: translateY(-4px);
+  box-shadow: 
+    0 15px 35px rgba(62, 47, 31, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.t-stat__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.4) 100%);
+  border: 1px solid rgba(200, 150, 62, 0.2);
+  color: #c8963e;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(62, 47, 31, 0.05);
+}
+.t-stat__content {
+  display: flex;
+  flex-direction: column;
+}
+.t-stat__number {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--color-text-main);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.2rem;
+}
+.t-stat__label {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Divider ────────────────────────────────────────────────────── */
+.t-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0 auto 8rem;
+  max-width: 600px;
+}
+.t-divider__line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200, 150, 62, 0.3), transparent);
+}
+.t-divider__icon {
+  color: #c8963e;
+  opacity: 0.6;
+}
+
+/* ── 2. Testimonials Header ─────────────────────────────────────── */
+.t-header {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto 5rem;
+}
+.t-eyebrow {
+  display: inline-block;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #b87333;
+  padding: 0.4rem 1.2rem;
+  border: 1px solid rgba(184, 115, 51, 0.25);
+  border-radius: 999px;
+  background: rgba(255, 248, 235, 0.7);
+  backdrop-filter: blur(8px);
+  margin-bottom: 1.2rem;
+  box-shadow: 0 4px 12px rgba(62, 47, 31, 0.05);
+}
+.t-heading {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(2.4rem, 6vw, 4.2rem);
+  font-weight: 900;
+  line-height: 1.15;
+  color: var(--color-text-main);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.t-heading__accent {
+  color: #b87333;
+  font-style: italic;
+  font-weight: 600;
+}
+
+/* ── 3. Reviews Layout ──────────────────────────────────────────── */
+.t-reviews-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.t-reviews-secondary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+/* Review Card */
+.t-review {
+  position: relative;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(251, 248, 241, 0.8) 100%);
+  border: 1px solid rgba(200, 150, 62, 0.15);
+  border-radius: 32px;
+  backdrop-filter: blur(12px);
+  box-shadow: 
+    0 12px 36px rgba(62, 47, 31, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+  transform: translateZ(0);
+}
+.t-review:hover {
+  transform: translateY(-6px);
+  box-shadow: 
+    0 24px 48px rgba(62, 47, 31, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  border-color: rgba(200, 150, 62, 0.3);
+}
+
+.t-review--featured {
+  padding: 4rem;
+}
+.t-review--standard {
+  padding: 3rem;
+}
+
+/* Glass Shine on Hover */
+.t-review__glass-shine {
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  pointer-events: none;
+}
+.t-review:hover .t-review__glass-shine {
+  animation: tShine 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tShine {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+.t-review__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+.t-review__stars {
+  display: flex;
+  gap: 0.3rem;
+  color: #e8b96a;
+}
+.t-review__quote-icon {
+  color: rgba(200, 150, 62, 0.15);
+  transform: scaleX(-1);
+}
+
+.t-review__text {
+  font-family: 'Playfair Display', Georgia, serif;
+  color: var(--color-text-main);
+  margin: 0 0 3rem;
+  line-height: 1.5;
+  flex: 1;
+}
+.t-review--featured .t-review__text {
+  font-size: clamp(1.8rem, 2.5vw, 2.4rem);
+}
+.t-review--standard .t-review__text {
+  font-size: 1.4rem;
+}
+
+.t-review__author {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin-top: auto;
+}
+.t-review__avatar {
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 12px rgba(62, 47, 31, 0.1);
+}
+.t-review--featured .t-review__avatar {
+  width: 72px; height: 72px;
+}
+.t-review__meta {
+  display: flex;
+  flex-direction: column;
+}
+.t-review__name {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-main);
+}
+.t-review__role {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .t-stats-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3rem;
+  }
+  .t-stats-header {
+    flex: none;
+    text-align: center;
+  }
+  .t-stats-heading {
+    margin: 0 auto 1rem;
+  }
+  .t-review--featured {
+    padding: 3rem;
+  }
+  .t-review--featured .t-review__text {
+    font-size: 1.8rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .t-reviews-secondary {
+    grid-template-columns: 1fr;
+  }
+  .t-stats-grid {
+    gap: 1.5rem;
+  }
+  .t-stat {
+    padding: 1.5rem;
+  }
+  .t-stat__number {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 580px) {
+  .t-section { padding: 4rem 0 5rem; }
+  .t-header { margin-bottom: 3rem; }
+  .t-heading { font-size: clamp(1.8rem, 8vw, 2.4rem); }
+  .t-stats-heading { font-size: clamp(1.8rem, 8vw, 2.2rem); }
+  
+  .t-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .t-stat {
+    padding: clamp(1.2rem, 6vw, 1.5rem);
+  }
+  .t-stat__number {
+    font-size: clamp(1.8rem, 8vw, 2.2rem);
+  }
+  .t-stat__label {
+    font-size: 0.85rem;
+  }
+  
+  .t-review--featured,
+  .t-review--standard {
+    padding: clamp(1.2rem, 6vw, 2rem);
+  }
+  .t-review--featured .t-review__text,
+  .t-review--standard .t-review__text {
+    font-size: clamp(1.1rem, 5vw, 1.4rem);
+    margin-bottom: 2rem;
+  }
+  .t-review__avatar {
+    width: clamp(40px, 12vw, 50px); height: clamp(40px, 12vw, 50px);
+  }
+  .t-review--featured .t-review__avatar {
+    width: clamp(40px, 12vw, 50px); height: clamp(40px, 12vw, 50px);
+  }
+  .t-review__name { font-size: 0.95rem; }
+  .t-review__role { font-size: 0.85rem; }
+}
