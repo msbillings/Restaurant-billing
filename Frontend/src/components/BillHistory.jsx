@@ -36,7 +36,8 @@ const BillHistory = () => {
   const fetchBills = async () => {
     setLoading(true);
     try {
-      const data = await getBills(currentPage, itemsPerPage, debouncedSearchTerm);
+      const searchForBackend = debouncedSearchTerm.trim().replace(/^#/, '');
+      const data = await getBills(currentPage, itemsPerPage, searchForBackend);
 
       // Handle both old format (array) and new format (object with pagination)
       let billsData = [];
@@ -44,6 +45,10 @@ const BillHistory = () => {
         billsData = data;
       } else {
         billsData = data.bills || [];
+        
+        if (data.totalBills === 0 && /^MS\d+$/i.test(searchForBackend)) {
+          setToast({ message: 'This bill is missing or deleted', type: 'error' });
+        }
       }
 
       // Filter out delivery orders - only show dine-in and takeaway
@@ -135,6 +140,26 @@ const BillHistory = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchTerm, filterType]);
+
+  // Listen for global searches from the Top Nav Bar
+  useEffect(() => {
+    const handleBillSearch = (e) => {
+      if (e.detail) {
+        let formattedSearch = e.detail.trim();
+        // Format if it's just a number
+        if (/^\d+$/.test(formattedSearch)) {
+          formattedSearch = `MS${formattedSearch.padStart(4, '0')}`;
+        } else if (/^#?MS\d+$/i.test(formattedSearch)) {
+          formattedSearch = formattedSearch.replace(/^#/, '').toUpperCase();
+        }
+        
+        setSearchTerm(formattedSearch);
+      }
+    };
+
+    window.addEventListener('executeBillSearch', handleBillSearch);
+    return () => window.removeEventListener('executeBillSearch', handleBillSearch);
+  }, []);
 
   if (loading) return (
     <div className="h-full flex flex-col bg-background p-6">
