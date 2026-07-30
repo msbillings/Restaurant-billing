@@ -30,7 +30,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-text-main font-sans overflow-hidden;
+    @apply bg-background text-text-main font-sans;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
     padding-left: env(safe-area-inset-left, 0px);
