@@ -304,6 +304,7 @@ import customerRoutes from './routes/customerRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 import serviceRequestRoutes from './routes/serviceRequestRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -323,6 +324,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
+app.use('/api/contact', contactRoutes);
 
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 
