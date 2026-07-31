@@ -118,7 +118,7 @@ const FloorManagement = ({ onNavigate }) => {
     };
   }, []);
 
-  const syncSpaces = async () => {
+  async function syncSpaces() {
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
       const res = await fetch(`${API_BASE_URL}/floors`, {
@@ -139,7 +139,7 @@ const FloorManagement = ({ onNavigate }) => {
     }
   };
 
-  const fetchOrders = async () => {
+  async function fetchOrders() {
     try {
       const data = await getOpenOrders();
       setOrders(data);
@@ -311,7 +311,7 @@ const FloorManagement = ({ onNavigate }) => {
 
   const handleConfirmMerge = async () => {
     if (!mergeModal.targetSpace || mergeModal.sourceSpaces.length === 0) {
-      showToast('Please select a destination table and at least one table to merge from.', 'error');
+      setToast({ message: 'Please select a destination table and at least one table to merge from.', type: 'error' });
       return;
     }
     const destination = mergeModal.targetSpace;
@@ -321,17 +321,17 @@ const FloorManagement = ({ onNavigate }) => {
     setMerging(true);
     try {
       await mergeTableOrders(destination, sources);
-      showToast(`Successfully combined table bills into ${destination}!`, 'success');
+      setToast({ message: `Successfully combined table bills into ${destination}!`, type: 'success' });
       await fetchOrders();
     } catch (err) {
-      showToast(err?.response?.data?.message || 'Failed to merge table bills.', 'error');
+      setToast({ message: err?.response?.data?.message || 'Failed to merge table bills.', type: 'error' });
       await fetchOrders();
     } finally {
       setMerging(false);
     }
   };
 
-  const renderSpaceCard = (item, type, IconComponent) => {
+  const renderSpaceCard = (item, type, IconComponent, index = 0) => {
     const currentFloor = floors.find(f => f.id === activeFloorId);
     const uniqueSpaceName = currentFloor ? `${currentFloor.name} - ${item.name}` : item.name;
 
@@ -402,7 +402,7 @@ const FloorManagement = ({ onNavigate }) => {
 
     return (
       <div
-        key={item.id}
+        key={item._id || `${item.id}-${index}`}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
         className={`group relative flex flex-col justify-between w-[160px] h-[130px] p-3 rounded-2xl border-2 transition-all cursor-pointer shadow-sm ${statusBgClass} ${statusBorderClass} hover:shadow-md hover:opacity-90`}
       >
@@ -507,9 +507,9 @@ const FloorManagement = ({ onNavigate }) => {
 
       {/* Floor Tabs */}
       <div className="px-6 pt-3 border-b border-gray-100 bg-white flex gap-2 overflow-x-auto">
-        {floors.map(floor => (
+        {floors.map((floor, index) => (
           <div
-            key={floor.id}
+            key={floor._id || `${floor.id}-${index}`}
             onClick={() => setActiveFloorId(floor.id)}
             className={`group relative flex items-center gap-2 px-5 py-2.5 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-[16px] ${activeFloorId === floor.id
               ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
@@ -556,8 +556,8 @@ const FloorManagement = ({ onNavigate }) => {
              return acc;
           }, {});
 
-          return Object.entries(grouped).map(([typeName, items]) => (
-            <section key={typeName}>
+          return Object.entries(grouped).map(([typeName, items], index) => (
+            <section key={`${typeName}-${index}`}>
               <div className="flex items-center gap-3 mb-4 group/section w-max">
                 <h3 className="text-[11px] font-bold text-[#d32f2f] uppercase tracking-wider">
                   {typeName}
@@ -571,7 +571,7 @@ const FloorManagement = ({ onNavigate }) => {
                 </button>
               </div>
               <div className="flex flex-wrap gap-4">
-                {items.map(item => renderSpaceCard(item, item._origType, Coffee))}
+                {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
                 {/* Inline Add Button for this category */}
                 <button
                   onClick={() => setAddSpaceModal({ isOpen: true, name: '', type: typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase() })}
@@ -762,8 +762,8 @@ const FloorManagement = ({ onNavigate }) => {
                   className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-amber-500 font-bold text-text-main"
                 >
                   <option value="">-- Choose Destination Table --</option>
-                  {getActiveSpacesForMerge().map(sp => (
-                    <option key={sp.id} value={sp.orderTableNo}>
+                  {getActiveSpacesForMerge().map((sp, index) => (
+                    <option key={`${sp.id || 'sp'}-${index}`} value={sp.orderTableNo}>
                       {sp.uniqueSpaceName} ({sp.status} - ₹{sp.total?.toLocaleString()})
                     </option>
                   ))}
@@ -779,11 +779,11 @@ const FloorManagement = ({ onNavigate }) => {
                   <div className="space-y-2 max-h-52 overflow-y-auto border border-border/60 rounded-xl p-3 bg-background/50">
                     {getActiveSpacesForMerge()
                       .filter(sp => sp.orderTableNo !== mergeModal.targetSpace)
-                      .map(sp => {
+                      .map((sp, index) => {
                         const isChecked = mergeModal.sourceSpaces.includes(sp.orderTableNo);
                         return (
                           <label
-                            key={sp.id}
+                            key={`${sp.id || 'sp'}-${index}`}
                             className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
                               isChecked 
                                 ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400 font-bold' 

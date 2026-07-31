@@ -11,6 +11,7 @@ import StockLogDefault from '../models/StockLog.js';
 import FloorDefault from '../models/Floor.js';
 import StaffDefault from '../models/Staff.js';
 import CustomerDefault from '../models/Customer.js';
+import ServiceRequestDefault from '../models/ServiceRequest.js';
 
 const connectionPool = new Map();
 
@@ -56,6 +57,7 @@ export const getTenantModels = async (databaseName) => {
   const Floor = conn.models.Floor || conn.model('Floor', FloorDefault.schema);
   const Staff = conn.models.Staff || conn.model('Staff', StaffDefault.schema);
   const Customer = conn.models.Customer || conn.model('Customer', CustomerDefault.schema);
+  const ServiceRequest = conn.models.ServiceRequest || conn.model('ServiceRequest', ServiceRequestDefault.schema);
 
   return {
     Menu,
@@ -70,6 +72,7 @@ export const getTenantModels = async (databaseName) => {
     Floor,
     Staff,
     Customer,
+    ServiceRequest,
     connection: conn
   };
 };

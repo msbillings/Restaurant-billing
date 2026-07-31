@@ -24,6 +24,7 @@ const BillHistory = () => {
 
   useEffect(() => {
     fetchBills();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, debouncedSearchTerm, filterType]);
 
   // Refresh bills when component mounts to show latest bills first
@@ -31,6 +32,7 @@ const BillHistory = () => {
     // Reset to page 1 and fetch latest bills when component mounts
     setCurrentPage(1);
     fetchBills();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchBills = async () => {
@@ -161,54 +163,6 @@ const BillHistory = () => {
     return () => window.removeEventListener('executeBillSearch', handleBillSearch);
   }, []);
 
-  if (loading) return (
-    <div className="h-full flex flex-col bg-background p-6">
-      <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-        <div className="animate-pulse">
-          <div className="w-40 h-6 bg-text-muted/20 rounded mb-2"></div>
-          <div className="w-48 h-4 bg-text-muted/20 rounded"></div>
-        </div>
-        <div className="flex gap-4 animate-pulse">
-          <div className="w-64 h-10 bg-surface-hover rounded-xl"></div>
-          <div className="w-32 h-10 bg-surface-hover rounded-xl"></div>
-        </div>
-      </div>
-      <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-background">
-              <tr>
-                <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                <th className="p-4"><div className="w-20 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                <th className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                <th className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...Array(8)].map((_, i) => (
-                <tr key={i} className="border-b border-border animate-pulse">
-                  <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
-                  <td className="p-4">
-                    <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
-                    <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
-                  </td>
-                  <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
-                  <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
-                  <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                  <td className="p-4"><div className="flex justify-end gap-2">
-                    <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                    <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                  </div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="h-full flex flex-col bg-background p-3 sm:p-6">
@@ -268,9 +222,27 @@ const BillHistory = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredBills.length === 0 ? (
+              {loading ? (
+                [...Array(8)].map((_, i) => (
+                  <tr key={i} className="border-b border-border animate-pulse">
+                    <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4">
+                      <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
+                      <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
+                    </td>
+                    <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="flex justify-end gap-2">
+                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                    </div></td>
+                  </tr>
+                ))
+              ) : filteredBills.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-8 text-center text-text-muted">
+                  <td colSpan="7" className="p-8 text-center text-text-muted">
                     No transactions found
                   </td>
                 </tr>

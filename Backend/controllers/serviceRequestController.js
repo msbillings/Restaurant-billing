@@ -1,4 +1,4 @@
-import ServiceRequestSchema from '../models/ServiceRequest.js';
+import ServiceRequestDefault from '../models/ServiceRequest.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 
 export const createServiceRequest = async (req, res) => {
@@ -6,7 +6,7 @@ export const createServiceRequest = async (req, res) => {
     const { tableNumber, requestType } = req.body;
     
     // We get the tenant DB based on req.subdomain (set in middleware)
-    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestSchema);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     
     // Create new request
     const newRequest = new ServiceRequest({
@@ -24,7 +24,7 @@ export const createServiceRequest = async (req, res) => {
 
 export const getActiveRequests = async (req, res) => {
   try {
-    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestSchema);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     const requests = await ServiceRequest.find({ status: 'Pending' }).sort({ createdAt: 1 });
     res.json(requests);
   } catch (error) {
@@ -35,7 +35,7 @@ export const getActiveRequests = async (req, res) => {
 export const resolveRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestSchema);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     
     const request = await ServiceRequest.findByIdAndUpdate(
       id, 

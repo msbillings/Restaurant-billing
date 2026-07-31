@@ -13,7 +13,7 @@ import TransferTableModal from './TransferTableModal';
 import { io } from 'socket.io-client';
 import { useLanguage } from '../context/LanguageContext';
 
-const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admin', onToggleMenu }) => {
+const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admin' }) => {
   const { t } = useLanguage();
   const [activeTable, setActiveTable] = useState(initialTable || '');
   const [floors, setFloors] = useState([]);
@@ -46,14 +46,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     };
   }, []);
 
-  const fetchOpenOrdersList = async () => {
+  async function fetchOpenOrdersList() {
     try {
       const data = await getOpenOrders();
       setOpenOrdersList(data || []);
-    } catch (e) {
-      console.error('Error fetching open orders list:', e);
+    } catch (error) {
+      console.error('Error fetching open orders list:', error);
     }
-  };
+  }
 
   useEffect(() => {
     const loadSpaces = () => {
@@ -72,7 +72,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           }
           setFloors(parsed);
           return;
-        } catch (e) {}
+        } catch (error) { console.error('Error loading spaces:', error); }
       }
       setFloors([{
         id: 'f-1',
@@ -100,7 +100,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             setFloors(data.spaces);
           }
         }
-      } catch (e) {}
+      } catch (error) { console.error('Error syncing spaces:', error); }
     };
     syncSpacesFromBackend();
 
@@ -149,6 +149,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   useEffect(() => {
     if (initialTable) {
+      // eslint-disable-next-line
       setActiveTable(initialTable);
       if (initialTable.startsWith('DEL-')) {
         setBillType('Delivery');
@@ -165,6 +166,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
       const existingOrder = openOrdersList.find(o => o.tableNo?.startsWith(prefix) && (o.status === 'Open' || o.status === 'Billed'));
       if (existingOrder && !initialTable) {
+        // eslint-disable-next-line
         setActiveTable(existingOrder.tableNo);
       } else {
         const timestamp = Date.now().toString().slice(-6);
@@ -175,6 +177,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     } else if (billType === 'Dine-In' && activeTable && (activeTable.startsWith('DEL-') || activeTable.startsWith('TAK-'))) {
       setActiveTable('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billType, openOrdersList]);
 
   useEffect(() => {
@@ -182,11 +185,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
       fetchActiveOrder();
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
       if (cart.length === 0) {
+        // eslint-disable-next-line
         setOrderId(null);
         setOrderStatus('Open');
         setBillNumber(null);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTable]);
 
   useEffect(() => {
@@ -214,15 +219,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               setCustomerInfo(null);
             }
           }
-        } catch (e) {}
+        } catch (error) { console.error('Error fetching customer:', error); }
       };
       fetchCustomer();
     } else {
+      // eslint-disable-next-line
       setCustomerInfo(null);
     }
   }, [customerPhone]);
 
-  const fetchActiveOrder = async () => {
+  async function fetchActiveOrder() {
     if (!activeTable) return;
     setLoading(true);
     try {
@@ -252,7 +258,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             if (s.enableSgst !== false) tot += (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5);
             if (s.enableGst === true) tot += (s.gstRate !== undefined ? Number(s.gstRate) : 5);
             if (tot > 0) setTaxRate(tot);
-          } catch (e) {}
+          } catch (error) { console.error('Error parsing settings:', error); }
         }
       } else {
         setCart([]);
@@ -273,7 +279,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           if (s.enableSgst !== false) tot += (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5);
           if (s.enableGst === true) tot += (s.gstRate !== undefined ? Number(s.gstRate) : 5);
           setTaxRate(tot > 0 ? tot : '');
-        } catch (e) {
+        } catch (error) {
+          console.error('Error fetching settings:', error);
           setTaxRate('');
         }
       }
@@ -284,7 +291,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     }
   };
 
-  const fetchDailyStats = async () => {
+  async function fetchDailyStats() {
     try {
       const { getDailyStats } = await import('../api/billing');
       const stats = await getDailyStats();
@@ -844,14 +851,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
               className="bg-transparent font-bold text-text-main focus:outline-none text-sm"
             >
               <option value="" >{t('selectTable')}</option>
-              {floors.map(floor => {
+              {floors.map((floor, index) => {
                 const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
                 if (!hasItems) return null;
                 return (
-                  <optgroup key={floor.id} label={floor.name}>
-                    {floor.tables?.map(t => <option key={`t-${t.id}`} value={t.name}>{t.name} (Table)</option>)}
-                    {floor.cabins?.map(c => <option key={`c-${c.id}`} value={c.name}>{c.name} (Cabin)</option>)}
-                    {floor.sofas?.map(s => <option key={`s-${s.id}`} value={s.name}>{s.name} (Sofa)</option>)}
+                  <optgroup key={`${floor.id || 'f'}-${index}`} label={floor.name}>
+                    {floor.tables?.map((t, i) => <option key={`t-${t.id || 'x'}-${i}`} value={t.name}>{t.name} (Table)</option>)}
+                    {floor.cabins?.map((c, i) => <option key={`c-${c.id || 'x'}-${i}`} value={c.name}>{c.name} (Cabin)</option>)}
+                    {floor.sofas?.map((s, i) => <option key={`s-${s.id || 'x'}-${i}`} value={s.name}>{s.name} (Sofa)</option>)}
                   </optgroup>
                 );
               })}

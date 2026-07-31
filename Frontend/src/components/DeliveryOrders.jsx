@@ -30,15 +30,6 @@ const DeliveryOrders = () => {
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const itemsPerPage = 20;
 
-  useEffect(() => {
-    fetchDeliveryOrders();
-  }, [currentPage, searchTerm]);
-
-  // Reset to first page when filter/search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, platformFilter]);
-
   const fetchDeliveryOrders = async () => {
     setLoading(true);
     try {
@@ -85,6 +76,12 @@ const DeliveryOrders = () => {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line
+    fetchDeliveryOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, searchTerm]);
+
   const handleDeleteClick = (id) => {
     setDeleteModal({ isOpen: true, billId: id });
   };
@@ -128,56 +125,6 @@ const DeliveryOrders = () => {
     return order.orderSource === platformFilter;
   });
 
-  if (loading) {
-    return (
-      <div className="h-full flex flex-col bg-background p-6">
-        <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-          <div className="animate-pulse">
-            <div className="w-40 h-6 bg-text-muted/20 rounded mb-2"></div>
-            <div className="w-48 h-4 bg-text-muted/20 rounded"></div>
-          </div>
-          <div className="flex gap-4 animate-pulse">
-            <div className="w-64 h-10 bg-surface-hover rounded-xl"></div>
-            <div className="w-32 h-10 bg-surface-hover rounded-xl"></div>
-          </div>
-        </div>
-        <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
-          <div className="overflow-y-auto flex-1">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-background">
-                <tr>
-                  <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                  <th className="p-4"><div className="w-20 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                  <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                  <th className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                  <th className="p-4"><div className="w-12 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                  <th className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded animate-pulse"></div></th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...Array(8)].map((_, i) => (
-                  <tr key={i} className="border-b border-border animate-pulse">
-                    <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4">
-                      <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
-                      <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
-                    </td>
-                    <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="flex justify-end gap-2">
-                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                    </div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="h-full flex flex-col bg-background p-6">
       <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
@@ -193,7 +140,10 @@ const DeliveryOrders = () => {
               type="text"
               placeholder="Search Bill #..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-64"
             />
           </div>
@@ -215,6 +165,7 @@ const DeliveryOrders = () => {
                     key={platform}
                     onClick={() => {
                       setPlatformFilter(platform);
+                      setCurrentPage(1);
                       setShowPlatformFilter(false);
                     }}
                     className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-all ${
@@ -258,7 +209,23 @@ const DeliveryOrders = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.length === 0 ? (
+              {loading ? (
+                [...Array(8)].map((_, i) => (
+                  <tr key={i} className="border-b border-border animate-pulse">
+                    <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4">
+                      <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
+                      <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
+                    </td>
+                    <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="p-4"><div className="flex justify-end gap-2">
+                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                    </div></td>
+                  </tr>
+                ))
+              ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-text-muted">
                     <div className="flex flex-col items-center gap-4">

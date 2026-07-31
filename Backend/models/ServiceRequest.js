@@ -22,4 +22,4 @@ const serviceRequestSchema = new mongoose.Schema({
   timestamps: true
 });
 
-export default serviceRequestSchema;
+export default mongoose.model('ServiceRequest', serviceRequestSchema);
