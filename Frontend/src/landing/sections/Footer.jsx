@@ -80,7 +80,7 @@ const Footer = () => {
             <ul className="f-contact-list">
               <li className="f-contact-item">
                 <Mail strokeWidth={1.5} size={16} className="f-contact-icon" />
-                <span>hello@msbillings.com</span>
+                <span>msbillling@gmail.com</span>
               </li>
               <li className="f-contact-item">
                 <Phone strokeWidth={1.5} size={16} className="f-contact-icon" />
