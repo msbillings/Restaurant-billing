@@ -44,17 +44,18 @@ export const login = async (req, res) => {
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 const rpName = 'MSBILLING Super Admin';
-const rpID = process.env.NODE_ENV === 'production' ? 'msbillings-superadmin.vercel.app' : 'localhost';
-const origin = process.env.NODE_ENV === 'production' ? 'https://msbillings-superadmin.vercel.app' : 'http://localhost:5174';
+// Removed hardcoded rpID and origin
 
 export const getRegistrationOptions = async (req, res) => {
   try {
     const admin = await Admin.findOne({ email: 'admin@msbilling.in' });
     if (!admin) return res.status(404).send('Admin not found');
 
+    const currentRpID = req.hostname || 'localhost';
+
     const options = await generateRegistrationOptions({
       rpName,
-      rpID,
+      rpID: currentRpID,
       userID: Buffer.from(admin._id.toString()),
       userName: admin.email,
       userDisplayName: admin.name,
@@ -81,11 +82,14 @@ export const verifyRegistration = async (req, res) => {
     const admin = await Admin.findOne({ email: 'admin@msbilling.in' });
     if (!admin) return res.status(404).send('Admin not found');
 
+    const currentRpID = req.hostname || 'localhost';
+    const currentOrigin = req.get('origin') || `https://${currentRpID}`;
+
     const verification = await verifyRegistrationResponse({
       response: req.body,
       expectedChallenge: admin.currentChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
+      expectedOrigin: currentOrigin,
+      expectedRPID: currentRpID,
     });
 
     if (verification.verified && verification.registrationInfo) {
@@ -118,8 +122,10 @@ export const getAuthOptions = async (req, res) => {
       return res.status(404).json({ error: 'No passkeys found' });
     }
 
+    const currentRpID = req.hostname || 'localhost';
+
     const options = await generateAuthenticationOptions({
-      rpID,
+      rpID: currentRpID,
       allowCredentials: admin.passkeys.map(passkey => ({
         id: passkey.credentialID,
         type: 'public-key',
@@ -144,15 +150,18 @@ export const verifyAuth = async (req, res) => {
     if (!admin) return res.status(404).send('Admin not found');
 
     const bodyCredID = req.body.id;
-    const passkey = admin.passkeys.find(pk => pk.credentialID === bodyCredID);
-    if (!passkey) return res.status(400).send('Passkey not found');
+    const passkey = admin.passkeys.find(pk => pk.credentialID === req.body.id);
+    if (!passkey) return res.status(404).send('Passkey not found');
+
+    const currentRpID = req.hostname || 'localhost';
+    const currentOrigin = req.get('origin') || `https://${currentRpID}`;
 
     const verification = await verifyAuthenticationResponse({
       response: req.body,
       expectedChallenge: admin.currentChallenge,
-      expectedOrigin: origin,
-      expectedRPID: rpID,
-      credential: {
+      expectedOrigin: currentOrigin,
+      expectedRPID: currentRpID,
+      authenticator: {
         id: passkey.credentialID, // already a base64url string
         publicKey: Buffer.from(passkey.credentialPublicKey, 'base64url'),
         counter: passkey.counter,
