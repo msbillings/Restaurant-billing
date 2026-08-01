@@ -5,6 +5,7 @@ import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billin
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
 const BillHistory = ({ onNavigate }) => {
   const [bills, setBills] = useState([]);
@@ -165,6 +166,7 @@ const BillHistory = ({ onNavigate }) => {
 
 
   return (
+<<<<<<< HEAD
     <div className="h-full flex flex-col bg-background p-3 sm:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
         <div className="flex items-center gap-3">
@@ -180,6 +182,19 @@ const BillHistory = ({ onNavigate }) => {
             <h1 className="text-xl sm:text-2xl font-bold text-text-main">Transaction History</h1>
             <p className="text-xs sm:text-sm text-text-muted">View and manage past transactions</p>
           </div>
+=======
+    <div className="h-[90vh] sm:h-[95vh] lg:h-full flex flex-col bg-background p-2 sm:p-4 lg:p-6 overflow-hidden">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 lg:mb-6 gap-3 shrink-0">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-text-main">Bill History</h1>
+          <p className="text-xs sm:text-sm text-text-muted">View and manage past transactions</p>
+>>>>>>> 7b3c02a27085174aaf65e13fbf69a48c91234404
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">

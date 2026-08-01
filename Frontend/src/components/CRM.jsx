@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Search, Star, TrendingUp, Calendar } from 'lucide-react';
+import BackButton from './common/BackButton';
 
-const CRM = () => {
+const CRM = ({ onNavigate }) => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,6 +40,9 @@ const CRM = () => {
 
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
         <h1 className="text-2xl font-black text-text-main flex items-center gap-2">
           <Users className="text-primary" /> CUSTOMER DIRECTORY (CRM)

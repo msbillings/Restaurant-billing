@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
+import BackButton from './common/BackButton';
 
-const Settings = ({ user, setUser }) => {
+const Settings = ({ user, setUser, onNavigate }) => {
   const [settings, setSettings] = useState({
     restaurantName: '',
     restaurantType: '',
@@ -124,6 +125,9 @@ const Settings = ({ user, setUser }) => {
       <div className="w-full space-y-6">
         {/* Header */}
         <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-6 border border-border">
+          <div className="flex items-center gap-4 mb-4">
+            <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+          </div>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center">
               <SettingsIcon className="text-primary" size={24} />

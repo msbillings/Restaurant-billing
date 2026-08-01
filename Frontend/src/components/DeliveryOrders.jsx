@@ -15,8 +15,9 @@ import {
   ChevronRight
 } from 'lucide-react';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
-const DeliveryOrders = () => {
+const DeliveryOrders = ({ onNavigate }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState('all'); // all, Swiggy, Zomato, Direct, Other
@@ -127,6 +128,9 @@ const DeliveryOrders = () => {
 
   return (
     <div className="h-full flex flex-col bg-background p-6">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
       <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
         <div>
           <h1 className="text-2xl font-bold text-text-main">Delivery Orders</h1>

@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import { Menu, UtensilsCrossed, Search, Calculator, Bell, User, Power, Phone } from 'lucide-react';
+import useBroadcasts from '../hooks/useBroadcasts';
 
 const GlobalHeader = ({ 
   onToggleMenu, 
   onNavigate, 
   onLogout,
   onCalculatorToggle,
-  activeKOTCount = 0
+  activeKOTCount = 0,
+  userRole = 'Admin'
 }) => {
   const [searchBillNo, setSearchBillNo] = useState('');
+  
+  // Fetch broadcasts and unread count
+  const { unreadCount } = useBroadcasts(userRole);
 
   const handleSearchKeyPress = (e) => {
     if (e.key === 'Enter' && searchBillNo.trim()) {
@@ -80,10 +85,12 @@ const GlobalHeader = ({
           <button onClick={onCalculatorToggle} className="hover:text-primary transition-colors">
             <Calculator size={20} />
           </button>
-          <button className="hover:text-primary transition-colors relative" onClick={() => onNavigate('orders')}>
+          <button className="hover:text-primary transition-colors relative" onClick={() => onNavigate('operations')}>
             <Bell size={20} />
-            {activeKOTCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-danger rounded-full border-2 border-white"></span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger rounded-full border border-white text-[10px] text-white flex items-center justify-center font-bold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
             )}
           </button>
           <button className="hover:text-primary transition-colors" onClick={() => onNavigate('settings')}>

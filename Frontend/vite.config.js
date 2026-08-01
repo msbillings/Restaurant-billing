@@ -34,8 +34,11 @@ export default defineConfig({
         ]
       },
       workbox: {
-        // Cache all JS, CSS, HTML, and font files
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Cache all JS, CSS, HTML, and font files — exclude large animation frames from precache
+        globPatterns: ['**/*.{js,css,html,ico,svg,woff,woff2}', 'assets/*.png'],
+        globIgnores: ['assets/frame-*.png'],
+        // Increase the file size limit to 5 MB to handle larger assets
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Runtime caching for API calls
         runtimeCaching: [
           {

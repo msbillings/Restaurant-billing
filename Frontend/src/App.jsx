@@ -55,9 +55,12 @@ const AboutModal = React.lazy(() => import('./components/AboutModal'));
 const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
 import GlobalHeader from './components/GlobalHeader';
+import useBroadcasts from './hooks/useBroadcasts';
+import useNotifications from './hooks/useNotifications';
 
 import {  LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
+import { AnimatePresence, motion } from 'framer-motion';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
 import { io } from 'socket.io-client';
@@ -96,12 +99,8 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
   
-  // Dummy notifications
-  const notifications = [
-    { id: 1, title: 'Captain Activity', message: 'Captain Rahul took a new order for Table 4.', time: '2 mins ago', type: 'success' },
-    { id: 2, title: 'KDS Alert', message: 'Chef accepted the KOT for Table 2.', time: '5 mins ago', type: 'info' },
-    { id: 3, title: 'Waiter Activity', message: 'Waiter Suresh cleared Table 8.', time: '12 mins ago', type: 'warning' }
-  ];
+  // Dummy notifications removed
+  const dummyNotifications = [];
   
   // Search Bill
   const [searchBillNo, setSearchBillNo] = useState('');
@@ -172,6 +171,36 @@ function App() {
   const userRole = usernameLower.includes('captain') ? 'Captain' : (usernameLower.includes('cashier') ? 'Cashier' : rawRole);
   const isCaptain = userRole === 'Captain';
   const isAdmin = userRole === 'Admin';
+
+  const { broadcasts, unreadCount, markAsRead, markAllAsRead } = useBroadcasts(userRole);
+  const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
+  const totalUnreadCount = unreadCount + rtUnreadCount;
+  
+  const [toastMessage, setToastMessage] = useState(null);
+  const prevUnreadCountRef = React.useRef(totalUnreadCount);
+
+  useEffect(() => {
+    if (totalUnreadCount > prevUnreadCountRef.current) {
+      // New broadcast arrived!
+      setToastMessage("You have a new Notification!");
+      const timer = setTimeout(() => setToastMessage(null), 5000);
+      prevUnreadCountRef.current = totalUnreadCount;
+      return () => clearTimeout(timer);
+    }
+    prevUnreadCountRef.current = totalUnreadCount;
+  }, [totalUnreadCount]);
+  
+  // Format broadcasts for the dropdown
+  const formattedBroadcasts = broadcasts.map(b => ({
+    id: b._id,
+    title: b.title,
+    message: b.message,
+    time: new Date(b.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    type: 'info',
+    isUnread: false
+  }));
+  
+  const notifications = [...realTimeNotifs, ...formattedBroadcasts];
 
   useEffect(() => {
     if (isCaptain && !['floor', 'orders', 'kothistory', 'billing'].includes(view)) {
@@ -287,7 +316,8 @@ function App() {
             // 3. Sync Passwords to Local Backend if present
             if (saData.plainTextPassword || (saData.staffAccounts && saData.staffAccounts.length > 0)) {
               try {
-                await fetch('/api/config/sync-users', {
+                const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+                await fetch(`${API_BASE_URL}/config/sync-users`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -677,6 +707,26 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-background text-text-main font-sans overflow-hidden relative">
 
+      {/* Broadcast Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 20 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="absolute top-0 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 cursor-pointer"
+            onClick={() => {
+              setToastMessage(null);
+              handleViewChange('notification');
+            }}
+          >
+            <Bell className="animate-bounce" size={20} />
+            {toastMessage}
+            <X size={16} className="ml-2 hover:bg-white/20 rounded-full p-0.5 transition-colors" onClick={(e) => { e.stopPropagation(); setToastMessage(null); }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Offline / Sync Status Banner */}
       {(!onlineStatus.isOnline || onlineStatus.pendingCount > 0) && (
         <div className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold tracking-wide shrink-0 z-50 ${
@@ -787,11 +837,21 @@ function App() {
               
               <div className="relative hidden sm:block">
                 <button 
-                  onClick={() => setShowNotifications(!showNotifications)} 
+                  onClick={() => {
+                    setShowNotifications(!showNotifications);
+                    if (!showNotifications) {
+                      markAllAsRead(); // Mark broadcasts as read
+                      rtMarkAllAsRead(); // Mark real-time notifications as read
+                    }
+                  }} 
                   className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative"
                 >
-                  <Bell size={20} />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                  <Bell size={22} className="text-gray-200 hover:text-white transition-colors" />
+                  {totalUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#1e1e2d]">
+                    {totalUnreadCount}
+                  </span>
+                  )}
                 </button>
                 
                 {/* Notifications Dropdown */}
@@ -801,7 +861,12 @@ function App() {
                     <div className="absolute right-0 top-10 mt-1 w-80 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
                       <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                         <span className="font-bold text-gray-800">Notifications</span>
-                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">3 New</span>
+                        <span 
+                          onClick={() => { setShowNotifications(false); handleViewChange('notification'); }}
+                          className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200"
+                        >
+                          View All
+                        </span>
                       </div>
                       <div className="max-h-[300px] overflow-y-auto">
                         {notifications.map(n => (
@@ -1226,9 +1291,15 @@ function App() {
                 )}
                 {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
                 {view === 'history' && <BillHistory onNavigate={handleViewChange} />}
+<<<<<<< HEAD
                 {view === 'kothistory' && <KOTHistory />}
                 {view === 'analytics' && <Analytics />}
                 {view === 'daybook' && <DayBook />}
+=======
+                {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} />}
+                {view === 'analytics' && <Analytics onNavigate={handleViewChange} />}
+                {view === 'daybook' && <DayBook onNavigate={handleViewChange} />}
+>>>>>>> 7b3c02a27085174aaf65e13fbf69a48c91234404
                 {view === 'operations' && <Operations onNavigate={handleViewChange} userRole={user?.role?.toLowerCase()} />}
                 {view === 'tax' && <TaxConfig onNavigate={handleViewChange} />}
                 {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} />}
@@ -1242,19 +1313,24 @@ function App() {
                 {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} />}
                 {view === 'sync' && <ManualSync onNavigate={handleViewChange} />}
                 {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} />}
+<<<<<<< HEAD
                 {view === 'menu' && <MenuManagement user={user} />}
                 {view === 'delivery' && <DeliveryOrders />}
                 {view === 'pickup' && <PickupOrders />}
+=======
+                {view === 'menu' && <MenuManagement user={user} onNavigate={handleViewChange} />}
+                {view === 'delivery' && <DeliveryOrders onNavigate={handleViewChange} />}
+>>>>>>> 7b3c02a27085174aaf65e13fbf69a48c91234404
                 {view === 'expenses' && <Expenses />}
-                {view === 'inventory' && <InventoryManagement />}
-                {view === 'crm' && <CRM />}
-                {view === 'staff' && <StaffManagement />}
+                {view === 'inventory' && <InventoryManagement onNavigate={handleViewChange} />}
+                {view === 'crm' && <CRM onNavigate={handleViewChange} />}
+                {view === 'staff' && <StaffManagement onNavigate={handleViewChange} />}
                 {view === 'qrcode' && <QRCodeGenerator />}
-                {view === 'settings' && <Settings user={user} setUser={setUser} />}
+                {view === 'settings' && <Settings user={user} setUser={setUser} onNavigate={handleViewChange} />}
                 {view === 'kds' && <KDS />}
 
                 {/* Placeholder Routes */}
-                {view === 'notification' && <NotificationCenter onNavigate={handleViewChange} />}
+                {view === 'notification' && <NotificationCenter onNavigate={handleViewChange} userRole={userRole} />}
                 {view === 'help' && <HelpSupport onNavigate={handleViewChange} />}
                 {view === 'live-view' && <LiveView onNavigate={handleViewChange} />}
                 {view === 'language' && <LanguageProfile onNavigate={handleViewChange} />}

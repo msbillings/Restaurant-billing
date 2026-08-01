@@ -5,6 +5,7 @@ import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 import { updateCustomerFromBill, syncCustomer } from './customerController.js';
+import { emitNotification } from '../utils/notificationHelper.js';
 
 const emitSocketEvent = (req, eventName, data) => {
   try {
@@ -220,6 +221,12 @@ export const saveOrder = async (req, res) => {
     cache.clear('openOrders');
     
     emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status });
+
+    if (id) {
+      emitNotification(req, 'Order Updated', `Order updated for Table ${tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+    } else {
+      emitNotification(req, 'New Order Placed', `Order placed for Table ${tableNo} (${order.billType})`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+    }
     
     // Update Floor/Table status in DB
     if (order.status === 'Open' && order.billType === 'Dine-In') {
@@ -1280,6 +1287,12 @@ export const updateKOTItemStatus = async (req, res) => {
     await order.save();
 
     emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, status });
+    
+    if (status === 'Preparing') {
+      emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${order.tableNo} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
+    } else if (status === 'Ready') {
+      emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${order.tableNo}`, 'success', ['Captain', 'Manager', 'Admin']);
+    }
 
     res.json({ message: 'Item status updated successfully', kot });
   } catch (error) {
