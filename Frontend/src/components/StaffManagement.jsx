@@ -4,8 +4,9 @@ import { getStaff, addStaff, updateStaff, deleteStaff } from '../api/staff';
 import Toast from './Toast';
 import FaceRegistration from './FaceRegistration';
 import { Camera, Image as ImageIcon } from 'lucide-react';
+import BackButton from './common/BackButton';
 
-const StaffManagement = () => {
+const StaffManagement = ({ onNavigate }) => {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -90,7 +91,10 @@ const StaffManagement = () => {
 
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
-      <div className="flex justify-between items-center mb-6 shrink-0">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
         <h1 className="text-2xl font-black text-text-main flex items-center gap-2">
           <Users className="text-primary" /> STAFF MANAGEMENT
         </h1>

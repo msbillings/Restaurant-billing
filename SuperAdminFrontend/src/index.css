@@ -5,4 +5,33 @@
   body {
     @apply bg-background text-white antialiased;
   }
+
+  /* GLOBAL FIX: Make the entire date/time input field clickable to open the native calendar popup */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    position: relative;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: auto;
+    cursor: pointer;
+    /* Keeps the native calendar icon on the right side without stretching it */
+    background-position: right 1rem center;
+    background-size: 1.25rem;
+    background-repeat: no-repeat;
+  }
 }
+

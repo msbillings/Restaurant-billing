@@ -73,7 +73,8 @@ const clientSchema = new mongoose.Schema({
     lat: Number,
     lon: Number,
     lastUpdated: Date,
-    ip: String
+    ip: String,
+    mapsUrl: String
   }
 });
 

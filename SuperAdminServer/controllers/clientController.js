@@ -63,6 +63,76 @@ export const updateLicense = async (req, res) => {
        await newLicense.save();
     }
 
+    // Handle mapsUrl if provided
+    const mapsUrl = req.body.mapsUrl;
+    if (mapsUrl) {
+      client.location = client.location || {};
+      client.location.mapsUrl = mapsUrl;
+      client.location.lastUpdated = new Date();
+
+      try {
+        let query = '';
+        const decodedUrl = decodeURIComponent(mapsUrl);
+        const daddrMatch = decodedUrl.match(/daddr=([^&]+)/);
+        if (daddrMatch) {
+          query = daddrMatch[1].replace(/\+/g, ' ');
+        } else {
+          const placeMatch = decodedUrl.match(/\/place\/([^\/]+)/);
+          if (placeMatch) {
+            query = placeMatch[1].replace(/\+/g, ' ');
+          } else {
+            const dirMatch = decodedUrl.match(/\/dir\/[^\/]*\/([^\/]+)/);
+            if (dirMatch) {
+              query = dirMatch[1].replace(/\+/g, ' ');
+            } else {
+              const searchMatch = decodedUrl.match(/\/search\/([^\/]+)/) || decodedUrl.match(/\?q=([^&]+)/);
+              if (searchMatch) {
+                query = searchMatch[1].replace(/\+/g, ' ');
+              }
+            }
+          }
+        }
+
+        if (query) {
+          let parts = query.split(',').map(s => s.trim());
+          let foundLocation = null;
+
+          while (parts.length > 0 && !foundLocation) {
+            const currentQuery = parts.join(', ');
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(currentQuery)}&format=json&limit=1&addressdetails=1`;
+            
+            const response = await fetch(url, {
+              headers: { 'User-Agent': 'RestaurantBillingSuperAdmin/1.0' }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data && data.length > 0) {
+                foundLocation = data[0];
+              }
+            }
+            parts.shift(); // Remove the most specific part and try again if not found
+          }
+
+          if (foundLocation) {
+            const address = foundLocation.address || {};
+            // Prefer state_district or county as the "city" for correct district categorization
+            const district = address.state_district || address.county || address.city || address.town || address.village || foundLocation.name;
+            const country = address.country || 'India';
+            
+            client.location.lat = parseFloat(foundLocation.lat);
+            client.location.lon = parseFloat(foundLocation.lon);
+            client.location.city = district;
+            client.location.country = country;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching location data from mapsUrl:', error);
+      }
+      
+      await client.save();
+    }
+
     res.status(200).json({ message: 'License updated successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error updating license', error: error.message });

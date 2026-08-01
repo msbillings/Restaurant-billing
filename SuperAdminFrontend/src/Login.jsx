@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Fingerprint, Lock, Mail, Shield, AlertTriangle } from 'lucide-react';
+import { Fingerprint, Lock, Mail, Shield, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
 
 const Login = ({ onLogin }) => {
@@ -10,6 +10,7 @@ const Login = ({ onLogin }) => {
   const [bioLoading, setBioLoading] = useState(false);
   const [error, setError] = useState('');
   const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     // Check if the browser supports WebAuthn
@@ -23,7 +24,7 @@ const Login = ({ onLogin }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/login', { email, password });
+      const res = await axios.post('http://localhost:4000/api/auth/login', { email, password });
       localStorage.setItem('superadmin_token', res.data.token);
       localStorage.setItem('superadmin_user', JSON.stringify(res.data.admin));
       onLogin(res.data.token);
@@ -40,14 +41,14 @@ const Login = ({ onLogin }) => {
     setBioLoading(true);
     try {
       // 1. Get auth options from server
-      const resp = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/authenticate/generate');
+      const resp = await axios.get('http://localhost:4000/api/auth/webauthn/authenticate/generate');
       const options = resp.data;
 
       // 2. Trigger browser biometric prompt (TouchID / FaceID / Windows Hello)
       const asseResp = await startAuthentication(options);
 
       // 3. Verify on server
-      const verificationResp = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/authenticate/verify', asseResp);
+      const verificationResp = await axios.post('http://localhost:4000/api/auth/webauthn/authenticate/verify', asseResp);
       
       if (verificationResp.data.verified && verificationResp.data.token) {
         localStorage.setItem('superadmin_token', verificationResp.data.token);
@@ -112,13 +113,20 @@ const Login = ({ onLogin }) => {
                   <Lock className="w-5 h-5 text-gray-500" />
                 </div>
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-primary transition-colors"
-                  placeholder="••••••••"
+                  className="w-full bg-background border border-border text-white rounded-xl py-3 pl-10 pr-10 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  placeholder="••••••••••••"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 

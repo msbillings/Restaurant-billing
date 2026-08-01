@@ -5,6 +5,7 @@ import {
   Filter, Utensils, ShieldAlert, FileText, ChevronRight, Brain, TrendingUp
 } from 'lucide-react';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
 
@@ -14,7 +15,7 @@ const getHeaders = () => ({
   'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
 });
 
-const InventoryManagement = () => {
+const InventoryManagement = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'recipes' | 'logs' | 'predictions'
   const [items, setItems] = useState([]);
   const [recipes, setRecipes] = useState([]);
@@ -319,6 +320,10 @@ const InventoryManagement = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
 
       {/* Header & Stats */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-6 rounded-2xl text-white shadow-lg">

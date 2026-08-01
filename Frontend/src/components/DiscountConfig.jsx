@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Trash2, Edit2, Tags, ArrowLeft } from 'lucide-react';
+import BackButton from './common/BackButton';
 
 const DiscountConfig = ({ onNavigate }) => {
   const [discounts, setDiscounts] = useState([]);
@@ -70,11 +71,11 @@ const DiscountConfig = ({ onNavigate }) => {
 
   return (
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-          <button onClick={() => onNavigate('operations')} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-            <ArrowLeft size={24} className="text-gray-600" />
-          </button>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Discount Configuration</h1>
             <p className="text-sm text-gray-500">Manage promo codes and discounts</p>
