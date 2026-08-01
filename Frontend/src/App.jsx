@@ -1291,15 +1291,9 @@ function App() {
                 )}
                 {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
                 {view === 'history' && <BillHistory onNavigate={handleViewChange} />}
-<<<<<<< HEAD
-                {view === 'kothistory' && <KOTHistory />}
-                {view === 'analytics' && <Analytics />}
-                {view === 'daybook' && <DayBook />}
-=======
                 {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} />}
                 {view === 'analytics' && <Analytics onNavigate={handleViewChange} />}
                 {view === 'daybook' && <DayBook onNavigate={handleViewChange} />}
->>>>>>> 7b3c02a27085174aaf65e13fbf69a48c91234404
                 {view === 'operations' && <Operations onNavigate={handleViewChange} userRole={user?.role?.toLowerCase()} />}
                 {view === 'tax' && <TaxConfig onNavigate={handleViewChange} />}
                 {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} />}
@@ -1313,14 +1307,9 @@ function App() {
                 {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} />}
                 {view === 'sync' && <ManualSync onNavigate={handleViewChange} />}
                 {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} />}
-<<<<<<< HEAD
-                {view === 'menu' && <MenuManagement user={user} />}
-                {view === 'delivery' && <DeliveryOrders />}
-                {view === 'pickup' && <PickupOrders />}
-=======
                 {view === 'menu' && <MenuManagement user={user} onNavigate={handleViewChange} />}
                 {view === 'delivery' && <DeliveryOrders onNavigate={handleViewChange} />}
->>>>>>> 7b3c02a27085174aaf65e13fbf69a48c91234404
+                {view === 'pickup' && <PickupOrders />}
                 {view === 'expenses' && <Expenses />}
                 {view === 'inventory' && <InventoryManagement onNavigate={handleViewChange} />}
                 {view === 'crm' && <CRM onNavigate={handleViewChange} />}
