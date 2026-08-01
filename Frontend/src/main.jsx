@@ -11,7 +11,7 @@ import { LanguageProvider } from './context/LanguageContext.jsx'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <LanguageProvider>
-      <App />
+      {path === '/' || path === '/index.html' ? <LandingRoutes /> : <App />}
     </LanguageProvider>
   </StrictMode>,
 )

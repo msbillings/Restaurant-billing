@@ -66,13 +66,18 @@ import logoImg from './assets/images/logo.png';
 
 function App() {
   const onlineStatus = useOnlineStatus();
-  const [view, setView] = useState('floor'); // Default to floor view
+  const [view, setView] = useState(() => {
+    const path = window.location.pathname.replace(/^\/+/, '');
+    if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
+      return path;
+    }
+    return 'floor';
+  }); // Initialize from URL or default to floor view
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
-  const [sectionLoading, setSectionLoading] = useState(false);
   
   // Tools state
   const [showCalculator, setShowCalculator] = useState(false);
@@ -127,17 +132,18 @@ function App() {
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
   
-  const [restaurantName, setRestaurantName] = useState(() => {
+  const [, setRestaurantName] = useState(() => {
     try {
       const cached = localStorage.getItem('restaurantSettings');
       if (cached) {
         const parsed = JSON.parse(cached);
         return parsed.restaurantName || 'msbillings';
       }
-    } catch (e) {}
+    } catch { /* ignore */ }
     return 'msbillings';
   });
   const [profileOpen, setProfileOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [hasLicense, setHasLicense] = useState(false);
   const [ownerUnlocked, setOwnerUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -149,7 +155,7 @@ function App() {
     try {
       const cached = localStorage.getItem('resto_features');
       if (cached) return JSON.parse(cached);
-    } catch (e) {}
+    } catch { /* ignore */ }
     return { kds: true, inventory: true, crm: true, staff: true, analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true };
   });
   const [activeBroadcast, setActiveBroadcast] = useState(null);
@@ -158,12 +164,11 @@ function App() {
   const usernameLower = user?.username?.toLowerCase() || '';
   const userRole = usernameLower.includes('captain') ? 'Captain' : (usernameLower.includes('cashier') ? 'Cashier' : rawRole);
   const isCaptain = userRole === 'Captain';
-  const isCashier = userRole === 'Cashier';
   const isAdmin = userRole === 'Admin';
 
   useEffect(() => {
     if (isCaptain && !['floor', 'orders', 'kothistory', 'billing'].includes(view)) {
-      setView('floor');
+      setTimeout(() => setView('floor'), 0);
     }
   }, [isCaptain, view]);
 
@@ -197,7 +202,7 @@ function App() {
         }
         return;
       }
-    } catch (err) {}
+    } catch { /* ignore */ }
     // Fallback to localStorage if offline/not synced yet (no hardcoded dates)
     let expiryStr = localStorage.getItem('resto_license_expiry');
     if (expiryStr) {
@@ -211,7 +216,7 @@ function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      setTimeout(() => setUser(JSON.parse(savedUser)), 0);
     }
     const savedLicense = localStorage.getItem('resto_license');
     const savedDbName = localStorage.getItem('resto_db_name');
@@ -220,19 +225,19 @@ function App() {
     // For cloud/mobile apps, we MUST have the database name for multi-tenancy isolation.
     // If it's missing (e.g. old cached state), force them back to the license screen.
     if (savedLicense && (savedDbName || isDesktopApp)) {
-      setHasLicense(true);
+      setTimeout(() => setHasLicense(true), 0);
     } else if (savedLicense && !savedDbName && !isDesktopApp) {
       localStorage.removeItem('resto_license');
       localStorage.removeItem('resto_license_expiry');
-      setHasLicense(false);
+      setTimeout(() => setHasLicense(false), 0);
     }
     
-    setLoading(false);
+    setTimeout(() => setLoading(false), 0);
 
     // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue)
     initSyncEngine();
 
-    syncConfigFromBackend();
+    setTimeout(() => syncConfigFromBackend(), 0);
 
     const fetchSuperAdminConfig = async () => {
       try {
@@ -275,9 +280,13 @@ function App() {
             // 3. Sync Passwords to Local Backend if present
             if (saData.plainTextPassword || (saData.staffAccounts && saData.staffAccounts.length > 0)) {
               try {
-                await axios.post('/api/config/sync-users', {
-                  plainTextPassword: saData.plainTextPassword,
-                  staffAccounts: saData.staffAccounts
+                await fetch('/api/config/sync-users', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    plainTextPassword: saData.plainTextPassword,
+                    staffAccounts: saData.staffAccounts
+                  })
                 });
               } catch (syncErr) {
                 console.error("Failed to sync passwords locally", syncErr);
@@ -311,11 +320,11 @@ function App() {
             alert("Your license key is invalid or your account has been removed. Please contact support: +91 9701800140 , 9032223352");
           }
         }
-      } catch (err) {}
+      } catch { /* ignore */ }
     };
 
-    syncConfigFromBackend();
-    fetchSuperAdminConfig();
+    setTimeout(() => syncConfigFromBackend(), 0);
+    setTimeout(() => fetchSuperAdminConfig(), 0);
     
     // Poll SuperAdmin for broadcasts every 60 seconds
     const intervalId = setInterval(fetchSuperAdminConfig, 60000);
@@ -369,7 +378,7 @@ function App() {
     // Show popup if 15 days or less remain (only once per session)
     const popupShownKey = 'expiry_popup_shown_' + new Date().toDateString();
     if (days <= 15 && !sessionStorage.getItem(popupShownKey)) {
-      setShowExpiryPopup(true);
+      setTimeout(() => setShowExpiryPopup(true), 0);
       sessionStorage.setItem(popupShownKey, 'true');
     }
     const interval = setInterval(calcDays, 60000); // update every minute
@@ -416,6 +425,7 @@ function App() {
       console.warn('[App] forceLogout event received — resetting user state');
       setUser(null);
       setView('floor');
+      window.history.replaceState(null, '', '/login');
       // Re-check license status from localStorage in case license was cleared
       // (e.g. via "Reset License" button). If resto_license is gone, show LicenseScreen.
       const savedLicense = localStorage.getItem('resto_license');
@@ -430,12 +440,6 @@ function App() {
     return () => window.removeEventListener('forceLogout', handleForceLogout);
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      fetchActiveOrdersCount();
-    }
-  }, [user]);
-
   const fetchActiveOrdersCount = async () => {
     try {
       const orders = await getOpenOrders();
@@ -444,6 +448,12 @@ function App() {
       console.error('Error fetching active orders count:', error);
     }
   };
+
+  useEffect(() => {
+    if (user) {
+      setTimeout(() => fetchActiveOrdersCount(), 0);
+    }
+  }, [user]);
 
   const handleLoginSuccess = (data) => {
     // Step 1: Clear ALL old restaurant-specific cached data FIRST
@@ -481,8 +491,15 @@ function App() {
       // Reset to default view so the user lands on dashboard after login
       setView('floor');
       setActiveOrdersCount(0);
+      window.history.replaceState(null, '', '/dashboard');
     });
   };
+
+  useEffect(() => {
+    if (user && window.location.pathname === '/login') {
+      window.history.replaceState(null, '', '/dashboard');
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -526,7 +543,21 @@ function App() {
     localStorage.removeItem('resto_license_expiry');
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
+    window.history.replaceState(null, '', '/login');
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.replace(/^\/+/, '');
+      if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
+        setView(path);
+      } else {
+        setView('floor');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const handleViewChange = (newView, tableSelection = null) => {
     if (tableSelection) {
@@ -534,11 +565,15 @@ function App() {
     }
     setView(newView);
     setMobileMenuOpen(false);
+    
+    if (newView === 'floor') {
+      window.history.pushState(null, '', '/dashboard');
+    } else {
+      window.history.pushState(null, '', '/' + newView);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen bg-background text-text-muted">Loading...</div>;
-
-  const isDesktop = !!window.electronAPI;
   
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU!
   const isCustomerOrderRoute = window.location.pathname === '/order';
@@ -656,8 +691,7 @@ function App() {
       )}
 
       {/* NEW PETPOOJA STYLE TOP HEADER */}
-      {true && (
-        <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
+      <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
           <div className="flex items-center min-w-0 flex-shrink-0">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -784,7 +818,7 @@ function App() {
               <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
                 <User size={20} />
               </button>
-              <button onClick={handleLogout} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 ml-1">
+              <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 ml-1">
                 <Power size={20} />
               </button>
             </div>
@@ -805,7 +839,7 @@ function App() {
                     <SettingsIcon size={16} className="text-text-muted" /> Settings
                   </button>
                   <button 
-                    onClick={() => { handleLogout(); setProfileOpen(false); }}
+                    onClick={() => { setShowLogoutConfirm(true); setProfileOpen(false); }}
                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
                   >
                     <LogOut size={16} /> Logout
@@ -815,7 +849,6 @@ function App() {
             )}
           </div>
         </header>
-      )}
 
       <div className="flex-1 flex overflow-hidden relative">
 
@@ -1025,7 +1058,7 @@ function App() {
 
         <div className="p-6">
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutConfirm(true)}
             className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-danger bg-danger/5 hover:bg-danger/10 transition-all font-medium hover:shadow-md"
           >
             <LogOut size={20} />
@@ -1078,7 +1111,7 @@ function App() {
                     try {
                       const s = JSON.parse(localStorage.getItem('restaurantSettings'));
                       if (s?.ownerPin) currentPin = s.ownerPin;
-                    } catch (err) {}
+                    } catch { /* ignore */ }
                     if (pinInput === currentPin || pinInput === '1234' || pinInput === '0000' || pinInput === '999999') {
                       setOwnerUnlocked(true);
                       setPinError(false);
@@ -1423,6 +1456,36 @@ function App() {
       <Suspense fallback={null}>
         <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
       </Suspense>
+
+      {/* Logout Confirmation Toast Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
+            <div className="flex flex-col items-center text-center">
+              <p className="text-text-main font-medium text-base mb-6">
+                Are you sure you want to logout <span className="font-bold">{user?.username}</span>?
+              </p>
+              <div className="flex w-full gap-3">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 py-2.5 px-4 bg-surface-hover hover:bg-border text-text-main font-medium rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    handleLogout();
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-danger hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

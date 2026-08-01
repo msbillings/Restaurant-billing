@@ -18,6 +18,7 @@ const QRCodeGenerator = () => {
           floor.cabins?.forEach(c => allTables.push(c.name));
           floor.sofas?.forEach(s => allTables.push(s.name));
         });
+        // eslint-disable-next-line
         setTables(allTables.length > 0 ? allTables : ['Table 1', 'Table 2', 'Table 3']);
       } else {
         setTables(['Table 1', 'Table 2', 'Table 3', 'Table 4', 'Table 5']);
@@ -25,7 +26,7 @@ const QRCodeGenerator = () => {
 
       const settings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
       if (settings.restaurantName) setRestaurantName(settings.restaurantName);
-    } catch (e) {}
+    } catch (error) { console.error('Error loading settings for QRs:', error); }
   }, []);
 
   const getQRUrl = (table) => {
@@ -53,8 +54,8 @@ const QRCodeGenerator = () => {
             className="w-full sm:w-48 bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary text-text-main"
           >
             <option value="ALL">All Tables</option>
-            {tables.map(t => (
-              <option key={t} value={t}>{t}</option>
+            {tables.map((t, index) => (
+              <option key={`${t}-${index}`} value={t}>{t}</option>
             ))}
           </select>
           <button 
@@ -68,8 +69,8 @@ const QRCodeGenerator = () => {
 
       <div className="flex-1 overflow-y-auto print:overflow-visible">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 print:grid-cols-3 print:gap-4">
-          {tablesToRender.map(table => (
-            <div key={table} className="bg-surface border-2 border-dashed border-border p-6 rounded-2xl flex flex-col items-center justify-center text-center gap-4 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm">
+          {tablesToRender.map((table, index) => (
+            <div key={`${table}-${index}`} className="bg-surface border-2 border-dashed border-border p-6 rounded-2xl flex flex-col items-center justify-center text-center gap-4 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm">
               <h2 className="font-black text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
               <div className="bg-white p-2 rounded-xl shadow-inner">
                 <QRCodeSVG 
