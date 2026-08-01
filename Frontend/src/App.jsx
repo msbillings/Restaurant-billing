@@ -37,6 +37,7 @@ const LoyaltyProgram = React.lazy(() => import('./components/LoyaltyProgram'));
 const SalesForecasting = React.lazy(() => import('./components/AIForecasting'));
 const Expenses = React.lazy(() => import('./components/Expenses'));
 const DeliveryOrders = React.lazy(() => import('./components/DeliveryOrders'));
+const PickupOrders = React.lazy(() => import('./components/PickupOrders'));
 const KOTHistory = React.lazy(() => import('./components/KOTHistory'));
 const LicenseScreen = React.lazy(() => import('./components/LicenseScreen'));
 const DayBook = React.lazy(() => import('./components/DayBook'));
@@ -55,7 +56,7 @@ const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
 import GlobalHeader from './components/GlobalHeader';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall } from 'lucide-react';
+import {  LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
@@ -151,6 +152,12 @@ function App() {
   const [licenseExpiry, setLicenseExpiry] = useState(null); // Date object
   const [daysRemaining, setDaysRemaining] = useState(null);
   const [showExpiryPopup, setShowExpiryPopup] = useState(false);
+  const [sidebarSections, setSidebarSections] = useState({
+    main: true,
+    operations: true,
+    management: true,
+    system: true
+  });
   const [features, setFeatures] = useState(() => {
     try {
       const cached = localStorage.getItem('resto_features');
@@ -655,6 +662,7 @@ function App() {
       case 'daybook': return 'DayBook';
       case 'menu': return 'Menu Management';
       case 'delivery': return 'Delivery Orders';
+      case 'pickup': return 'Pickup Orders';
       case 'expenses': return 'Petty Cash & Expenses';
       case 'inventory': return 'Inventory & Stock';
       case 'crm': return 'Customer Directory (CRM)';
@@ -678,12 +686,12 @@ function App() {
         }`}>
           {!onlineStatus.isOnline ? (
             <>
-              <WifiOff size={14} />
+              <WifiOff size={18} />
               <span>You are offline — orders will be saved locally and synced when internet returns</span>
             </>
           ) : (
             <>
-              <RefreshCw size={14} className="animate-spin" />
+              <RefreshCw size={18} className="animate-spin" />
               <span>{onlineStatus.pendingCount} item{onlineStatus.pendingCount !== 1 ? 's' : ''} waiting to sync...</span>
             </>
           )}
@@ -716,7 +724,7 @@ function App() {
             
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={16} className="text-gray-400" />
+                <Search size={18} className="text-gray-400" />
               </div>
               <input
                 type="text"
@@ -724,7 +732,7 @@ function App() {
                 value={searchBillNo}
                 onChange={(e) => setSearchBillNo(e.target.value)}
                 onKeyDown={handleSearchKeyPress}
-                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-sm transition-all text-gray-800"
+                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-[1.05rem] transition-all text-gray-800"
               />
             </div>
 
@@ -750,10 +758,10 @@ function App() {
 
           <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
             <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-              <PhoneCall size={16} className="text-red-500" />
+              <PhoneCall size={18} className="text-red-500" />
               <div className="flex flex-col leading-none">
                 <span className="text-[10px] text-gray-500 font-semibold uppercase">Call For Support</span>
-                <span className="text-sm font-bold text-gray-800">9701800140</span>
+                <span className="text-[1.05rem] font-bold text-gray-800">9701800140</span>
               </div>
             </div>
 
@@ -800,7 +808,7 @@ function App() {
                           <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
                             <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                             <div>
-                              <p className="text-sm font-bold text-gray-800 leading-tight">{n.title}</p>
+                              <p className="text-[1.05rem] font-bold text-gray-800 leading-tight">{n.title}</p>
                               <p className="text-xs text-gray-500 mt-1">{n.message}</p>
                               <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
                             </div>
@@ -829,20 +837,20 @@ function App() {
                 <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)}></div>
                 <div className="absolute right-4 top-14 mt-1 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
                   <div className="px-4 py-2 border-b border-border/50 bg-gray-50/50">
-                    <span className="block text-sm font-bold text-text-main">{user.username}</span>
+                    <span className="block text-[1.05rem] font-bold text-text-main">{user.username}</span>
                     <span className="block text-xs text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
                   </div>
                   <button 
                     onClick={() => { handleViewChange('settings'); setProfileOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1"
+                    className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1"
                   >
-                    <SettingsIcon size={16} className="text-text-muted" /> Settings
+                    <SettingsIcon size={18} className="text-text-muted" /> Settings
                   </button>
                   <button 
                     onClick={() => { setShowLogoutConfirm(true); setProfileOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
+                    className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
                   >
-                    <LogOut size={16} /> Logout
+                    <LogOut size={18} /> Logout
                   </button>
                 </div>
               </>
@@ -863,203 +871,258 @@ function App() {
       {/* Sidebar Drawer */}
       <aside className={`fixed lg:relative inset-y-0 left-0 z-50 bg-surface flex flex-col shrink-0 shadow-2xl lg:shadow-none lg:border-r lg:border-border/40 transition-all duration-300 ease-in-out overflow-hidden ${mobileMenuOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-0 lg:translate-x-0'}`}>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {/* 1. Floor Management - Available to all */}
-          <button
-            onClick={() => handleViewChange('floor')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'floor' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-          >
-            <LayoutGrid size={20} />
-            <span>Floor Management</span>
-          </button>
+        <nav className="flex-1 px-3 pt-8 pb-4 space-y-6 overflow-y-auto custom-scrollbar">
           
-          {/* 2. New Orders / Table Order - Available to all */}
-          <button
-            onClick={() => handleViewChange('billing')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'billing' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-          >
-            <LayoutDashboard size={20} />
-            <span>{isCaptain ? 'Captain Order' : 'New Order'}</span>
-          </button>
+          {/* MAIN SECTION */}
+          <div>
+            <button 
+              onClick={() => setSidebarSections(s => ({ ...s, main: !s.main }))}
+              className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
+            >
+              <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Main</h3>
+              {sidebarSections.main ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
+            </button>
+            {sidebarSections.main && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => handleViewChange('floor')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'floor' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+              >
+                <LayoutGrid size={22} />
+                <span>Floor Management</span>
+              </button>
+              
+              <button
+                onClick={() => handleViewChange('billing')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'billing' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+              >
+                <LayoutDashboard size={22} />
+                <span>{isCaptain ? 'Captain Order' : 'New Order'}</span>
+              </button>
 
-          {/* 3. Active Orders - Available to all */}
-          <button
-            onClick={() => handleViewChange('orders')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] relative ${view === 'orders' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-          >
-            <ClipboardList size={20} />
-            <span>Active Orders</span>
-            {activeOrdersCount > 0 && (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${view === 'orders' ? 'bg-white text-primary' : 'bg-primary text-white'}`}>
-                {activeOrdersCount}
-              </span>
+              <button
+                onClick={() => handleViewChange('orders')}
+                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'orders' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+              >
+                <div className="flex items-center gap-3">
+                  <ClipboardList size={22} />
+                  <span>Active Orders</span>
+                </div>
+                {activeOrdersCount > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${view === 'orders' ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>
+                    {activeOrdersCount}
+                  </span>
+                )}
+              </button>
+
+              {!isCaptain && (
+                <button
+                  onClick={() => handleViewChange('history')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                >
+                  <History size={22} />
+                  <span>Bill History</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => handleViewChange('kothistory')}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+              >
+                <Printer size={22} />
+                <span>KOT History</span>
+              </button>
+            </div>
             )}
-          </button>
+          </div>
 
-          {/* 4. Bill History - Hidden for Captain */}
+          {/* OPERATIONS SECTION */}
+          {(!isCaptain && (features.kds !== false || features.expenses !== false || features.delivery !== false)) && (
+            <div>
+              <button 
+                onClick={() => setSidebarSections(s => ({ ...s, operations: !s.operations }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
+              >
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Operations</h3>
+                {sidebarSections.operations ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
+              </button>
+              {sidebarSections.operations && (
+              <div className="space-y-0.5">
+                {features.kds !== false && (
+                  <button
+                    onClick={() => handleViewChange('kds')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <UtensilsCrossed size={22} />
+                    <span>Kitchen Display (KDS)</span>
+                  </button>
+                )}
+
+                {features.delivery !== false && (
+                  <button
+                    onClick={() => handleViewChange('delivery')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'delivery' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <Truck size={22} />
+                    <span>Delivery Orders</span>
+                  </button>
+                )}
+
+                {features.delivery !== false && (
+                  <button
+                    onClick={() => handleViewChange('pickup')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'pickup' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <ShoppingBag size={22} />
+                    <span>Pickup Orders</span>
+                  </button>
+                )}
+
+                {features.expenses !== false && (
+                  <button
+                    onClick={() => handleViewChange('expenses')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'expenses' ? 'bg-gradient-to-r from-rose-500 to-red-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <Wallet size={22} />
+                    <span>Petty Cash</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleViewChange('operations')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'operations' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                >
+                  <LayoutGrid size={22} />
+                  <span>Extra Operations</span>
+                </button>
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* MANAGEMENT SECTION */}
           {!isCaptain && (
-            <button
-              onClick={() => handleViewChange('history')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'history' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <History size={20} />
-              <span>Bill History</span>
-            </button>
+            <div>
+              <button 
+                onClick={() => setSidebarSections(s => ({ ...s, management: !s.management }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
+              >
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Management</h3>
+                {sidebarSections.management ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
+              </button>
+              {sidebarSections.management && (
+              <div className="space-y-0.5">
+                <button
+                  onClick={() => handleViewChange('dashboard')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'dashboard' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                >
+                  <Home size={22} />
+                  <span>Dashboard</span>
+                </button>
+
+                {(isAdmin && features.analytics !== false) && (
+                  <button
+                    onClick={() => handleViewChange('analytics')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'analytics' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <BarChart3 size={22} />
+                    <span>Analytics</span>
+                  </button>
+                )}
+
+                {features.daybook !== false && (
+                  <button
+                    onClick={() => handleViewChange('daybook')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'daybook' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <BookOpen size={22} />
+                    <span>DayBook</span>
+                  </button>
+                )}
+              </div>
+              )}
+            </div>
           )}
 
-          {/* 4.5 KOT History - Available to all */}
-          <button
-            onClick={() => handleViewChange('kothistory')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'kothistory' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-          >
-            <Printer size={20} />
-            <span>KOT History</span>
-          </button>
-
-          {/* 4.6 KDS - Hidden for Captain */}
-          {(!isCaptain && features.kds !== false) && (
-            <button
-              onClick={() => handleViewChange('kds')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'kds' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <UtensilsCrossed size={20} />
-              <span>Kitchen Display (KDS)</span>
-            </button>
-          )}
-
-          {/* 5. Petty Cash & Expenses - Hidden for Captain */}
-          {(!isCaptain && features.expenses !== false) && (
-            <button
-              onClick={() => handleViewChange('expenses')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'expenses' ? 'bg-red-500 text-white shadow-lg shadow-red-500/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <Wallet size={20} />
-              <span>Petty Cash & Expenses</span>
-            </button>
-          )}
-
-          {/* 6. Delivery Orders - Hidden for Captain */}
-          {(!isCaptain && features.delivery !== false) && (
-            <button
-              onClick={() => handleViewChange('delivery')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'delivery' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <Truck size={20} />
-              <span>Delivery Orders</span>
-            </button>
-          )}
-
-          {/* 6. Dashboard - Hidden for Captain */}
+          {/* SYSTEM SECTION */}
           {!isCaptain && (
-            <button
-              onClick={() => handleViewChange('dashboard')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <Home size={20} />
-              <span>Dashboard</span>
-            </button>
-          )}
+            <div>
+              <button 
+                onClick={() => setSidebarSections(s => ({ ...s, system: !s.system }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
+              >
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">System</h3>
+                {sidebarSections.system ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
+              </button>
+              {sidebarSections.system && (
+              <div className="space-y-0.5">
+                {(isAdmin && features.inventory !== false) && (
+                  <button
+                    onClick={() => handleViewChange('inventory')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'inventory' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <Package size={22} />
+                    <span>Inventory</span>
+                  </button>
+                )}
 
-          {/* 7. Analytics - Hidden for Captain and Cashier */}
-          {(isAdmin && features.analytics !== false) && (
-            <button
-              onClick={() => handleViewChange('analytics')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'analytics' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <BarChart3 size={20} />
-              <span>Analytics</span>
-            </button>
-          )}
+                {features.crm !== false && (
+                  <button
+                    onClick={() => handleViewChange('crm')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'crm' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <UsersIcon size={22} />
+                    <span>Customer CRM</span>
+                  </button>
+                )}
 
-          {/* 7.5 DayBook - Hidden for Captain */}
-          {(!isCaptain && features.daybook !== false) && (
-            <button
-              onClick={() => handleViewChange('daybook')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'daybook' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <BookOpen size={20} />
-              <span>DayBook</span>
-            </button>
-          )}
+                {(isAdmin && features.staff !== false) && (
+                  <button
+                    onClick={() => handleViewChange('staff')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'staff' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <UserCheck size={22} />
+                    <span>Staff HR</span>
+                  </button>
+                )}
 
-          {/* 7.6 Inventory - Admin only */}
-          {(isAdmin && features.inventory !== false) && (
-            <button
-              onClick={() => handleViewChange('inventory')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'inventory' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <Package size={20} />
-              <span>Inventory</span>
-            </button>
-          )}
+                {(isAdmin && features.qrcode !== false) && (
+                  <button
+                    onClick={() => handleViewChange('qrcode')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'qrcode' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <QrCode size={22} />
+                    <span>QR Menu Generator</span>
+                  </button>
+                )}
 
-          {/* 7.7 CRM - Hidden for Captain */}
-          {(!isCaptain && features.crm !== false) && (
-            <button
-              onClick={() => handleViewChange('crm')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'crm' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <UsersIcon size={20} />
-              <span>Customer CRM</span>
-            </button>
-          )}
+                <button
+                  onClick={() => handleViewChange('menu')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'menu' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                >
+                  <UtensilsCrossed size={22} />
+                  <span>Menu</span>
+                </button>
 
-          {(isAdmin && features.staff !== false) && (
-            <button
-              onClick={() => handleViewChange('staff')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'staff' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <UserCheck size={20} />
-              <span>Staff HR</span>
-            </button>
-          )}
-
-          {(isAdmin && features.qrcode !== false) && (
-            <button
-              onClick={() => handleViewChange('qrcode')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'qrcode' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <QrCode size={20} />
-              <span>QR Menu Generator</span>
-            </button>
-          )}
-
-          {/* 7.9 Operations */}
-          <button
-            onClick={() => handleViewChange('operations')}
-            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'operations' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-          >
-            <LayoutGrid size={20} />
-            <span>Operations</span>
-          </button>
-
-          {/* 8. Menu - Hidden for Captain */}
-          {!isCaptain && (
-            <button
-              onClick={() => handleViewChange('menu')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'menu' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <UtensilsCrossed size={20} />
-              <span>Menu</span>
-            </button>
-          )}
-
-          {/* 9. Settings - Hidden for Captain and Cashier */}
-          {isAdmin && (
-            <button
-              onClick={() => handleViewChange('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-semibold text-[1.05rem] ${view === 'settings' ? 'bg-primary text-white shadow-lg shadow-primary/25 translate-x-2' : 'text-text-muted hover:bg-surface-hover hover:text-text-main hover:translate-x-1'}`}
-            >
-              <SettingsIcon size={20} />
-              <span>Settings</span>
-            </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleViewChange('settings')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'settings' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
+                  >
+                    <SettingsIcon size={22} />
+                    <span>Settings</span>
+                  </button>
+                )}
+              </div>
+              )}
+            </div>
           )}
         </nav>
 
         <div className="p-6">
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-danger bg-danger/5 hover:bg-danger/10 transition-all font-medium hover:shadow-md"
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all font-medium hover:shadow-md"
           >
             <LogOut size={20} />
             <span>Logout</span>
@@ -1100,7 +1163,7 @@ function App() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-extrabold text-text-main">Owner Access Protected</h2>
-                    <p className="text-sm text-text-muted mt-1.5 leading-relaxed">
+                    <p className="text-[1.05rem] text-text-muted mt-1.5 leading-relaxed">
                       Please enter the security PIN to access sensitive financial reports ({getTitle()}).
                     </p>
                   </div>
@@ -1158,10 +1221,11 @@ function App() {
                       handleViewChange('billing');
                     }}
                     onOrderUpdate={fetchActiveOrdersCount}
+                    onNavigate={handleViewChange}
                   />
                 )}
                 {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
-                {view === 'history' && <BillHistory />}
+                {view === 'history' && <BillHistory onNavigate={handleViewChange} />}
                 {view === 'kothistory' && <KOTHistory />}
                 {view === 'analytics' && <Analytics />}
                 {view === 'daybook' && <DayBook />}
@@ -1180,6 +1244,7 @@ function App() {
                 {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} />}
                 {view === 'menu' && <MenuManagement user={user} />}
                 {view === 'delivery' && <DeliveryOrders />}
+                {view === 'pickup' && <PickupOrders />}
                 {view === 'expenses' && <Expenses />}
                 {view === 'inventory' && <InventoryManagement />}
                 {view === 'crm' && <CRM />}
@@ -1216,7 +1281,7 @@ function App() {
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'floor' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <LayoutGrid size={20} className={view === 'floor' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-[11px] tracking-tight">Tables</span>
+            <span className="text-xs tracking-tight">Tables</span>
           </button>
 
           <button
@@ -1233,7 +1298,7 @@ function App() {
                 </span>
               )}
             </div>
-            <span className="text-[11px] tracking-tight">KOTs</span>
+            <span className="text-xs tracking-tight">KOTs</span>
           </button>
 
           <button
@@ -1245,7 +1310,7 @@ function App() {
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'billing' ? 'bg-primary/15 text-primary scale-105 shadow-sm' : 'text-text-muted'}`}>
               <UtensilsCrossed size={22} className={view === 'billing' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-[11px] tracking-tight font-black">Billing</span>
+            <span className="text-xs tracking-tight font-black">Billing</span>
           </button>
 
           <button
@@ -1257,7 +1322,7 @@ function App() {
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'history' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <Receipt size={20} className={view === 'history' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-[11px] tracking-tight">History</span>
+            <span className="text-xs tracking-tight">History</span>
           </button>
 
           <button
@@ -1269,7 +1334,7 @@ function App() {
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <Menu size={20} className={['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-[11px] tracking-tight">More</span>
+            <span className="text-xs tracking-tight">More</span>
           </button>
         </div>
       </div>
@@ -1318,7 +1383,7 @@ function App() {
                 onClick={() => setShowExpiryPopup(false)}
                 className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center hover:bg-border transition-colors"
               >
-                <X size={16} className="text-text-muted" />
+                <X size={18} className="text-text-muted" />
               </button>
             </div>
 
@@ -1326,8 +1391,8 @@ function App() {
             <div className="px-6 py-5 space-y-4">
               <div className="bg-background rounded-2xl p-4 border border-border space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-text-muted font-medium">Expiry Date</span>
-                  <span className="text-sm font-bold text-text-main">
+                  <span className="text-[1.05rem] text-text-muted font-medium">Expiry Date</span>
+                  <span className="text-[1.05rem] font-bold text-text-main">
                     {daysRemaining > 365 
                       ? 'Permanent (Lifetime)' 
                       : licenseExpiry 
@@ -1336,8 +1401,8 @@ function App() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-text-muted font-medium">Days Remaining</span>
-                  <span className={`text-sm font-bold ${
+                  <span className="text-[1.05rem] text-text-muted font-medium">Days Remaining</span>
+                  <span className={`text-[1.05rem] font-bold ${
                     daysRemaining <= 0 
                       ? 'text-red-500' 
                       : daysRemaining > 365
@@ -1368,7 +1433,7 @@ function App() {
 
               {daysRemaining <= 365 ? (
                 <div className="bg-amber-50 dark:bg-amber-500/10 rounded-2xl p-4 border border-amber-200 dark:border-amber-500/20">
-                  <p className="text-sm text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
+                  <p className="text-[1.05rem] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
                     {daysRemaining <= 0
                       ? 'Your license has expired. Please renew immediately to continue using all features without interruption.'
                       : 'Your license will expire soon. Please renew before the expiry date to avoid any service interruption.'}
@@ -1376,7 +1441,7 @@ function App() {
                 </div>
               ) : (
                 <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-500/20">
-                  <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium leading-relaxed">
+                  <p className="text-[1.05rem] text-emerald-800 dark:text-emerald-300 font-medium leading-relaxed">
                     Thank you for choosing MS Tech Hive! Your software license is fully active and has no upcoming expiration.
                   </p>
                 </div>

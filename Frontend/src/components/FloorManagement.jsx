@@ -340,35 +340,36 @@ const FloorManagement = ({ onNavigate }) => {
     const isOccupied = !!activeOrder;
 
     let statusColorClass = 'text-emerald-600';
-    let statusBgClass = 'bg-emerald-50';
+    let statusBgClass = 'bg-emerald-100/60';
     let statusBorderClass = 'border-emerald-200';
     let statusBadgeClass = 'bg-emerald-100 text-emerald-700';
     let statusText = 'Available';
     let Icon = null;
     let SmallIcon = CheckCircle;
 
-    if (type.toLowerCase() === 'table') Icon = Coffee;
-    else if (type.toLowerCase() === 'cabin') Icon = Home;
-    else if (type.toLowerCase() === 'sofa') Icon = Sofa;
+    const resolvedType = (item.type || type).toLowerCase();
+    if (resolvedType === 'table') Icon = Coffee;
+    else if (resolvedType === 'cabin') Icon = Home;
+    else if (resolvedType === 'sofa') Icon = Sofa;
     else Icon = Utensils; // fallback
 
     if (activeOrder) {
       if (activeOrder.status === 'Open') {
-        statusBgClass = 'bg-blue-50';
+        statusBgClass = 'bg-blue-100/60';
         statusBorderClass = 'border-blue-300';
         statusColorClass = 'text-blue-600';
         statusBadgeClass = 'bg-blue-200 text-blue-800';
         statusText = 'Running';
         SmallIcon = Clock;
       } else if (activeOrder.status === 'Printed') {
-        statusBgClass = 'bg-orange-50';
+        statusBgClass = 'bg-orange-100/60';
         statusBorderClass = 'border-orange-300';
         statusColorClass = 'text-orange-600';
         statusBadgeClass = 'bg-orange-200 text-orange-800';
         statusText = 'Printed';
         SmallIcon = Printer;
       } else if (activeOrder.status === 'Billed') {
-        statusBgClass = 'bg-gray-50';
+        statusBgClass = 'bg-gray-100/60';
         statusBorderClass = 'border-gray-300';
         statusColorClass = 'text-gray-600';
         statusBadgeClass = 'bg-gray-200 text-gray-800';
@@ -376,7 +377,7 @@ const FloorManagement = ({ onNavigate }) => {
         SmallIcon = CheckCircle;
       }
     } else if (item.status === 'Reserved') {
-      statusBgClass = 'bg-amber-50';
+      statusBgClass = 'bg-amber-100/60';
       statusBorderClass = 'border-amber-300';
       statusColorClass = 'text-amber-600';
       statusBadgeClass = 'bg-amber-200 text-amber-800';
@@ -404,38 +405,39 @@ const FloorManagement = ({ onNavigate }) => {
       <div
         key={item._id || `${item.id}-${index}`}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
-        className={`group relative flex flex-col justify-between w-[160px] h-[130px] p-3 rounded-2xl border-2 transition-all cursor-pointer shadow-sm ${statusBgClass} ${statusBorderClass} hover:shadow-md hover:opacity-90`}
+        className={`group relative flex flex-col items-center justify-center w-[160px] h-[155px] p-4 rounded-[1.25rem] border border-white/50 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-1 ${statusBgClass}`}
       >
         {insightBadge}
 
-        {/* Top Row: Icon and Badge */}
-        <div className="flex justify-between items-start w-full">
-          <div className={`p-1.5 rounded-lg bg-white/60 ${statusColorClass} shadow-sm`}>
-            <Icon size={20} strokeWidth={2.5} />
+        <div className="flex flex-col items-center gap-1.5 w-full h-full justify-between">
+          <div className={`p-2 rounded-full bg-white shadow-sm ${statusColorClass}`}>
+            <Icon size={24} strokeWidth={2.5} />
           </div>
-          <div className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase ${statusBadgeClass}`}>
-            {statusText}
-          </div>
-        </div>
-
-        {/* Middle/Bottom Row: Name, Status, Amount */}
-        <div className="w-full mt-2 flex flex-col gap-0.5">
-          <h3 className="text-[17px] font-extrabold text-gray-800 leading-tight">
+          
+          <h3 className="text-[17px] font-black text-gray-800 leading-tight text-center w-full truncate my-1">
             {item.name}
           </h3>
           
           {!isOccupied ? (
-            <div className={`flex items-center gap-1.5 mt-1 text-[12px] font-bold ${statusColorClass}`}>
-              <SmallIcon size={14} strokeWidth={3} />
-              <span>{statusText}</span>
+            <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white shadow-sm ${statusColorClass}`}>
+              {statusText}
             </div>
           ) : (
-            <div className="flex items-center justify-between mt-1">
-              <span className="font-black text-[16px] text-gray-900">₹{activeOrder.total?.toLocaleString() || 0}</span>
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 mt-1 w-full justify-center">
+              <div className="px-3 py-1 rounded-full text-[12px] font-black uppercase tracking-wider bg-white shadow-sm text-gray-900 flex-1 text-center truncate">
+                ₹{activeOrder.total?.toLocaleString() || 0}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleSpaceClick(uniqueSpaceName); }}
+                  className="bg-white rounded-full p-1.5 hover:text-emerald-600 transition-colors shadow-sm text-gray-500"
+                  title="View Order Details"
+                >
+                  <Eye size={14} strokeWidth={2.5} />
+                </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); /* Print */ }}
-                  className="bg-white/80 border border-gray-200 rounded p-1 hover:text-blue-600 transition-colors shadow-sm"
+                  className="bg-white rounded-full p-1.5 hover:text-blue-600 transition-colors shadow-sm text-gray-500"
                   title="Print Bill directly"
                 >
                   <Printer size={14} strokeWidth={2.5} />
@@ -482,11 +484,11 @@ const FloorManagement = ({ onNavigate }) => {
             Merge Bills
           </button>
 
-          <button onClick={() => onNavigate('delivery')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
+          <button onClick={() => onNavigate('billing', 'DEL-NEW')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
             Delivery
           </button>
           
-          <button onClick={() => onNavigate('delivery')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
+          <button onClick={() => onNavigate('billing', 'TAK-NEW')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">
             Pick Up
           </button>
 

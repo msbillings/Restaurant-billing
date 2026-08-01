@@ -13,6 +13,9 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
     } catch (e) { return true; }
   });
 
+  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
+  const quickAmounts = currencySymbol === '$' ? [10, 50, 100] : [500, 1000, 2000];
+
   const balance = amountPaid - total;
   const mixedTotal = splitPayments.cash + splitPayments.upi + splitPayments.card;
   const isMixedValid = mixedTotal === total;
@@ -40,7 +43,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
         <div className="p-6 overflow-y-auto">
           <div className="text-center mb-8">
             <span className="text-text-muted text-sm uppercase tracking-wider font-semibold">Amount Due</span>
-            <div className="text-4xl font-bold text-primary mt-1">₹{total.toFixed(2)}</div>
+            <div className="text-4xl font-bold text-primary mt-1">{currencySymbol}{total.toFixed(2)}</div>
           </div>
 
           <div className="mb-6">
@@ -76,7 +79,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                 </div>
                 
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">₹</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">{currencySymbol}</span>
                   <input 
                     type="number" 
                     className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 text-xl font-black text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
@@ -88,16 +91,16 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
 
                 <div className="grid grid-cols-4 gap-2 mt-2">
                   <button onClick={() => setAmountPaid(total)} className="py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold text-text-main transition-colors">Exact</button>
-                  <button onClick={() => setAmountPaid(500)} className="py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold text-text-main transition-colors">₹500</button>
-                  <button onClick={() => setAmountPaid(1000)} className="py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold text-text-main transition-colors">₹1000</button>
-                  <button onClick={() => setAmountPaid(2000)} className="py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold text-text-main transition-colors">₹2000</button>
+                  {quickAmounts.map(amt => (
+                    <button key={amt} onClick={() => setAmountPaid(amt)} className="py-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-xs font-bold text-text-main transition-colors">{currencySymbol}{amt}</button>
+                  ))}
                 </div>
               </div>
               
               <div className="flex justify-between items-center p-4 bg-background rounded-xl border border-border">
                 <span className="font-medium text-text-muted">Balance to Return</span>
                 <span className={`text-2xl font-black ${balance < 0 ? 'text-danger' : 'text-success'}`}>
-                  ₹{Math.max(0, balance).toFixed(2)}
+                  {currencySymbol}{Math.max(0, balance).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -132,15 +135,16 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                     />
                   </div>
                   
-                  <div className="font-bold text-text-main text-base flex items-center gap-1.5">
-                    Amount Due: <span className="text-primary font-black text-lg">₹{total.toFixed(2)}</span>
+                  <div className="mt-4 text-center">
+                    Amount Due: <span className="text-primary font-black text-lg">{currencySymbol}{total.toFixed(2)}</span>
+                    <div className="text-xs text-text-muted mt-1">Supports PhonePe, GPay, Paytm & all UPI apps</div>
                   </div>
-                  <p className="text-[11px] text-text-muted mt-0.5 font-medium">Supports PhonePe, GPay, Paytm & all UPI apps</p>
                 </div>
               ) : (
-                <div className="bg-background p-5 rounded-2xl border border-border text-center">
-                  <div className="font-bold text-text-main text-base mb-1">UPI Payment Due: ₹{total.toFixed(2)}</div>
-                  <p className="text-xs text-text-muted">Dynamic QR Code display is turned off in Settings.</p>
+                <div className="flex flex-col items-center justify-center p-8 bg-background border border-border rounded-xl">
+                  <Wallet size={48} className="text-text-muted mb-4 opacity-20" />
+                  <div className="font-bold text-text-main text-base mb-1">UPI Payment Due: {currencySymbol}{total.toFixed(2)}</div>
+                  <div className="text-sm text-text-muted">Waiting for customer to scan and pay...</div>
                 </div>
               )}
 
@@ -177,13 +181,14 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                         {method === 'cash' ? <Banknote size={16} /> : method === 'upi' ? <Wallet size={16} /> : <CreditCard size={16} />}
                         {method}
                       </div>
-                      <div className="relative flex-1">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">₹</span>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">{currencySymbol}</span>
                         <input 
                           type="number" 
-                          className="w-full bg-background border border-border rounded-xl py-2 pl-10 pr-4 font-black text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                          className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 font-bold text-text-main focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                           value={splitPayments[method] === 0 ? '' : splitPayments[method]} 
                           onChange={(e) => setSplitPayments({...splitPayments, [method]: parseFloat(e.target.value) || 0})}
+                          placeholder={`${method.charAt(0).toUpperCase() + method.slice(1)} Amount`}
                         />
                       </div>
                     </div>
@@ -191,10 +196,10 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                 </div>
               </div>
               
-              <div className="flex justify-between items-center p-4 bg-background rounded-xl border border-border">
-                <span className="font-medium text-text-muted">Sum / Total</span>
-                <span className={`text-xl font-black ${mixedTotal !== total ? 'text-danger' : 'text-success'}`}>
-                  ₹{mixedTotal.toFixed(2)} / ₹{total.toFixed(2)}
+              <div className={`p-4 rounded-xl border ${isMixedValid ? 'bg-success/5 border-success/20' : 'bg-danger/5 border-danger/20'} flex justify-between items-center`}>
+                <span className="font-bold text-sm text-text-main">Total Allocated</span>
+                <span className={`text-xl font-black ${isMixedValid ? 'text-success' : 'text-danger'}`}>
+                  {currencySymbol}{mixedTotal.toFixed(2)} / {currencySymbol}{total.toFixed(2)}
                 </span>
               </div>
             </div>

@@ -2,6 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Printer, ArrowLeft, Save } from 'lucide-react';
 
 const Invoice = ({ bill, onClose, onSave }) => {
+  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
+  const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
+  let enabledCurrencies = [];
+  let baseRate = 1.0;
+  try {
+    const s = JSON.parse(localStorage.getItem('secondaryCurrencies')) || [];
+    enabledCurrencies = s.filter(c => c.enabled && c.code !== primaryCurrency);
+    if (primaryCurrency !== 'INR') {
+      const found = s.find(r => r.code === primaryCurrency);
+      if (found) baseRate = found.rate;
+    }
+  } catch(e) {}
+
   const [settings, setSettings] = useState({
     restaurantName: 'msbillings',
     restaurantType: 'Restaurant',
@@ -307,7 +320,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                   </div>
                   <div className="flex justify-between items-center w-full mt-2" style={{ fontSize: '24px', fontWeight: 'bold' }}>
                     <span>Grand Total</span>
-                    <span>₹{roundedTotal.toFixed(2)}</span>
+                    <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                   </div>
                 </>
               );
@@ -315,6 +328,23 @@ const Invoice = ({ bill, onClose, onSave }) => {
           </div>
 
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+
+          {/* Secondary Currencies */}
+          {enabledCurrencies.length > 0 && (
+            <div className="text-center mt-2 pb-1" style={{ fontSize: '14px', fontWeight: 'bold' }}>
+              <div className="mb-1">Amount in Foreign Currencies:</div>
+              {enabledCurrencies.map(c => {
+                const foreignAmt = Math.round(bill.total) * (c.rate / baseRate);
+                return (
+                  <div key={c.code} className="flex justify-between px-6" style={{ fontWeight: 'normal' }}>
+                    <span>{c.code}</span>
+                    <span>{foreignAmt.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: '1px dashed black', margin: '4px 0', marginTop: '6px' }}></div>
+            </div>
+          )}
 
           {/* Payment Mode */}
           {bill.paymentMode && (

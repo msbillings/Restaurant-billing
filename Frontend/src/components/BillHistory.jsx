@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw } from 'lucide-react';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 
-const BillHistory = () => {
+const BillHistory = ({ onNavigate }) => {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState(null);
@@ -167,9 +167,19 @@ const BillHistory = () => {
   return (
     <div className="h-full flex flex-col bg-background p-3 sm:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text-main">Transaction History</h1>
-          <p className="text-xs sm:text-sm text-text-muted">View and manage past transactions</p>
+        <div className="flex items-center gap-3">
+          {onNavigate && (
+            <button 
+              onClick={() => onNavigate('dashboard')} 
+              className="p-2 bg-black/5 hover:bg-black/10 rounded-full transition-colors mr-1"
+            >
+              <ArrowLeft size={20} className="text-gray-700" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-text-main">Transaction History</h1>
+            <p className="text-xs sm:text-sm text-text-muted">View and manage past transactions</p>
+          </div>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders } from '../api/billing';
-import { UtensilsCrossed, Clock, ChevronRight, FileText, CheckCircle } from 'lucide-react';
+import { UtensilsCrossed, Clock, ChevronRight, ArrowLeft, FileText, CheckCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 
-const ActiveOrders = ({ onSelectOrder }) => {
+const ActiveOrders = ({ onSelectOrder, onNavigate }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Online'
@@ -92,13 +92,23 @@ const ActiveOrders = ({ onSelectOrder }) => {
     <div className="h-full flex flex-col bg-background">
       <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h2 className="text-2xl font-bold text-text-main flex items-center gap-3">
-            <UtensilsCrossed className="text-primary" />
-            Active Orders
-            <span className="bg-primary/10 text-primary text-sm px-3 py-1 rounded-full font-mono">
-              {orders.length}
-            </span>
-          </h2>
+          <div className="flex items-center gap-3">
+            {onNavigate && (
+              <button 
+                onClick={() => onNavigate('billing')} 
+                className="p-2 bg-black/5 hover:bg-black/10 rounded-full transition-colors mr-1"
+              >
+                <ArrowLeft size={20} className="text-gray-700" />
+              </button>
+            )}
+            <h2 className="text-2xl font-bold text-text-main flex items-center gap-3">
+              <UtensilsCrossed className="text-primary" />
+              Active Orders
+              <span className="bg-primary/10 text-primary text-sm px-3 py-1 rounded-full font-mono">
+                {orders.length}
+              </span>
+            </h2>
+          </div>
           <div className="flex bg-surface p-1 rounded-lg border border-border">
             {['All', 'Dine-In', 'Online'].map(type => (
               <button

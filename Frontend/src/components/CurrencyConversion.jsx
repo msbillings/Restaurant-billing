@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Save, CircleDollarSign, RefreshCw, Check } from 'lucide-react';
 
 const CurrencyConversion = ({ onNavigate }) => {
-  const [baseCurrency, setBaseCurrency] = useState('INR');
+  const [baseCurrency, setBaseCurrency] = useState(localStorage.getItem('primaryCurrency') || 'INR');
   const [exchangeRates, setExchangeRates] = useState([
     { code: 'USD', name: 'US Dollar', rate: 0.012, enabled: true },
     { code: 'EUR', name: 'Euro', rate: 0.011, enabled: true },
@@ -18,22 +18,38 @@ const CurrencyConversion = ({ onNavigate }) => {
     ));
   };
 
-  const handleUpdateRates = () => {
+  const handleUpdateRates = async () => {
     setIsUpdating(true);
-    // Simulate API call to fetch live rates
-    setTimeout(() => {
-      setExchangeRates(rates => rates.map(rate => ({
-        ...rate,
-        rate: rate.rate + (Math.random() * 0.001 - 0.0005) // Slight fluctuation
-      })));
-      setIsUpdating(false);
-    }, 1500);
+    try {
+      const response = await fetch('https://api.exchangerate-api.com/v4/latest/INR');
+      const data = await response.json();
+      if (data && data.rates) {
+        setExchangeRates(rates => rates.map(rate => ({
+          ...rate,
+          rate: data.rates[rate.code] || rate.rate
+        })));
+      }
+    } catch (error) {
+      console.error("Failed to fetch live rates", error);
+      alert("Failed to fetch live rates. Please check your connection.");
+    }
+    setIsUpdating(false);
   };
 
   const handleSave = () => {
+    localStorage.setItem('primaryCurrency', baseCurrency);
+    localStorage.setItem('secondaryCurrencies', JSON.stringify(exchangeRates));
     alert('Currency settings saved! Enabled currencies will now appear on the printed bills and checkout screens.');
     onNavigate('operations');
   };
+
+  const getBaseRate = () => {
+    if (baseCurrency === 'INR') return 1.0;
+    const found = exchangeRates.find(r => r.code === baseCurrency);
+    return found ? found.rate : 1.0;
+  };
+  
+  const baseRate = getBaseRate();
 
   return (
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
@@ -108,7 +124,7 @@ const CurrencyConversion = ({ onNavigate }) => {
                     </td>
                     <td className="p-3 text-right">
                       <div className="font-bold text-gray-700 font-mono">
-                        1 {baseCurrency} = {rate.rate.toFixed(4)} {rate.code}
+                        1 {rate.code} = {(baseRate / rate.rate).toFixed(2)} {baseCurrency}
                       </div>
                     </td>
                     <td className="p-3 text-center">

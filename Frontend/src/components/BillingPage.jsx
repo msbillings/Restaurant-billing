@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MenuGrid from './MenuGrid';
 import BillSummary from './BillSummary';
 import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
-import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
 import CancelOrderModal from './CancelOrderModal';
@@ -18,6 +18,41 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
   const [activeTable, setActiveTable] = useState(initialTable || '');
   const [floors, setFloors] = useState([]);
   const [openOrdersList, setOpenOrdersList] = useState([]);
+  const [isLayoutLocked, setIsLayoutLocked] = useState(false);
+
+  const [rightPanelWidth, setRightPanelWidth] = useState(400);
+  const isResizing = useRef(false);
+
+  const startResizing = useCallback((e) => {
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    e.preventDefault();
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    if (isResizing.current) {
+      isResizing.current = false;
+      document.body.style.cursor = 'default';
+    }
+  }, []);
+
+  const resize = useCallback((e) => {
+    if (isResizing.current) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 320 && newWidth < 800) {
+        setRightPanelWidth(newWidth);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', resize);
+    window.addEventListener('mouseup', stopResizing);
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [resize, stopResizing]);
 
   useEffect(() => {
     fetchOpenOrdersList();
@@ -149,20 +184,29 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
 
   useEffect(() => {
     if (initialTable) {
-      // eslint-disable-next-line
-      setActiveTable(initialTable);
-      if (initialTable.startsWith('DEL-')) {
-        setBillType('Delivery');
-      } else if (initialTable.startsWith('TAK-')) {
-        setBillType('Takeaway');
+      if (initialTable === 'DEL-NEW' || initialTable === 'TAK-NEW') {
+        const prefix = initialTable === 'DEL-NEW' ? 'DEL-' : 'TAK-';
+        setBillType(initialTable === 'DEL-NEW' ? 'Delivery' : 'Takeaway');
+        const timestamp = Date.now().toString().slice(-6);
+        const generatedOrderNo = `${prefix}${timestamp}`;
+        newlyGeneratedTables.current.add(generatedOrderNo);
+        setActiveTable(generatedOrderNo);
       } else {
-        setBillType('Dine-In');
+        // eslint-disable-next-line
+        setActiveTable(initialTable);
+        if (initialTable.startsWith('DEL-')) {
+          setBillType('Delivery');
+        } else if (initialTable.startsWith('TAK-')) {
+          setBillType('Takeaway');
+        } else {
+          setBillType('Dine-In');
+        }
       }
     }
   }, [initialTable]);
 
   useEffect(() => {
-    if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
+    if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || activeTable === 'DEL-NEW' || activeTable === 'TAK-NEW' || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
       const existingOrder = openOrdersList.find(o => o.tableNo?.startsWith(prefix) && (o.status === 'Open' || o.status === 'Billed'));
       if (existingOrder && !initialTable) {
@@ -813,86 +857,90 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
     <div className="h-full flex flex-col overflow-hidden bg-background">
       <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 z-10">
 
-        <div className="flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5">
-          <LayoutGrid size={16} className="text-text-muted" />
-          {(billType === 'Delivery' || billType === 'Takeaway') ? (
-            <select 
-              value={activeTable} 
-              onChange={(e) => {
-                if (e.target.value === 'NEW_ORDER') {
-                  const timestamp = Date.now().toString().slice(-6);
-                  const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
-                  setActiveTable(`${prefix}${timestamp}`);
-                } else {
-                  setActiveTable(e.target.value);
+        <div className="flex items-center gap-1 bg-background border border-border rounded-xl px-2 py-1 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20">
+          
+          <div className="relative flex items-center gap-2 flex-1 cursor-pointer px-1 py-0.5">
+            <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
+            <div className="flex items-center flex-1 pointer-events-none">
+              <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
+                {activeTable 
+                  ? (activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable) 
+                  : t('selectTable', { defaultValue: 'Select Table' })}
+              </span>
+              <ChevronDown size={14} className="text-text-muted ml-1 shrink-0" />
+            </div>
+
+            {(billType === 'Delivery' || billType === 'Takeaway') ? (
+              <select 
+                value={activeTable} 
+                onChange={(e) => {
+                  if (e.target.value === 'NEW_ORDER') {
+                    const timestamp = Date.now().toString().slice(-6);
+                    const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
+                    setActiveTable(`${prefix}${timestamp}`);
+                  } else {
+                    setActiveTable(e.target.value);
+                  }
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              >
+                <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
+                {openOrdersList
+                  .filter(o => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))
+                  .map(o => (
+                    <option key={o._id} value={o.tableNo} className="bg-surface text-white">
+                      {o.tableNo} ({o.status} - ₹{o.total || 0})
+                    </option>
+                  ))
                 }
-              }}
-              className="bg-transparent font-bold text-text-main focus:outline-none text-sm cursor-pointer"
-            >
-              <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
-              {openOrdersList
-                .filter(o => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))
-                .map(o => (
-                  <option key={o._id} value={o.tableNo} className="bg-surface text-white">
-                    {o.tableNo} ({o.status} - ₹{o.total || 0})
+                {activeTable && !openOrdersList.some(o => o.tableNo === activeTable) && (
+                  <option value={activeTable} className="bg-surface text-white">
+                    {activeTable} ({t('newCurrent')})
                   </option>
-                ))
-              }
-              {activeTable && !openOrdersList.some(o => o.tableNo === activeTable) && (
-                <option value={activeTable} className="bg-surface text-white">
-                  {activeTable} ({t('newCurrent')})
-                </option>
-              )}
-            </select>
-          ) : (
-            <select 
-              value={activeTable} 
-              onChange={(e) => setActiveTable(e.target.value)}
-              className="bg-transparent font-bold text-text-main focus:outline-none text-sm"
-            >
-              <option value="" >{t('selectTable')}</option>
-              {floors.map((floor, index) => {
-                const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
-                if (!hasItems) return null;
-                return (
-                  <optgroup key={`${floor.id || 'f'}-${index}`} label={floor.name}>
-                    {floor.tables?.map((t, i) => <option key={`t-${t.id || 'x'}-${i}`} value={t.name}>{t.name} (Table)</option>)}
-                    {floor.cabins?.map((c, i) => <option key={`c-${c.id || 'x'}-${i}`} value={c.name}>{c.name} (Cabin)</option>)}
-                    {floor.sofas?.map((s, i) => <option key={`s-${s.id || 'x'}-${i}`} value={s.name}>{s.name} (Sofa)</option>)}
-                  </optgroup>
-                );
-              })}
-              {floors.length === 0 && [...Array(20)].map((_, i) => (
-                <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                  {t('table')} {String(i + 1).padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-          )}
+                )}
+              </select>
+            ) : (
+              <select 
+                value={activeTable} 
+                onChange={(e) => setActiveTable(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              >
+                <option value="" >{t('selectTable', { defaultValue: 'Select Table' })}</option>
+                {floors.map((floor, index) => {
+                  const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
+                  if (!hasItems) return null;
+                  return (
+                    <optgroup key={`${floor.id || 'f'}-${index}`} label={floor.name}>
+                      {floor.tables?.map((t, i) => <option key={`t-${t.id || 'x'}-${i}`} value={t.name}>{t.name} (Table)</option>)}
+                      {floor.cabins?.map((c, i) => <option key={`c-${c.id || 'x'}-${i}`} value={c.name}>{c.name} (Cabin)</option>)}
+                      {floor.sofas?.map((s, i) => <option key={`s-${s.id || 'x'}-${i}`} value={s.name}>{s.name} (Sofa)</option>)}
+                    </optgroup>
+                  );
+                })}
+                {(!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0)) && [...Array(20)].map((_, i) => (
+                  <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
+                    {t('table')} {String(i + 1).padStart(2, '0')}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           
           {activeTable && orderStatus === 'Open' && orderId && billType !== 'Delivery' && (
             <button
-              onClick={() => setShowTransfer(true)}
+              onClick={(e) => {
+                e.preventDefault();
+                setShowTransfer(true);
+              }}
               title={t('transferBill')}
-              className="ml-2 p-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors border border-primary/20 flex items-center justify-center"
+              className="p-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors border border-primary/20 flex items-center justify-center shrink-0 z-20"
             >
               <ArrowRightLeft size={16} />
             </button>
           )}
         </div>
 
-        <div className="flex-1 max-w-md mx-4 hidden md:block">
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={18} />
-            <input 
-              type="text" 
-              placeholder={t('searchItems')} 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 text-text-main transition-all shadow-inner"
-            />
-          </div>
-        </div>
+
 
         <div className="items-center gap-6 hidden sm:flex">
           <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
@@ -904,6 +952,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
             </div>
           </div>
           
+          <button 
+            onClick={() => setIsLayoutLocked(!isLayoutLocked)}
+            className={`p-2 rounded-lg transition-all ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
+            title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}
+          >
+            {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
+          </button>
           <button 
             onClick={toggleFullScreen}
             className="p-2 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all"
@@ -961,12 +1016,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, userRole = 'Admi
           <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
             mobileTab === 'cart' ? 'hidden md:flex' : 'flex'
           } flex-1 transition-all duration-300`}>
-            <MenuGrid onSelectItem={addToCart} searchTerm={debouncedSearchTerm} />
+            <MenuGrid onSelectItem={addToCart} searchTerm={searchTerm} onSearchChange={setSearchTerm} isLayoutLocked={isLayoutLocked} />
           </div>
 
-          <div className={`flex flex-col overflow-hidden bg-surface ${
+          <div 
+            style={{ width: isCartCollapsed ? 0 : rightPanelWidth }}
+            className={`flex flex-col overflow-hidden bg-surface ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'
-          } ${isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100' : 'w-full md:w-[380px] lg:w-[400px] border-l border-border/50'} shrink-0 transition-all duration-300 relative`}>
+          } ${isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100' : 'border-l border-border/50'} shrink-0 transition-none relative`}
+          >
+            
+            {/* Drag Handle */}
+            {!isCartCollapsed && !isLayoutLocked && (
+              <div 
+                onMouseDown={startResizing}
+                className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent z-40 transition-colors"
+              />
+            )}
             
             <button 
               onClick={() => setIsCartCollapsed(!isCartCollapsed)}

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
-import { Printer, Calendar, Search, FileText } from 'lucide-react';
+import { Printer, Calendar, Search, FileText, ArrowLeft } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
 
-const KOTHistory = () => {
+const KOTHistory = ({ onNavigate }) => {
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedKOT, setSelectedKOT] = useState(null);
@@ -52,6 +52,14 @@ const KOTHistory = () => {
       {/* Header and Filters */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-surface border-b border-border shrink-0 z-10 shadow-sm gap-4">
         <div className="flex items-center gap-3">
+          {onNavigate && (
+            <button 
+              onClick={() => onNavigate('floor')}
+              className="p-2 hover:bg-surface-hover rounded-xl transition-colors text-text-muted hover:text-text-main mr-1"
+            >
+              <ArrowLeft size={24} />
+            </button>
+          )}
           <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 shadow-sm border border-orange-200">
             <Printer size={20} />
           </div>
