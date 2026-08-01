@@ -6,6 +6,7 @@ import Papa from 'papaparse';
 import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
 const formatImageUrl = (url) => {
   if (!url) return '';
@@ -41,7 +42,7 @@ const formatImageUrl = (url) => {
   return trimmed;
 };
 
-const MenuManagement = ({ user }) => {
+const MenuManagement = ({ user, onNavigate }) => {
   const [activeTab, setActiveTab] = useState('items');
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -485,6 +486,9 @@ const MenuManagement = ({ user }) => {
 
   return (
     <div className="h-full flex flex-col bg-background p-3 sm:p-6">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-text-main">Menu Management</h1>

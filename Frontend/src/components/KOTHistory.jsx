@@ -4,8 +4,9 @@ import { Printer, Calendar, Search, FileText } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
+import BackButton from './common/BackButton';
 
-const KOTHistory = () => {
+const KOTHistory = ({ onNavigate }) => {
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedKOT, setSelectedKOT] = useState(null);
@@ -48,9 +49,15 @@ const KOTHistory = () => {
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background">
+    <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
+
       {/* Header and Filters */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-6 bg-surface border-b border-border shrink-0 z-10 shadow-sm gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 shrink-0 bg-surface p-6 border border-border rounded-xl shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 shadow-sm border border-orange-200">
             <Printer size={20} />

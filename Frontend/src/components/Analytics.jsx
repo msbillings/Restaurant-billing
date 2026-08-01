@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import BackButton from './common/BackButton';
 import { getAnalytics, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../api/analytics';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import {
@@ -18,11 +19,13 @@ import {
   ShieldAlert,
   AlertTriangle,
   UserX,
-  X
+  X,
+  DownloadCloud,
+  ChevronDown
 } from 'lucide-react';
 import Toast from './Toast';
 
-const Analytics = () => {
+const Analytics = ({ onNavigate }) => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -165,6 +168,9 @@ const Analytics = () => {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-7xl mx-auto p-6 space-y-5">
+        <div className="flex items-center gap-4 mb-2">
+          <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+        </div>
         {/* Period Selector */}
         <div className="bg-gradient-to-r from-primary/5 via-accent/3 to-secondary/5 rounded-xl p-4 border border-border/50 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-4">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -21,6 +21,11 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Use localhost during development so we can test the new upload features
+const API_BASE_URL = 'http://localhost:4000/api';
+// When deploying, change to:
+// const API_BASE_URL = 'https://restaurant-superadmin-api-maheer.vercel.app/api';
+
 // Axios Interceptor for JWT
 axios.interceptors.request.use((config) => {
   const token = localStorage.getItem('superadmin_token');
@@ -39,7 +44,30 @@ function App() {
   const [filterPlan, setFilterPlan] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [signupsFilter, setSignupsFilter] = useState('7days');
-  const [currentTab, setCurrentTab] = useState('Dashboard');
+  const [currentTab, setCurrentTab] = useState(() => {
+    const hash = window.location.hash.replace('#', '');
+    const validTabs = ['Dashboard', 'Insights', 'Broadcasts'];
+    const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
+    return tabMatch || 'Dashboard';
+  });
+
+  useEffect(() => {
+    window.location.hash = currentTab.toLowerCase();
+  }, [currentTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      const validTabs = ['Dashboard', 'Insights', 'Broadcasts'];
+      const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
+      if (tabMatch && tabMatch !== currentTab) {
+        setCurrentTab(tabMatch);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentTab]);
+
   const [token, setToken] = useState(localStorage.getItem('superadmin_token'));
   const [adminUser, setAdminUser] = useState(JSON.parse(localStorage.getItem('superadmin_user') || 'null'));
   
@@ -48,7 +76,7 @@ function App() {
   const [loadingStats, setLoadingStats] = useState(false);
   
   // Modal State
-  const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
+  const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false, mapsUrl: '' });
   const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
   const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, staffAccounts: [], restaurantName: '' });
@@ -56,12 +84,47 @@ function App() {
 
   // Broadcast State
   const [broadcasts, setBroadcasts] = useState([]);
-  const [newBroadcast, setNewBroadcast] = useState({ title: '', message: '', imageUrl: '' });
+  const [replies, setReplies] = useState([]);
+  const [editingBroadcastId, setEditingBroadcastId] = useState(null);
+  
+  // Persist broadcast form in localStorage
+  const getInitialBroadcastState = () => {
+    const saved = localStorage.getItem('superadmin_draft_broadcast');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Ensure file is always null on reload since we can't serialize Files
+        return { ...parsed, file: null };
+      } catch (e) {
+        console.error('Error parsing draft broadcast', e);
+      }
+    }
+    return { 
+      title: '', 
+      message: '', 
+      imageUrl: '',
+      targetClients: [],
+      targetRoles: [],
+      file: null,
+      allowReplies: true
+    };
+  };
+
+  const [newBroadcast, setNewBroadcast] = useState(getInitialBroadcastState);
+
+  // Save to local storage whenever it changes
+  useEffect(() => {
+    // We can't stringify File objects, so we omit 'file'
+    const { file, ...serializableState } = newBroadcast;
+    localStorage.setItem('superadmin_draft_broadcast', JSON.stringify(serializableState));
+  }, [newBroadcast]);
 
   const fetchBroadcasts = async () => {
     try {
-      const response = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts');
+      const response = await axios.get(`${API_BASE_URL}/broadcasts`);
       setBroadcasts(response.data);
+      const repResponse = await axios.get(`${API_BASE_URL}/broadcasts/replies`);
+      setReplies(repResponse.data);
     } catch (error) {
       console.error('Error fetching broadcasts:', error);
     }
@@ -70,7 +133,7 @@ function App() {
   const fetchClients = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/clients');
+      const response = await axios.get(`${API_BASE_URL}/clients`);
       setClients(response.data);
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -82,7 +145,7 @@ function App() {
   const fetchGlobalStats = async () => {
     setLoadingStats(true);
     try {
-      const response = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/analytics/global');
+      const response = await axios.get(`${API_BASE_URL}/analytics/global`);
       setGlobalStats(response.data);
     } catch (error) {
       console.error('Error fetching global stats:', error);
@@ -106,21 +169,17 @@ function App() {
     setAdminUser(null);
   };
 
-  if (!token) {
-    return <Login onLogin={(t) => setToken(t)} />;
-  }
-
-  const handleRegisterFingerprint = async () => {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);  const handleRegisterFingerprint = async () => {
     try {
       // 1. Get registration options
-      const resp = await axios.get('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/register/generate');
+      const resp = await axios.get(`${API_BASE_URL}/auth/webauthn/register/generate`);
       const options = resp.data;
 
       // 2. Start biometric prompt
       const attResp = await startRegistration(options);
 
       // 3. Verify registration
-      const verificationResp = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/auth/webauthn/register/verify', attResp);
+      const verificationResp = await axios.post(`${API_BASE_URL}/auth/webauthn/register/verify`, attResp);
 
       if (verificationResp.data.verified) {
         alert('🎉 Fingerprint registered successfully! You can now use TouchID to login.');
@@ -139,7 +198,7 @@ function App() {
     if (!newPassword) return;
 
     try {
-      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${id}/password`, { newPassword });
+      await axios.put(`${API_BASE_URL}/clients/${id}/password`, { newPassword });
       fetchClients();
       alert('Password overridden successfully!');
     } catch (error) {
@@ -153,19 +212,21 @@ function App() {
       clientId: client._id,
       licenseKey: client.licenseKey || '',
       validUntil: client.validUntil ? new Date(client.validUntil).toISOString().split('T')[0] : '',
-      resetHardware: false
+      resetHardware: false,
+      mapsUrl: client.location?.mapsUrl || ''
     });
   };
 
   const handleSaveLicense = async () => {
     try {
-      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${licenseModal.clientId}/license`, {
+      await axios.put(`${API_BASE_URL}/clients/${licenseModal.clientId}/license`, {
         licenseKey: licenseModal.licenseKey,
         validUntil: licenseModal.validUntil,
-        resetHardware: licenseModal.resetHardware
+        resetHardware: licenseModal.resetHardware,
+        mapsUrl: licenseModal.mapsUrl
       });
       alert('License updated successfully!');
-      setLicenseModal({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false });
+      setLicenseModal({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false, mapsUrl: '' });
       fetchClients();
     } catch (error) {
       alert('Failed to update license.');
@@ -186,7 +247,7 @@ function App() {
 
   const handleSaveFeatures = async () => {
     try {
-      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${featuresModal.clientId}/features`, {
+      await axios.put(`${API_BASE_URL}/clients/${featuresModal.clientId}/features`, {
         features: featuresModal.features
       });
       alert('Features updated successfully!');
@@ -198,52 +259,109 @@ function App() {
     }
   };
 
-  const handleImageUpload = (e) => {
+  const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     
     // Quick validation
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      // Compress image if it's too large (optional, but good practice for Base64)
-      const img = document.createElement('img');
-      img.src = reader.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const scaleSize = MAX_WIDTH / img.width;
-        canvas.width = MAX_WIDTH;
-        canvas.height = img.height * scaleSize;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-        setNewBroadcast({ ...newBroadcast, imageUrl: compressedBase64 });
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const img = document.createElement('img');
+        img.src = reader.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          setNewBroadcast({ ...newBroadcast, imageUrl: compressedBase64, file: null });
+        };
       };
-    };
+    } else {
+      // For APKs/IPAs
+      setNewBroadcast({ ...newBroadcast, file: file, imageUrl: '' });
+    }
+  };
+
+  const handleClientToggle = (clientId) => {
+    setNewBroadcast(prev => {
+      const current = prev.targetClients;
+      if (current.includes(clientId)) {
+        return { ...prev, targetClients: current.filter(id => id !== clientId) };
+      } else {
+        return { ...prev, targetClients: [...current, clientId] };
+      }
+    });
+  };
+
+  const handleRoleToggle = (role) => {
+    setNewBroadcast(prev => {
+      const current = prev.targetRoles;
+      if (current.includes(role)) {
+        return { ...prev, targetRoles: current.filter(r => r !== role) };
+      } else {
+        return { ...prev, targetRoles: [...current, role] };
+      }
+    });
   };
 
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts', newBroadcast);
-      setNewBroadcast({ title: '', message: '', imageUrl: '' });
+      const formData = new FormData();
+      formData.append('title', newBroadcast.title);
+      formData.append('message', newBroadcast.message);
+      formData.append('allowReplies', newBroadcast.allowReplies);
+      if (newBroadcast.imageUrl) formData.append('imageUrl', newBroadcast.imageUrl);
+      if (newBroadcast.file) formData.append('file', newBroadcast.file);
+      formData.append('targetClients', JSON.stringify(newBroadcast.targetClients));
+      formData.append('targetRoles', JSON.stringify(newBroadcast.targetRoles));
+
+      if (editingBroadcastId) {
+        await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        alert('Broadcast updated successfully!');
+      } else {
+        await axios.post(`${API_BASE_URL}/broadcasts`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        alert('Broadcast created successfully!');
+      }
+      
+      setNewBroadcast({ title: '', message: '', imageUrl: '', targetClients: [], targetRoles: [], file: null, allowReplies: true });
+      setEditingBroadcastId(null);
+      localStorage.removeItem('superadmin_draft_broadcast');
       fetchBroadcasts();
-      alert('Broadcast created successfully!');
     } catch (err) {
       console.error(err);
-      alert('Failed to create broadcast. ' + (err.response?.data?.message || err.message));
+      alert(`Failed to ${editingBroadcastId ? 'update' : 'create'} broadcast. ` + (err.response?.data?.message || err.message));
     }
+  };
+
+  const handleEditBroadcast = (b) => {
+    setNewBroadcast({
+      title: b.title,
+      message: b.message,
+      imageUrl: b.imageUrl || '',
+      targetClients: b.targetClients || [],
+      targetRoles: b.targetRoles || [],
+      file: null,
+      allowReplies: b.allowReplies
+    });
+    setEditingBroadcastId(b._id);
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const toggleBroadcast = async (id) => {
     try {
-      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts/${id}/toggle`);
+      await axios.put(`${API_BASE_URL}/broadcasts/${id}/toggle`);
       fetchBroadcasts();
     } catch (err) {
       alert('Failed to toggle broadcast');
@@ -253,7 +371,7 @@ function App() {
   const deleteBroadcast = async (id) => {
     if (!window.confirm('Are you sure you want to delete this broadcast?')) return;
     try {
-      await axios.delete(`https://restaurant-superadmin-api-maheer.vercel.app/api/broadcasts/${id}`);
+      await axios.delete(`${API_BASE_URL}/broadcasts/${id}`);
       fetchBroadcasts();
     } catch (err) {
       alert('Failed to delete broadcast');
@@ -265,7 +383,7 @@ function App() {
     if (!confirm(`Are you sure you want to change this client's status to ${newStatus}?`)) return;
 
     try {
-      await axios.put(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${id}/status`, { status: newStatus });
+      await axios.put(`${API_BASE_URL}/clients/${id}/status`, { status: newStatus });
       fetchClients();
     } catch (error) {
       alert('Failed to update status.');
@@ -277,7 +395,7 @@ function App() {
     if (!confirm('Are you sure you want to completely delete this restaurant? This cannot be undone and will remove all their access.')) return;
 
     try {
-      await axios.delete(`https://restaurant-superadmin-api-maheer.vercel.app/api/clients/${id}`);
+      await axios.delete(`${API_BASE_URL}/clients/${id}`);
       fetchClients();
     } catch (error) {
       alert('Failed to delete client.');
@@ -317,7 +435,7 @@ function App() {
   const handleCreateClient = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/clients', createClientModal);
+      await axios.post(`${API_BASE_URL}/clients`, createClientModal);
       alert('Client and License generated successfully!');
       setCreateClientModal({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
       fetchClients();
@@ -431,6 +549,10 @@ function App() {
     return { totalRevenue: rev, expiringSoon: expiring, planData: pData, monthlyData: mData, geographicData: gData };
   }, [clients, signupsFilter]);
 
+  if (!token) {
+    return <Login onLogin={(t) => setToken(t)} />;
+  }
+
   return (
     <div className="min-h-screen bg-background text-white font-sans selection:bg-primary/30">
       
@@ -450,7 +572,7 @@ function App() {
                 <button onClick={handleRegisterFingerprint} title="Register Fingerprint" className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl transition">
                   <Fingerprint className="w-4 h-4" />
                 </button>
-                <button onClick={handleLogout} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
+                <button onClick={() => setShowLogoutConfirm(true)} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
                   <LogOut className="w-4 h-4" />
                 </button>
               </div>
@@ -469,7 +591,7 @@ function App() {
                 <button onClick={handleRegisterFingerprint} title="Register Fingerprint" className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl transition">
                   <Fingerprint className="w-5 h-5" />
                 </button>
-                <button onClick={handleLogout} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
+                <button onClick={() => setShowLogoutConfirm(true)} title="Logout" className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-xl transition">
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
@@ -479,9 +601,9 @@ function App() {
       </nav>
 
       {/* Tabs */}
-      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        <div className="flex gap-4 border-b border-border">
-          <button 
+      <div className="w-full max-w-[1800px] mx-auto px-2 sm:px-6 lg:px-8 mt-4 md:mt-6 overflow-x-auto">
+        <div className="flex gap-2 md:gap-4 border-b border-border min-w-max">
+          <button
             onClick={() => setCurrentTab('Dashboard')}
             className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Dashboard' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
           >
@@ -503,37 +625,37 @@ function App() {
       </div>
 
       {/* Main Content */}
-      <main className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="w-full max-w-[1800px] mx-auto px-2 sm:px-6 lg:px-8 py-4 md:py-8">
         
         {currentTab === 'Dashboard' && (
           <>
             {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Users className="w-24 h-24 text-white" />
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-2 md:gap-6 mb-4 md:mb-8">
+          <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-1.5 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Users className="w-6 h-6 md:w-24 md:h-24 text-white" />
             </div>
-            <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Clients</p>
-            <h3 className="text-4xl font-black">{clients.length}</h3>
+            <p className="text-gray-400 text-[9px] md:text-sm font-bold uppercase tracking-wider mb-0.5 md:mb-2 leading-tight truncate">Total Clients</p>
+            <h3 className="text-lg md:text-4xl font-black">{clients.length}</h3>
           </div>
-          <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Key className="w-24 h-24 text-white" />
+          <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-1.5 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Key className="w-6 h-6 md:w-24 md:h-24 text-white" />
             </div>
-            <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Active Licenses</p>
-            <h3 className="text-4xl font-black text-primary">{clients.filter(c => c.status === 'Active').length}</h3>
+            <p className="text-gray-400 text-[9px] md:text-sm font-bold uppercase tracking-wider mb-0.5 md:mb-2 leading-tight truncate">Active Licenses</p>
+            <h3 className="text-lg md:text-4xl font-black text-primary">{clients.filter(c => c.status === 'Active').length}</h3>
           </div>
-          <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <TrendingUp className="w-24 h-24 text-white" />
+          <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-1.5 md:p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <TrendingUp className="w-6 h-6 md:w-24 md:h-24 text-white" />
             </div>
-            <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Est. Revenue</p>
-            <h3 className="text-4xl font-black text-green-400">₹{totalRevenue.toLocaleString()}</h3>
+            <p className="text-gray-400 text-[9px] md:text-sm font-bold uppercase tracking-wider mb-0.5 md:mb-2 leading-tight truncate">Est. Revenue</p>
+            <h3 className="text-lg md:text-4xl font-black text-green-400">₹{totalRevenue >= 1000 ? (totalRevenue/1000).toFixed(1)+'k' : totalRevenue}</h3>
           </div>
-          <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg relative overflow-hidden group flex items-center justify-between">
+          <div className="bg-surface rounded-xl md:rounded-2xl p-3 md:p-6 border border-border shadow-lg relative overflow-hidden group flex items-center justify-between col-span-3 md:col-span-1">
             <div>
-              <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Generate New Key</p>
-              <button onClick={() => setCreateClientModal({ ...createClientModal, isOpen: true })} className="bg-primary hover:bg-primary-hover text-white font-bold py-2 px-6 rounded-xl transition-all shadow-lg shadow-primary/20">
+              <p className="text-gray-400 text-[10px] md:text-sm font-bold uppercase tracking-wider mb-1 md:mb-2 leading-tight">Generate New Key</p>
+              <button onClick={() => setCreateClientModal({ ...createClientModal, isOpen: true })} className="bg-primary hover:bg-primary-hover text-white font-bold py-1.5 px-4 md:py-2 md:px-6 text-xs md:text-base rounded-lg md:rounded-xl transition-all shadow-lg shadow-primary/20">
                 + New Client
               </button>
             </div>
@@ -544,8 +666,8 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           
           {/* Expiry Alerts Panel */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl flex flex-col max-h-96">
-            <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
+          <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl flex flex-col max-h-96">
+            <h3 className="text-base md:text-lg font-bold flex items-center gap-2 mb-4">
               <AlertTriangle className="text-amber-500 w-5 h-5" /> 
               Expiry Alerts
             </h3>
@@ -572,9 +694,9 @@ function App() {
           </div>
 
           {/* Growth Chart */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1 flex flex-col">
+          <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl lg:col-span-1 flex flex-col">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold flex items-center gap-2"><TrendingUp className="text-primary w-5 h-5"/> New Signups</h3>
+              <h3 className="text-base md:text-lg font-bold flex items-center gap-2"><TrendingUp className="text-primary w-5 h-5"/> New Signups</h3>
               <select 
                 value={signupsFilter} 
                 onChange={e => setSignupsFilter(e.target.value)}
@@ -596,8 +718,8 @@ function App() {
           </div>
 
           {/* Plan Distribution */}
-          <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl">
-            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Key className="text-green-500 w-5 h-5"/> Plan Distribution</h3>
+          <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl">
+            <h3 className="text-base md:text-lg font-bold mb-4 flex items-center gap-2"><Key className="text-green-500 w-5 h-5"/> Plan Distribution</h3>
             <div className="h-64 relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -723,6 +845,7 @@ function App() {
             <thead>
               <tr className="bg-background/50 text-gray-400 text-xs uppercase tracking-wider font-bold">
                 <th className="p-4 border-b border-border">Restaurant</th>
+                <th className="p-4 border-b border-border">Username</th>
                 <th className="p-4 border-b border-border">Email</th>
                 <th className="p-4 border-b border-border">License Key</th>
                 <th className="p-4 border-b border-border">Expires</th>
@@ -735,19 +858,24 @@ function App() {
             <tbody className="text-sm divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center text-gray-500">
+                  <td colSpan="9" className="p-8 text-center text-gray-500">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
                     Loading database...
                   </td>
                 </tr>
               ) : filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center text-gray-500">No clients found matching your search.</td>
+                  <td colSpan="9" className="p-8 text-center text-gray-500">No clients found matching your search.</td>
                 </tr>
               ) : (
                 filteredClients.map(client => (
                   <tr key={client._id} className="hover:bg-background/30 transition-colors">
                     <td className="p-4 font-bold">{client.restaurantName}</td>
+                    <td className="p-4 font-medium text-gray-200">
+                      {client.staffAccounts?.length > 0 
+                        ? (client.staffAccounts.find(s => s.role === 'Admin')?.username || client.staffAccounts[0].username) 
+                        : (client.appUsername || (client.users?.length > 0 ? client.users[0].username : '-'))}
+                    </td>
                     <td className="p-4 text-gray-300">{client.email}</td>
                     <td className="p-4">
                       <span className="font-mono bg-background px-2 py-1 rounded text-primary text-xs font-bold border border-primary/20 whitespace-nowrap">
@@ -841,7 +969,7 @@ function App() {
               </div>
               <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
                 <button 
-                  onClick={() => window.open('https://restaurant-superadmin-api-maheer.vercel.app/api/analytics/customers/export', '_blank')}
+                  onClick={() => window.open(`${API_BASE_URL}/analytics/customers/export`, '_blank')}
                   className="w-full sm:w-auto bg-surface hover:bg-gray-700 border border-border text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   Export All Customers (CSV)
@@ -859,27 +987,27 @@ function App() {
 
             {globalStats ? (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
-                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total GMV Processed</p>
-                    <h3 className="text-4xl font-black text-green-400">₹{globalStats.totalGMV.toLocaleString()}</h3>
+                <div className="grid grid-cols-4 md:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-6 mb-4 md:mb-8">
+                  <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-[7px] md:text-sm font-bold uppercase tracking-wider mb-0 md:mb-2 leading-tight text-center md:text-left truncate">Total GMV</p>
+                    <h3 className="text-sm md:text-4xl font-black text-green-400 text-center md:text-left truncate">₹{globalStats.totalGMV >= 1000 ? (globalStats.totalGMV/1000).toFixed(1)+'k' : globalStats.totalGMV}</h3>
                   </div>
-                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
-                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total Orders</p>
-                    <h3 className="text-4xl font-black text-blue-400">{globalStats.totalOrders.toLocaleString()}</h3>
+                  <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-[7px] md:text-sm font-bold uppercase tracking-wider mb-0 md:mb-2 leading-tight text-center md:text-left truncate">Total Orders</p>
+                    <h3 className="text-sm md:text-4xl font-black text-blue-400 text-center md:text-left truncate">{globalStats.totalOrders >= 1000 ? (globalStats.totalOrders/1000).toFixed(1)+'k' : globalStats.totalOrders}</h3>
                   </div>
-                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
-                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Avg Order Value</p>
-                    <h3 className="text-4xl font-black text-amber-400">₹{Math.round(globalStats.aov).toLocaleString()}</h3>
+                  <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-[7px] md:text-sm font-bold uppercase tracking-wider mb-0 md:mb-2 leading-tight text-center md:text-left truncate">Avg Order Value</p>
+                    <h3 className="text-sm md:text-4xl font-black text-amber-400 text-center md:text-left truncate">₹{Math.round(globalStats.aov) >= 1000 ? (Math.round(globalStats.aov)/1000).toFixed(1)+'k' : Math.round(globalStats.aov)}</h3>
                   </div>
-                  <div className="bg-surface rounded-2xl p-6 border border-border shadow-lg">
-                    <p className="text-gray-400 text-sm font-bold uppercase tracking-wider mb-2">Total End Customers</p>
-                    <h3 className="text-4xl font-black text-purple-400">{globalStats.totalCustomers.toLocaleString()}</h3>
+                  <div className="bg-surface rounded-xl md:rounded-2xl p-2 md:p-6 border border-border shadow-lg">
+                    <p className="text-gray-400 text-[7px] md:text-sm font-bold uppercase tracking-wider mb-0 md:mb-2 leading-tight text-center md:text-left truncate">End Customers</p>
+                    <h3 className="text-sm md:text-4xl font-black text-purple-400 text-center md:text-left truncate">{globalStats.totalCustomers >= 1000 ? (globalStats.totalCustomers/1000).toFixed(1)+'k' : globalStats.totalCustomers}</h3>
                   </div>
                 </div>
 
-                <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-primary">
+                <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl">
+                  <h3 className="text-base md:text-lg font-bold mb-4 flex items-center gap-2 text-primary">
                     Most Ordered Items Globally
                   </h3>
                   <div className="h-72">
@@ -905,18 +1033,33 @@ function App() {
         )}
 
         {currentTab === 'Broadcasts' && (
-          <div className="space-y-8 animate-fade-in">
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-surface p-6 rounded-2xl border border-border shadow-xl">
+          <div className="space-y-4 md:space-y-8 animate-fade-in">
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 md:gap-6 bg-surface p-4 md:p-6 rounded-xl md:rounded-2xl border border-border shadow-xl">
               <div className="w-full xl:w-auto">
-                <h2 className="text-2xl font-black mb-2 flex items-center gap-2"><Radio className="text-primary w-6 h-6"/> Global Broadcast System</h2>
+                <h2 className="text-xl md:text-2xl font-black mb-1 md:mb-2 flex items-center gap-2"><Radio className="text-primary w-5 h-5 md:w-6 md:h-6"/> Global Broadcast System</h2>
                 <p className="text-gray-400 text-sm">Push announcements, greetings, and alerts instantly to every active POS client globally.</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
               {/* Composer */}
-              <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-1 h-fit">
-                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Plus className="w-5 h-5 text-primary"/> New Broadcast</h3>
+              <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl lg:col-span-1 h-fit">
+                <div className="flex justify-between items-center mb-4 md:mb-6">
+                  <h3 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                    <Plus className="text-primary w-6 h-6"/> {editingBroadcastId ? 'Edit Broadcast' : 'New Broadcast'}
+                  </h3>
+                  {editingBroadcastId && (
+                    <button 
+                      onClick={() => {
+                        setEditingBroadcastId(null);
+                        setNewBroadcast({ title: '', message: '', imageUrl: '', targetClients: [], targetRoles: [], file: null, allowReplies: true });
+                      }}
+                      className="text-xs text-gray-400 hover:text-white bg-gray-800 px-2 py-1 rounded"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
                 <form onSubmit={handleCreateBroadcast} className="space-y-4">
                   <div>
                     <label className="block text-sm text-gray-400 mb-1 font-medium">Title</label>
@@ -940,12 +1083,56 @@ function App() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1 font-medium">Upload Image (Optional)</label>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Target Shops (Optional)</label>
+                    <div className="bg-background border border-border rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          checked={newBroadcast.targetClients.length === 0}
+                          onChange={() => setNewBroadcast({...newBroadcast, targetClients: []})}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-300">All Shops (Global)</span>
+                      </div>
+                      {clients.map(c => (
+                        <div key={c._id} className="flex items-center gap-2">
+                          <input 
+                            type="checkbox" 
+                            checked={newBroadcast.targetClients.includes(c._id)}
+                            onChange={() => handleClientToggle(c._id)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-gray-300">{c.restaurantName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Target Roles</label>
+                    <div className="flex gap-4">
+                      {['Admin', 'Cashier', 'Captain'].map(role => (
+                        <div key={role} className="flex items-center gap-2">
+                          <input 
+                            type="checkbox" 
+                            checked={newBroadcast.targetRoles.includes(role)}
+                            onChange={() => handleRoleToggle(role)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm text-gray-300">{role}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-xs text-gray-500">If none selected, it sends to all roles.</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1 font-medium">Upload Media/File (Optional)</label>
                     <div className="relative">
                       <input 
                         type="file" 
-                        accept="image/*"
-                        onChange={handleImageUpload}
+                        accept="image/*,.apk,.ipa,.pdf"
+                        onChange={handleFileUpload}
                         className="hidden"
                         id="broadcast-image-upload"
                       />
@@ -960,26 +1147,43 @@ function App() {
                               <span className="text-white text-sm flex items-center gap-2"><Upload className="w-4 h-4"/> Change Image</span>
                             </div>
                           </div>
+                        ) : newBroadcast.file ? (
+                          <div className="flex flex-col items-center justify-center text-primary">
+                             <ExternalLink className="w-6 h-6 mb-2" />
+                             <span className="text-sm font-bold">{newBroadcast.file.name}</span>
+                             <span className="text-xs mt-1 text-gray-400">{(newBroadcast.file.size / (1024*1024)).toFixed(2)} MB - Click to change</span>
+                          </div>
                         ) : (
                           <>
-                            <Image className="w-6 h-6 mb-2" />
-                            <span className="text-sm">Click to upload image</span>
-                            <span className="text-xs opacity-50 mt-1">JPG, PNG, GIF up to 5MB</span>
+                            <Upload className="w-6 h-6 mb-2" />
+                            <span className="text-sm">Click to upload Image / APK / PDF</span>
+                            <span className="text-xs opacity-50 mt-1">Max 50MB</span>
                           </>
                         )}
                       </label>
                     </div>
                   </div>
+                  
+                  <div className="flex items-center gap-2 pt-2 pb-2">
+                    <input 
+                      type="checkbox" 
+                      id="allowReplies"
+                      checked={newBroadcast.allowReplies}
+                      onChange={(e) => setNewBroadcast({...newBroadcast, allowReplies: e.target.checked})}
+                      className="w-4 h-4 text-primary bg-background border-border rounded focus:ring-primary"
+                    />
+                    <label htmlFor="allowReplies" className="text-sm font-medium">Allow shops to reply to this broadcast</label>
+                  </div>
                   <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                    <Radio className="w-5 h-5" />
-                    Broadcast Now
+                    {editingBroadcastId ? <Edit3 className="w-5 h-5" /> : <Radio className="w-5 h-5" />}
+                    {editingBroadcastId ? 'Update Broadcast' : 'Broadcast Now'}
                   </button>
                 </form>
               </div>
 
-              {/* Active Broadcasts List */}
-              <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl lg:col-span-2">
-                <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts</h3>
+              {/* History */}
+              <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl lg:col-span-2">
+                <h3 className="text-lg md:text-xl font-bold mb-4 md:mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts</h3>
                 <div className="space-y-4">
                   {broadcasts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 bg-background rounded-xl border border-border border-dashed">
@@ -1012,8 +1216,11 @@ function App() {
                                   {b.active ? <CheckCircle className="w-3 h-3"/> : <XCircle className="w-3 h-3"/>}
                                   {b.active ? 'Active' : 'Inactive'}
                                 </button>
-                                <button onClick={() => deleteBroadcast(b._id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors">
+                                <button onClick={() => deleteBroadcast(b._id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Delete">
                                   <Trash2 className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleEditBroadcast(b)} className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Edit">
+                                  <Edit3 className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
@@ -1025,6 +1232,38 @@ function App() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* Replies Inbox */}
+            <div className="bg-surface border border-border rounded-2xl p-6 shadow-xl mt-8">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-green-400"/> Replies Inbox</h3>
+              <div className="space-y-4">
+                {replies.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 bg-background rounded-xl border border-border border-dashed">
+                    No replies yet from any shops.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {replies.map(reply => (
+                      <div key={reply._id} className="bg-background border border-border p-4 rounded-xl shadow">
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-bold text-md text-white">{reply.clientId?.restaurantName || reply.shopName}</h4>
+                            <p className="text-xs text-gray-400">{reply.senderUsername} ({reply.senderRole})</p>
+                          </div>
+                          <p className="text-xs text-gray-500 font-mono">{new Date(reply.createdAt).toLocaleString()}</p>
+                        </div>
+                        <p className="text-sm text-gray-300 mt-2 bg-surface/50 p-3 rounded-lg border border-border/50">
+                          {reply.message}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-3 flex items-center gap-1">
+                          <Radio className="w-3 h-3" /> Re: {reply.broadcastId?.title || 'Unknown Broadcast'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1058,6 +1297,17 @@ function App() {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Google Maps URL</label>
+                <input 
+                  type="url" 
+                  placeholder="https://maps.google.com/..."
+                  value={licenseModal.mapsUrl}
+                  onChange={(e) => setLicenseModal({...licenseModal, mapsUrl: e.target.value})}
+                  className="w-full bg-background border border-border rounded-lg p-2 text-white font-mono text-sm"
+                />
+              </div>
+
               <div className="flex items-center gap-2 bg-background p-3 rounded-lg border border-border">
                 <input 
                   type="checkbox" 
@@ -1072,7 +1322,7 @@ function App() {
 
             <div className="flex justify-end gap-3 mt-6">
               <button 
-                onClick={() => setLicenseModal({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false })}
+                onClick={() => setLicenseModal({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false, mapsUrl: '' })}
                 className="px-4 py-2 bg-background border border-border rounded-lg hover:bg-gray-700 transition-colors text-sm font-bold"
               >
                 Cancel
@@ -1392,6 +1642,36 @@ function App() {
           </div>
         </div>
       )}
+      {/* Logout Confirmation Toast Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
+            <div className="flex flex-col items-center text-center">
+              <p className="text-white font-medium text-base mb-6">
+                Are you sure you want to logout <span className="font-bold">{adminUser?.name || 'Admin'}</span>?
+              </p>
+              <div className="flex w-full gap-3">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 py-2.5 px-4 bg-background hover:bg-border text-white font-medium rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLogoutConfirm(false);
+                    handleLogout();
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-red-500 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

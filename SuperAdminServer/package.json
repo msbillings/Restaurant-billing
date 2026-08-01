@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
+    "dev": "npx nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -24,9 +24,11 @@
     "jsonwebtoken": "^9.0.3",
     "mongo-sanitize": "^1.1.0",
     "mongoose": "^9.7.1",
+    "multer": "^2.2.0",
     "nodemailer": "^9.0.1",
     "pdfkit": "^0.19.1",
     "razorpay": "^2.9.6",
+    "socket.io": "^4.8.3",
     "xss": "^1.0.15"
   }
 }

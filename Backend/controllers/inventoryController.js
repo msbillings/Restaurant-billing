@@ -3,6 +3,7 @@ import RecipeDefault from '../models/Recipe.js';
 import StockLogDefault from '../models/StockLog.js';
 import MenuDefault from '../models/Menu.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import { emitNotification } from '../utils/notificationHelper.js';
 
 // Helper to get models from request (for multi-tenancy)
 const getModels = (req) => ({
@@ -110,6 +111,10 @@ export const updateItem = async (req, res) => {
         notes: notes || 'Manual stock audit / correction',
         performedBy: performedBy || 'Admin'
       });
+
+      if (newStock <= existingItem.minStockAlert && oldStock > existingItem.minStockAlert) {
+        emitNotification(req, 'Low Stock Alert', `${existingItem.name} stock has fallen below minimum alert level (${newStock} ${existingItem.unit}).`, 'warning', ['Admin', 'Manager']);
+      }
     }
 
     await existingItem.save();
@@ -379,6 +384,10 @@ export const deductStockForBillItems = async (req, billItems, performedBy = 'POS
           notes: `Auto-deducted for ${orderQty}x ${item.name || 'dish'} on POS Bill`,
           performedBy
         });
+
+        if (invItem.currentStock <= invItem.minStockAlert && (invItem.currentStock + deductQty) > invItem.minStockAlert) {
+          emitNotification(req, 'Low Stock Alert', `${invItem.name} stock has fallen below minimum alert level (${invItem.currentStock} ${invItem.unit}) due to POS deduction.`, 'warning', ['Admin', 'Manager']);
+        }
       }
     }
   } catch (err) {

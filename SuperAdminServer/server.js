@@ -8,10 +8,35 @@ import helmet from 'helmet';
 
 const app = express();
 
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: { origin: '*' }
+});
+
+app.locals.io = io;
+
+io.on('connection', (socket) => {
+  console.log('New client connected to SuperAdmin WebSocket:', socket.id);
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Security Middleware Imports
 import rateLimit from 'express-rate-limit';
@@ -129,10 +154,10 @@ const connectDB = async () => {
   }
 };
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== 'production' || process.env.RENDER) {
   connectDB().then(() => {
     const PORT = process.env.PORT || 4000;
-    app.listen(PORT, '0.0.0.0', () => console.log(`SuperAdmin Server running on 0.0.0.0:${PORT}`));
+    httpServer.listen(PORT, '0.0.0.0', () => console.log(`SuperAdmin Server running on 0.0.0.0:${PORT}`));
   });
 } else {
   // Connect to DB for serverless environment BEFORE hitting routes
@@ -156,6 +181,6 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/analytics', protect, analyticsRoutes);
 app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/payment', paymentRoutes);
-app.use('/api/broadcasts', protect, broadcastRoutes);
+app.use('/api/broadcasts', broadcastRoutes);
 
 export default app;

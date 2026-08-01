@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { getDayBook, downloadDayBookExcel } from '../api/analytics';
 import { Calendar, Download, TrendingUp, TrendingDown, RefreshCw, CreditCard, Wallet, Smartphone, Banknote, Loader2 } from 'lucide-react';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
-const DayBook = () => {
+const DayBook = ({ onNavigate }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [data, setData] = useState({
     summary: { totalSales: 0, salesCount: 0, totalExpenses: 0, expensesCount: 0 },
@@ -54,6 +55,9 @@ const DayBook = () => {
 
   return (
     <div className="h-full flex flex-col bg-background p-6 overflow-y-auto">
+      <div className="flex items-center gap-4 mb-2">
+        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+      </div>
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
@@ -63,8 +67,8 @@ const DayBook = () => {
           <div>
             <h1 className="text-2xl font-bold text-text-main">DayBook</h1>
             <div className="flex items-center gap-2 mt-1">
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={date}
                 max={new Date().toISOString().split('T')[0]}
                 onChange={(e) => setDate(e.target.value)}
@@ -73,16 +77,16 @@ const DayBook = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="flex gap-3">
-          <button 
+          <button
             onClick={fetchDayBookData}
             className="flex items-center gap-2 bg-surface hover:bg-surface-hover text-text-main px-4 py-2 rounded-xl transition-colors border border-border"
           >
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
-          <button 
+          <button
             onClick={handleDownloadExcel}
             disabled={downloading}
             className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl transition-colors shadow-lg shadow-primary/20 disabled:opacity-70 disabled:cursor-not-allowed"
@@ -139,7 +143,7 @@ const DayBook = () => {
               </div>
               <span className="font-bold text-white">₹{data.cashFlow.cashIn.toLocaleString()}</span>
             </div>
-            
+
             {data.cashFlow.onlineInBreakdown.length > 0 && (
               <div className="bg-black/20 p-3 rounded-lg border border-green-500/20">
                 <div className="flex items-center gap-3 mb-2">
@@ -172,7 +176,7 @@ const DayBook = () => {
               </div>
               <span className="font-bold text-white">₹{data.cashFlow.cashOut.toLocaleString()}</span>
             </div>
-            
+
             <div className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-red-500/20">
               <div className="flex items-center gap-3">
                 <CreditCard className="text-red-400 w-5 h-5" />
@@ -216,9 +220,8 @@ const DayBook = () => {
                       {new Date(t.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        t.type === 'Sale' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${t.type === 'Sale' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}>
                         {t.type}
                       </span>
                     </td>
