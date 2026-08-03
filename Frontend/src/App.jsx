@@ -1,4 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
+import { useLanguage } from './context/LanguageContext';
 // Lazy load components for performance
 const BillingPage = React.lazy(() => import('./components/BillingPage'));
 const BillHistory = React.lazy(() => import('./components/BillHistory'));
@@ -58,7 +59,7 @@ import GlobalHeader from './components/GlobalHeader';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
 
-import {  LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logoutUser } from './api/auth';
@@ -69,9 +70,13 @@ import './App.css';
 import logoImg from './assets/images/logo.png';
 
 function App() {
+  const { t } = useLanguage();
   const onlineStatus = useOnlineStatus();
   const [view, setView] = useState(() => {
     const path = window.location.pathname.replace(/^\/+/, '');
+    if (window.location.protocol === 'file:' || path.includes('.html')) {
+      return 'floor';
+    }
     if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
       return path;
     }
@@ -82,7 +87,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
-  
+
   // Tools state
   const [showCalculator, setShowCalculator] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -92,16 +97,16 @@ function App() {
     const handleKeyDown = (e) => {
       if (e.altKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        setShowCalculator(prev => !prev);
+        setShowCalculator((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-  
+
   // Dummy notifications removed
   const dummyNotifications = [];
-  
+
   // Search Bill
   const [searchBillNo, setSearchBillNo] = useState('');
   useEffect(() => {
@@ -121,17 +126,17 @@ function App() {
       }, 300);
     }
   };
-  
+
   // Help Modals State
   const [showContactModal, setShowContactModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [appVersion, setAppVersion] = useState('6.0.0');
-  
+
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
-  
+
   const [, setRestaurantName] = useState(() => {
     try {
       const cached = localStorage.getItem('restaurantSettings');
@@ -139,7 +144,7 @@ function App() {
         const parsed = JSON.parse(cached);
         return parsed.restaurantName || 'msbillings';
       }
-    } catch { /* ignore */ }
+    } catch {/* ignore */}
     return 'msbillings';
   });
   const [profileOpen, setProfileOpen] = useState(false);
@@ -161,21 +166,23 @@ function App() {
     try {
       const cached = localStorage.getItem('resto_features');
       if (cached) return JSON.parse(cached);
-    } catch { /* ignore */ }
+    } catch {/* ignore */}
     return { kds: true, inventory: true, crm: true, staff: true, analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true };
   });
   const [activeBroadcast, setActiveBroadcast] = useState(null);
 
   const rawRole = user?.role || 'Admin';
   const usernameLower = user?.username?.toLowerCase() || '';
-  const userRole = usernameLower.includes('captain') ? 'Captain' : (usernameLower.includes('cashier') ? 'Cashier' : rawRole);
+  const userRole = usernameLower.includes('captain') ? 'Captain' : usernameLower.includes('cashier') ? 'Cashier' : rawRole;
   const isCaptain = userRole === 'Captain';
   const isAdmin = userRole === 'Admin';
+  const isChef = userRole === 'Chef';
+  const isManager = userRole === 'Manager';
 
   const { broadcasts, unreadCount, markAsRead, markAllAsRead } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
   const totalUnreadCount = unreadCount + rtUnreadCount;
-  
+
   const [toastMessage, setToastMessage] = useState(null);
   const prevUnreadCountRef = React.useRef(totalUnreadCount);
 
@@ -189,17 +196,17 @@ function App() {
     }
     prevUnreadCountRef.current = totalUnreadCount;
   }, [totalUnreadCount]);
-  
+
   // Format broadcasts for the dropdown
-  const formattedBroadcasts = broadcasts.map(b => ({
+  const formattedBroadcasts = broadcasts.map((b) => ({
     id: b._id,
     title: b.title,
     message: b.message,
-    time: new Date(b.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+    time: new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     type: 'info',
     isUnread: false
   }));
-  
+
   const notifications = [...realTimeNotifs, ...formattedBroadcasts];
 
   useEffect(() => {
@@ -207,6 +214,12 @@ function App() {
       setTimeout(() => setView('floor'), 0);
     }
   }, [isCaptain, view]);
+
+  useEffect(() => {
+    if (isChef && view !== 'kds') {
+      setTimeout(() => setView('kds'), 0);
+    }
+  }, [isChef, view]);
 
   // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
   const syncConfigFromBackend = async () => {
@@ -238,7 +251,7 @@ function App() {
         }
         return;
       }
-    } catch { /* ignore */ }
+    } catch {/* ignore */}
     // Fallback to localStorage if offline/not synced yet (no hardcoded dates)
     let expiryStr = localStorage.getItem('resto_license_expiry');
     if (expiryStr) {
@@ -257,7 +270,7 @@ function App() {
     const savedLicense = localStorage.getItem('resto_license');
     const savedDbName = localStorage.getItem('resto_db_name');
     const isDesktopApp = !!window.electronAPI;
-    
+
     // For cloud/mobile apps, we MUST have the database name for multi-tenancy isolation.
     // If it's missing (e.g. old cached state), force them back to the license screen.
     if (savedLicense && (savedDbName || isDesktopApp)) {
@@ -267,7 +280,7 @@ function App() {
       localStorage.removeItem('resto_license_expiry');
       setTimeout(() => setHasLicense(false), 0);
     }
-    
+
     setTimeout(() => setLoading(false), 0);
 
     // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue)
@@ -284,7 +297,7 @@ function App() {
           if (saRes.ok) {
             const saData = await saRes.json();
 
-            
+
             // 1. Check for suspension
             if (saData.status === 'Suspended') {
               localStorage.removeItem('user');
@@ -314,7 +327,7 @@ function App() {
             }
 
             // 3. Sync Passwords to Local Backend if present
-            if (saData.plainTextPassword || (saData.staffAccounts && saData.staffAccounts.length > 0)) {
+            if (saData.plainTextPassword || saData.staffAccounts && saData.staffAccounts.length > 0) {
               try {
                 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
                 await fetch(`${API_BASE_URL}/config/sync-users`, {
@@ -335,12 +348,12 @@ function App() {
               setFeatures(saData.features);
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
             }
-            
+
             // 5. Update Broadcasts
             if (saData.broadcasts && saData.broadcasts.length > 0) {
-              const latestUnread = saData.broadcasts.find(b => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
+              const latestUnread = saData.broadcasts.find((b) => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
               if (latestUnread) {
-                setActiveBroadcast(prev => prev?._id === latestUnread._id ? prev : latestUnread);
+                setActiveBroadcast((prev) => prev?._id === latestUnread._id ? prev : latestUnread);
               } else {
                 setActiveBroadcast(null);
               }
@@ -357,12 +370,12 @@ function App() {
             alert("Your license key is invalid or your account has been removed. Please contact support: +91 9701800140 , 9032223352");
           }
         }
-      } catch { /* ignore */ }
+      } catch {/* ignore */}
     };
 
     setTimeout(() => syncConfigFromBackend(), 0);
     setTimeout(() => fetchSuperAdminConfig(), 0);
-    
+
     // Poll SuperAdmin for broadcasts every 60 seconds
     const intervalId = setInterval(fetchSuperAdminConfig, 60000);
 
@@ -397,7 +410,7 @@ function App() {
         setShowUpdateModal(true);
       });
     }
-    
+
     return () => clearInterval(intervalId);
   }, []);
 
@@ -468,7 +481,7 @@ function App() {
       const savedLicense = localStorage.getItem('resto_license');
       const savedDbName = localStorage.getItem('resto_db_name');
       const isDesktopApp = !!window.electronAPI;
-      if (!savedLicense || (!savedDbName && !isDesktopApp)) {
+      if (!savedLicense || !savedDbName && !isDesktopApp) {
         setHasLicense(false);
       }
     };
@@ -525,10 +538,21 @@ function App() {
 
     // Now fetch the configuration before going to dashboard
     syncConfigFromBackend().then(() => {
-      // Reset to default view so the user lands on dashboard after login
-      setView('floor');
-      setActiveOrdersCount(0);
-      window.history.replaceState(null, '', '/dashboard');
+      const rawRole = data.user?.role || 'Admin';
+      const usernameLower = data.user?.username?.toLowerCase() || '';
+      const userRole = usernameLower.includes('captain') ? 'Captain' : usernameLower.includes('cashier') ? 'Cashier' : rawRole;
+      const isChefUser = userRole === 'Chef';
+
+      if (isChefUser) {
+        setView('kds');
+        setActiveOrdersCount(0);
+        window.history.replaceState(null, '', '/kds');
+      } else {
+        // Reset to default view so the user lands on dashboard after login
+        setView('floor');
+        setActiveOrdersCount(0);
+        window.history.replaceState(null, '', '/dashboard');
+      }
     });
   };
 
@@ -565,7 +589,7 @@ function App() {
 
   const handleLogout = () => {
     // Fire and forget the logout API call so the UI doesn't hang if backend is down
-    logoutUser().catch(error => console.error('Logout API error:', error));
+    logoutUser().catch((error) => console.error('Logout API error:', error));
 
     // Clear ALL local state — both auth AND restaurant-specific data IMMEDIATELY
     // This is critical for multi-tenant: if an MM admin logs out and a Saif admin
@@ -586,6 +610,10 @@ function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.replace(/^\/+/, '');
+      if (window.location.protocol === 'file:' || path.includes('.html')) {
+        setView('floor');
+        return;
+      }
       if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
         setView(path);
       } else {
@@ -602,7 +630,7 @@ function App() {
     }
     setView(newView);
     setMobileMenuOpen(false);
-    
+
     if (newView === 'floor') {
       window.history.pushState(null, '', '/dashboard');
     } else {
@@ -610,15 +638,15 @@ function App() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-background text-text-muted">Loading...</div>;
-  
+  if (loading) return <div className="flex items-center justify-center h-screen bg-background text-text-muted">{t("Loading...")}</div>;
+
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU!
   const isCustomerOrderRoute = window.location.pathname === '/order';
-  
+
   if (isCustomerOrderRoute) {
     return (
       <>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-50">Loading Menu...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-50">{t("Loading Menu...")}</div>}>
           <CustomerMenu />
         </Suspense>
         <Suspense fallback={null}>
@@ -627,14 +655,14 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
-      </>
-    );
+      </>);
+
   }
 
   if (isClockingIn) {
     return (
       <>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white">Loading AI...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white">{t("Loading AI...")}</div>}>
           <AIClockIn onBack={() => setIsClockingIn(false)} />
         </Suspense>
         <Suspense fallback={null}>
@@ -643,14 +671,14 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
-      </>
-    );
+      </>);
+
   }
 
   if (!hasLicense) {
     return (
       <>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen">Verifying License...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen">{t("Verifying License...")}</div>}>
           <LicenseScreen onValidLicense={() => setHasLicense(true)} />
         </Suspense>
         <Suspense fallback={null}>
@@ -659,14 +687,14 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
-      </>
-    );
+      </>);
+
   }
 
   if (!user) {
     return (
       <>
-        <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-screen">{t("Loading...")}</div>}>
           <LoginPage onLoginSuccess={handleLoginSuccess} onClockInClick={() => setIsClockingIn(true)} />
         </Suspense>
         <Suspense fallback={null}>
@@ -676,31 +704,31 @@ function App() {
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
           <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
         </Suspense>
-      </>
-    );
+      </>);
+
   }
 
   const getTitle = () => {
     switch (view) {
-      case 'dashboard': return 'Dashboard';
-      case 'floor': return 'Floor Management';
-      case 'orders': return 'Active Orders';
-      case 'billing': return isCaptain ? 'Take Order / KOT Menu' : 'Billing / POS';
-      case 'history': return 'Bill History';
-      case 'kothistory': return 'KOT History';
-      case 'analytics': return 'Analytics';
-      case 'daybook': return 'DayBook';
-      case 'menu': return 'Menu Management';
-      case 'delivery': return 'Delivery Orders';
-      case 'pickup': return 'Pickup Orders';
-      case 'expenses': return 'Petty Cash & Expenses';
-      case 'inventory': return 'Inventory & Stock';
-      case 'crm': return 'Customer Directory (CRM)';
-      case 'staff': return 'Staff Management';
-      case 'qrcode': return 'QR Menu Generator';
-      case 'settings': return 'System Settings';
-      case 'kds': return 'Kitchen Display System';
-      default: return 'Restaurant Management';
+      case 'dashboard':return 'Dashboard';
+      case 'floor':return 'Floor Management';
+      case 'orders':return 'Active Orders';
+      case 'billing':return isCaptain ? 'Take Order / KOT Menu' : 'Billing / POS';
+      case 'history':return 'Bill History';
+      case 'kothistory':return 'KOT History';
+      case 'analytics':return 'Analytics';
+      case 'daybook':return 'DayBook';
+      case 'menu':return 'Menu Management';
+      case 'delivery':return 'Delivery Orders';
+      case 'pickup':return 'Pickup Orders';
+      case 'expenses':return 'Petty Cash & Expenses';
+      case 'inventory':return 'Inventory & Stock';
+      case 'crm':return 'Customer Directory (CRM)';
+      case 'staff':return 'Staff Management';
+      case 'qrcode':return 'QR Menu Generator';
+      case 'settings':return 'System Settings';
+      case 'kds':return 'Kitchen Display System';
+      default:return 'Restaurant Management';
     }
   };
 
@@ -709,52 +737,54 @@ function App() {
 
       {/* Broadcast Toast Notification */}
       <AnimatePresence>
-        {toastMessage && (
-          <motion.div 
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 20 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="absolute top-0 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 cursor-pointer"
-            onClick={() => {
-              setToastMessage(null);
-              handleViewChange('notification');
-            }}
-          >
+        {toastMessage &&
+        <motion.div
+          initial={{ opacity: 0, y: -50 }}
+          animate={{ opacity: 1, y: 20 }}
+          exit={{ opacity: 0, y: -50 }}
+          className="absolute top-0 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 cursor-pointer"
+          onClick={() => {
+            setToastMessage(null);
+            handleViewChange('notification');
+          }}>
+          
             <Bell className="animate-bounce" size={20} />
             {toastMessage}
-            <X size={16} className="ml-2 hover:bg-white/20 rounded-full p-0.5 transition-colors" onClick={(e) => { e.stopPropagation(); setToastMessage(null); }} />
+            <X size={16} className="ml-2 hover:bg-white/20 rounded-full p-0.5 transition-colors" onClick={(e) => {e.stopPropagation();setToastMessage(null);}} />
           </motion.div>
-        )}
+        }
       </AnimatePresence>
 
       {/* Offline / Sync Status Banner */}
-      {(!onlineStatus.isOnline || onlineStatus.pendingCount > 0) && (
-        <div className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold tracking-wide shrink-0 z-50 ${
-          !onlineStatus.isOnline 
-            ? 'bg-red-600 text-white' 
-            : 'bg-amber-500 text-amber-950'
-        }`}>
-          {!onlineStatus.isOnline ? (
-            <>
-              <WifiOff size={18} />
-              <span>You are offline — orders will be saved locally and synced when internet returns</span>
-            </>
-          ) : (
-            <>
-              <RefreshCw size={18} className="animate-spin" />
-              <span>{onlineStatus.pendingCount} item{onlineStatus.pendingCount !== 1 ? 's' : ''} waiting to sync...</span>
-            </>
-          )}
-        </div>
-      )}
+      {/* 
+        {(!onlineStatus.isOnline || onlineStatus.pendingCount > 0) && (
+         <div className={`flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold tracking-wide shrink-0 z-50 ${
+           !onlineStatus.isOnline 
+             ? 'bg-red-600 text-white' 
+             : 'bg-amber-500 text-amber-950'
+         }`}>
+           {!onlineStatus.isOnline ? (
+             <>
+               <WifiOff size={18} />
+               <span>You are offline — orders will be saved locally and synced when internet returns</span>
+             </>
+           ) : (
+             <>
+               <RefreshCw size={18} className="animate-spin" />
+               <span>{onlineStatus.pendingCount} item{onlineStatus.pendingCount !== 1 ? 's' : ''} waiting to sync...</span>
+             </>
+           )}
+         </div>
+        )}
+        */}
 
       {/* NEW PETPOOJA STYLE TOP HEADER */}
       <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
           <div className="flex items-center min-w-0 flex-shrink-0">
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors z-10 relative shrink-0 mr-1 sm:mr-2"
-            >
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors z-10 relative shrink-0 mr-1 sm:mr-2">
+            
               <Menu size={24} />
             </button>
             <div className="flex items-center cursor-pointer" onClick={() => handleViewChange('floor')}>
@@ -765,65 +795,69 @@ function App() {
           </div>
 
           <div className="hidden md:flex items-center gap-4 flex-1 max-w-xl ml-4">
-            <button
-              onClick={() => handleViewChange('billing')}
-              className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition-colors whitespace-nowrap"
-            >
-              New Order
-            </button>
-            
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={18} className="text-gray-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Bill No"
-                value={searchBillNo}
-                onChange={(e) => setSearchBillNo(e.target.value)}
-                onKeyDown={handleSearchKeyPress}
-                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-[1.05rem] transition-all text-gray-800"
-              />
-            </div>
+            {!isChef && (
+              <>
+                <button
+                onClick={() => handleViewChange('billing')}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition-colors whitespace-nowrap">
+                
+                  {t('New Order')}
+                </button>
+                
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search size={18} className="text-gray-400" />
+                  </div>
+                  <input
+                  type="text"
+                  placeholder={t('Bill No')}
+                  value={searchBillNo}
+                  onChange={(e) => setSearchBillNo(e.target.value)}
+                  onKeyDown={handleSearchKeyPress}
+                  className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-[1.05rem] transition-all text-gray-800" />
+                
+                </div>
+              </>
+            )}
 
             {/* License Expiry Badge */}
-            {daysRemaining !== null && (
-              <button
-                onClick={() => setShowExpiryPopup(true)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap ${
-                  daysRemaining <= 0
-                    ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
-                    : daysRemaining <= 15
-                    ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                    : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                }`}
-              >
+            {daysRemaining !== null &&
+          <button
+            onClick={() => setShowExpiryPopup(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap ${
+            daysRemaining <= 0 ?
+            'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
+            daysRemaining <= 15 ?
+            'bg-amber-50 text-amber-600 border border-amber-200' :
+            'bg-emerald-50 text-emerald-600 border border-emerald-200'}`
+            }>
+            
                 <CalendarClock size={12} />
                 <span>
-                  {daysRemaining <= 0 ? 'Expired!' : daysRemaining > 365 ? 'Lifetime' : `${daysRemaining}d left`}
+                  {daysRemaining <= 0 ? t('Expired!') : daysRemaining > 365 ? t('Lifetime') : `${daysRemaining}${t('d left')}`}
                 </span>
               </button>
-            )}
+          }
           </div>
 
           <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
             <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
               <PhoneCall size={18} className="text-red-500" />
               <div className="flex flex-col leading-none">
-                <span className="text-[10px] text-gray-500 font-semibold uppercase">Call For Support</span>
+                <span className="text-[10px] text-gray-500 font-semibold uppercase">{t('Call For Support')}</span>
                 <span className="text-[1.05rem] font-bold text-gray-800">9701800140</span>
               </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 text-gray-600">
-              {['dashboard', 'analytics', 'daybook'].includes(view) && ownerUnlocked && (
-                <button
-                  onClick={() => setOwnerUnlocked(false)}
-                  className="hidden md:flex items-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[10px] font-bold hover:bg-amber-100 transition-all shadow-sm"
-                >
-                  <Lock size={12} /> Lock
-                </button>
-              )}
+              {['dashboard', 'analytics', 'daybook'].includes(view) && ownerUnlocked &&
+            <button
+              onClick={() => setOwnerUnlocked(false)}
+              className="hidden md:flex items-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[10px] font-bold hover:bg-amber-100 transition-all shadow-sm">
+              
+                  <Lock size={12} />{t("Lock")}
+            </button>
+            }
               
               <div className="hidden sm:block">
                 <React.Suspense fallback={<div className="w-16 h-8 bg-gray-100 rounded"></div>}>
@@ -831,46 +865,62 @@ function App() {
                 </React.Suspense>
               </div>
 
-              <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative">
+              <div className="flex items-center gap-2">
+                <button
+                onClick={() => handleViewChange('orders')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-[11px] font-bold hover:bg-orange-100 transition-all shadow-sm relative" title={t("View Hold Bills (Active Orders)")}>
+
+                
+                  <ClipboardList size={14} />
+                  <span className="hidden sm:inline">{t('Hold Bills')}</span>
+                  {activeOrdersCount > 0 &&
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] px-1.5 rounded-full font-black border border-white">
+                      {activeOrdersCount}
+                    </span>
+                }
+                </button>
+              </div>
+
+              <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative" title={t("Calculator")}>
                 <Calculator size={20} />
               </button>
               
               <div className="relative hidden sm:block">
-                <button 
-                  onClick={() => {
-                    setShowNotifications(!showNotifications);
-                    if (!showNotifications) {
-                      markAllAsRead(); // Mark broadcasts as read
-                      rtMarkAllAsRead(); // Mark real-time notifications as read
-                    }
-                  }} 
-                  className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative"
-                >
+                <button
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) {
+                    markAllAsRead(); // Mark broadcasts as read
+                    rtMarkAllAsRead(); // Mark real-time notifications as read
+                  }
+                }}
+                className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
+                
                   <Bell size={22} className="text-gray-200 hover:text-white transition-colors" />
-                  {totalUnreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#1e1e2d]">
+                  {totalUnreadCount > 0 &&
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#1e1e2d]">
                     {totalUnreadCount}
                   </span>
-                  )}
+                }
                 </button>
                 
                 {/* Notifications Dropdown */}
-                {showNotifications && (
-                  <>
+                {showNotifications &&
+              <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
                     <div className="absolute right-0 top-10 mt-1 w-80 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
                       <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                        <span className="font-bold text-gray-800">Notifications</span>
-                        <span 
-                          onClick={() => { setShowNotifications(false); handleViewChange('notification'); }}
-                          className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200"
-                        >
-                          View All
-                        </span>
+                        <span className="font-bold text-gray-800">{t("Notifications")}</span>
+                        <span
+                      onClick={() => {setShowNotifications(false);handleViewChange('notification');}}
+                      className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200">{t("View All")}
+
+
+                    </span>
                       </div>
                       <div className="max-h-[300px] overflow-y-auto">
-                        {notifications.map(n => (
-                          <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
+                        {notifications.map((n) =>
+                    <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
                             <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                             <div>
                               <p className="text-[1.05rem] font-bold text-gray-800 leading-tight">{n.title}</p>
@@ -878,14 +928,14 @@ function App() {
                               <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
                             </div>
                           </div>
-                        ))}
+                    )}
                       </div>
                       <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
-                        <button className="text-xs font-bold text-red-600 hover:text-red-700">Mark all as read</button>
+                        <button className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}</button>
                       </div>
                     </div>
                   </>
-                )}
+              }
               </div>
 
               <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
@@ -897,41 +947,41 @@ function App() {
             </div>
             
             {/* Profile Dropdown */}
-            {profileOpen && (
-              <>
+            {profileOpen &&
+          <>
                 <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)}></div>
                 <div className="absolute right-4 top-14 mt-1 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
                   <div className="px-4 py-2 border-b border-border/50 bg-gray-50/50">
                     <span className="block text-[1.05rem] font-bold text-text-main">{user.username}</span>
                     <span className="block text-xs text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
                   </div>
-                  <button 
-                    onClick={() => { handleViewChange('settings'); setProfileOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1"
-                  >
-                    <SettingsIcon size={18} className="text-text-muted" /> Settings
-                  </button>
-                  <button 
-                    onClick={() => { setShowLogoutConfirm(true); setProfileOpen(false); }}
-                    className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1"
-                  >
-                    <LogOut size={18} /> Logout
+                  <button
+                onClick={() => {handleViewChange('settings');setProfileOpen(false);}}
+                className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1">
+                
+                    <SettingsIcon size={18} className="text-text-muted" />{t("Settings")}
+              </button>
+                  <button
+                onClick={() => {setShowLogoutConfirm(true);setProfileOpen(false);}}
+                className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1">
+                
+                    <LogOut size={18} /> {t('Logout')}
                   </button>
                 </div>
               </>
-            )}
+          }
           </div>
         </header>
 
       <div className="flex-1 flex overflow-hidden relative">
 
       {/* Drawer Backdrop Overlay (Mobile only) */}
-      {mobileMenuOpen && (
-        <div 
+      {mobileMenuOpen &&
+        <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+          onClick={() => setMobileMenuOpen(false)} />
+
+        }
 
       {/* Sidebar Drawer */}
       <aside className={`fixed lg:relative inset-y-0 left-0 z-50 bg-surface flex flex-col shrink-0 shadow-2xl lg:shadow-none lg:border-r lg:border-border/40 transition-all duration-300 ease-in-out overflow-hidden ${mobileMenuOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-0 lg:translate-x-0'}`}>
@@ -939,258 +989,262 @@ function App() {
         <nav className="flex-1 px-3 pt-8 pb-4 space-y-6 overflow-y-auto custom-scrollbar">
           
           {/* MAIN SECTION */}
+          {!isChef &&
           <div>
-            <button 
-              onClick={() => setSidebarSections(s => ({ ...s, main: !s.main }))}
-              className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
-            >
-              <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Main</h3>
+            <button
+                onClick={() => setSidebarSections((s) => ({ ...s, main: !s.main }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group">
+                
+              <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">{t('Main')}</h3>
               {sidebarSections.main ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
             </button>
-            {sidebarSections.main && (
-            <div className="space-y-0.5">
+            {sidebarSections.main &&
+              <div className="space-y-0.5">
               <button
-                onClick={() => handleViewChange('floor')}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'floor' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-              >
+                  onClick={() => handleViewChange('floor')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'floor' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                 <LayoutGrid size={22} />
-                <span>Floor Management</span>
+                <span>{t('Floor Management')}</span>
               </button>
               
               <button
-                onClick={() => handleViewChange('billing')}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'billing' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-              >
+                  onClick={() => handleViewChange('billing')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'billing' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                 <LayoutDashboard size={22} />
-                <span>{isCaptain ? 'Captain Order' : 'New Order'}</span>
+                <span>{isCaptain ? t('Captain Order') : t('New Order')}</span>
               </button>
 
               <button
-                onClick={() => handleViewChange('orders')}
-                className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'orders' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-              >
+                  onClick={() => handleViewChange('orders')}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'orders' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                 <div className="flex items-center gap-3">
                   <ClipboardList size={22} />
-                  <span>Active Orders</span>
+                  <span>{t('Active Orders')}</span>
                 </div>
-                {activeOrdersCount > 0 && (
+                {activeOrdersCount > 0 &&
                   <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${view === 'orders' ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>
                     {activeOrdersCount}
                   </span>
-                )}
+                  }
               </button>
 
-              {!isCaptain && (
+              {!isCaptain &&
                 <button
                   onClick={() => handleViewChange('history')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                >
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                   <History size={22} />
-                  <span>Bill History</span>
+                  <span>{t('Bill History')}</span>
                 </button>
-              )}
+                }
 
               <button
-                onClick={() => handleViewChange('kothistory')}
-                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-              >
+                  onClick={() => handleViewChange('kothistory')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                 <Printer size={22} />
-                <span>KOT History</span>
+                <span>{t('KOT History')}</span>
               </button>
             </div>
-            )}
+              }
           </div>
+          }
 
           {/* OPERATIONS SECTION */}
-          {(!isCaptain && (features.kds !== false || features.expenses !== false || features.delivery !== false)) && (
+          {!isCaptain && (features.kds !== false || features.expenses !== false || features.delivery !== false) &&
             <div>
-              <button 
-                onClick={() => setSidebarSections(s => ({ ...s, operations: !s.operations }))}
-                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
-              >
-                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Operations</h3>
+              <button
+                onClick={() => setSidebarSections((s) => ({ ...s, operations: !s.operations }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group">
+                
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">{t('Operations')}</h3>
                 {sidebarSections.operations ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
               </button>
-              {sidebarSections.operations && (
+              {sidebarSections.operations &&
               <div className="space-y-0.5">
-                {features.kds !== false && (
-                  <button
-                    onClick={() => handleViewChange('kds')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {features.kds !== false &&
+                <button
+                  onClick={() => handleViewChange('kds')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <UtensilsCrossed size={22} />
-                    <span>Kitchen Display (KDS)</span>
+                    <span>{t('Kitchen Display (KDS)')}</span>
                   </button>
-                )}
+                }
 
-                {features.delivery !== false && (
-                  <button
-                    onClick={() => handleViewChange('delivery')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'delivery' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {!isChef && features.delivery !== false &&
+                <button
+                  onClick={() => handleViewChange('delivery')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'delivery' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <Truck size={22} />
-                    <span>Delivery Orders</span>
+                    <span>{t('Delivery Orders')}</span>
                   </button>
-                )}
+                }
 
-                {features.delivery !== false && (
-                  <button
-                    onClick={() => handleViewChange('pickup')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'pickup' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {!isChef && features.delivery !== false &&
+                <button
+                  onClick={() => handleViewChange('pickup')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'pickup' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <ShoppingBag size={22} />
-                    <span>Pickup Orders</span>
+                    <span>{t('Pickup Orders')}</span>
                   </button>
-                )}
+                }
 
-                {features.expenses !== false && (
-                  <button
-                    onClick={() => handleViewChange('expenses')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'expenses' ? 'bg-gradient-to-r from-rose-500 to-red-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {!isChef && features.expenses !== false &&
+                <button
+                  onClick={() => handleViewChange('expenses')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'expenses' ? 'bg-gradient-to-r from-rose-500 to-red-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <Wallet size={22} />
-                    <span>Petty Cash</span>
+                    <span>{t('Petty Cash')}</span>
                   </button>
-                )}
+                }
 
+                {!isChef &&
                 <button
                   onClick={() => handleViewChange('operations')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'operations' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                >
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'operations' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                   <LayoutGrid size={22} />
-                  <span>Extra Operations</span>
+                  <span>{t('Extra Operations')}</span>
                 </button>
+                }
               </div>
-              )}
+              }
             </div>
-          )}
+            }
 
           {/* MANAGEMENT SECTION */}
-          {!isCaptain && (
+          {!isCaptain && !isChef &&
             <div>
-              <button 
-                onClick={() => setSidebarSections(s => ({ ...s, management: !s.management }))}
-                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
-              >
-                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">Management</h3>
+              <button
+                onClick={() => setSidebarSections((s) => ({ ...s, management: !s.management }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group">
+                
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">{t('Management')}</h3>
                 {sidebarSections.management ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
               </button>
-              {sidebarSections.management && (
+              {sidebarSections.management &&
               <div className="space-y-0.5">
                 <button
                   onClick={() => handleViewChange('dashboard')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'dashboard' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                >
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'dashboard' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                   <Home size={22} />
-                  <span>Dashboard</span>
+                  <span>{t('Dashboard')}</span>
                 </button>
 
-                {(isAdmin && features.analytics !== false) && (
-                  <button
-                    onClick={() => handleViewChange('analytics')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'analytics' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {(isAdmin || isManager) && features.analytics !== false &&
+                <button
+                  onClick={() => handleViewChange('analytics')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'analytics' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <BarChart3 size={22} />
-                    <span>Analytics</span>
+                    <span>{t('Analytics')}</span>
                   </button>
-                )}
+                }
 
-                {features.daybook !== false && (
-                  <button
-                    onClick={() => handleViewChange('daybook')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'daybook' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {features.daybook !== false &&
+                <button
+                  onClick={() => handleViewChange('daybook')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'daybook' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <BookOpen size={22} />
-                    <span>DayBook</span>
+                    <span>{t('DayBook')}</span>
                   </button>
-                )}
+                }
               </div>
-              )}
+              }
             </div>
-          )}
+            }
 
           {/* SYSTEM SECTION */}
-          {!isCaptain && (
+          {!isCaptain && !isChef &&
             <div>
-              <button 
-                onClick={() => setSidebarSections(s => ({ ...s, system: !s.system }))}
-                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group"
-              >
-                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">System</h3>
+              <button
+                onClick={() => setSidebarSections((s) => ({ ...s, system: !s.system }))}
+                className="w-full flex items-center justify-between px-3 py-1 mb-1.5 group">
+                
+                <h3 className="text-[13px] font-black text-red-500/90 group-hover:text-red-600 uppercase tracking-widest transition-colors">{t('System')}</h3>
                 {sidebarSections.system ? <ChevronDown size={18} className="text-red-500/90 group-hover:text-red-600" /> : <ChevronRight size={18} className="text-red-500/90 group-hover:text-red-600" />}
               </button>
-              {sidebarSections.system && (
+              {sidebarSections.system &&
               <div className="space-y-0.5">
-                {(isAdmin && features.inventory !== false) && (
-                  <button
-                    onClick={() => handleViewChange('inventory')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'inventory' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {(isAdmin || isManager) && features.inventory !== false &&
+                <button
+                  onClick={() => handleViewChange('inventory')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'inventory' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <Package size={22} />
-                    <span>Inventory</span>
+                    <span>{t("Inventory")}</span>
                   </button>
-                )}
+                }
 
-                {features.crm !== false && (
-                  <button
-                    onClick={() => handleViewChange('crm')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'crm' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {features.crm !== false &&
+                <button
+                  onClick={() => handleViewChange('crm')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'crm' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <UsersIcon size={22} />
-                    <span>Customer CRM</span>
+                    <span>{t("Customer CRM")}</span>
                   </button>
-                )}
+                }
 
-                {(isAdmin && features.staff !== false) && (
-                  <button
-                    onClick={() => handleViewChange('staff')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'staff' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {(isAdmin || isManager) && features.staff !== false &&
+                <button
+                  onClick={() => handleViewChange('staff')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'staff' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <UserCheck size={22} />
-                    <span>Staff HR</span>
+                    <span>{t("Staff HR")}</span>
                   </button>
-                )}
+                }
 
-                {(isAdmin && features.qrcode !== false) && (
-                  <button
-                    onClick={() => handleViewChange('qrcode')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'qrcode' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {(isAdmin || isManager) && features.qrcode !== false &&
+                <button
+                  onClick={() => handleViewChange('qrcode')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'qrcode' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <QrCode size={22} />
-                    <span>QR Menu Generator</span>
+                    <span>{t("QR Menu Generator")}</span>
                   </button>
-                )}
+                }
 
                 <button
                   onClick={() => handleViewChange('menu')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'menu' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                >
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'menu' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                   <UtensilsCrossed size={22} />
-                  <span>Menu</span>
+                  <span>{t("Menu")}</span>
                 </button>
 
-                {isAdmin && (
-                  <button
-                    onClick={() => handleViewChange('settings')}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'settings' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}
-                  >
+                {isAdmin &&
+                <button
+                  onClick={() => handleViewChange('settings')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'settings' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
                     <SettingsIcon size={22} />
-                    <span>Settings</span>
+                    <span>{t('Settings')}</span>
                   </button>
-                )}
+                }
               </div>
-              )}
+              }
             </div>
-          )}
+            }
         </nav>
 
         <div className="p-6">
           <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all font-medium hover:shadow-md"
-          >
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all font-medium hover:shadow-md">
+              
             <LogOut size={20} />
-            <span>Logout</span>
+            <span>{t('Logout')}</span>
           </button>
         </div>
       </aside>
@@ -1216,20 +1270,20 @@ function App() {
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin"></div>
-                <p className="text-text-muted font-medium">Loading...</p>
+                <p className="text-text-muted font-medium">{t("Loading...")}</p>
               </div>
             </div>
-          }>
-            {['dashboard', 'analytics', 'daybook'].includes(view) && !ownerUnlocked ? (
+            }>
+            {['dashboard', 'analytics', 'daybook'].includes(view) && !ownerUnlocked ?
               <div className="h-full flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
                 <div className="bg-surface p-8 rounded-3xl border border-border shadow-2xl max-w-md w-full text-center space-y-6">
                   <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto shadow-inner">
                     <Lock size={32} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-extrabold text-text-main">Owner Access Protected</h2>
-                    <p className="text-[1.05rem] text-text-muted mt-1.5 leading-relaxed">
-                      Please enter the security PIN to access sensitive financial reports ({getTitle()}).
+                    <h2 className="text-2xl font-extrabold text-text-main">{t("Owner Access Protected")}</h2>
+                    <p className="text-[1.05rem] text-text-muted mt-1.5 leading-relaxed">{t("Please enter the security PIN to access sensitive financial reports (")}
+                      {getTitle()}).
                     </p>
                   </div>
                   
@@ -1239,7 +1293,7 @@ function App() {
                     try {
                       const s = JSON.parse(localStorage.getItem('restaurantSettings'));
                       if (s?.ownerPin) currentPin = s.ownerPin;
-                    } catch { /* ignore */ }
+                    } catch {/* ignore */}
                     if (pinInput === currentPin || pinInput === '1234' || pinInput === '0000' || pinInput === '999999') {
                       setOwnerUnlocked(true);
                       setPinError(false);
@@ -1249,7 +1303,7 @@ function App() {
                     }
                   }} className="space-y-4">
                     <div>
-                      <input 
+                      <input
                         type="password"
                         maxLength="6"
                         placeholder="• • • •"
@@ -1259,36 +1313,36 @@ function App() {
                           setPinError(false);
                         }}
                         className={`w-full text-center tracking-[1em] text-2xl font-bold py-4 bg-background border-2 rounded-2xl focus:outline-none transition-all ${
-                          pinError ? 'border-danger bg-danger/5 text-danger' : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/10'
-                        }`}
-                        autoFocus
-                      />
-                      {pinError && <p className="text-xs font-bold text-danger animate-bounce mt-2">Incorrect PIN! Default is 1234 or 0000.</p>}
+                        pinError ? 'border-danger bg-danger/5 text-danger' : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/10'}`
+                        }
+                        autoFocus />
+                      
+                      {pinError && <p className="text-xs font-bold text-danger animate-bounce mt-2">{t("Incorrect PIN! Default is 1234 or 0000.")}</p>}
                     </div>
 
-                    <button 
+                    <button
                       type="submit"
-                      className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all text-base transform active:scale-[0.98] cursor-pointer"
-                    >
-                      Unlock Owner Reports
+                      className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all text-base transform active:scale-[0.98] cursor-pointer">{t("Unlock Owner Reports")}
+
+
                     </button>
                   </form>
                 </div>
-              </div>
-            ) : (
+              </div> :
+
               <>
                 {view === 'dashboard' && <Dashboard onNavigate={handleViewChange} />}
                 {view === 'floor' && <FloorManagement onNavigate={handleViewChange} />}
-                {view === 'orders' && (
-                  <ActiveOrders
-                    onSelectOrder={(tableNo) => {
-                      setSelectedTable(tableNo);
-                      handleViewChange('billing');
-                    }}
-                    onOrderUpdate={fetchActiveOrdersCount}
-                    onNavigate={handleViewChange}
-                  />
-                )}
+                {view === 'orders' &&
+                <ActiveOrders
+                  onSelectOrder={(tableNo) => {
+                    setSelectedTable(tableNo);
+                    handleViewChange('billing');
+                  }}
+                  onOrderUpdate={fetchActiveOrdersCount}
+                  onNavigate={handleViewChange} />
+
+                }
                 {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
                 {view === 'history' && <BillHistory onNavigate={handleViewChange} />}
                 {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} />}
@@ -1331,123 +1385,125 @@ function App() {
                 {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} />}
                 {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} />}
               </>
-            )}
+              }
           </Suspense>
         </main>
 
         {/* Native Android Bottom Navigation Bar (Google MD3 Style - Mobile Only) */}
+        {!isChef && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 min-h-[70px] pt-1.5 pb-[calc(10px+env(safe-area-inset-bottom,0px))] bg-surface/98 backdrop-blur-xl border-t border-border/80 z-50 flex items-center justify-around px-2 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
           <button
-            onClick={() => handleViewChange('floor')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'floor' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'
-            }`}
-          >
+              onClick={() => handleViewChange('floor')}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
+              view === 'floor' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
+              }>
+              
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'floor' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <LayoutGrid size={20} className={view === 'floor' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-xs tracking-tight">Tables</span>
+            <span className="text-xs tracking-tight">{t("Tables")}</span>
           </button>
 
           <button
-            onClick={() => handleViewChange('orders')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all relative ${
-              view === 'orders' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'
-            }`}
-          >
+              onClick={() => handleViewChange('orders')}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all relative ${
+              view === 'orders' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
+              }>
+              
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center relative ${view === 'orders' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <Clock size={20} className={view === 'orders' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-              {activeOrdersCount > 0 && (
+              {activeOrdersCount > 0 &&
                 <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                   {activeOrdersCount}
                 </span>
-              )}
+                }
             </div>
-            <span className="text-xs tracking-tight">KOTs</span>
+            <span className="text-xs tracking-tight">{t("KOTs")}</span>
           </button>
 
           <button
-            onClick={() => handleViewChange('billing')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'billing' ? 'text-primary font-extrabold' : 'text-text-muted hover:text-text-main font-medium'
-            }`}
-          >
+              onClick={() => handleViewChange('billing')}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
+              view === 'billing' ? 'text-primary font-extrabold' : 'text-text-muted hover:text-text-main font-medium'}`
+              }>
+              
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'billing' ? 'bg-primary/15 text-primary scale-105 shadow-sm' : 'text-text-muted'}`}>
               <UtensilsCrossed size={22} className={view === 'billing' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-xs tracking-tight font-black">Billing</span>
+            <span className="text-xs tracking-tight font-black">{t("Billing")}</span>
           </button>
 
           <button
-            onClick={() => handleViewChange('history')}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'history' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'
-            }`}
-          >
+              onClick={() => handleViewChange('history')}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
+              view === 'history' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
+              }>
+              
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'history' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <Receipt size={20} className={view === 'history' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-xs tracking-tight">History</span>
+            <span className="text-xs tracking-tight">{t("History")}</span>
           </button>
 
           <button
-            onClick={() => setMobileMenuOpen(true)}
-            className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              ['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'
-            }`}
-          >
+              onClick={() => setMobileMenuOpen(true)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
+              ['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
+              }>
+              
             <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
               <Menu size={20} className={['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
             </div>
-            <span className="text-xs tracking-tight">More</span>
+            <span className="text-xs tracking-tight">{t("More")}</span>
           </button>
         </div>
+        )}
       </div>
       </div>{/* end flex-1 wrapper */}
 
       {/* License Expiry Warning Popup */}
-      {showExpiryPopup && daysRemaining !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+      {showExpiryPopup && daysRemaining !== null &&
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
           <div className="bg-surface rounded-3xl border border-border shadow-2xl max-w-md w-full mx-4 overflow-hidden">
             {/* Header */}
             <div className={`px-6 py-5 flex items-center justify-between ${
-              daysRemaining <= 0 
-                ? 'bg-gradient-to-r from-red-500/20 to-red-400/10' 
-                : daysRemaining > 365
-                ? 'bg-gradient-to-r from-emerald-500/20 to-emerald-400/10'
-                : 'bg-gradient-to-r from-amber-500/20 to-amber-400/10'
-            }`}>
+          daysRemaining <= 0 ?
+          'bg-gradient-to-r from-red-500/20 to-red-400/10' :
+          daysRemaining > 365 ?
+          'bg-gradient-to-r from-emerald-500/20 to-emerald-400/10' :
+          'bg-gradient-to-r from-amber-500/20 to-amber-400/10'}`
+          }>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
-                  daysRemaining <= 0 
-                    ? 'bg-red-500/20 text-red-500' 
-                    : daysRemaining > 365
-                    ? 'bg-emerald-500/20 text-emerald-500'
-                    : 'bg-amber-500/20 text-amber-500'
-                }`}>
+              daysRemaining <= 0 ?
+              'bg-red-500/20 text-red-500' :
+              daysRemaining > 365 ?
+              'bg-emerald-500/20 text-emerald-500' :
+              'bg-amber-500/20 text-amber-500'}`
+              }>
                   {daysRemaining > 365 ? <CalendarClock size={28} /> : <ShieldAlert size={28} />}
                 </div>
                 <div>
                   <h2 className="text-lg font-extrabold text-text-main">
-                    {daysRemaining <= 0 
-                      ? 'License Expired!' 
-                      : daysRemaining > 365
-                      ? 'License Active!'
-                      : 'License Expiring Soon!'}
+                    {daysRemaining <= 0 ?
+                  'License Expired!' :
+                  daysRemaining > 365 ?
+                  'License Active!' :
+                  'License Expiring Soon!'}
                   </h2>
                   <p className="text-xs text-text-muted font-medium">
-                    {daysRemaining <= 0
-                      ? 'Your software license has expired.'
-                      : daysRemaining > 365
-                      ? 'Your lifetime license is active.'
-                      : `Only ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining!`}
+                    {daysRemaining <= 0 ?
+                  'Your software license has expired.' :
+                  daysRemaining > 365 ?
+                  'Your lifetime license is active.' :
+                  `Only ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining!`}
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setShowExpiryPopup(false)}
-                className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center hover:bg-border transition-colors"
-              >
+              onClick={() => setShowExpiryPopup(false)}
+              className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center hover:bg-border transition-colors">
+              
                 <X size={18} className="text-text-muted" />
               </button>
             </div>
@@ -1456,99 +1512,99 @@ function App() {
             <div className="px-6 py-5 space-y-4">
               <div className="bg-background rounded-2xl p-4 border border-border space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-[1.05rem] text-text-muted font-medium">Expiry Date</span>
+                  <span className="text-[1.05rem] text-text-muted font-medium">{t("Expiry Date")}</span>
                   <span className="text-[1.05rem] font-bold text-text-main">
-                    {daysRemaining > 365 
-                      ? 'Permanent (Lifetime)' 
-                      : licenseExpiry 
-                      ? licenseExpiry.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) 
-                      : '—'}
+                    {daysRemaining > 365 ?
+                  'Permanent (Lifetime)' :
+                  licenseExpiry ?
+                  licenseExpiry.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) :
+                  '—'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[1.05rem] text-text-muted font-medium">Days Remaining</span>
+                  <span className="text-[1.05rem] text-text-muted font-medium">{t("Days Remaining")}</span>
                   <span className={`text-[1.05rem] font-bold ${
-                    daysRemaining <= 0 
-                      ? 'text-red-500' 
-                      : daysRemaining > 365
-                      ? 'text-emerald-500'
-                      : daysRemaining <= 7 
-                      ? 'text-red-500' 
-                      : 'text-amber-500'
-                  }`}>
-                    {daysRemaining <= 0 
-                      ? 'EXPIRED' 
-                      : daysRemaining > 365
-                      ? 'Lifetime'
-                      : `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}
+                daysRemaining <= 0 ?
+                'text-red-500' :
+                daysRemaining > 365 ?
+                'text-emerald-500' :
+                daysRemaining <= 7 ?
+                'text-red-500' :
+                'text-amber-500'}`
+                }>
+                    {daysRemaining <= 0 ?
+                  'EXPIRED' :
+                  daysRemaining > 365 ?
+                  'Lifetime' :
+                  `${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`}
                   </span>
                 </div>
                 {/* Progress bar */}
-                {daysRemaining <= 365 && (
-                  <div className="h-2 bg-border rounded-full overflow-hidden">
+                {daysRemaining <= 365 &&
+              <div className="h-2 bg-border rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        daysRemaining <= 0 ? 'bg-red-500' : daysRemaining <= 7 ? 'bg-red-400' : 'bg-amber-400'
-                      }`}
-                      style={{ width: `${Math.max(0, Math.min(100, ((15 - Math.max(0, daysRemaining)) / 15) * 100))}%` }}
-                    />
+                  className={`h-full rounded-full transition-all duration-500 ${
+                  daysRemaining <= 0 ? 'bg-red-500' : daysRemaining <= 7 ? 'bg-red-400' : 'bg-amber-400'}`
+                  }
+                  style={{ width: `${Math.max(0, Math.min(100, (15 - Math.max(0, daysRemaining)) / 15 * 100))}%` }} />
+                
                   </div>
-                )}
+              }
               </div>
 
-              {daysRemaining <= 365 ? (
-                <div className="bg-amber-50 dark:bg-amber-500/10 rounded-2xl p-4 border border-amber-200 dark:border-amber-500/20">
+              {daysRemaining <= 365 ?
+            <div className="bg-amber-50 dark:bg-amber-500/10 rounded-2xl p-4 border border-amber-200 dark:border-amber-500/20">
                   <p className="text-[1.05rem] text-amber-800 dark:text-amber-300 font-medium leading-relaxed">
-                    {daysRemaining <= 0
-                      ? 'Your license has expired. Please renew immediately to continue using all features without interruption.'
-                      : 'Your license will expire soon. Please renew before the expiry date to avoid any service interruption.'}
+                    {daysRemaining <= 0 ?
+                'Your license has expired. Please renew immediately to continue using all features without interruption.' :
+                'Your license will expire soon. Please renew before the expiry date to avoid any service interruption.'}
                   </p>
+                </div> :
+
+            <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-500/20">
+                  <p className="text-[1.05rem] text-emerald-800 dark:text-emerald-300 font-medium leading-relaxed">{t("Thank you for choosing MS Tech Hive! Your software license is fully active and has no upcoming expiration.")}
+
+              </p>
                 </div>
-              ) : (
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl p-4 border border-emerald-200 dark:border-emerald-500/20">
-                  <p className="text-[1.05rem] text-emerald-800 dark:text-emerald-300 font-medium leading-relaxed">
-                    Thank you for choosing MS Tech Hive! Your software license is fully active and has no upcoming expiration.
-                  </p>
-                </div>
-              )}
+            }
 
               {/* Contact Info */}
-              {daysRemaining <= 365 && (
-                <div className="bg-primary/5 rounded-2xl p-4 border border-primary/15">
-                  <p className="text-xs text-text-muted font-bold uppercase tracking-wider mb-2">Contact Customer Care</p>
+              {daysRemaining <= 365 &&
+            <div className="bg-primary/5 rounded-2xl p-4 border border-primary/15">
+                  <p className="text-xs text-text-muted font-bold uppercase tracking-wider mb-2">{t("Contact Customer Care")}</p>
                   <a href="tel:+919701800140" className="flex items-center gap-3 text-primary font-bold text-lg hover:underline">
                     <Phone size={20} />
                     +91 9701800140
                   </a>
                 </div>
-              )}
+            }
             </div>
 
             {/* Footer */}
             <div className="px-6 pb-5">
               <button
-                onClick={() => setShowExpiryPopup(false)}
-                className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all transform active:scale-[0.98]"
-              >
-                Got it, I'll Renew
-              </button>
+              onClick={() => setShowExpiryPopup(false)}
+              className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all transform active:scale-[0.98]">{t("Got it, I'll Renew")}
+
+
+            </button>
             </div>
           </div>
         </div>
-      )}
+      }
 
       {/* Global Broadcast Modal */}
-      {activeBroadcast && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] animate-fade-in p-4 backdrop-blur-sm">
+      {activeBroadcast &&
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] animate-fade-in p-4 backdrop-blur-sm">
           <div className="bg-surface border border-primary/50 p-1 rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-transform overflow-hidden relative">
             <div className="bg-background rounded-xl p-6 sm:p-8 relative">
-              <button 
-                onClick={() => {
-                  localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
-                  setActiveBroadcast(null);
-                }} 
-                className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10"
-              >
+              <button
+              onClick={() => {
+                localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                setActiveBroadcast(null);
+              }}
+              className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10">
+              
                 <X className="w-5 h-5 text-gray-400" />
               </button>
               
@@ -1559,28 +1615,28 @@ function App() {
                 
                 <h3 className="text-2xl font-black mb-4 text-white">{activeBroadcast.title}</h3>
                 
-                {activeBroadcast.imageUrl && (
-                  <div className="w-full max-h-64 rounded-xl overflow-hidden mb-6 border border-border shadow-lg">
+                {activeBroadcast.imageUrl &&
+              <div className="w-full max-h-64 rounded-xl overflow-hidden mb-6 border border-border shadow-lg">
                     <img src={activeBroadcast.imageUrl} alt={activeBroadcast.title} className="w-full h-full object-contain bg-surface" />
                   </div>
-                )}
+              }
                 
                 <p className="text-gray-300 mb-8 leading-relaxed whitespace-pre-wrap">{activeBroadcast.message}</p>
                 
-                <button 
-                  onClick={() => {
-                    localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
-                    setActiveBroadcast(null);
-                  }}
-                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg"
-                >
-                  Got it, Thanks!
-                </button>
+                <button
+                onClick={() => {
+                  localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                  setActiveBroadcast(null);
+                }}
+                className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg">{t("Got it, Thanks!")}
+
+
+              </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      }
 
       {/* Tools Modals */}
       <Suspense fallback={null}>
@@ -1588,37 +1644,37 @@ function App() {
       </Suspense>
 
       {/* Logout Confirmation Toast Modal */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+      {showLogoutConfirm &&
+      <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
             <div className="flex flex-col items-center text-center">
-              <p className="text-text-main font-medium text-base mb-6">
-                Are you sure you want to logout <span className="font-bold">{user?.username}</span>?
+              <p className="text-text-main font-medium text-base mb-6">{t("Are you sure you want to logout")}
+              <span className="font-bold">{user?.username}</span>?
               </p>
               <div className="flex w-full gap-3">
                 <button
-                  onClick={() => setShowLogoutConfirm(false)}
-                  className="flex-1 py-2.5 px-4 bg-surface-hover hover:bg-border text-text-main font-medium rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 py-2.5 px-4 bg-surface-hover hover:bg-border text-text-main font-medium rounded-xl transition-colors">{t("Cancel")}
+
+
+              </button>
                 <button
-                  onClick={() => {
-                    setShowLogoutConfirm(false);
-                    handleLogout();
-                  }}
-                  className="flex-1 py-2.5 px-4 bg-danger hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
-                >
-                  Logout
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  handleLogout();
+                }}
+                className="flex-1 py-2.5 px-4 bg-danger hover:bg-red-600 text-white font-medium rounded-xl transition-colors">
+                
+                  {t('Logout')}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      }
 
-    </div>
-  );
+    </div>);
+
 }
 
 export default App;
