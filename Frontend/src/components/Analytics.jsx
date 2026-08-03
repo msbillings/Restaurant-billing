@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import { getAnalytics, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../api/analytics';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -21,11 +21,11 @@ import {
   UserX,
   X,
   DownloadCloud,
-  ChevronDown
-} from 'lucide-react';
+  ChevronDown } from
+'lucide-react';
 import Toast from './Toast';
 
-const Analytics = ({ onNavigate }) => {
+const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -37,6 +37,7 @@ const Analytics = ({ onNavigate }) => {
   const [showFraudModal, setShowFraudModal] = useState(false);
   const [fraudData, setFraudData] = useState(null);
   const [fraudLoading, setFraudLoading] = useState(false);
+  const [fraudDays, setFraudDays] = useState(30);
 
   useEffect(() => {
     fetchAnalytics();
@@ -62,12 +63,13 @@ const Analytics = ({ onNavigate }) => {
     }
   };
 
-  const fetchFraudAnalysis = async () => {
+  const fetchFraudAnalysis = async (days = fraudDays) => {
     setFraudLoading(true);
     setShowFraudModal(true);
+    setFraudDays(days);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
-      const res = await fetch(`${API_BASE_URL}/ai/fraud-analysis`, {
+      const res = await fetch(`${API_BASE_URL}/ai/fraud-analysis?days=${days}`, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
@@ -115,15 +117,15 @@ const Analytics = ({ onNavigate }) => {
 
   const getMaxRevenue = () => {
     if (!analytics?.dailyRevenue || analytics.dailyRevenue.length === 0) return 1;
-    return Math.max(...analytics.dailyRevenue.map(d => d.revenue));
+    return Math.max(...analytics.dailyRevenue.map((d) => d.revenue));
   };
 
   const getPaymentModeIcon = (mode) => {
     switch (mode) {
-      case 'Cash': return <Wallet size={20} />;
-      case 'UPI': return <Smartphone size={20} />;
-      case 'Card': return <CreditCard size={20} />;
-      default: return <CreditCard size={20} />;
+      case 'Cash':return <Wallet size={20} />;
+      case 'UPI':return <Smartphone size={20} />;
+      case 'Card':return <CreditCard size={20} />;
+      default:return <CreditCard size={20} />;
     }
   };
 
@@ -148,46 +150,55 @@ const Analytics = ({ onNavigate }) => {
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-4">
           <RefreshCw className="animate-spin text-primary" size={32} />
-          <p className="text-text-muted">Loading analytics...</p>
+          <p className="text-text-muted">{t("Loading analytics...")}</p>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   if (!analytics) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-text-muted">No analytics data available</p>
-      </div>
-    );
+        <p className="text-text-muted">{t("No analytics data available")}</p>
+      </div>);
+
   }
 
   const { summary, dailyRevenue, paymentModeStats } = analytics;
   const maxRevenue = getMaxRevenue();
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-7xl mx-auto p-6 space-y-5">
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-4 md:p-6 overflow-y-auto">
+      {/* Analytics Container - Forcing dark mode */}
+      <style>{`
+        .glass-card {
+          background: rgba(20, 20, 24, 0.6);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 16px;
+        }
+      `}</style>
+      <div className="space-y-5">
         <div className="flex items-center gap-4 mb-2">
-          <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+          <BackButton onClick={onGoBack} />
         </div>
         {/* Period Selector */}
-        <div className="bg-gradient-to-r from-primary/5 via-accent/3 to-secondary/5 rounded-xl p-4 border border-border/50 shadow-sm">
+        <div className="glass-card p-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-surface rounded-lg p-1 border border-border/50">
+              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg p-1 border border-white/10">
                 <button
                   onClick={() => {
                     setViewMode('month');
                     setDays(null);
                   }}
                   className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    viewMode === 'month'
-                      ? 'bg-primary text-white shadow-md'
-                      : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                  }`}
-                >
-                  Month
+                  viewMode === 'month' ?
+                  'bg-[#f97316] text-white shadow-md' :
+                  'text-gray-400 hover:text-white hover:bg-white/5'}`
+                  }>{t("Month")}
+
+
                 </button>
                 <button
                   onClick={() => {
@@ -195,12 +206,12 @@ const Analytics = ({ onNavigate }) => {
                     setDays(7);
                   }}
                   className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    viewMode === 'days'
-                      ? 'bg-primary text-white shadow-md'
-                      : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                  }`}
-                >
-                  Days
+                  viewMode === 'days' ?
+                  'bg-[#f97316] text-white shadow-md' :
+                  'text-gray-400 hover:text-white hover:bg-white/5'}`
+                  }>{t("Days")}
+
+
                 </button>
                 <button
                   onClick={() => {
@@ -208,85 +219,85 @@ const Analytics = ({ onNavigate }) => {
                     setDays(null);
                   }}
                   className={`px-4 py-2 rounded-md font-medium transition-all ${
-                    viewMode === 'day'
-                      ? 'bg-primary text-white shadow-md'
-                      : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                  }`}
-                >
-                  Day
+                  viewMode === 'day' ?
+                  'bg-[#f97316] text-white shadow-md' :
+                  'text-gray-400 hover:text-white hover:bg-white/5'}`
+                  }>{t("Day")}
+
+
                 </button>
               </div>
               
-              {viewMode === 'month' ? (
-                <div className="flex items-center gap-2 bg-surface rounded-lg px-4 py-2 border border-border/50">
-                  <Calendar size={16} className="text-primary" />
+              {viewMode === 'month' ?
+              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg px-4 py-2 border border-white/10">
+                  <Calendar size={16} className="text-[#f97316]" />
                   <select
-                    value={`${selectedYear}-${selectedMonth}`}
-                    onChange={(e) => {
-                      const [year, month] = e.target.value.split('-').map(Number);
-                      setSelectedYear(year);
-                      setSelectedMonth(month);
-                    }}
-                    className="bg-transparent font-medium text-text-main focus:outline-none cursor-pointer"
-                  >
-                    {getAvailableMonths().map((m) => (
-                      <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+                  value={`${selectedYear}-${selectedMonth}`}
+                  onChange={(e) => {
+                    const [year, month] = e.target.value.split('-').map(Number);
+                    setSelectedYear(year);
+                    setSelectedMonth(month);
+                  }}
+                  className="bg-transparent font-medium text-white focus:outline-none cursor-pointer">
+                  
+                    {getAvailableMonths().map((m) =>
+                  <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
                         {m.label}
                       </option>
-                    ))}
+                  )}
                   </select>
-                </div>
-              ) : viewMode === 'days' ? (
-                <div className="flex items-center gap-2 bg-surface rounded-lg p-1 border border-border/50">
-                  {[7, 30].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setDays(d)}
-                      className={`px-4 py-2 rounded-md font-medium transition-all ${
-                        days === d
-                          ? 'bg-primary text-white shadow-md'
-                          : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                      }`}
-                    >
-                      {d} Days
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 bg-surface rounded-lg px-4 py-2 border border-border/50">
-                  <Calendar size={16} className="text-primary" />
+                </div> :
+              viewMode === 'days' ?
+              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg p-1 border border-white/10">
+                  {[7, 30].map((d) =>
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`px-4 py-2 rounded-md font-medium transition-all ${
+                  days === d ?
+                  'bg-[#f97316] text-white shadow-md' :
+                  'text-gray-400 hover:text-white hover:bg-white/5'}`
+                  }>
+                  
+                      {d}{t("Days")}
+                </button>
+                )}
+                </div> :
+
+              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg px-4 py-2 border border-white/10">
+                  <Calendar size={16} className="text-[#f97316]" />
                   <input
-                    type="date"
-                    value={selectedDate}
-                    max={new Date().toISOString().split('T')[0]}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-transparent font-medium text-text-main focus:outline-none cursor-pointer"
-                  />
+                  type="date"
+                  value={selectedDate}
+                  max={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent font-medium text-white focus:outline-none cursor-pointer [color-scheme:dark]" />
+                
                 </div>
-              )}
+              }
             </div>
             
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDownloadReport}
-                className="flex items-center gap-2 px-4 py-2.5 bg-success hover:bg-success/90 rounded-lg border border-success transition-all text-white shadow-sm hover:shadow-md font-medium"
-              >
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#22c55e] hover:bg-[#16a34a] rounded-lg transition-all text-white shadow-sm font-medium">
+                
                 <FileSpreadsheet size={16} />
-                <span className="text-sm">Download Report</span>
+                <span className="text-sm">{t("Download Report")}</span>
               </button>
               <button
                 onClick={fetchAnalytics}
-                className="flex items-center gap-2 px-4 py-2.5 bg-surface hover:bg-surface-hover rounded-lg border border-border/50 transition-all text-text-main shadow-sm hover:shadow-md font-medium"
-              >
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#1e1e24] hover:bg-white/10 rounded-lg border border-white/10 transition-all text-white shadow-sm font-medium">
+                
                 <RefreshCw size={16} />
-                <span className="text-sm">Refresh</span>
+                <span className="text-sm">{t("Refresh")}</span>
               </button>
               <button
-                onClick={fetchFraudAnalysis}
-                className="flex items-center gap-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg border border-red-200 transition-all shadow-sm hover:shadow-md font-bold ml-2"
-              >
+                onClick={() => fetchFraudAnalysis()}
+                className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/20 transition-all font-bold ml-2">
+                
                 <ShieldAlert size={16} />
-                <span className="text-sm hidden sm:inline">Silent Auditor</span>
+                <span className="text-sm hidden sm:inline">{t("Silent Auditor")}</span>
               </button>
             </div>
           </div>
@@ -295,69 +306,69 @@ const Analytics = ({ onNavigate }) => {
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Total Bills */}
-          <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl p-5 border border-primary/20 shadow-sm hover:shadow-lg hover:border-primary/30 transition-all duration-300">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-                <Receipt className="text-primary" size={20} />
+              <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                <Receipt className="text-blue-500" size={20} />
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Total Bills</p>
-              <p className="text-2xl font-bold text-text-main leading-tight">{summary.totalBills.toLocaleString()}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
+              <p className="text-2xl font-bold text-white leading-tight">{summary.totalBills.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Total Orders */}
-          <div className="bg-gradient-to-br from-secondary/10 to-secondary/5 rounded-xl p-5 border border-secondary/20 shadow-sm hover:shadow-lg hover:border-secondary/30 transition-all duration-300">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-secondary/20 rounded-lg flex items-center justify-center">
-                <ShoppingBag className="text-secondary" size={20} />
+              <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
+                <ShoppingBag className="text-purple-500" size={20} />
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Total Orders</p>
-              <p className="text-2xl font-bold text-text-main leading-tight">{summary.totalOrders.toLocaleString()}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
+              <p className="text-2xl font-bold text-white leading-tight">{summary.totalOrders.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Today's Revenue */}
-          <div className="bg-gradient-to-br from-success/10 to-success/5 rounded-xl p-5 border border-success/20 shadow-sm hover:shadow-lg hover:border-success/30 transition-all duration-300">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-success/20 rounded-lg flex items-center justify-center">
-                <TrendingUp className="text-success" size={20} />
+              <div className="w-10 h-10 bg-[#22c55e]/10 rounded-lg flex items-center justify-center">
+                <TrendingUp className="text-[#22c55e]" size={20} />
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Today's Revenue</p>
-              <p className="text-2xl font-bold text-text-main leading-tight">{formatCurrency(summary.today.revenue)}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Today's Revenue")}</p>
+              <p className="text-2xl font-bold text-white leading-tight">{formatCurrency(summary.today.revenue)}</p>
             </div>
           </div>
 
           {/* Period Revenue */}
-          <div className="bg-gradient-to-br from-accent/10 to-accent/5 rounded-xl p-5 border border-accent/20 shadow-sm hover:shadow-lg hover:border-accent/30 transition-all duration-300">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-accent/20 rounded-lg flex items-center justify-center">
-                <DollarSign className="text-accent" size={20} />
+              <div className="w-10 h-10 bg-[#f97316]/10 rounded-lg flex items-center justify-center">
+                <DollarSign className="text-[#f97316]" size={20} />
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-                {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear}` : `${days} Days`} Revenue
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear}` : `${days} Days`}{t("Revenue")}
               </p>
-              <p className="text-2xl font-bold text-text-main leading-tight">{formatCurrency(summary.period.revenue)}</p>
+              <p className="text-2xl font-bold text-white leading-tight">{formatCurrency(summary.period.revenue)}</p>
             </div>
           </div>
 
           {/* Delivery Orders */}
-          <div className="bg-gradient-to-br from-orange-100/50 to-orange-50/30 rounded-xl p-5 border border-orange-200/50 shadow-sm hover:shadow-lg hover:border-orange-300/50 transition-all duration-300">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-orange-200/50 rounded-lg flex items-center justify-center">
-                <Truck className="text-orange-600" size={20} />
+              <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+                <Truck className="text-yellow-500" size={20} />
               </div>
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-text-muted uppercase tracking-wide">Delivery Orders</p>
-              <p className="text-2xl font-bold text-text-main leading-tight">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Delivery Orders")}</p>
+              <p className="text-2xl font-bold text-white leading-tight">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
             </div>
           </div>
         </div>
@@ -365,354 +376,354 @@ const Analytics = ({ onNavigate }) => {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Daily Revenue Chart */}
-          <div className="bg-surface rounded-xl p-6 border border-border shadow-sm hover:shadow-md transition-all duration-300">
+          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                  <BarChart3 className="text-primary" size={20} />
+                <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center">
+                  <BarChart3 className="text-[#f97316]" size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-text-main">Daily Revenue & Orders</h2>
-                  <p className="text-xs text-text-muted">
-                    {viewMode === 'month' 
-                      ? `${getMonthName(selectedMonth)} ${selectedYear}` 
-                      : `Last ${days} days`}
+                  <h2 className="text-lg font-bold text-white">{t("Daily Revenue & Orders")}</h2>
+                  <p className="text-xs text-gray-400">
+                    {viewMode === 'month' ?
+                    `${getMonthName(selectedMonth)} ${selectedYear}` :
+                    `Last ${days} days`}
                   </p>
                 </div>
               </div>
             </div>
             
-            {dailyRevenue && dailyRevenue.length > 0 ? (
-              <div className="space-y-4">
+            {dailyRevenue && dailyRevenue.length > 0 ?
+            <div className="space-y-4">
                 {/* Professional Chart */}
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dailyRevenue} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <XAxis 
-                        dataKey="_id" 
-                        tickFormatter={(val) => {
-                          const d = new Date(val);
-                          return `${d.getDate()}/${d.getMonth()+1}`;
-                        }}
-                        tick={{ fontSize: 11, fill: '#8b8d97' }}
-                        axisLine={false}
-                        tickLine={false}
-                        dy={10}
-                      />
-                      <YAxis 
-                        tickFormatter={(val) => {
-                          if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
-                          return `₹${val}`;
-                        }}
-                        tick={{ fontSize: 11, fill: '#8b8d97' }}
-                        axisLine={false}
-                        tickLine={false}
-                        dx={-10}
-                      />
-                      <Tooltip 
-                        cursor={{ fill: 'rgba(0,0,0,0.05)' }}
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const data = payload[0].payload;
-                            return (
-                              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-lg p-3 z-50">
-                                <p className="font-bold text-slate-800 dark:text-slate-200 mb-1">{formatDate(data._id)}</p>
-                                <p className="text-orange-500 font-bold text-lg">{formatCurrency(data.revenue)}</p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                                  Orders: {data.orders} • Bills: {data.bills}
+                      <XAxis
+                      dataKey="_id"
+                      tickFormatter={(val) => {
+                        const d = new Date(val);
+                        return `${d.getDate()}/${d.getMonth() + 1}`;
+                      }}
+                      tick={{ fontSize: 11, fill: '#8b8d97' }}
+                      axisLine={false}
+                      tickLine={false}
+                      dy={10} />
+                    
+                      <YAxis
+                      tickFormatter={(val) => {
+                        if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
+                        return `₹${val}`;
+                      }}
+                      tick={{ fontSize: 11, fill: '#8b8d97' }}
+                      axisLine={false}
+                      tickLine={false}
+                      dx={-10} />
+                    
+                      <Tooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-[#1e1e1e] border border-gray-800 shadow-xl rounded-lg p-3 z-50">
+                                <p className="font-bold text-gray-200 mb-1">{formatDate(data._id)}</p>
+                                <p className="text-[#f97316] font-bold text-lg">{formatCurrency(data.revenue)}</p>
+                                <p className="text-xs text-gray-400 mt-1 font-medium">{t("Orders:")}
+                                {data.orders} {t("• Bills:")} {data.bills}
                                 </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
+                              </div>);
+
+                        }
+                        return null;
+                      }} />
+                    
                       <Bar dataKey="revenue" radius={[6, 6, 0, 0]} maxBarSize={50}>
-                        {dailyRevenue.map((entry, index) => (
-                          <Cell key={`cell-${index}`} className="fill-primary hover:opacity-80 transition-opacity" />
-                        ))}
+                        {dailyRevenue.map((entry, index) =>
+                      <Cell key={`cell-${index}`} fill="#f97316" className="hover:opacity-80 transition-opacity" />
+                      )}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 
                 {/* Daily Breakdown Table */}
-                <div className="mt-6 border border-border/50 rounded-xl overflow-hidden shadow-sm">
-                  <div className="bg-primary/5 px-4 py-3 border-b border-border/50">
-                    <h3 className="font-bold text-text-main text-sm">Daily Breakdown</h3>
+                <div className="mt-6 border border-white/10 rounded-xl overflow-hidden shadow-sm">
+                  <div className="bg-[#1e1e24] px-4 py-3 border-b border-white/10">
+                    <h3 className="font-bold text-white text-sm">{t("Daily Breakdown")}</h3>
                   </div>
                   <div className="max-h-64 overflow-y-auto">
-                    <table className="w-full">
-                      <thead className="bg-surface-hover sticky top-0">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#1e1e24] sticky top-0">
                         <tr>
-                          <th className="text-left px-4 py-2 text-xs font-bold text-text-muted uppercase">Date</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-text-muted uppercase">Revenue</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-text-muted uppercase">Bills</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-text-muted uppercase">Orders</th>
+                          <th className="px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Date")}</th>
+                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Revenue")}</th>
+                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Bills")}</th>
+                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Orders")}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyRevenue.map((day, index) => (
-                          <tr key={index} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
-                            <td className="px-4 py-2 text-sm font-medium text-text-main">
+                        {dailyRevenue.map((day, index) =>
+                      <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td className="px-4 py-2 text-sm font-medium text-white">
                               {formatDate(day._id)}
                             </td>
-                            <td className="px-4 py-2 text-sm font-bold text-text-main text-right">
+                            <td className="px-4 py-2 text-sm font-bold text-white text-right">
                               {formatCurrency(day.revenue)}
                             </td>
-                            <td className="px-4 py-2 text-sm text-text-muted text-right">
+                            <td className="px-4 py-2 text-sm text-gray-400 text-right">
                               {day.bills}
                             </td>
-                            <td className="px-4 py-2 text-sm text-text-muted text-right">
+                            <td className="px-4 py-2 text-sm text-gray-400 text-right">
                               {day.orders}
                             </td>
                           </tr>
-                        ))}
+                      )}
                       </tbody>
                     </table>
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-4 border-t border-border">
+                <div className="flex items-center justify-between pt-4 border-t border-white/10">
                   <div className="text-center">
-                    <p className="text-xs text-text-muted">Total Revenue</p>
-                    <p className="text-lg font-bold text-text-main">
+                    <p className="text-xs text-gray-400">{t("Total Revenue")}</p>
+                    <p className="text-lg font-bold text-white">
                       {formatCurrency(dailyRevenue.reduce((sum, d) => sum + d.revenue, 0))}
                     </p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-text-muted">Total Bills</p>
-                    <p className="text-lg font-bold text-text-main">
+                    <p className="text-xs text-gray-400">{t("Total Bills")}</p>
+                    <p className="text-lg font-bold text-white">
                       {dailyRevenue.reduce((sum, d) => sum + d.bills, 0)}
                     </p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-text-muted">Avg Daily</p>
-                    <p className="text-lg font-bold text-text-main">
+                    <p className="text-xs text-gray-400">{t("Avg Daily")}</p>
+                    <p className="text-lg font-bold text-white">
                       {formatCurrency(
-                        dailyRevenue.reduce((sum, d) => sum + d.revenue, 0) / dailyRevenue.length
-                      )}
+                      dailyRevenue.reduce((sum, d) => sum + d.revenue, 0) / dailyRevenue.length
+                    )}
                     </p>
                   </div>
                 </div>
+              </div> :
+
+            <div className="flex items-center justify-center h-64 text-gray-400">
+                <p>{t("No revenue data for the selected period")}</p>
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-64 text-text-muted">
-                <p>No revenue data for the selected period</p>
-              </div>
-            )}
+            }
           </div>
 
           {/* Payment Mode Breakdown */}
-          <div className="bg-surface rounded-xl p-6 border border-border shadow-sm hover:shadow-md transition-all duration-300">
+          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-secondary/10 rounded-xl flex items-center justify-center">
-                  <CreditCard className="text-secondary" size={20} />
+                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center">
+                  <CreditCard className="text-purple-500" size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-text-main">Payment Methods</h2>
-                  <p className="text-xs text-text-muted">
-                    {viewMode === 'month' 
-                      ? `${getMonthName(selectedMonth)} ${selectedYear}` 
-                      : `Last ${days} days`}
+                  <h2 className="text-lg font-bold text-white">{t("Payment Methods")}</h2>
+                  <p className="text-xs text-gray-400">
+                    {viewMode === 'month' ?
+                    `${getMonthName(selectedMonth)} ${selectedYear}` :
+                    `Last ${days} days`}
                   </p>
                 </div>
               </div>
             </div>
             
-            {paymentModeStats && paymentModeStats.length > 0 ? (
-              <div className="space-y-2.5">
+            {paymentModeStats && paymentModeStats.length > 0 ?
+            <div className="space-y-2.5">
                 {paymentModeStats.map((stat, index) => {
-                  const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
-                  const percentage = totalRevenue > 0 ? (stat.revenue / totalRevenue) * 100 : 0;
-                  const colors = [
-                    'from-primary to-primary/60',
-                    'from-secondary to-secondary/60',
-                    'from-accent to-accent/60'
-                  ];
-                  const colorClass = colors[index % colors.length];
-                  
-                  return (
-                    <div key={stat._id || index} className="space-y-2 p-3 bg-surface/50 rounded-lg border border-border/30 hover:border-border/50 transition-all duration-200">
+                const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
+                const percentage = totalRevenue > 0 ? stat.revenue / totalRevenue * 100 : 0;
+                const colors = [
+                'from-orange-500 to-orange-400',
+                'from-blue-500 to-blue-400',
+                'from-green-500 to-green-400'];
+
+                const colorClass = colors[index % colors.length];
+
+                return (
+                  <div key={stat._id || index} className="space-y-2 p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/10 transition-all duration-200">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className={`w-9 h-9 bg-gradient-to-br ${colorClass} rounded-lg flex items-center justify-center text-white shadow-sm`}>
                             {getPaymentModeIcon(stat._id)}
                           </div>
                           <div>
-                            <p className="font-bold text-text-main text-sm">{stat._id || 'Unknown'}</p>
-                            <p className="text-xs text-text-muted">{stat.count} txns</p>
+                            <p className="font-bold text-white text-sm">{stat._id || 'Unknown'}</p>
+                            <p className="text-xs text-gray-400">{stat.count} {t("txns")}</p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-text-main text-base">{formatCurrency(stat.revenue)}</p>
-                          <p className="text-xs text-text-muted">{percentage.toFixed(1)}%</p>
+                          <p className="font-bold text-white text-base">{formatCurrency(stat.revenue)}</p>
+                          <p className="text-xs text-gray-400">{percentage.toFixed(1)}%</p>
                         </div>
                       </div>
-                      <div className="w-full bg-border/50 rounded-full h-2 overflow-hidden shadow-inner">
+                      <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden shadow-inner">
                         <div
-                          className={`h-full bg-gradient-to-r ${colorClass} transition-all duration-500 shadow-sm`}
-                          style={{ width: `${percentage}%` }}
-                        />
+                        className={`h-full bg-gradient-to-r ${colorClass} transition-all duration-500 shadow-sm`}
+                        style={{ width: `${percentage}%` }} />
+                      
                       </div>
-                    </div>
-                  );
-                })}
-                <div className="pt-4 border-t border-border/50 mt-4 space-y-3">
+                    </div>);
+
+              })}
+                <div className="pt-4 border-t border-white/10 mt-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-text-muted">Total</p>
-                    <p className="text-lg font-bold text-text-main">
+                    <p className="text-sm font-bold text-gray-400">{t("Total")}</p>
+                    <p className="text-lg font-bold text-white">
                       {formatCurrency(
-                        paymentModeStats.reduce((sum, s) => sum + s.revenue, 0)
-                      )}
+                      paymentModeStats.reduce((sum, s) => sum + s.revenue, 0)
+                    )}
                     </p>
                   </div>
                   
                   {/* Payment Insights */}
                   {paymentModeStats.length > 0 && (() => {
-                    const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
-                    const totalTransactions = paymentModeStats.reduce((sum, s) => sum + s.count, 0);
-                    const mostPopularByCount = paymentModeStats.reduce((max, stat) => 
-                      stat.count > max.count ? stat : max, paymentModeStats[0]
-                    );
-                    const mostRevenue = paymentModeStats.reduce((max, stat) => 
-                      stat.revenue > max.revenue ? stat : max, paymentModeStats[0]
-                    );
-                    const avgTransactionValue = totalRevenue / totalTransactions;
-                    const leastUsed = paymentModeStats.reduce((min, stat) => 
-                      stat.count < min.count ? stat : min, paymentModeStats[0]
-                    );
-                    const revenueShare = paymentModeStats.map(stat => ({
-                      method: stat._id,
-                      share: ((stat.revenue / totalRevenue) * 100).toFixed(1)
-                    }));
-                    
-                    return (
-                      <div className="pt-3 border-t border-border/30 space-y-3">
+                  const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
+                  const totalTransactions = paymentModeStats.reduce((sum, s) => sum + s.count, 0);
+                  const mostPopularByCount = paymentModeStats.reduce((max, stat) =>
+                  stat.count > max.count ? stat : max, paymentModeStats[0]
+                  );
+                  const mostRevenue = paymentModeStats.reduce((max, stat) =>
+                  stat.revenue > max.revenue ? stat : max, paymentModeStats[0]
+                  );
+                  const avgTransactionValue = totalRevenue / totalTransactions;
+                  const leastUsed = paymentModeStats.reduce((min, stat) =>
+                  stat.count < min.count ? stat : min, paymentModeStats[0]
+                  );
+                  const revenueShare = paymentModeStats.map((stat) => ({
+                    method: stat._id,
+                    share: (stat.revenue / totalRevenue * 100).toFixed(1)
+                  }));
+
+                  return (
+                    <div className="pt-3 border-t border-white/10 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-primary/5 rounded-lg p-2.5 border border-primary/10">
-                            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Most Popular</p>
-                            <p className="text-xs font-bold text-text-main">{mostPopularByCount._id}</p>
-                            <p className="text-[10px] text-text-muted mt-0.5">{mostPopularByCount.count} txns</p>
+                          <div className="bg-[#3b82f6]/10 rounded-lg p-2.5 border border-[#3b82f6]/20">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Most Popular")}</p>
+                            <p className="text-xs font-bold text-white">{mostPopularByCount._id}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{mostPopularByCount.count} {t("txns")}</p>
                           </div>
-                          <div className="bg-success/5 rounded-lg p-2.5 border border-success/10">
-                            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Top Revenue</p>
-                            <p className="text-xs font-bold text-text-main">{mostRevenue._id}</p>
-                            <p className="text-[10px] text-text-muted mt-0.5">{formatCurrency(mostRevenue.revenue)}</p>
+                          <div className="bg-[#22c55e]/10 rounded-lg p-2.5 border border-[#22c55e]/20">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Top Revenue")}</p>
+                            <p className="text-xs font-bold text-white">{mostRevenue._id}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{formatCurrency(mostRevenue.revenue)}</p>
                           </div>
-                          <div className="bg-accent/5 rounded-lg p-2.5 border border-accent/10">
-                            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Avg Transaction</p>
-                            <p className="text-xs font-bold text-text-main">{formatCurrency(avgTransactionValue)}</p>
+                          <div className="bg-[#f97316]/10 rounded-lg p-2.5 border border-[#f97316]/20">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Avg Transaction")}</p>
+                            <p className="text-xs font-bold text-white">{formatCurrency(avgTransactionValue)}</p>
                           </div>
-                          <div className="bg-secondary/5 rounded-lg p-2.5 border border-secondary/10">
-                            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Total Transactions</p>
-                            <p className="text-xs font-bold text-text-main">{totalTransactions}</p>
+                          <div className="bg-[#8b5cf6]/10 rounded-lg p-2.5 border border-[#8b5cf6]/20">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Total Transactions")}</p>
+                            <p className="text-xs font-bold text-white">{totalTransactions}</p>
                           </div>
                         </div>
-                        <div className="bg-surface/50 rounded-lg p-2.5 border border-border/30">
-                          <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-2">Revenue Share</p>
+                        <div className="bg-white/5 rounded-lg p-2.5 border border-white/5">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{t("Revenue Share")}</p>
                           <div className="space-y-1.5">
-                            {revenueShare.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between">
-                                <span className="text-xs text-text-muted">{item.method}</span>
-                                <span className="text-xs font-bold text-text-main">{item.share}%</span>
+                            {revenueShare.map((item, idx) =>
+                          <div key={idx} className="flex items-center justify-between">
+                                <span className="text-xs text-gray-400">{item.method}</span>
+                                <span className="text-xs font-bold text-white">{item.share}%</span>
                               </div>
-                            ))}
+                          )}
                           </div>
                         </div>
-                        <div className="bg-orange-50/50 dark:bg-orange-950/10 rounded-lg p-2.5 border border-orange-200/30">
-                          <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-1">Least Used</p>
-                          <p className="text-xs font-bold text-text-main">{leastUsed._id}</p>
-                          <p className="text-[10px] text-text-muted mt-0.5">Consider promoting this method</p>
+                        <div className="bg-yellow-500/10 rounded-lg p-2.5 border border-yellow-500/20">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Least Used")}</p>
+                          <p className="text-xs font-bold text-white">{leastUsed._id}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">{t("Consider promoting this method")}</p>
                         </div>
-                      </div>
-                    );
-                  })()}
+                      </div>);
+
+                })()}
                 </div>
+              </div> :
+
+            <div className="flex items-center justify-center h-64 text-text-muted">
+                <p>{t("No payment data for the selected period")}</p>
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-64 text-text-muted">
-                <p>No payment data for the selected period</p>
-              </div>
-            )}
+            }
           </div>
         </div>
 
         {/* Additional Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-surface/80 backdrop-blur-sm rounded-xl p-5 border border-border/50 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Calendar className="text-primary" size={20} />
+              <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                <Calendar className="text-blue-500" size={20} />
               </div>
-              <h3 className="font-bold text-text-main text-sm">Period Summary</h3>
+              <h3 className="font-bold text-white text-sm">{t("Period Summary")}</h3>
             </div>
             <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Bills</span>
-                <span className="font-bold text-text-main text-base">{summary.period.bills}</span>
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
+                <span className="font-bold text-white text-base">{summary.period.bills}</span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Orders</span>
-                <span className="font-bold text-text-main text-base">{summary.period.orders}</span>
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
+                <span className="font-bold text-white text-base">{summary.period.orders}</span>
               </div>
               <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Avg Bill</span>
-                <span className="font-bold text-text-main text-base">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
+                <span className="font-bold text-white text-base">
                   {formatCurrency(summary.period.averageBill)}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="bg-surface/80 backdrop-blur-sm rounded-xl p-5 border border-border/50 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="text-success" size={20} />
+              <div className="w-10 h-10 bg-[#22c55e]/10 rounded-lg flex items-center justify-center">
+                <TrendingUp className="text-[#22c55e]" size={20} />
               </div>
-              <h3 className="font-bold text-text-main text-sm">Discounts & Tax</h3>
+              <h3 className="font-bold text-white text-sm">{t("Discounts & Tax")}</h3>
             </div>
             <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Total Discount</span>
-                <span className="font-bold text-text-main text-base">
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Discount")}</span>
+                <span className="font-bold text-white text-base">
                   {formatCurrency(summary.period.discount)}
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Total Tax</span>
-                <span className="font-bold text-text-main text-base">
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Tax")}</span>
+                <span className="font-bold text-white text-base">
                   {formatCurrency(summary.period.tax)}
                 </span>
               </div>
               <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Net Revenue</span>
-                <span className="font-bold text-success text-base">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Net Revenue")}</span>
+                <span className="font-bold text-[#22c55e] text-base">
                   {formatCurrency(summary.period.revenue)}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="bg-surface/80 backdrop-blur-sm rounded-xl p-5 border border-border/50 shadow-sm hover:shadow-md transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-accent/10 rounded-lg flex items-center justify-center">
-                <Receipt className="text-accent" size={20} />
+              <div className="w-10 h-10 bg-[#f97316]/10 rounded-lg flex items-center justify-center">
+                <Receipt className="text-[#f97316]" size={20} />
               </div>
-              <h3 className="font-bold text-text-main text-sm">Today's Performance</h3>
+              <h3 className="font-bold text-white text-sm">{t("Today's Performance")}</h3>
             </div>
             <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Bills</span>
-                <span className="font-bold text-text-main text-base">{summary.today.bills}</span>
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
+                <span className="font-bold text-white text-base">{summary.today.bills}</span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Orders</span>
-                <span className="font-bold text-text-main text-base">{summary.today.orders}</span>
+              <div className="flex justify-between items-center py-2 border-b border-white/10">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
+                <span className="font-bold text-white text-base">{summary.today.orders}</span>
               </div>
               <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Avg Bill</span>
-                <span className="font-bold text-text-main text-base">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
+                <span className="font-bold text-white text-base">
                   {formatCurrency(summary.today.averageBill)}
                 </span>
               </div>
@@ -721,104 +732,116 @@ const Analytics = ({ onNavigate }) => {
         </div>
       </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast &&
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)} />
+
+      }
 
       {/* Fraud Analysis Modal */}
-      {showFraudModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-surface rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-border/50 flex justify-between items-center bg-red-50/50 dark:bg-red-950/20">
+      {showFraudModal &&
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#141418] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-white/10 flex justify-between items-center bg-red-500/10">
               <div>
-                <h2 className="text-xl font-bold text-red-600 flex items-center gap-2">
-                  <ShieldAlert className="w-6 h-6" />
-                  AI Silent Auditor
-                </h2>
-                <p className="text-sm text-red-600/70 mt-1">Analyzing last 30 days of billing activity for fraud & anomalies.</p>
+                <h2 className="text-xl font-bold text-red-500 flex items-center gap-2">
+                  <ShieldAlert className="w-6 h-6" />{t("AI Silent Auditor")}
+
+              </h2>
+                <p className="text-sm text-red-500/80 mt-1">{t("Analyzing last")} {fraudDays} {t("days of billing activity for fraud & anomalies.")}</p>
               </div>
-              <button onClick={() => setShowFraudModal(false)} className="p-2 hover:bg-red-100 rounded-lg text-red-500 transition">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-4">
+                <select 
+                  className="bg-[#09090b] border border-red-500/30 text-red-500 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-red-500"
+                  value={fraudDays}
+                  onChange={(e) => fetchFraudAnalysis(parseInt(e.target.value))}
+                >
+                  <option value={7}>{t("Last 7 Days")}</option>
+                  <option value={30}>{t("Last 30 Days")}</option>
+                  <option value={90}>{t("Last 3 Months")}</option>
+                  <option value={180}>{t("Last 6 Months")}</option>
+                  <option value={365}>{t("Last 1 Year")}</option>
+                </select>
+                <button onClick={() => setShowFraudModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 transition">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1 bg-background">
-              {fraudLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
+            <div className="p-6 overflow-y-auto flex-1">
+              {fraudLoading ?
+            <div className="flex flex-col items-center justify-center py-20">
                   <div className="relative">
                     <ShieldAlert className="w-16 h-16 text-red-500 animate-pulse" />
-                    <RefreshCw className="w-6 h-6 text-red-500 animate-spin absolute -bottom-2 -right-2 bg-white rounded-full" />
+                    <RefreshCw className="w-6 h-6 text-red-500 animate-spin absolute -bottom-2 -right-2 bg-[#141418] rounded-full" />
                   </div>
-                  <p className="mt-6 text-text-main font-bold text-lg">Scanning Database...</p>
-                  <p className="text-text-muted mt-2 text-sm">Looking for cancelled bills, unusual discounts, and staff patterns.</p>
-                </div>
-              ) : fraudData ? (
-                <div className="space-y-6">
+                  <p className="mt-6 text-white font-bold text-lg">{t("Scanning Database...")}</p>
+                  <p className="text-gray-400 mt-2 text-sm">{t("Looking for cancelled bills, unusual discounts, and staff patterns.")}</p>
+                </div> :
+            fraudData ?
+            <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-surface border border-border rounded-xl p-4 text-center">
-                      <p className="text-text-muted text-sm uppercase font-bold mb-1">Bills Analyzed</p>
-                      <p className="text-3xl font-black text-text-main">{fraudData.totalAnalyzed}</p>
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
+                      <p className="text-gray-400 text-sm uppercase font-bold mb-1">{t("Bills Analyzed")}</p>
+                      <p className="text-3xl font-black text-white">{fraudData.totalAnalyzed}</p>
                     </div>
-                    <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 rounded-xl p-4 text-center">
-                      <p className="text-red-500 text-sm uppercase font-bold mb-1">Anomalies Detected</p>
-                      <p className="text-3xl font-black text-red-600">{fraudData.alerts?.length || 0}</p>
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+                      <p className="text-red-500 text-sm uppercase font-bold mb-1">{t("Anomalies Detected")}</p>
+                      <p className="text-3xl font-black text-red-500">{fraudData.alerts?.length || 0}</p>
                     </div>
                   </div>
 
-                  {fraudData.alerts?.length > 0 ? (
-                    <div className="space-y-3">
-                      <h3 className="font-bold text-text-main text-lg mb-4 border-b border-border/50 pb-2">Detailed Alerts</h3>
-                      {fraudData.alerts.map((alert, i) => (
-                        <div key={i} className={`p-4 rounded-xl border flex gap-4 ${
-                          alert.severity === 'Critical' ? 'bg-red-50 border-red-300' :
-                          alert.severity === 'High' ? 'bg-orange-50 border-orange-300' : 'bg-surface border-border'
-                        }`}>
+                  {fraudData.alerts?.length > 0 ?
+              <div className="space-y-3">
+                      <h3 className="font-bold text-white text-lg mb-4 border-b border-white/10 pb-2">{t("Detailed Alerts")}</h3>
+                      {fraudData.alerts.map((alert, i) =>
+                <div key={i} className={`p-4 rounded-xl border flex gap-4 ${
+                alert.severity === 'Critical' ? 'bg-red-500/10 border-red-500/30' :
+                alert.severity === 'High' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10'}`
+                }>
                           <div className={`mt-1 ${
-                            alert.severity === 'Critical' ? 'text-red-600' :
-                            alert.severity === 'High' ? 'text-orange-600' : 'text-text-muted'
-                          }`}>
+                  alert.severity === 'Critical' ? 'text-red-500' :
+                  alert.severity === 'High' ? 'text-orange-500' : 'text-gray-400'}`
+                  }>
                             {alert.type === 'Staff Anomaly' ? <UserX size={24} /> : <AlertTriangle size={24} />}
                           </div>
                           <div>
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-bold text-text-main">{alert.type}</h4>
+                              <h4 className="font-bold text-white">{alert.type}</h4>
                               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                                alert.severity === 'Critical' ? 'bg-red-600 text-white' :
-                                alert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-200 text-gray-700'
-                              }`}>{alert.severity}</span>
+                      alert.severity === 'Critical' ? 'bg-red-500 text-white' :
+                      alert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-600 text-white'}`
+                      }>{alert.severity}</span>
                             </div>
-                            <p className="text-text-muted text-sm">{alert.details}</p>
-                            <div className="mt-2 flex gap-4 text-xs font-mono text-text-muted">
-                              {alert.tableNo && <span>Table: {alert.tableNo}</span>}
-                              {alert.billNumber && <span>Bill: {alert.billNumber}</span>}
+                            <p className="text-gray-400 text-sm">{alert.details}</p>
+                            <div className="mt-2 flex gap-4 text-xs font-mono text-gray-500">
+                              {alert.tableNo && <span>{t("Table:")}{alert.tableNo}</span>}
+                              {alert.billNumber && <span>{t("Bill:")}{alert.billNumber}</span>}
                               <span>{new Date(alert.date).toLocaleString()}</span>
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-16 text-center">
-                      <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                )}
+                    </div> :
+
+              <div className="py-16 text-center">
+                      <div className="w-16 h-16 bg-green-500/10 text-[#22c55e] rounded-full flex items-center justify-center mx-auto mb-4">
                         <ShieldAlert size={32} />
                       </div>
-                      <h3 className="text-xl font-bold text-text-main mb-2">No Anomalies Found</h3>
-                      <p className="text-text-muted">Your billing activity looks completely normal for the past 30 days.</p>
+                      <h3 className="text-xl font-bold text-white mb-2">{t("No Anomalies Found")}</h3>
+                      <p className="text-gray-400">{t("Your billing activity looks completely normal for the past 30 days.")}</p>
                     </div>
-                  )}
-                </div>
-              ) : null}
+              }
+                </div> :
+            null}
             </div>
           </div>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 };
 
 export default Analytics;
-

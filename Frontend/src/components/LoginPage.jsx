@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
 import { LogIn, User, Lock, Eye, EyeOff, Sparkles, RefreshCw, Camera } from 'lucide-react';
 import { loginUser } from '../api/auth';
 import BackgroundSlideshow from './BackgroundSlideshow';
 import logoImg from '../assets/images/logo.png';
 
-const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
+const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLanguage();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,8 +40,8 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
             <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
             <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={20} />
           </div>
-          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">
-            msbillings
+          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}
+
           </h1>
         </div>
 
@@ -50,11 +50,11 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
           
           <div className="relative z-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-black text-white mb-2 drop-shadow-md">
-                Welcome Back
+              <h2 className="text-3xl font-black text-white mb-2 drop-shadow-md">{t("Welcome Back")}
+
               </h2>
-              <p className="text-gray-300 font-medium">
-                Sign in to continue to your dashboard
+              <p className="text-gray-300 font-medium">{t("Sign in to continue to your dashboard")}
+
               </p>
             </div>
 
@@ -62,24 +62,24 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
               {/* Username Field */}
               <div className="space-y-2">
                 <label htmlFor="username" className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                  <User size={16} />
-                  Username
+                  <User size={16} />{t("Username")}
+
                 </label>
                 <div className="relative group">
                   <div className={`relative flex items-center transition-all ${focusedField === 'username' ? 'scale-[1.02]' : ''}`}>
                     <User size={20} className={`absolute left-4 transition-colors ${focusedField === 'username' ? 'text-white' : 'text-gray-400'}`} />
                      <input
-                       type="text"
-                       id="username"
-                       placeholder="Enter your username"
-                       value={username}
-                       onChange={(e) => setUsername(e.target.value)}
-                       onFocus={() => setFocusedField('username')}
-                       onBlur={() => setFocusedField(null)}
-                       required
-                       className="w-full py-4 px-4 pl-12 pr-4 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
-                       style={{ borderRadius: '16px' }}
-                     />
+                      type="text"
+                      id="username" placeholder={t("Enter your username")}
+
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      onFocus={() => setFocusedField('username')}
+                      onBlur={() => setFocusedField(null)}
+                      required
+                      className="w-full py-4 px-4 pl-12 pr-4 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                      style={{ borderRadius: '16px' }} />
+                    
                   </div>
                 </div>
               </div>
@@ -87,29 +87,29 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
               {/* Password Field */}
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-bold text-gray-200 flex items-center gap-2">
-                  <Lock size={16} />
-                  Password
+                  <Lock size={16} />{t("Password")}
+
                 </label>
                 <div className="relative group">
                   <div className={`relative flex items-center transition-all ${focusedField === 'password' ? 'scale-[1.02]' : ''}`}>
                     <Lock size={20} className={`absolute left-4 transition-colors ${focusedField === 'password' ? 'text-white' : 'text-gray-400'}`} />
                      <input
-                       type={showPassword ? "text" : "password"}
-                       id="password"
-                       placeholder="Enter your password"
-                       value={password}
-                       onChange={(e) => setPassword(e.target.value)}
-                       onFocus={() => setFocusedField('password')}
-                       onBlur={() => setFocusedField(null)}
-                       required
-                       className="w-full py-4 px-4 pl-12 pr-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
-                       style={{ borderRadius: '16px' }}
-                     />
+                      type={showPassword ? "text" : "password"}
+                      id="password" placeholder={t("Enter your password")}
+
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onFocus={() => setFocusedField('password')}
+                      onBlur={() => setFocusedField(null)}
+                      required
+                      className="w-full py-4 px-4 pl-12 pr-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                      style={{ borderRadius: '16px' }} />
+                    
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 text-gray-400 hover:text-white transition-colors p-1"
-                    >
+                      className="absolute right-4 text-gray-400 hover:text-white transition-colors p-1">
+                      
                       {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                     </button>
                   </div>
@@ -117,31 +117,31 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
               </div>
 
                {/* Error Message */}
-               {error && (
-                 <div className="bg-red-500/20 backdrop-blur-sm border border-red-500/50 text-red-100 p-4 text-sm text-center font-bold animate-shake" style={{ borderRadius: '16px' }}>
+               {error &&
+              <div className="bg-red-500/20 backdrop-blur-sm border border-red-500/50 text-red-100 p-4 text-sm text-center font-bold animate-shake" style={{ borderRadius: '16px' }}>
                    {error}
                  </div>
-               )}
+              }
 
                {/* Submit Button */}
                <button
-                 type="submit"
-                 disabled={loading}
-                 className="w-full py-4 px-6 font-black text-slate-900 bg-white hover:bg-gray-100 transition-all duration-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
-                 style={{ borderRadius: '16px' }}
-               >
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 px-6 font-black text-slate-900 bg-white hover:bg-gray-100 transition-all duration-300 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
+                style={{ borderRadius: '16px' }}>
+                
                 <span className="relative z-10 flex items-center justify-center gap-2">
-                  {loading ? (
-                    <>
+                  {loading ?
+                  <>
                       <div className="w-5 h-5 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin"></div>
-                      <span>Signing in...</span>
-                    </>
-                  ) : (
-                    <>
+                      <span>{t("Signing in...")}</span>
+                    </> :
+
+                  <>
                       <LogIn size={20} />
-                      <span>Sign In Securely</span>
+                      <span>{t("Sign In Securely")}</span>
                     </>
-                  )}
+                  }
                 </span>
               </button>
             </form>
@@ -150,17 +150,17 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
             <div className="mt-8 flex flex-col items-center gap-4">
               
               {/* AI Clock In Button */}
-              <button 
+              <button
                 type="button"
                 onClick={onClockInClick}
-                className="w-full flex items-center justify-center gap-2 py-4 px-6 border-2 border-white/30 bg-black/20 text-white hover:bg-white hover:text-slate-900 rounded-2xl font-bold transition-all group"
-              >
-                <Camera size={20} className="group-hover:scale-110 transition-transform" />
-                Staff AI Clock-In
+                className="w-full flex items-center justify-center gap-2 py-4 px-6 border-2 border-white/30 bg-black/20 text-white hover:bg-white hover:text-slate-900 rounded-2xl font-bold transition-all group">
+                
+                <Camera size={20} className="group-hover:scale-110 transition-transform" />{t("Staff AI Clock-In")}
+
               </button>
 
-              <p className="text-sm text-gray-300 mt-2">
-                Powered by <span className="font-bold text-white">MS Tech Hive</span>
+              <p className="text-sm text-gray-300 mt-2">{t("Powered by")}
+                <span className="font-bold text-white">{t("MS Tech Hive")}</span>
               </p>
 
               <button
@@ -182,7 +182,7 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
                       localStorage.removeItem('resto_db_name');
                       localStorage.removeItem('restaurantSettings');
                       localStorage.removeItem('msbillings_spaces');
-                      
+
                       alert('License reset successfully. Please restart the application.');
                       window.dispatchEvent(new Event('forceLogout'));
                     } catch (err) {
@@ -190,10 +190,10 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
                     }
                   }
                 }}
-                className="text-gray-400 hover:text-white text-sm font-medium transition-colors flex items-center gap-2 mt-2"
-              >
-                <RefreshCw size={14} />
-                Reset License & Switch Account
+                className="text-gray-400 hover:text-white text-sm font-medium transition-colors flex items-center gap-2 mt-2">
+                
+                <RefreshCw size={14} />{t("Reset License & Switch Account")}
+
               </button>
             </div>
           </div>
@@ -213,8 +213,8 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {
         .animate-fade-in { animation: fade-in 0.6s ease-out; }
         .animate-shake { animation: shake 0.4s ease-in-out; }
       `}</style>
-    </BackgroundSlideshow>
-  );
+    </BackgroundSlideshow>);
+
 };
 
 export default LoginPage;

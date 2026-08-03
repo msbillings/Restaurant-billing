@@ -1,7 +1,11 @@
 import express from 'express';
 const router = express.Router();
 import { getAnalytics, getDayBook, exportDayBookExcel, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../controllers/analyticsController.js';
+import { getSalesForecast } from '../controllers/forecastController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
+
+// GET forecast - Admin users only
+router.get('/forecast', authenticateToken, requireAdmin, getSalesForecast);
 
 // GET analytics - Admin users only
 router.get('/', authenticateToken, requireAdmin, getAnalytics);

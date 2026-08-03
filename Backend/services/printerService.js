@@ -1,0 +1,241 @@
+import net from 'net';
+import PrinterConfigDefault from '../models/PrinterConfig.js';
+import MenuDefault from '../models/Menu.js';
+import CategoryDefault from '../models/Category.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
+import { emitNotification } from '../utils/notificationHelper.js';
+
+// ESC/POS Commands
+const ESC = '\x1B';
+const GS = '\x1D';
+
+const CMD = {
+  INIT: ESC + '@',                  // Initialize printer
+  ALIGN_LEFT: ESC + 'a\x00',         // Align Left
+  ALIGN_CENTER: ESC + 'a\x01',       // Align Center
+  ALIGN_RIGHT: ESC + 'a\x02',        // Align Right
+  TEXT_NORMAL: GS + '!\x00',         // Normal text size
+  TEXT_DOUBLE_HEIGHT: GS + '!\x01',  // Double height text
+  TEXT_DOUBLE_WIDTH: GS + '!\x10',   // Double width text
+  TEXT_LARGE: GS + '!\x11',          // Double height & width text
+  BOLD_ON: ESC + 'E\x01',            // Bold text ON
+  BOLD_OFF: ESC + 'E\x00',           // Bold text OFF
+  CUT_PAPER: GS + 'V\x42\x00',       // Full paper cut
+  LINE_FEED: '\n'
+};
+
+/**
+ * Sends a Buffer directly to a TCP Network Thermal Printer on IP:Port (standard 9100)
+ */
+export const sendRawToNetworkPrinter = (ipAddress, port = 9100, buffer) => {
+  return new Promise((resolve, reject) => {
+    if (!ipAddress || ipAddress.trim() === '') {
+      return reject(new Error('Printer IP address is required'));
+    }
+
+    const socket = new net.Socket();
+    let isHandled = false;
+
+    socket.setTimeout(4000); // 4 second connection timeout
+
+    socket.connect(port, ipAddress, () => {
+      isHandled = true;
+      socket.write(buffer, () => {
+        setTimeout(() => {
+          socket.end();
+          resolve({ success: true, message: `Successfully printed to ${ipAddress}:${port}` });
+        }, 300);
+      });
+    });
+
+    socket.on('error', (err) => {
+      if (!isHandled) {
+        isHandled = true;
+        socket.destroy();
+        reject(new Error(`Printer socket error (${ipAddress}:${port}): ${err.message}`));
+      }
+    });
+
+    socket.on('timeout', () => {
+      if (!isHandled) {
+        isHandled = true;
+        socket.destroy();
+        reject(new Error(`Printer connection timed out (${ipAddress}:${port})`));
+      }
+    });
+  });
+};
+
+/**
+ * Generate a Test Receipt ESC/POS buffer
+ */
+export const generateESCPOSTestReceipt = (config) => {
+  const lineDivider = config.paperWidth === '58mm'
+    ? '--------------------------------'
+    : '------------------------------------------------';
+
+  let content = '';
+  
+  content += CMD.INIT;
+  content += CMD.ALIGN_CENTER;
+  content += CMD.TEXT_LARGE + CMD.BOLD_ON + 'TEST PRINT' + CMD.LINE_FEED;
+  content += CMD.TEXT_NORMAL + CMD.BOLD_OFF + lineDivider + CMD.LINE_FEED;
+  content += CMD.ALIGN_LEFT;
+  content += `Printer Name : ${config.name}` + CMD.LINE_FEED;
+  content += `Printer Type : ${config.type?.toUpperCase()}` + CMD.LINE_FEED;
+  content += `Connection   : ${config.connectionType?.toUpperCase()}` + CMD.LINE_FEED;
+  content += `IP Address   : ${config.ipAddress || 'USB / Local'}:${config.port || 9100}` + CMD.LINE_FEED;
+  content += `Department   : ${config.assignTo || 'All Departments'}` + CMD.LINE_FEED;
+  content += `Paper Width  : ${config.paperWidth || '80mm'}` + CMD.LINE_FEED;
+  content += `Date & Time  : ${new Date().toLocaleString()}` + CMD.LINE_FEED;
+  content += CMD.ALIGN_CENTER;
+  content += lineDivider + CMD.LINE_FEED;
+  content += CMD.BOLD_ON + 'Hardware Communication OK!' + CMD.LINE_FEED + CMD.BOLD_OFF;
+  content += CMD.LINE_FEED + CMD.LINE_FEED + CMD.LINE_FEED;
+  content += CMD.CUT_PAPER;
+
+  return Buffer.from(content, 'utf-8');
+};
+
+/**
+ * Generate a formatted KOT ESC/POS Buffer for thermal printers
+ */
+export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) => {
+  const is58mm = printerConfig.paperWidth === '58mm';
+  const lineDivider = is58mm
+    ? '--------------------------------'
+    : '------------------------------------------------';
+
+  let content = '';
+  
+  content += CMD.INIT;
+  content += CMD.ALIGN_CENTER;
+  content += CMD.TEXT_LARGE + CMD.BOLD_ON + 'KITCHEN ORDER (KOT)' + CMD.LINE_FEED;
+  content += CMD.TEXT_DOUBLE_HEIGHT + `KOT NO: ${kotNumber}` + CMD.LINE_FEED;
+  content += CMD.TEXT_NORMAL + CMD.BOLD_OFF;
+  content += lineDivider + CMD.LINE_FEED;
+  
+  content += CMD.ALIGN_LEFT;
+  content += CMD.BOLD_ON + `TABLE: ${bill.tableNo || 'Takeaway / Delivery'}` + CMD.BOLD_OFF + CMD.LINE_FEED;
+  if (bill.orderType) content += `Order Type: ${bill.orderType}` + CMD.LINE_FEED;
+  content += `Time: ${new Date().toLocaleTimeString()}` + CMD.LINE_FEED;
+  content += lineDivider + CMD.LINE_FEED;
+
+  // Header for items
+  content += CMD.BOLD_ON + 'QTY  ITEM NAME' + CMD.LINE_FEED;
+  content += lineDivider + CMD.LINE_FEED + CMD.BOLD_OFF;
+
+  // Items list
+  items.forEach((item) => {
+    const qtyStr = `${item.quantity}`.padStart(3, ' ');
+    const itemName = item.name || item.itemName;
+    content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `${qtyStr}  ${itemName}` + CMD.LINE_FEED + CMD.TEXT_NORMAL + CMD.BOLD_OFF;
+    if (item.specialNote) {
+      content += `     * Note: ${item.specialNote}` + CMD.LINE_FEED;
+    }
+  });
+
+  content += lineDivider + CMD.LINE_FEED;
+  if (printerConfig.assignTo && printerConfig.assignTo.trim() !== '') {
+    content += CMD.ALIGN_CENTER + `[ DEPT: ${printerConfig.assignTo.toUpperCase()} ]` + CMD.LINE_FEED;
+  }
+  content += CMD.LINE_FEED + CMD.LINE_FEED + CMD.LINE_FEED;
+  content += CMD.CUT_PAPER;
+
+  return Buffer.from(content, 'utf-8');
+};
+
+/**
+ * Routes and sends KOT items to active thermal network printers concurrently
+ */
+export const printKOTToPrinters = async (req, bill, kotNumber, kotItems) => {
+  try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
+    const Menu = getTenantModel(req, 'Menu', MenuDefault);
+
+    // Fetch active printers
+    const activePrinters = await PrinterConfig.find({ isActive: true });
+    if (!activePrinters || activePrinters.length === 0) {
+      console.log('[PrinterService] No active printers configured.');
+      return;
+    }
+
+    const kotPrinters = activePrinters.filter(p => p.type === 'kot' || p.type === 'general');
+    if (kotPrinters.length === 0) {
+      console.log('[PrinterService] No active KOT/General printers found.');
+      return;
+    }
+
+    // Build item name to category mapping from Database
+    const categoryMap = {};
+    try {
+      const menuList = await Menu.find().populate('category', 'name');
+      menuList.forEach(m => {
+        if (m.name) {
+          categoryMap[m.name.toLowerCase()] = (m.category?.name || '').toLowerCase();
+        }
+      });
+    } catch (e) {
+      console.warn('[PrinterService] Could not load menu categories for routing:', e.message);
+    }
+
+    // Process all configured KOT printers in parallel
+    const printPromises = kotPrinters.map(async (printer) => {
+      if (printer.connectionType !== 'network' || !printer.ipAddress) {
+        console.log(`[PrinterService] Printer '${printer.name}' is ${printer.connectionType} (Browser/OS driver mode).`);
+        return;
+      }
+
+      // Department Filtering Logic
+      const assignedDept = (printer.assignTo || '').trim().toLowerCase();
+      let targetItems = kotItems;
+
+      if (assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general') {
+        const deptTokens = assignedDept.split(',').map(d => d.trim()).filter(Boolean);
+
+        targetItems = kotItems.filter(item => {
+          const itemLower = (item.name || '').toLowerCase();
+          const catLower = categoryMap[itemLower] || (item.category?.name || item.category || '').toLowerCase();
+
+          return deptTokens.some(token => catLower.includes(token) || itemLower.includes(token));
+        });
+      }
+
+      // If specific department is assigned but no items matched this department, skip printing on this specific printer
+      if (targetItems.length === 0 && assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general') {
+        console.log(`[PrinterService] Skipping printer '${printer.name}' (${printer.assignTo}) - no items matched department.`);
+        return;
+      }
+
+      const itemsToPrint = targetItems.length > 0 ? targetItems : kotItems;
+      const buffer = generateKOTESCPOSBuffer(bill, itemsToPrint, kotNumber, printer);
+
+      console.log(`[PrinterService] Streaming KOT #${kotNumber} to '${printer.name}' (${printer.ipAddress}:${printer.port || 9100})`);
+
+      try {
+        const res = await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
+        console.log(`[PrinterService] Success: ${res.message}`);
+        emitNotification(
+          req,
+          '🖨️ KOT Printed',
+          `KOT #${kotNumber} sent to ${printer.name} (${printer.ipAddress})`,
+          'success',
+          ['Admin', 'Captain', 'Manager']
+        );
+      } catch (err) {
+        console.error(`[PrinterService] Error on '${printer.name}' (${printer.ipAddress}): ${err.message}`);
+        emitNotification(
+          req,
+          '⚠️ Printer Offline',
+          `Could not print KOT #${kotNumber} to ${printer.name} (${printer.ipAddress}): ${err.message}`,
+          'warning',
+          ['Admin', 'Captain', 'Manager']
+        );
+      }
+    });
+
+    await Promise.allSettled(printPromises);
+  } catch (error) {
+    console.error('[PrinterService] Critical error during multi-printer routing:', error.message);
+  }
+};

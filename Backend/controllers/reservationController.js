@@ -32,6 +32,7 @@ export const createReservation = async (req, res) => {
     await newReservation.save();
     res.status(201).json(newReservation);
   } catch (error) {
+    import('fs').then(fs => fs.appendFileSync('res_error.log', new Date().toISOString() + ': ' + error.message + '\n'));
     res.status(500).json({ message: 'Error creating reservation', error: error.message });
   }
 };

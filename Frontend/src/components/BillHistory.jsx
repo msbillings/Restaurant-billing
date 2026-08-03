@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
 import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
@@ -7,7 +7,7 @@ import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 
-const BillHistory = ({ onNavigate }) => {
+const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState(null);
@@ -20,7 +20,7 @@ const BillHistory = ({ onNavigate }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const itemsPerPage = 20; // Server-side pagination - Show 20 bills per page (latest first)
-  
+
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ const BillHistory = ({ onNavigate }) => {
         billsData = data;
       } else {
         billsData = data.bills || [];
-        
+
         if (data.totalBills === 0 && /^MS\d+$/i.test(searchForBackend)) {
           setToast({ message: 'This bill is missing or deleted', type: 'error' });
         }
@@ -56,7 +56,7 @@ const BillHistory = ({ onNavigate }) => {
 
       // Filter out delivery orders - only show dine-in and takeaway
       // Only filter by billType, not orderSource
-      const filteredBills = billsData.filter(bill => {
+      const filteredBills = billsData.filter((bill) => {
         return bill.billType !== 'Delivery';
       });
 
@@ -92,19 +92,19 @@ const BillHistory = ({ onNavigate }) => {
   const confirmDelete = async () => {
     if (!deleteModal.billId) return;
     if (!deleteModal.password) {
-      setDeleteModal(prev => ({ ...prev, error: 'Please enter password to confirm deletion' }));
+      setDeleteModal((prev) => ({ ...prev, error: 'Please enter password to confirm deletion' }));
       return;
     }
-    
-    setDeleteModal(prev => ({ ...prev, loading: true, error: '' }));
+
+    setDeleteModal((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       await deleteBill(deleteModal.billId, deleteModal.password);
-      setBills(bills.filter(bill => bill._id !== deleteModal.billId));
+      setBills(bills.filter((bill) => bill._id !== deleteModal.billId));
       setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
       setToast({ message: 'Bill deleted successfully', type: 'success' });
     } catch (error) {
       console.error('Error deleting bill:', error);
-      setDeleteModal(prev => ({ ...prev, loading: false, error: error.response?.data?.message || 'Incorrect password or failed to delete bill' }));
+      setDeleteModal((prev) => ({ ...prev, loading: false, error: error.response?.data?.message || 'Incorrect password or failed to delete bill' }));
     }
   };
 
@@ -112,7 +112,7 @@ const BillHistory = ({ onNavigate }) => {
     if (!refundModal.billId) return;
     try {
       await apiRefundOrder(refundModal.billId, refundModal.reason);
-      setBills(bills.map(bill => bill._id === refundModal.billId ? { ...bill, status: 'Refunded', cancelReason: refundModal.reason || 'Customer requested refund' } : bill));
+      setBills(bills.map((bill) => bill._id === refundModal.billId ? { ...bill, status: 'Refunded', cancelReason: refundModal.reason || 'Customer requested refund' } : bill));
       setRefundModal({ isOpen: false, billId: null, reason: '' });
       setToast({ message: 'Bill refunded successfully', type: 'success' });
     } catch (error) {
@@ -125,7 +125,7 @@ const BillHistory = ({ onNavigate }) => {
   // Bills are already sorted by newest first from backend (updatedAt: -1)
   // This ensures recently paid bills appear at the top
   // We maintain this order - no re-sorting needed
-  const filteredBills = bills.filter(bill => {
+  const filteredBills = bills.filter((bill) => {
     if (filterType === 'All') {
       return true;
     } else if (filterType === 'Dine-In' || filterType === 'Takeaway') {
@@ -135,7 +135,7 @@ const BillHistory = ({ onNavigate }) => {
     }
     return true;
   });
-  
+
   // Ensure bills remain sorted by newest first (backend already does this, but double-check)
   // filteredBills are already in correct order from backend, no need to sort again
 
@@ -155,7 +155,7 @@ const BillHistory = ({ onNavigate }) => {
         } else if (/^#?MS\d+$/i.test(formattedSearch)) {
           formattedSearch = formattedSearch.replace(/^#/, '').toUpperCase();
         }
-        
+
         setSearchTerm(formattedSearch);
       }
     };
@@ -170,25 +170,25 @@ const BillHistory = ({ onNavigate }) => {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+        <BackButton onClick={onGoBack} />
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 lg:mb-6 gap-3 shrink-0">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-text-main">Bill History</h1>
-          <p className="text-xs sm:text-sm text-text-muted">View and manage past transactions</p>
+          <h1 className="text-xl sm:text-2xl font-black text-text-main">{t("Bill History")}</h1>
+          <p className="text-xs sm:text-sm text-text-muted">{t("View and manage past transactions")}</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
             <input
-              type="text"
-              placeholder="Search Bill #..."
+              type="text" placeholder={t("Search Bill #...")}
+
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-full"
-            />
+              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-full" />
+            
           </div>
 
           <div className="relative w-full sm:w-auto">
@@ -196,14 +196,14 @@ const BillHistory = ({ onNavigate }) => {
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full sm:w-auto pl-10 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main appearance-none cursor-pointer"
-            >
-              <option value="All">All</option>
-              <option value="Dine-In">Dine-In</option>
-              <option value="Takeaway">Takeaway</option>
-              <option value="Cash">Cash</option>
-              <option value="UPI">UPI</option>
-              <option value="Card">Card</option>
+              className="w-full sm:w-auto pl-10 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main appearance-none cursor-pointer">
+              
+              <option value="All">{t("All")}</option>
+              <option value="Dine-In">{t("Dine-In")}</option>
+              <option value="Takeaway">{t("Takeaway")}</option>
+              <option value="Cash">{t("Cash")}</option>
+              <option value="UPI">{t("UPI")}</option>
+              <option value="Card">{t("Card")}</option>
             </select>
           </div>
         </div>
@@ -214,24 +214,24 @@ const BillHistory = ({ onNavigate }) => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-background sticky top-0 z-10">
               <tr>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Bill #</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Bill #")}</th>
                 <th className="p-4 font-semibold text-text-muted border-b border-border">
-                  <div className="flex items-center gap-2">
-                    Date & Time
-                    <span className="text-xs text-primary font-normal">(Latest First)</span>
+                  <div className="flex items-center gap-2">{t("Date & Time")}
+
+                    <span className="text-xs text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Type</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Status</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Payment</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">Total</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">Action</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Type")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Status")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Payment")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Total")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">{t("Action")}</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                [...Array(8)].map((_, i) => (
-                  <tr key={i} className="border-b border-border animate-pulse">
+              {loading ?
+              [...Array(8)].map((_, i) =>
+              <tr key={i} className="border-b border-border animate-pulse">
                     <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
                     <td className="p-4">
                       <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
@@ -246,21 +246,21 @@ const BillHistory = ({ onNavigate }) => {
                       <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
                     </div></td>
                   </tr>
-                ))
-              ) : filteredBills.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">
-                    No transactions found
-                  </td>
-                </tr>
-              ) : (
-                filteredBills.map(bill => (
-                  <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
+              ) :
+              filteredBills.length === 0 ?
+              <tr>
+                  <td colSpan="7" className="p-8 text-center text-text-muted">{t("No transactions found")}
+
+                </td>
+                </tr> :
+
+              filteredBills.map((bill) =>
+              <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
                     <td className="p-4 font-medium text-text-main">
                       #{bill.billNumber || 'CANCELLED'}
-                      {bill.status === 'Cancelled' && bill.cancelReason && (
-                        <div className="text-[10px] text-danger mt-1">Reason: {bill.cancelReason}</div>
-                      )}
+                      {bill.status === 'Cancelled' && bill.cancelReason &&
+                  <div className="text-[10px] text-danger mt-1">{t("Reason:")}{bill.cancelReason}</div>
+                  }
                     </td>
                     <td className="p-4 text-text-muted">
                       <div className="flex flex-col">
@@ -270,26 +270,26 @@ const BillHistory = ({ onNavigate }) => {
                     </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                        bill.billType === 'Dine-In' 
-                          ? 'bg-primary/10 text-primary border-primary/20' 
-                          : 'bg-accent/10 text-accent-dark border-accent/20'
-                      }`}>
-                        {bill.billType}
+                  bill.billType === 'Dine-In' ?
+                  'bg-primary/10 text-primary border-primary/20' :
+                  'bg-accent/10 text-accent-dark border-accent/20'}`
+                  }>
+                        {t(bill.billType)}
                       </span>
                     </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                        bill.status === 'Paid' 
-                          ? 'bg-success/10 text-success border-success/20' 
-                          : 'bg-danger/10 text-danger border-danger/20'
-                      }`}>
-                        {bill.status || 'Paid'}
+                  bill.status === 'Paid' ?
+                  'bg-success/10 text-success border-success/20' :
+                  'bg-danger/10 text-danger border-danger/20'}`
+                  }>
+                        {t(bill.status || 'Paid')}
                       </span>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-2 text-text-main">
                         <CreditCard size={16} className="text-text-muted" />
-                        <span>{bill.paymentMode || '-'}</span>
+                        <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
                       </div>
                     </td>
                     <td className="p-4 font-bold text-text-main text-right">
@@ -299,224 +299,221 @@ const BillHistory = ({ onNavigate }) => {
                     </td>
                     <td className="p-4 text-center">
                       <div className="flex justify-center gap-2">
-                        <button 
-                          onClick={async () => {
-                            setLoadingBill(true);
-                            try {
-                              // Fetch full bill details with all items
-                              const fullBill = await getBillById(bill._id);
-                              setSelectedBill(fullBill);
-                            } catch (error) {
-                              console.error('Error fetching bill details:', error);
-                              setToast({ message: 'Failed to load bill details', type: 'error' });
-                            } finally {
-                              setLoadingBill(false);
-                            }
-                          }}
-                          disabled={loadingBill}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="View Invoice"
-                        >
+                        <button
+                      onClick={async () => {
+                        setLoadingBill(true);
+                        try {
+                          // Fetch full bill details with all items
+                          const fullBill = await getBillById(bill._id);
+                          setSelectedBill(fullBill);
+                        } catch (error) {
+                          console.error('Error fetching bill details:', error);
+                          setToast({ message: 'Failed to load bill details', type: 'error' });
+                        } finally {
+                          setLoadingBill(false);
+                        }
+                      }}
+                      disabled={loadingBill}
+                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={t("View Invoice")}>
+
+                      
                           <Eye size={18} />
                         </button>
-                        {bill.status === 'Paid' && (
-                          <button 
-                            onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-2"
-                            title="Refund Bill"
-                          >
+                        {bill.status === 'Paid' &&
+                    <button
+                      onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
+                      className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-2" title={t("Refund Bill")}>
+
+                      
                             <RefreshCcw size={18} />
                           </button>
-                        )}
-                        {bill.status !== 'Deleted' && (
-                          <button 
-                            onClick={() => handleDeleteClick(bill._id)}
-                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-2"
-                            title="Delete Bill (Requires Password)"
-                          >
+                    }
+                        {bill.status !== 'Deleted' &&
+                    <button
+                      onClick={() => handleDeleteClick(bill._id)}
+                      className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-2" title={t("Delete Bill (Requires Password)")}>
+
+                      
                             <Trash2 size={18} />
                           </button>
-                        )}
+                    }
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+              )
+              }
             </tbody>
           </table>
         </div>
         
         {/* Pagination Controls - Same style as MenuManagement */}
-        {pagination.totalPages > 1 && (
-          <div className="p-4 border-t border-border flex items-center justify-between bg-background">
-            <div className="text-sm text-text-muted">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
-              {Math.min(currentPage * itemsPerPage, pagination.totalBills)} of{' '}
-              {pagination.totalBills} bills
-            </div>
+        {pagination.totalPages > 1 &&
+        <div className="p-4 border-t border-border flex items-center justify-between bg-background">
+            <div className="text-sm text-text-muted">{t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("bills")}
+          </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1 || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1 || loading}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronLeft size={18} />
               </button>
               <div className="flex items-center gap-1">
                 {[...Array(pagination.totalPages)].map((_, i) => {
-                  const page = i + 1;
-                  if (
-                    page === 1 ||
-                    page === pagination.totalPages ||
-                    (page >= currentPage - 1 && page <= currentPage + 1)
-                  ) {
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        disabled={loading}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          currentPage === page
-                            ? 'bg-primary text-white'
-                            : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
-                        }`}
-                      >
+                const page = i + 1;
+                if (
+                page === 1 ||
+                page === pagination.totalPages ||
+                page >= currentPage - 1 && page <= currentPage + 1)
+                {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      disabled={loading}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page ?
+                      'bg-primary text-white' :
+                      'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'}`
+                      }>
+                      
                         {page}
-                      </button>
-                    );
-                  } else if (page === currentPage - 2 || page === currentPage + 2) {
-                    return <span key={page} className="px-2 text-text-muted">...</span>;
-                  }
-                  return null;
-                })}
+                      </button>);
+
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return <span key={page} className="px-2 text-text-muted">...</span>;
+                }
+                return null;
+              })}
               </div>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
-                disabled={currentPage === pagination.totalPages || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+              disabled={currentPage === pagination.totalPages || loading}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronRight size={18} />
               </button>
             </div>
           </div>
-        )}
+        }
       </div>
 
-      {selectedBill && (
-        <Invoice 
-          bill={selectedBill} 
-          onClose={() => setSelectedBill(null)} 
-        />
-      )}
+      {selectedBill &&
+      <Invoice
+        bill={selectedBill}
+        onClose={() => setSelectedBill(null)} />
 
-      {refundModal.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+      }
+
+      {refundModal.isOpen &&
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
           <div className="bg-surface rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border">
-            <h3 className="text-lg font-bold text-text-main mb-2">Refund Order</h3>
-            <p className="text-text-muted text-sm mb-4">Please provide a reason for the refund.</p>
+            <h3 className="text-lg font-bold text-text-main mb-2">{t("Refund Order")}</h3>
+            <p className="text-text-muted text-sm mb-4">{t("Please provide a reason for the refund.")}</p>
             <input
-              type="text"
-              value={refundModal.reason}
-              onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })}
-              placeholder="e.g. Customer unhappy, wrong item"
-              className="w-full bg-background border border-border rounded-xl px-4 py-2 mb-6 text-sm focus:outline-none focus:border-primary text-text-main"
-            />
+            type="text"
+            value={refundModal.reason}
+            onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })} placeholder={t("e.g. Customer unhappy, wrong item")}
+
+            className="w-full bg-background border border-border rounded-xl px-4 py-2 mb-6 text-sm focus:outline-none focus:border-primary text-text-main" />
+          
             <div className="flex gap-3">
-              <button 
-                onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
-                className="flex-1 py-2 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={confirmRefund}
-                className="flex-1 py-2 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-              >
-                Confirm Refund
-              </button>
+              <button
+              onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
+              className="flex-1 py-2 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors">{t("Cancel")}
+
+
+            </button>
+              <button
+              onClick={confirmRefund}
+              className="flex-1 py-2 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors">{t("Confirm Refund")}
+
+
+            </button>
             </div>
           </div>
         </div>
-      )}
+      }
 
-      {deleteModal.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+      {deleteModal.isOpen &&
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
           <div className="bg-surface rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200">
             <div className="flex items-start gap-4 mb-4">
               <div className="p-3 rounded-full shrink-0 bg-danger/10 text-danger">
                 <Trash2 size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-text-main mb-1">Security Verification Required</h3>
-                <p className="text-text-muted text-sm leading-relaxed">
-                  Deleting a bill cannot be undone and will update daily sales reports. Please enter your Admin/User password to authorize this action:
-                </p>
+                <h3 className="text-lg font-bold text-text-main mb-1">{t("Security Verification Required")}</h3>
+                <p className="text-text-muted text-sm leading-relaxed">{t("Deleting a bill cannot be undone and will update daily sales reports. Please enter your Admin/User password to authorize this action:")}
+
+              </p>
               </div>
             </div>
 
-            {deleteModal.error && (
-              <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-sm font-medium">
+            {deleteModal.error &&
+          <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-sm font-medium">
                 {deleteModal.error}
               </div>
-            )}
+          }
 
             <div className="mb-6">
-              <label className="block text-xs font-semibold text-text-muted uppercase mb-2">Password</label>
+              <label className="block text-xs font-semibold text-text-muted uppercase mb-2">{t("Password")}</label>
               <div className="relative">
                 <input
-                  type={deleteModal.showPassword ? "text" : "password"}
-                  value={deleteModal.password}
-                  onChange={(e) => setDeleteModal(prev => ({ ...prev, password: e.target.value, error: '' }))}
-                  onKeyDown={(e) => e.key === 'Enter' && confirmDelete()}
-                  placeholder="Enter password..."
-                  autoFocus
-                  className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-sm focus:outline-none focus:border-danger text-text-main"
-                />
+                type={deleteModal.showPassword ? "text" : "password"}
+                value={deleteModal.password}
+                onChange={(e) => setDeleteModal((prev) => ({ ...prev, password: e.target.value, error: '' }))}
+                onKeyDown={(e) => e.key === 'Enter' && confirmDelete()} placeholder={t("Enter password...")}
+
+                autoFocus
+                className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-sm focus:outline-none focus:border-danger text-text-main" />
+              
                 <button
-                  type="button"
-                  onClick={() => setDeleteModal(prev => ({ ...prev, showPassword: !prev.showPassword }))}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
-                  title={deleteModal.showPassword ? "Hide password" : "Show password"}
-                >
+                type="button"
+                onClick={() => setDeleteModal((prev) => ({ ...prev, showPassword: !prev.showPassword }))}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
+                title={deleteModal.showPassword ? "Hide password" : "Show password"}>
+                
                   {deleteModal.showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
 
             <div className="flex gap-3">
-              <button 
-                onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
-                disabled={deleteModal.loading}
-                className="flex-1 py-2.5 rounded-xl font-medium border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={confirmDelete}
-                disabled={deleteModal.loading}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-lg shadow-danger/20 transition-all transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {deleteModal.loading ? (
-                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                ) : (
-                  <Trash2 size={18} />
-                )}
-                Confirm Delete
-              </button>
+              <button
+              onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
+              disabled={deleteModal.loading}
+              className="flex-1 py-2.5 rounded-xl font-medium border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50">{t("Cancel")}
+
+
+            </button>
+              <button
+              onClick={confirmDelete}
+              disabled={deleteModal.loading}
+              className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-lg shadow-danger/20 transition-all transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+              
+                {deleteModal.loading ?
+              <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> :
+
+              <Trash2 size={18} />
+              }{t("Confirm Delete")}
+
+            </button>
             </div>
           </div>
         </div>
-      )}
+      }
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
-  );
+      {toast &&
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)} />
+
+      }
+    </div>);
+
 };
 
 export default BillHistory;

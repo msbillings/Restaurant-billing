@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { getBills, getBillById, deleteBill } from '../api/billing';
 import Invoice from './Invoice';
 import ConfirmationModal from './ConfirmationModal';
@@ -12,12 +12,12 @@ import {
   CreditCard,
   Trash2,
   ChevronLeft,
-  ChevronRight
-} from 'lucide-react';
+  ChevronRight } from
+'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 
-const DeliveryOrders = ({ onNavigate }) => {
+const DeliveryOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState('all'); // all, Swiggy, Zomato, Direct, Other
@@ -37,30 +37,30 @@ const DeliveryOrders = ({ onNavigate }) => {
       // Get only paid delivery orders from bill history with pagination
       // getBills already returns only 'Paid' bills (status: 'Paid')
       const paidBills = await getBills(currentPage, itemsPerPage, searchTerm);
-      
+
       // Filter for delivery orders
       // Only show orders with billType === 'Delivery'
-      const paidDeliveryOrders = (paidBills.bills || []).filter(bill => {
+      const paidDeliveryOrders = (paidBills.bills || []).filter((bill) => {
         return bill.billType === 'Delivery';
       });
-      
+
       // Sort by date (newest first) - backend already sorts, but ensure it
       const allDeliveryOrders = paidDeliveryOrders.sort((a, b) => {
         const dateA = new Date(a.updatedAt || a.createdAt);
         const dateB = new Date(b.updatedAt || b.createdAt);
         return dateB - dateA;
       });
-      
+
       setOrders(allDeliveryOrders);
-      
+
       // Calculate pagination for delivery orders
       // We need to get total count of delivery orders
       if (currentPage === 1) {
         const allBills = await getBills(1, 1000, searchTerm);
-        const allDeliveryCount = (allBills.bills || []).filter(bill => {
+        const allDeliveryCount = (allBills.bills || []).filter((bill) => {
           return bill.billType === 'Delivery';
         }).length;
-        
+
         setPagination({
           totalBills: allDeliveryCount,
           totalPages: Math.ceil(allDeliveryCount / itemsPerPage),
@@ -89,10 +89,10 @@ const DeliveryOrders = ({ onNavigate }) => {
 
   const confirmDelete = async () => {
     if (!deleteModal.billId) return;
-    
+
     try {
       await deleteBill(deleteModal.billId);
-      setOrders(orders.filter(order => order._id !== deleteModal.billId));
+      setOrders(orders.filter((order) => order._id !== deleteModal.billId));
       setDeleteModal({ isOpen: false, billId: null });
       setToast({ message: 'Delivery order deleted successfully', type: 'success' });
       // Refresh to update pagination
@@ -105,23 +105,23 @@ const DeliveryOrders = ({ onNavigate }) => {
 
   const getPlatformColor = (platform) => {
     switch (platform) {
-      case 'Swiggy': return 'bg-orange-100 text-orange-800';
-      case 'Zomato': return 'bg-red-100 text-red-800';
-      case 'Other': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Swiggy':return 'bg-orange-100 text-orange-800';
+      case 'Zomato':return 'bg-red-100 text-red-800';
+      case 'Other':return 'bg-gray-100 text-gray-800';
+      default:return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = orders.filter((order) => {
     if (platformFilter === 'all') {
       return true;
     }
     if (platformFilter === 'Other') {
       // Other includes anything that's not Swiggy, Zomato, or Direct
-      return order.orderSource && 
-             order.orderSource !== 'Swiggy' && 
-             order.orderSource !== 'Zomato' && 
-             order.orderSource !== 'Direct';
+      return order.orderSource &&
+      order.orderSource !== 'Swiggy' &&
+      order.orderSource !== 'Zomato' &&
+      order.orderSource !== 'Direct';
     }
     return order.orderSource === platformFilter;
   });
@@ -129,66 +129,66 @@ const DeliveryOrders = ({ onNavigate }) => {
   return (
     <div className="h-full flex flex-col bg-background p-6">
       <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+        <BackButton onClick={onGoBack} />
       </div>
       <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
         <div>
-          <h1 className="text-2xl font-bold text-text-main">Delivery Orders</h1>
-          <p className="text-text-muted">View and manage delivery orders</p>
+          <h1 className="text-2xl font-bold text-text-main">{t("Delivery Orders")}</h1>
+          <p className="text-text-muted">{t("View and manage delivery orders")}</p>
         </div>
         
         <div className="flex gap-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
             <input
-              type="text"
-              placeholder="Search Bill #..."
+              type="text" placeholder={t("Search Bill #...")}
+
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-64"
-            />
+              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-64" />
+            
           </div>
 
           <div className="relative">
             <button
               onClick={() => setShowPlatformFilter(!showPlatformFilter)}
-              className="flex items-center gap-2 pl-3 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main"
-            >
+              className="flex items-center gap-2 pl-3 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main">
+              
               <Filter size={18} className="text-text-muted" />
-              <span>{platformFilter === 'all' ? 'All ' : platformFilter}</span>
+              <span>{t(platformFilter === 'all' ? 'All' : platformFilter)}</span>
               <ChevronDown size={16} className={`absolute right-3 transition-transform ${showPlatformFilter ? 'rotate-180' : ''}`} />
             </button>
             
-            {showPlatformFilter && (
-              <div className="absolute top-full right-0 mt-2 bg-surface border border-border rounded-xl shadow-lg p-2 z-20 min-w-[140px]">
-                {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) => (
-                  <button
-                    key={platform}
-                    onClick={() => {
-                      setPlatformFilter(platform);
-                      setCurrentPage(1);
-                      setShowPlatformFilter(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-all ${
-                      platformFilter === platform
-                        ? 'bg-primary text-white'
-                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                    }`}
-                  >
-                    {platform === 'all' ? 'All ' : platform}
+            {showPlatformFilter &&
+            <div className="absolute top-full right-0 mt-2 bg-surface border border-border rounded-xl shadow-lg p-2 z-20 min-w-[140px]">
+                {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) =>
+              <button
+                key={platform}
+                onClick={() => {
+                  setPlatformFilter(platform);
+                  setCurrentPage(1);
+                  setShowPlatformFilter(false);
+                }}
+                className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-all ${
+                platformFilter === platform ?
+                'bg-primary text-white' :
+                'text-text-muted hover:text-text-main hover:bg-surface-hover'}`
+                }>
+                
+                    {t(platform === 'all' ? 'All' : platform)}
                   </button>
-                ))}
+              )}
               </div>
-            )}
+            }
           </div>
 
           <button
             onClick={fetchDeliveryOrders}
-            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl hover:bg-surface-hover transition-all text-text-main"
-          >
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl hover:bg-surface-hover transition-all text-text-main">
+            
             <RefreshCw size={18} />
           </button>
         </div>
@@ -199,23 +199,23 @@ const DeliveryOrders = ({ onNavigate }) => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-background sticky top-0 z-10">
               <tr>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Bill #</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Bill #")}</th>
                 <th className="p-4 font-semibold text-text-muted border-b border-border">
-                  <div className="flex items-center gap-2">
-                    Date & Time
-                    <span className="text-xs text-primary font-normal">(Latest First)</span>
+                  <div className="flex items-center gap-2">{t("Date & Time")}
+
+                    <span className="text-xs text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Platform</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">Payment</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">Total</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">Action</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Platform")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Payment")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Total")}</th>
+                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">{t("Action")}</th>
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                [...Array(8)].map((_, i) => (
-                  <tr key={i} className="border-b border-border animate-pulse">
+              {loading ?
+              [...Array(8)].map((_, i) =>
+              <tr key={i} className="border-b border-border animate-pulse">
                     <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
                     <td className="p-4">
                       <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
@@ -228,22 +228,22 @@ const DeliveryOrders = ({ onNavigate }) => {
                       <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
                     </div></td>
                   </tr>
-                ))
-              ) : filteredOrders.length === 0 ? (
-                <tr>
+              ) :
+              filteredOrders.length === 0 ?
+              <tr>
                   <td colSpan="6" className="p-8 text-center text-text-muted">
                     <div className="flex flex-col items-center gap-4">
                       <Truck size={48} className="text-text-muted" />
                       <div>
-                        <h3 className="text-lg font-bold text-text-main mb-2">No Delivery Orders</h3>
-                        <p className="text-text-muted">No orders match your current filters</p>
+                        <h3 className="text-lg font-bold text-text-main mb-2">{t("No Delivery Orders")}</h3>
+                        <p className="text-text-muted">{t("No orders match your current filters")}</p>
                       </div>
                     </div>
                   </td>
-                </tr>
-              ) : (
-                filteredOrders.map(order => (
-                  <tr key={order._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
+                </tr> :
+
+              filteredOrders.map((order) =>
+              <tr key={order._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
                     <td className="p-4 font-medium text-text-main">#{order.billNumber}</td>
                     <td className="p-4 text-text-muted">
                       <div className="flex flex-col">
@@ -253,136 +253,133 @@ const DeliveryOrders = ({ onNavigate }) => {
                     </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium ${getPlatformColor(order.orderSource || 'Other')}`}>
-                        {order.orderSource || 'Other'}
+                        {t(order.orderSource || 'Other')}
                       </span>
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-2 text-text-main">
                         <CreditCard size={16} className="text-text-muted" />
-                        <span>{order.paymentMode}</span>
+                        <span>{t(order.paymentMode)}</span>
                       </div>
                     </td>
                     <td className="p-4 font-bold text-text-main text-right">₹{order.total?.toFixed(2) || '0.00'}</td>
                     <td className="p-4 text-center">
                       <div className="flex justify-center gap-2">
-                        <button 
-                          onClick={async () => {
-                            setLoadingBill(true);
-                            try {
-                              // Fetch full bill details with all items
-                              const fullBill = await getBillById(order._id);
-                              setSelectedBill(fullBill);
-                            } catch (error) {
-                              console.error('Error fetching bill details:', error);
-                              setToast({ message: 'Failed to load bill details', type: 'error' });
-                            } finally {
-                              setLoadingBill(false);
-                            }
-                          }}
-                          disabled={loadingBill}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="View Invoice"
-                        >
+                        <button
+                      onClick={async () => {
+                        setLoadingBill(true);
+                        try {
+                          // Fetch full bill details with all items
+                          const fullBill = await getBillById(order._id);
+                          setSelectedBill(fullBill);
+                        } catch (error) {
+                          console.error('Error fetching bill details:', error);
+                          setToast({ message: 'Failed to load bill details', type: 'error' });
+                        } finally {
+                          setLoadingBill(false);
+                        }
+                      }}
+                      disabled={loadingBill}
+                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={t("View Invoice")}>
+
+                      
                           <Eye size={18} />
                         </button>
-                        <button 
-                          onClick={() => handleDeleteClick(order._id)}
-                          className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-colors inline-flex items-center gap-2"
-                          title="Delete Order"
-                        >
+                        <button
+                      onClick={() => handleDeleteClick(order._id)}
+                      className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-colors inline-flex items-center gap-2" title={t("Delete Order")}>
+
+                      
                           <Trash2 size={18} />
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+              )
+              }
             </tbody>
           </table>
         </div>
         
         {/* Pagination Controls */}
-        {pagination.totalPages > 1 && (
-          <div className="p-4 border-t border-border flex items-center justify-between bg-background">
-            <div className="text-sm text-text-muted">
-              Showing {((currentPage - 1) * itemsPerPage) + 1} to{' '}
-              {Math.min(currentPage * itemsPerPage, pagination.totalBills)} of{' '}
-              {pagination.totalBills} orders
-            </div>
+        {pagination.totalPages > 1 &&
+        <div className="p-4 border-t border-border flex items-center justify-between bg-background">
+            <div className="text-sm text-text-muted">{t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("orders")}
+          </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1 || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1 || loading}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronLeft size={18} />
               </button>
               <div className="flex items-center gap-1">
                 {[...Array(pagination.totalPages)].map((_, i) => {
-                  const page = i + 1;
-                  if (
-                    page === 1 ||
-                    page === pagination.totalPages ||
-                    (page >= currentPage - 1 && page <= currentPage + 1)
-                  ) {
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        disabled={loading}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                          currentPage === page
-                            ? 'bg-primary text-white'
-                            : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
-                        }`}
-                      >
+                const page = i + 1;
+                if (
+                page === 1 ||
+                page === pagination.totalPages ||
+                page >= currentPage - 1 && page <= currentPage + 1)
+                {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      disabled={loading}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page ?
+                      'bg-primary text-white' :
+                      'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'}`
+                      }>
+                      
                         {page}
-                      </button>
-                    );
-                  } else if (page === currentPage - 2 || page === currentPage + 2) {
-                    return <span key={page} className="px-2 text-text-muted">...</span>;
-                  }
-                  return null;
-                })}
+                      </button>);
+
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return <span key={page} className="px-2 text-text-muted">...</span>;
+                }
+                return null;
+              })}
               </div>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
-                disabled={currentPage === pagination.totalPages || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+              disabled={currentPage === pagination.totalPages || loading}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronRight size={18} />
               </button>
             </div>
           </div>
-        )}
+        }
       </div>
 
-      {selectedBill && (
-        <Invoice 
-          bill={selectedBill} 
-          onClose={() => setSelectedBill(null)} 
-        />
-      )}
+      {selectedBill &&
+      <Invoice
+        bill={selectedBill}
+        onClose={() => setSelectedBill(null)} />
 
-      <ConfirmationModal 
+      }
+
+      <ConfirmationModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, billId: null })}
-        onConfirm={confirmDelete}
-        title="Delete Delivery Order"
-        message="Are you sure you want to delete this delivery order? This action cannot be undone."
-        confirmText="Delete"
-        isDanger={true}
-      />
+        onConfirm={confirmDelete} title={t("Delete Delivery Order")}
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
-  );
+        message={t("Are you sure you want to delete this delivery order? This action cannot be undone.")}
+        confirmText={t("Delete")}
+        isDanger={true} />
+      
+
+      {toast &&
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)} />
+
+      }
+    </div>);
+
 };
 
 export default DeliveryOrders;

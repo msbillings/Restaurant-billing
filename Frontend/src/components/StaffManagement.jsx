@@ -1,22 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Trash2, Clock, CheckCircle } from 'lucide-react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { Users, Plus, Edit2, Trash2, Clock, CheckCircle, X } from 'lucide-react';
 import { getStaff, addStaff, updateStaff, deleteStaff } from '../api/staff';
 import Toast from './Toast';
 import FaceRegistration from './FaceRegistration';
 import { Camera, Image as ImageIcon } from 'lucide-react';
 import BackButton from './common/BackButton';
 
-const StaffManagement = ({ onNavigate }) => {
+const StaffManagement = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
-  
+
   const [registeringFace, setRegisteringFace] = useState(null);
   const [viewingLog, setViewingLog] = useState(null);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     role: 'Waiter',
@@ -67,13 +67,13 @@ const StaffManagement = ({ onNavigate }) => {
 
   const openEditModal = (s) => {
     setEditingStaff(s);
-    setFormData({ 
-      name: s.name, 
-      role: s.role, 
-      phone: s.phone || '', 
-      pin: s.pin, 
-      baseSalary: s.baseSalary || '', 
-      salaryType: s.salaryType 
+    setFormData({
+      name: s.name,
+      role: s.role,
+      phone: s.phone || '',
+      pin: s.pin,
+      baseSalary: s.baseSalary || '',
+      salaryType: s.salaryType
     });
     setIsModalOpen(true);
   };
@@ -92,17 +92,17 @@ const StaffManagement = ({ onNavigate }) => {
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
       <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+        <BackButton onClick={onGoBack} />
       </div>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
         <h1 className="text-2xl font-black text-text-main flex items-center gap-2">
-          <Users className="text-primary" /> STAFF MANAGEMENT
+          <Users className="text-primary" />{t("STAFF MANAGEMENT")}
         </h1>
-        <button 
+        <button
           onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-opacity"
-        >
-          <Plus size={18} /> Add Staff
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold hover:opacity-90 transition-opacity">
+          
+          <Plus size={18} />{t("Add Staff")}
         </button>
       </div>
 
@@ -110,35 +110,35 @@ const StaffManagement = ({ onNavigate }) => {
         <table className="w-full text-left border-collapse">
           <thead className="bg-background sticky top-0 z-10">
             <tr>
-              <th className="p-4 font-bold text-text-muted border-b border-border">Name</th>
-              <th className="p-4 font-bold text-text-muted border-b border-border">Role</th>
-              <th className="p-4 font-bold text-text-muted border-b border-border">PIN</th>
-              <th className="p-4 font-bold text-text-muted border-b border-border">Today's Status</th>
-              <th className="p-4 font-bold text-text-muted border-b border-border text-center">Actions</th>
+              <th className="p-4 font-bold text-text-muted border-b border-border">{t("Name")}</th>
+              <th className="p-4 font-bold text-text-muted border-b border-border">{t("Role")}</th>
+              <th className="p-4 font-bold text-text-muted border-b border-border">{t("PIN")}</th>
+              <th className="p-4 font-bold text-text-muted border-b border-border">{t("Today's Status")}</th>
+              <th className="p-4 font-bold text-text-muted border-b border-border text-center">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan="5" className="p-4 text-center">Loading...</td></tr>
-            ) : staff.map(s => {
-              const today = new Date().setHours(0,0,0,0);
-              const todayAttendance = s.attendance?.find(a => new Date(a.date).getTime() === today);
-              
+            {loading ?
+            <tr><td colSpan="5" className="p-4 text-center">{t("Loading...")}</td></tr> :
+            staff.map((s) => {
+              const today = new Date().setHours(0, 0, 0, 0);
+              const todayAttendance = s.attendance?.find((a) => new Date(a.date).getTime() === today);
+
               return (
                 <tr key={s._id} className="border-b border-border hover:bg-surface-hover">
                   <td className="p-4 font-medium text-text-main">{s.name}</td>
                   <td className="p-4 text-text-muted">{s.role}</td>
                   <td className="p-4 font-mono tracking-widest text-primary">{s.pin}</td>
                   <td className="p-4">
-                    {todayAttendance ? (
-                      todayAttendance.clockOut ? (
-                        <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-gray-500/10 text-gray-500 px-2 py-1 rounded-md hover:bg-gray-500/20 flex items-center gap-1"><ImageIcon size={12}/> Clocked Out</button>
-                      ) : (
-                        <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-success/10 text-success px-2 py-1 rounded-md hover:bg-success/20 flex items-center gap-1"><ImageIcon size={12}/> Clocked In</button>
-                      )
-                    ) : (
-                      <span className="text-xs bg-danger/10 text-danger px-2 py-1 rounded-md">Not Clocked In</span>
-                    )}
+                    {todayAttendance ?
+                    todayAttendance.clockOut ?
+                    <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-gray-500/10 text-gray-500 px-2 py-1 rounded-md hover:bg-gray-500/20 flex items-center gap-1"><ImageIcon size={12} />{t("Clocked Out")}</button> :
+
+                    <button onClick={() => setViewingLog({ staff: s, log: todayAttendance })} className="text-xs bg-success/10 text-success px-2 py-1 rounded-md hover:bg-success/20 flex items-center gap-1"><ImageIcon size={12} />{t("Clocked In")}</button> :
+
+
+                    <span className="text-xs bg-danger/10 text-danger px-2 py-1 rounded-md">{t("Not Clocked In")}</span>
+                    }
                   </td>
                   <td className="p-4 text-center flex justify-center gap-2">
                     <button onClick={() => setRegisteringFace(s)} className={`p-2 rounded-lg ${s.faceDescriptor && s.faceDescriptor.length > 0 ? 'text-success bg-success/10' : 'text-orange-500 bg-orange-500/10'}`} title={s.faceDescriptor?.length > 0 ? 'Update Face' : 'Register Face'}>
@@ -147,101 +147,101 @@ const StaffManagement = ({ onNavigate }) => {
                     <button onClick={() => openEditModal(s)} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg"><Edit2 size={16} /></button>
                     <button onClick={() => handleDelete(s._id)} className="p-2 text-danger hover:bg-danger/10 rounded-lg"><Trash2 size={16} /></button>
                   </td>
-                </tr>
-              );
+                </tr>);
+
             })}
           </tbody>
         </table>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      {isModalOpen &&
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
           <div className="bg-surface p-6 rounded-2xl w-full max-w-md border border-border">
             <h2 className="text-xl font-bold mb-4">{editingStaff ? 'Edit Staff' : 'Add Staff'}</h2>
             <form onSubmit={handleSave} className="flex flex-col gap-4">
               <div>
-                <label className="text-xs text-text-muted mb-1 block">Name</label>
-                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-background border border-border rounded-xl p-2 text-text-main" />
+                <label className="text-xs text-text-muted mb-1 block">{t("Name")}</label>
+                <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-background border border-border rounded-xl p-2 text-text-main" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-text-muted mb-1 block">Role</label>
-                  <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full bg-background border border-border rounded-xl p-2 text-text-main">
-                    <option>Waiter</option>
-                    <option>Chef</option>
-                    <option>Manager</option>
-                    <option>Cleaner</option>
+                  <label className="text-xs text-text-muted mb-1 block">{t("Role")}</label>
+                  <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full bg-background border border-border rounded-xl p-2 text-text-main">
+                    <option>{t("Waiter")}</option>
+                    <option>{t("Chef")}</option>
+                    <option>{t("Manager")}</option>
+                    <option>{t("Cleaner")}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-text-muted mb-1 block">PIN (4 digits)</label>
-                  <input required type="text" maxLength="4" value={formData.pin} onChange={e => setFormData({...formData, pin: e.target.value})} className="w-full bg-background border border-border rounded-xl p-2 text-text-main font-mono" />
+                  <label className="text-xs text-text-muted mb-1 block">{t("PIN (4 digits)")}</label>
+                  <input required type="text" maxLength="4" value={formData.pin} onChange={(e) => setFormData({ ...formData, pin: e.target.value })} className="w-full bg-background border border-border rounded-xl p-2 text-text-main font-mono" />
                 </div>
               </div>
               <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-border rounded-xl">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-primary text-white rounded-xl font-bold">Save</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-border rounded-xl">{t("Cancel")}</button>
+                <button type="submit" className="px-4 py-2 bg-primary text-white rounded-xl font-bold">{t("Save")}</button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      }
 
-      {registeringFace && (
-        <FaceRegistration 
-          staff={registeringFace}
-          onClose={() => setRegisteringFace(null)}
-          onSave={async (descriptor) => {
-            try {
-              await updateStaff(registeringFace._id, { faceDescriptor: descriptor });
-              setToast({ message: 'Face mapped successfully!', type: 'success' });
-              setRegisteringFace(null);
-              fetchStaff();
-            } catch(e) {
-              setToast({ message: 'Error saving face data', type: 'error' });
-            }
-          }}
-        />
-      )}
+      {registeringFace &&
+      <FaceRegistration
+        staff={registeringFace}
+        onClose={() => setRegisteringFace(null)}
+        onSave={async (descriptor) => {
+          try {
+            await updateStaff(registeringFace._id, { faceDescriptor: descriptor });
+            setToast({ message: 'Face mapped successfully!', type: 'success' });
+            setRegisteringFace(null);
+            fetchStaff();
+          } catch (e) {
+            setToast({ message: 'Error saving face data', type: 'error' });
+          }
+        }} />
 
-      {viewingLog && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+      }
+
+      {viewingLog &&
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <div className="bg-surface p-6 rounded-2xl w-full max-w-md border border-border shadow-2xl">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Attendance Log</h2>
+              <h2 className="text-xl font-bold">{t("Attendance Log")}</h2>
               <button onClick={() => setViewingLog(null)} className="p-2 text-text-muted hover:bg-background rounded-full"><X size={20} /></button>
             </div>
             <p className="font-bold text-text-main mb-4">{viewingLog.staff.name}</p>
             
             <div className="space-y-4">
-              {viewingLog.log.clockIn && (
-                <div className="bg-background p-4 rounded-xl border border-border">
-                  <p className="text-sm font-bold text-success mb-2">Clocked In: {new Date(viewingLog.log.clockIn).toLocaleTimeString()}</p>
-                  {viewingLog.log.clockInPhoto ? (
-                    <img src={viewingLog.log.clockInPhoto} alt="Clock In" className="w-full rounded-lg shadow-sm" />
-                  ) : (
-                    <p className="text-xs text-text-muted italic">No photo captured (PIN used without camera)</p>
-                  )}
+              {viewingLog.log.clockIn &&
+            <div className="bg-background p-4 rounded-xl border border-border">
+                  <p className="text-sm font-bold text-success mb-2">{t("Clocked In:")}{new Date(viewingLog.log.clockIn).toLocaleTimeString()}</p>
+                  {viewingLog.log.clockInPhoto ?
+              <img src={viewingLog.log.clockInPhoto} alt="Clock In" className="w-full rounded-lg shadow-sm" /> :
+
+              <p className="text-xs text-text-muted italic">{t("No photo captured (PIN used without camera)")}</p>
+              }
                 </div>
-              )}
-              {viewingLog.log.clockOut && (
-                <div className="bg-background p-4 rounded-xl border border-border">
-                  <p className="text-sm font-bold text-gray-500 mb-2">Clocked Out: {new Date(viewingLog.log.clockOut).toLocaleTimeString()}</p>
-                  {viewingLog.log.clockOutPhoto ? (
-                    <img src={viewingLog.log.clockOutPhoto} alt="Clock Out" className="w-full rounded-lg shadow-sm" />
-                  ) : (
-                    <p className="text-xs text-text-muted italic">No photo captured</p>
-                  )}
+            }
+              {viewingLog.log.clockOut &&
+            <div className="bg-background p-4 rounded-xl border border-border">
+                  <p className="text-sm font-bold text-gray-500 mb-2">{t("Clocked Out:")}{new Date(viewingLog.log.clockOut).toLocaleTimeString()}</p>
+                  {viewingLog.log.clockOutPhoto ?
+              <img src={viewingLog.log.clockOutPhoto} alt="Clock Out" className="w-full rounded-lg shadow-sm" /> :
+
+              <p className="text-xs text-text-muted italic">{t("No photo captured")}</p>
+              }
                 </div>
-              )}
+            }
             </div>
           </div>
         </div>
-      )}
+      }
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
-  );
+    </div>);
+
 };
 
 export default StaffManagement;

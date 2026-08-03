@@ -1,16 +1,20 @@
-import User from '../models/User.js';
+import UserDefault from '../models/User.js';
+import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 
 export const getUsers = async (req, res) => {
   try {
+    const User = getTenantModel(req, 'User', UserDefault);
     const users = await User.find({}, '-password'); // Exclude passwords
     res.status(200).json(users);
   } catch (error) {
+    if (error.code === 'TENANT_NOT_RESOLVED') return handleTenantError(error, res);
     res.status(500).json({ message: 'Error fetching users', error: error.message });
   }
 };
 
 export const createUser = async (req, res) => {
   try {
+    const User = getTenantModel(req, 'User', UserDefault);
     const { username, password, role } = req.body;
     
     const existingUser = await User.findOne({ username });
@@ -32,12 +36,14 @@ export const createUser = async (req, res) => {
     
     res.status(201).json(userToReturn);
   } catch (error) {
+    if (error.code === 'TENANT_NOT_RESOLVED') return handleTenantError(error, res);
     res.status(500).json({ message: 'Error creating user', error: error.message });
   }
 };
 
 export const updateUser = async (req, res) => {
   try {
+    const User = getTenantModel(req, 'User', UserDefault);
     const { username, role, password } = req.body;
     const user = await User.findById(req.params.id);
     
@@ -64,12 +70,14 @@ export const updateUser = async (req, res) => {
     
     res.status(200).json(userToReturn);
   } catch (error) {
+    if (error.code === 'TENANT_NOT_RESOLVED') return handleTenantError(error, res);
     res.status(500).json({ message: 'Error updating user', error: error.message });
   }
 };
 
 export const deleteUser = async (req, res) => {
   try {
+    const User = getTenantModel(req, 'User', UserDefault);
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -92,6 +100,7 @@ export const deleteUser = async (req, res) => {
     await User.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
+    if (error.code === 'TENANT_NOT_RESOLVED') return handleTenantError(error, res);
     res.status(500).json({ message: 'Error deleting user', error: error.message });
   }
 };

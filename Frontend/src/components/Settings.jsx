@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
 
-const Settings = ({ user, setUser, onNavigate }) => {
+const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [settings, setSettings] = useState({
     restaurantName: '',
     restaurantType: '',
@@ -40,14 +40,14 @@ const Settings = ({ user, setUser, onNavigate }) => {
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings);
-      setSettings(prev => ({ ...prev, ...parsed }));
+      setSettings((prev) => ({ ...prev, ...parsed }));
     }
 
     // Load available printers if running in Desktop App
     if (window.electronAPI && window.electronAPI.getPrinters) {
-      window.electronAPI.getPrinters().then(printers => {
+      window.electronAPI.getPrinters().then((printers) => {
         setSystemPrinters(printers || []);
-      }).catch(err => console.error("Failed to load printers:", err));
+      }).catch((err) => console.error("Failed to load printers:", err));
     }
   }, []);
 
@@ -99,7 +99,7 @@ const Settings = ({ user, setUser, onNavigate }) => {
     if (field === 'ownerPin') {
       value = value.replace(/\D/g, '').slice(0, 6);
     }
-    setSettings(prev => ({
+    setSettings((prev) => ({
       ...prev,
       [field]: value
     }));
@@ -126,15 +126,15 @@ const Settings = ({ user, setUser, onNavigate }) => {
         {/* Header */}
         <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-6 border border-border">
           <div className="flex items-center gap-4 mb-4">
-            <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+            <BackButton onClick={onGoBack} />
           </div>
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center">
               <SettingsIcon className="text-primary" size={24} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-text-main">Restaurant Settings</h1>
-              <p className="text-sm text-text-muted">Configure your restaurant information and preferences</p>
+              <h1 className="text-2xl font-bold text-text-main">{t("Restaurant Settings")}</h1>
+              <p className="text-sm text-text-muted">{t("Configure your restaurant information and preferences")}</p>
             </div>
           </div>
         </div>
@@ -148,21 +148,21 @@ const Settings = ({ user, setUser, onNavigate }) => {
                 <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
                   <User className="text-primary" size={20} />
                 </div>
-                <h2 className="text-xl font-bold text-text-main">Profile Information</h2>
+                <h2 className="text-xl font-bold text-text-main">{t("Profile Information")}</h2>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <User size={14} />
-                  Username
+                  <User size={14} />{t("Username")}
+
                 </label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter username"
-                />
+                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter username")} />
+
+                
               </div>
             </div>
 
@@ -174,85 +174,85 @@ const Settings = ({ user, setUser, onNavigate }) => {
                     <FileText className="text-primary" size={20} />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-text-main">Desktop Printers <span className="text-sm font-normal text-primary">(v1.4.5)</span></h2>
-                    <p className="text-xs text-text-muted mt-0.5">Configure auto-printing</p>
+                    <h2 className="text-xl font-bold text-text-main">{t("Desktop Printers")}<span className="text-sm font-normal text-primary">{t("(v1.4.5)")}</span></h2>
+                    <p className="text-xs text-text-muted mt-0.5">{t("Configure auto-printing")}</p>
                   </div>
                 </div>
-                {!window.electronAPI && (
-                  <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-md">
-                    WEB APP MODE
-                  </span>
-                )}
+                {!window.electronAPI &&
+                <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-md">{t("WEB APP MODE")}
+
+                </span>
+                }
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    Default KOT Printer
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Default KOT Printer")}
+
                   </label>
                   <select
                     value={settings.kotPrinter}
                     onChange={(e) => handleInputChange('kotPrinter', e.target.value)}
                     disabled={!window.electronAPI}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50"
-                  >
-                    <option value="">-- Select Printer --</option>
-                    {systemPrinters.map(p => (
-                      <option key={p.name} value={p.name}>{p.name}</option>
-                    ))}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                    
+                    <option value="">{t("-- Select Printer --")}</option>
+                    {systemPrinters.map((p) =>
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                    )}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    Default Billing Printer
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Default Billing Printer")}
+
                   </label>
                   <select
                     value={settings.billingPrinter}
                     onChange={(e) => handleInputChange('billingPrinter', e.target.value)}
                     disabled={!window.electronAPI}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50"
-                  >
-                    <option value="">-- Select Printer --</option>
-                    {systemPrinters.map(p => (
-                      <option key={p.name} value={p.name}>{p.name}</option>
-                    ))}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                    
+                    <option value="">{t("-- Select Printer --")}</option>
+                    {systemPrinters.map((p) =>
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                    )}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    Print Format (Receipt Layout)
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Print Format (Receipt Layout)")}
+
                   </label>
                   <select
                     value={settings.printFormat || '80mm'}
                     onChange={(e) => handleInputChange('printFormat', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  >
-                    <option value="80mm">Thermal 80mm (Standard Receipt)</option>
-                    <option value="58mm">Thermal 58mm (Small Receipt)</option>
-                    <option value="A4">A4 (Full Page Invoice)</option>
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main">
+                    
+                    <option value="80mm">{t("Thermal 80mm (Standard Receipt)")}</option>
+                    <option value="58mm">{t("Thermal 58mm (Small Receipt)")}</option>
+                    <option value="A4">{t("A4 (Full Page Invoice)")}</option>
                   </select>
                 </div>
                 <div className="flex items-center justify-between pt-2 border-t border-border mt-4">
                   <div className="space-y-0.5">
-                    <label className="text-sm font-semibold text-text-main">Silent Printing</label>
-                    <p className="text-xs text-text-muted">Print directly without showing the print dialog</p>
+                    <label className="text-sm font-semibold text-text-main">{t("Silent Printing")}</label>
+                    <p className="text-xs text-text-muted">{t("Print directly without showing the print dialog")}</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="sr-only peer"
                       checked={settings.silentPrinting !== false}
                       onChange={(e) => handleInputChange('silentPrinting', e.target.checked)}
-                      disabled={!window.electronAPI}
-                    />
+                      disabled={!window.electronAPI} />
+                    
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                   </label>
                 </div>
-                {!window.electronAPI && (
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                    Silent printing is only available in the Desktop App. In the web version, a print dialog will always appear.
-                  </p>
-                )}
+                {!window.electronAPI &&
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">{t("Silent printing is only available in the Desktop App. In the web version, a print dialog will always appear.")}
+
+                </p>
+                }
               </div>
             </div>
 
@@ -262,18 +262,18 @@ const Settings = ({ user, setUser, onNavigate }) => {
                 <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
                   <Building className="text-primary" size={20} />
                 </div>
-                <h2 className="text-xl font-bold text-text-main">Restaurant Information</h2>
+                <h2 className="text-xl font-bold text-text-main">{t("Restaurant Information")}</h2>
               </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Restaurant Logo */}
               <div className="md:col-span-2 space-y-2 pb-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <ImageIcon size={14} />
-                  Printed Bill Logo
-                </label>
+                  <ImageIcon size={14} />{t("Printed Bill Logo")}
+
+                  </label>
                 <div className="flex flex-wrap items-center gap-4 bg-background p-3 rounded-xl border border-border">
-                  {settings.logo ? (
+                  {settings.logo ?
                     <div className="flex items-center gap-4">
                       <div className="p-2 bg-white rounded-lg border border-border shadow-sm">
                         <img src={settings.logo} alt="Restaurant Logo" className="h-14 max-w-[140px] object-contain" />
@@ -281,272 +281,272 @@ const Settings = ({ user, setUser, onNavigate }) => {
                       <button
                         type="button"
                         onClick={() => handleInputChange('logo', '')}
-                        className="flex items-center gap-2 px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-sm font-bold transition-all"
-                      >
-                        <Trash2 size={16} />
-                        Remove Logo
+                        className="flex items-center gap-2 px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-sm font-bold transition-all">
+                        
+                        <Trash2 size={16} />{t("Remove Logo")}
+
                       </button>
-                    </div>
-                  ) : (
+                    </div> :
+
                     <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-bold cursor-pointer transition-all">
-                      <Upload size={16} />
-                      Upload Logo (PNG/JPG)
+                      <Upload size={16} />{t("Upload Logo (PNG/JPG)")}
+
                       <input
                         type="file"
                         accept="image/png, image/jpeg, image/jpg"
                         onChange={handleLogoUpload}
-                        className="hidden"
-                      />
+                        className="hidden" />
+                      
                     </label>
-                  )}
-                  <span className="text-xs text-text-muted">Displayed at top of printed bills (max 2MB)</span>
+                    }
+                  <span className="text-xs text-text-muted">{t("Displayed at top of printed bills (max 2MB)")}</span>
                 </div>
               </div>
 
               {/* Restaurant Name */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <Building size={14} />
-                  Restaurant Name
-                </label>
+                  <Building size={14} />{t("Restaurant Name")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.restaurantName}
-                  onChange={(e) => handleInputChange('restaurantName', e.target.value)}
-                  onKeyPress={(e) => {
-                    if (!/[a-zA-Z\s]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter restaurant name"
-                />
+                    type="text"
+                    value={settings.restaurantName}
+                    onChange={(e) => handleInputChange('restaurantName', e.target.value)}
+                    onKeyPress={(e) => {
+                      if (!/[a-zA-Z\s]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter restaurant name")} />
+
+                  
               </div>
 
               {/* Restaurant Type */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />
-                  Restaurant Type
-                </label>
+                  <FileText size={14} />{t("Restaurant Type")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.restaurantType}
-                  onChange={(e) => handleInputChange('restaurantType', e.target.value)}
-                  className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="e.g., South Indian & Chinese"
-                />
+                    type="text"
+                    value={settings.restaurantType}
+                    onChange={(e) => handleInputChange('restaurantType', e.target.value)}
+                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("e.g., South Indian & Chinese")} />
+
+                  
               </div>
 
               {/* Address */}
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <MapPin size={14} />
-                  Address
-                </label>
+                  <MapPin size={14} />{t("Address")}
+
+                  </label>
                 <textarea
-                  value={settings.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main resize-none"
-                  placeholder="Enter full address"
-                />
+                    value={settings.address}
+                    onChange={(e) => handleInputChange('address', e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main resize-none" placeholder={t("Enter full address")} />
+
+                  
               </div>
 
               {/* Phone */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <Phone size={14} />
-                  Phone Number
-                </label>
+                  <Phone size={14} />{t("Phone Number")}
+
+                  </label>
                 <input
-                  type="tel"
-                  value={settings.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  onKeyPress={(e) => {
-                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter phone number"
-                />
+                    type="tel"
+                    value={settings.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    onKeyPress={(e) => {
+                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter phone number")} />
+
+                  
               </div>
 
               {/* Email */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <Mail size={14} />
-                  Email
-                </label>
+                  <Mail size={14} />{t("Email")}
+
+                  </label>
                 <input
-                  type="email"
-                  value={settings.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  onKeyPress={(e) => {
-                    if (!/[a-zA-Z0-9@._-]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter email address"
-                />
+                    type="email"
+                    value={settings.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    onKeyPress={(e) => {
+                      if (!/[a-zA-Z0-9@._-]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter email address")} />
+
+                  
               </div>
 
               {/* GSTIN */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />
-                  GSTIN
-                </label>
+                  <FileText size={14} />{t("GSTIN")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.gstin}
-                  onChange={(e) => handleInputChange('gstin', e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter GSTIN"
-                />
+                    type="text"
+                    value={settings.gstin}
+                    onChange={(e) => handleInputChange('gstin', e.target.value)}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter GSTIN")} />
+
+                  
               </div>
 
               {/* FSSAI */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />
-                  FSSAI Number
-                </label>
+                  <FileText size={14} />{t("FSSAI Number")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.fssai || ''}
-                  onChange={(e) => handleInputChange('fssai', e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter FSSAI License Number"
-                />
+                    type="text"
+                    value={settings.fssai || ''}
+                    onChange={(e) => handleInputChange('fssai', e.target.value)}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter FSSAI License Number")} />
+
+                  
               </div>
 
               {/* Individual Tax Configuration */}
               <div className="space-y-3 p-4 bg-background rounded-xl border border-border">
                 <h3 className="text-sm font-bold text-text-main flex items-center gap-2">
-                  <FileText size={14} className="text-primary" />
-                  Individual Tax Options (CGST, SGST, GST)
-                </h3>
-                <p className="text-xs text-text-muted">Toggle ON/OFF each tax option and set its default percentage rate.</p>
+                  <FileText size={14} className="text-primary" />{t("Individual Tax Options (CGST, SGST, GST)")}
+
+                  </h3>
+                <p className="text-xs text-text-muted">{t("Toggle ON/OFF each tax option and set its default percentage rate.")}</p>
 
                 {/* CGST Option */}
                 <div className="flex items-center justify-between pt-2 border-t border-border/50">
                   <div className="flex items-center gap-3">
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer"
-                        checked={settings.enableCgst !== false}
-                        onChange={(e) => handleInputChange('enableCgst', e.target.checked)}
-                      />
+                      <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={settings.enableCgst !== false}
+                          onChange={(e) => handleInputChange('enableCgst', e.target.checked)} />
+                        
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                     </label>
-                    <span className="text-sm font-semibold text-text-main">Enable CGST</span>
+                    <span className="text-sm font-semibold text-text-main">{t("Enable CGST")}</span>
                   </div>
-                  {settings.enableCgst !== false && (
+                  {settings.enableCgst !== false &&
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         step="0.1"
                         value={settings.cgstRate !== undefined ? settings.cgstRate : 2.5}
                         onChange={(e) => handleInputChange('cgstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface"
-                      />
+                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
+                      
                       <span className="text-xs font-bold text-text-muted">%</span>
                     </div>
-                  )}
+                    }
                 </div>
 
                 {/* SGST Option */}
                 <div className="flex items-center justify-between pt-2 border-t border-border/50">
                   <div className="flex items-center gap-3">
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer"
-                        checked={settings.enableSgst !== false}
-                        onChange={(e) => handleInputChange('enableSgst', e.target.checked)}
-                      />
+                      <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={settings.enableSgst !== false}
+                          onChange={(e) => handleInputChange('enableSgst', e.target.checked)} />
+                        
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                     </label>
-                    <span className="text-sm font-semibold text-text-main">Enable SGST</span>
+                    <span className="text-sm font-semibold text-text-main">{t("Enable SGST")}</span>
                   </div>
-                  {settings.enableSgst !== false && (
+                  {settings.enableSgst !== false &&
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         step="0.1"
                         value={settings.sgstRate !== undefined ? settings.sgstRate : 2.5}
                         onChange={(e) => handleInputChange('sgstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface"
-                      />
+                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
+                      
                       <span className="text-xs font-bold text-text-muted">%</span>
                     </div>
-                  )}
+                    }
                 </div>
 
                 {/* GST / IGST Option */}
                 <div className="flex items-center justify-between pt-2 border-t border-border/50">
                   <div className="flex items-center gap-3">
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer"
-                        checked={settings.enableGst === true}
-                        onChange={(e) => handleInputChange('enableGst', e.target.checked)}
-                      />
+                      <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={settings.enableGst === true}
+                          onChange={(e) => handleInputChange('enableGst', e.target.checked)} />
+                        
                       <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                     </label>
-                    <span className="text-sm font-semibold text-text-main">Enable GST (or IGST)</span>
+                    <span className="text-sm font-semibold text-text-main">{t("Enable GST (or IGST)")}</span>
                   </div>
-                  {settings.enableGst === true && (
+                  {settings.enableGst === true &&
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         step="0.1"
                         value={settings.gstRate !== undefined ? settings.gstRate : 5}
                         onChange={(e) => handleInputChange('gstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface"
-                      />
+                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
+                      
                       <span className="text-xs font-bold text-text-muted">%</span>
                     </div>
-                  )}
+                    }
                 </div>
               </div>
 
               {/* UPI ID */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />
-                  UPI Payment VPA / ID
-                </label>
+                  <FileText size={14} />{t("UPI Payment VPA / ID")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.upiId || ''}
-                  onChange={(e) => handleInputChange('upiId', e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono"
-                  placeholder="e.g. restaurant@upi or 9876543210@ybl"
-                />
+                    type="text"
+                    value={settings.upiId || ''}
+                    onChange={(e) => handleInputChange('upiId', e.target.value)}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono" placeholder={t("e.g. restaurant@upi or 9876543210@ybl")} />
+
+                  
               </div>
 
               {/* Dynamic QR Payment Toggle */}
               <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-border">
                 <div className="space-y-0.5">
                   <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    <FileText size={14} className="text-primary" />
-                    Dynamic QR Code Payment
-                  </label>
-                  <p className="text-xs text-text-muted">Show dynamic scan-to-pay UPI QR code on checkout screen & printed bills</p>
+                    <FileText size={14} className="text-primary" />{t("Dynamic QR Code Payment")}
+
+                    </label>
+                  <p className="text-xs text-text-muted">{t("Show dynamic scan-to-pay UPI QR code on checkout screen & printed bills")}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer"
-                    checked={settings.enableQrPayment !== false}
-                    onChange={(e) => handleInputChange('enableQrPayment', e.target.checked)}
-                  />
+                  <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={settings.enableQrPayment !== false}
+                      onChange={(e) => handleInputChange('enableQrPayment', e.target.checked)} />
+                    
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                 </label>
               </div>
@@ -554,32 +554,32 @@ const Settings = ({ user, setUser, onNavigate }) => {
               {/* Owner Security PIN */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <User size={14} />
-                  Owner Security PIN (Reports Lock)
-                </label>
+                  <User size={14} />{t("Owner Security PIN (Reports Lock)")}
+
+                  </label>
                 <input
-                  type="password"
-                  value={settings.ownerPin || '786786'}
-                  onChange={(e) => handleInputChange('ownerPin', e.target.value)}
-                  maxLength={10}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono tracking-widest font-bold"
-                  placeholder="••••••"
-                />
+                    type="password"
+                    value={settings.ownerPin || '786786'}
+                    onChange={(e) => handleInputChange('ownerPin', e.target.value)}
+                    maxLength={10}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono tracking-widest font-bold"
+                    placeholder="••••••" />
+                  
               </div>
 
               {/* Footer Message */}
               <div className="space-y-2 md:col-span-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />
-                  Footer Message
-                </label>
+                  <FileText size={14} />{t("Footer Message")}
+
+                  </label>
                 <input
-                  type="text"
-                  value={settings.footerMessage}
-                  onChange={(e) => handleInputChange('footerMessage', e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
-                  placeholder="Enter footer message for receipts"
-                />
+                    type="text"
+                    value={settings.footerMessage}
+                    onChange={(e) => handleInputChange('footerMessage', e.target.value)}
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter footer message for receipts")} />
+
+                  
               </div>
             </div>
           </div>
@@ -587,25 +587,25 @@ const Settings = ({ user, setUser, onNavigate }) => {
 
           {/* Preview Section */}
           <div className="bg-surface rounded-2xl p-4 border border-border shadow-lg">
-            <h2 className="text-xl font-bold text-text-main mb-4">Receipt Preview</h2>
+            <h2 className="text-xl font-bold text-text-main mb-4">{t("Receipt Preview")}</h2>
             <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto">
-              {settings.logo && (
-                <div className="flex justify-center mb-2">
+              {settings.logo &&
+              <div className="flex justify-center mb-2">
                   <img src={settings.logo} alt="Logo Preview" className="max-h-14 max-w-[140px] object-contain" />
                 </div>
-              )}
+              }
               <div className="text-center font-bold text-lg mb-2">{settings.restaurantName}</div>
               <div className="text-center text-sm text-gray-600 mb-4">
-                {settings.restaurantType}<br/>
-                {settings.address.split('\n').map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
-                Ph: {settings.phone}<br/>
-                {settings.gstin && `GSTIN: ${settings.gstin}`}<br/>
+                {settings.restaurantType}<br />
+                {settings.address.split('\n').map((line, i) =>
+                <div key={i}>{line}</div>
+                )}{t("Ph:")}
+                {settings.phone}<br />
+                {settings.gstin && `GSTIN: ${settings.gstin}`}<br />
                 {settings.fssai && `FSSAI: ${settings.fssai}`}
               </div>
-              <div className="border-t border-b border-dashed py-2 my-4 text-center font-bold">
-                RECEIPT
+              <div className="border-t border-b border-dashed py-2 my-4 text-center font-bold">{t("RECEIPT")}
+
               </div>
               <div className="text-center text-sm mb-4">
                 {settings.footerMessage}
@@ -619,23 +619,23 @@ const Settings = ({ user, setUser, onNavigate }) => {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex items-center gap-3 px-8 py-4 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/40 hover:shadow-xl hover:shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]"
-          >
+            className="flex items-center gap-3 px-8 py-4 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/40 hover:shadow-xl hover:shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]">
+            
             <Save size={20} />
             <span>{loading ? 'Saving...' : 'Save Settings'}</span>
           </button>
         </div>
       </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
-  );
+      {toast &&
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)} />
+
+      }
+    </div>);
+
 };
 
 export default Settings;

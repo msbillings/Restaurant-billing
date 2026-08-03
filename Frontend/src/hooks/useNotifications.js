@@ -14,8 +14,30 @@ export const getNotificationSocket = () => {
 };
 
 const useNotifications = (userRole = 'Admin') => {
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('realtime_notifications');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [unreadCount, setUnreadCount] = useState(() => {
+    try {
+      return parseInt(localStorage.getItem('realtime_unread_count') || '0', 10);
+    } catch {
+      return 0;
+    }
+  });
+
+  // Save to localStorage whenever notifications change
+  useEffect(() => {
+    localStorage.setItem('realtime_notifications', JSON.stringify(notifications));
+  }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem('realtime_unread_count', unreadCount.toString());
+  }, [unreadCount]);
 
   useEffect(() => {
     const socket = getNotificationSocket();
@@ -50,7 +72,12 @@ const useNotifications = (userRole = 'Admin') => {
   };
 
   const clearNotification = (id) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (id === 'ALL') {
+      setNotifications([]);
+      setUnreadCount(0);
+    } else {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }
   };
 
   return { notifications, unreadCount, markAllAsRead, clearNotification };

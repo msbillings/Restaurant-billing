@@ -315,6 +315,8 @@ import printerConfigRoutes from './routes/printerConfigRoutes.js';
 import onlineConfigRoutes from './routes/onlineConfigRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import cameraRoutes from './routes/cameraRoutes.js';
+import loyaltyRoutes from './routes/loyaltyRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -345,6 +347,8 @@ app.use('/api/printer-configs', printerConfigRoutes);
 app.use('/api/online-configs', onlineConfigRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/cameras', cameraRoutes);
+app.use('/api/loyalty', loyaltyRoutes);
 
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 
@@ -373,8 +377,8 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   // The Desktop app's frontend falls back to localhost:5002 when process.env.VITE_API_URL is undefined
   const PORT = process.env.PORT || 5002;
   connectDB().then(() => {
-    server.listen(PORT, () => {
-      console.log(`Server & Socket.io running on port ${PORT}`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server & Socket.io running on 0.0.0.0:${PORT}`);
     });
   }).catch((err) => {
     console.error('Failed to start server:', err);
