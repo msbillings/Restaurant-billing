@@ -1,6 +1,8 @@
 import MenuDefault from '../models/Menu.js';
 import CategoryDefault from '../models/Category.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import { translateMenuItem } from '../services/translationService.js';
+import { emitNotification } from '../utils/notificationHelper.js';
 
 const emitSocketEvent = (req, eventName, data) => {
   try {
@@ -51,6 +53,29 @@ export const addMenuItem = async (req, res) => {
     const populatedItem = await Menu.findById(newItem._id).populate('category', 'name');
     emitSocketEvent(req, 'menuUpdated', { action: 'add', item: populatedItem });
     res.status(201).json(populatedItem);
+
+    // Auto-translate in background (non-blocking)
+    translateMenuItem(req.body.name, req.body.description).then(async (translations) => {
+      try {
+        await Menu.findByIdAndUpdate(newItem._id, {
+          nameTranslations: translations.nameTranslations,
+          descriptionTranslations: translations.descriptionTranslations
+        });
+        console.log(`[Translation] Auto-translated menu item: ${req.body.name}`);
+        // Emit updated item with translations
+        const updatedWithTranslations = await Menu.findById(newItem._id).populate('category', 'name');
+        emitSocketEvent(req, 'menuUpdated', { action: 'update', item: updatedWithTranslations });
+        // Send notification to bell icon
+        const langCount = Object.values(translations.nameTranslations).filter(v => v && v.length > 0).length;
+        emitNotification(req, '🌐 Translation Complete', `"${req.body.name}" has been auto-translated into ${langCount} languages`, 'success', ['Admin']);
+      } catch (err) {
+        console.error('[Translation] Failed to save translations:', err.message);
+        emitNotification(req, '⚠️ Translation Failed', `Could not translate "${req.body.name}": ${err.message}`, 'warning', ['Admin']);
+      }
+    }).catch(err => {
+      console.error('[Translation] Background translate error:', err.message);
+      emitNotification(req, '⚠️ Translation Failed', `Could not translate "${req.body.name}": ${err.message}`, 'warning', ['Admin']);
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -87,6 +112,32 @@ export const updateMenuItem = async (req, res) => {
       return res.status(404).json({ message: 'Menu item not found' });
     }
     emitSocketEvent(req, 'menuUpdated', { action: 'update', item: updatedItem });
+
+    // Re-translate if name or description changed (non-blocking)
+    if (updateData.name || updateData.description) {
+      const nameToTranslate = updateData.name || updatedItem.name;
+      const descToTranslate = updateData.description || updatedItem.description;
+      translateMenuItem(nameToTranslate, descToTranslate).then(async (translations) => {
+        try {
+          await Menu.findByIdAndUpdate(req.params.id, {
+            nameTranslations: translations.nameTranslations,
+            descriptionTranslations: translations.descriptionTranslations
+          });
+          console.log(`[Translation] Re-translated menu item: ${nameToTranslate}`);
+          const refreshed = await Menu.findById(req.params.id).populate('category', 'name');
+          emitSocketEvent(req, 'menuUpdated', { action: 'update', item: refreshed });
+          // Send notification to bell icon
+          const langCount = Object.values(translations.nameTranslations).filter(v => v && v.length > 0).length;
+          emitNotification(req, '🌐 Translation Updated', `"${nameToTranslate}" has been re-translated into ${langCount} languages`, 'success', ['Admin']);
+        } catch (err) {
+          console.error('[Translation] Failed to save re-translations:', err.message);
+          emitNotification(req, '⚠️ Translation Failed', `Could not re-translate "${nameToTranslate}": ${err.message}`, 'warning', ['Admin']);
+        }
+      }).catch(err => {
+        console.error('[Translation] Background re-translate error:', err.message);
+        emitNotification(req, '⚠️ Translation Failed', `Could not re-translate "${nameToTranslate}": ${err.message}`, 'warning', ['Admin']);
+      });
+    }
     res.status(200).json(updatedItem);
   } catch (error) {
     res.status(400).json({ message: error.message });

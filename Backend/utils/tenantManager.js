@@ -12,6 +12,7 @@ import FloorDefault from '../models/Floor.js';
 import StaffDefault from '../models/Staff.js';
 import CustomerDefault from '../models/Customer.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
+import CameraDefault from '../models/Camera.js';
 
 const connectionPool = new Map();
 
@@ -41,6 +42,12 @@ export const getTenantModels = async (databaseName) => {
       minPoolSize: 1,
     });
 
+    conn.on('error', (err) => {
+      console.error(`[TenantManager] MongoDB connection error for ${databaseName}:`, err.message);
+      // Remove from pool so it can be recreated on next request
+      connectionPool.delete(databaseName);
+    });
+
     connectionPool.set(databaseName, conn);
   }
 
@@ -58,6 +65,7 @@ export const getTenantModels = async (databaseName) => {
   const Staff = conn.models.Staff || conn.model('Staff', StaffDefault.schema);
   const Customer = conn.models.Customer || conn.model('Customer', CustomerDefault.schema);
   const ServiceRequest = conn.models.ServiceRequest || conn.model('ServiceRequest', ServiceRequestDefault.schema);
+  const Camera = conn.models.Camera || conn.model('Camera', CameraDefault.schema);
 
   return {
     Menu,
@@ -73,6 +81,7 @@ export const getTenantModels = async (databaseName) => {
     Staff,
     Customer,
     ServiceRequest,
+    Camera,
     connection: conn
   };
 };

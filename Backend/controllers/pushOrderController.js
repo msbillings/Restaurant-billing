@@ -21,8 +21,18 @@ export const receivePushOrder = async (req, res) => {
     const newOrder = new PushOrder(req.body);
     await newOrder.save();
     
-    // In a real app, emit a socket.io event here so the frontend dings
-    console.log('New mock order received:', newOrder._id);
+    // Emit a socket.io event here so the frontend dings
+    console.log('New online order received:', newOrder._id);
+    if (req.app && req.app.locals.io) {
+      req.app.locals.io.emit('new_notification', {
+        id: `order-${newOrder._id}-${Date.now()}`,
+        type: 'info',
+        title: 'New Online Order',
+        message: `Order ${newOrder.platformOrderId || ''} received from website!`,
+        timestamp: new Date(),
+        targetRoles: ['Admin', 'Manager', 'Cashier']
+      });
+    }
     
     res.status(201).json({ message: 'Order received successfully', orderId: newOrder._id });
   } catch (error) {

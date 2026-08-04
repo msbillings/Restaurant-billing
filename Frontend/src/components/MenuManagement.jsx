@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, deleteAllMenuItems } from '../api/menu';
 import { getAllCategories, createCategory, updateCategory, deleteCategory } from '../api/category';
 import { getInventory } from '../api/inventory';
@@ -34,15 +34,15 @@ const formatImageUrl = (url) => {
   }
   if (/^[A-Za-z0-9+/=]{30,}$/.test(trimmed) || trimmed.startsWith('iVBOR') || trimmed.startsWith('/9j/') || trimmed.startsWith('R0lGOD') || trimmed.startsWith('UklGR')) {
     let mime = 'jpeg';
-    if (trimmed.startsWith('iVBOR')) mime = 'png';
-    else if (trimmed.startsWith('R0lGOD')) mime = 'gif';
-    else if (trimmed.startsWith('UklGR')) mime = 'webp';
+    if (trimmed.startsWith('iVBOR')) mime = 'png';else
+    if (trimmed.startsWith('R0lGOD')) mime = 'gif';else
+    if (trimmed.startsWith('UklGR')) mime = 'webp';
     return `data:image/${mime};base64,${trimmed}`;
   }
   return trimmed;
 };
 
-const MenuManagement = ({ user, onNavigate }) => {
+const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('items');
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -247,8 +247,8 @@ const MenuManagement = ({ user, onNavigate }) => {
       if (error.response) {
         // Server responded with error status
         errorMessage = error.response.data?.message ||
-          error.response.data?.error ||
-          `Server error: ${error.response.status}`;
+        error.response.data?.error ||
+        `Server error: ${error.response.status}`;
         console.error('Server error details:', {
           status: error.response.status,
           data: error.response.data,
@@ -271,7 +271,7 @@ const MenuManagement = ({ user, onNavigate }) => {
   const fileInputRef = React.useRef(null);
 
   const handleExportCSV = () => {
-    const csvData = items.map(item => ({
+    const csvData = items.map((item) => ({
       Name: item.name,
       Category: item.category?.name || item.category,
       Price: item.price,
@@ -281,7 +281,7 @@ const MenuManagement = ({ user, onNavigate }) => {
       'Tax Rate': item.taxRate || 0,
       'HSN Code': item.hsnCode || '',
       'Image URL': item.image || '',
-      Variants: (item.variants && item.variants.length > 0) ? item.variants.map(v => `${v.name}:${v.price}`).join('|') : ''
+      Variants: item.variants && item.variants.length > 0 ? item.variants.map((v) => `${v.name}:${v.price}`).join('|') : ''
     }));
 
     const csv = Papa.unparse(csvData);
@@ -309,14 +309,14 @@ const MenuManagement = ({ user, onNavigate }) => {
           const rows = results.data;
           let successCount = 0;
           let errorCount = 0;
-          
+
           for (const row of rows) {
             try {
               if (!row.Name || !row.Price || !row.Category) continue;
 
               let parsedVariants = [];
               if (row.Variants) {
-                parsedVariants = row.Variants.split('|').map(v => {
+                parsedVariants = row.Variants.split('|').map((v) => {
                   const parts = v.split(':');
                   return { name: parts[0] ? parts[0].trim() : '', price: parseFloat(parts[1]) || 0 };
                 });
@@ -326,7 +326,7 @@ const MenuManagement = ({ user, onNavigate }) => {
                 name: row.Name.trim(),
                 price: parseFloat(row.Price) || 0,
                 category: row.Category.trim(),
-                type: (row.Type && row.Type.toLowerCase().includes('non')) ? 'non-veg' : 'veg',
+                type: row.Type && row.Type.toLowerCase().includes('non') ? 'non-veg' : 'veg',
                 description: row.Description || '',
                 isAvailable: row['Is Available'] ? row['Is Available'].toLowerCase() === 'yes' : true,
                 taxRate: parseFloat(row['Tax Rate']) || 0,
@@ -438,8 +438,8 @@ const MenuManagement = ({ user, onNavigate }) => {
 
       if (error.response) {
         errorMessage = error.response.data?.message ||
-          error.response.data?.error ||
-          `Server error: ${error.response.status}`;
+        error.response.data?.error ||
+        `Server error: ${error.response.status}`;
         console.error('Server error details:', {
           status: error.response.status,
           data: error.response.data
@@ -460,14 +460,14 @@ const MenuManagement = ({ user, onNavigate }) => {
     setDeleteModal({ isOpen: true, itemId: null, categoryId: id });
   };
 
-  const filteredItems = items.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (item.category?.name || item.category || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredItems = items.filter((item) =>
+  item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  (item.category?.name || item.category || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredCategories = categories.filter(category =>
-    category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (category.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredCategories = categories.filter((category) =>
+  category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  (category.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Pagination logic
@@ -482,17 +482,17 @@ const MenuManagement = ({ user, onNavigate }) => {
   const categoriesEndIndex = categoriesStartIndex + itemsPerPage;
   const paginatedCategories = filteredCategories.slice(categoriesStartIndex, categoriesEndIndex);
 
-  if (loading) return <div className="flex items-center justify-center h-full text-text-muted">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center h-full text-text-muted">{t("Loading...")}</div>;
 
   return (
     <div className="h-full flex flex-col bg-background p-3 sm:p-6">
       <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={() => onNavigate && onNavigate('dashboard')} />
+        <BackButton onClick={onGoBack} />
       </div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text-main">Menu Management</h1>
-          <p className="text-xs sm:text-sm text-text-muted">Manage your restaurant's menu items and categories</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text-main">{t("Menu Management")}</h1>
+          <p className="text-xs sm:text-sm text-text-muted">{t("Manage your restaurant's menu items and categories")}</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
           <input
@@ -500,66 +500,66 @@ const MenuManagement = ({ user, onNavigate }) => {
             accept=".csv"
             ref={fileInputRef}
             onChange={handleImportCSV}
-            className="hidden"
-          />
-          {user?.role === 'Admin' && activeTab === 'items' && (
-            <>
+            className="hidden" />
+          
+          {user?.role === 'Admin' && activeTab === 'items' &&
+          <>
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border"
-                title="Import CSV"
-              >
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border" title={t("Import CSV")}>
+
+              
                 <Upload size={20} />
-                <span className="hidden sm:inline">Import</span>
+                <span className="hidden sm:inline">{t("Import")}</span>
               </button>
               <button
-                onClick={handleExportCSV}
-                className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border"
-                title="Export CSV"
-              >
+              onClick={handleExportCSV}
+              className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border" title={t("Export CSV")}>
+
+              
                 <Download size={20} />
-                <span className="hidden sm:inline">Export</span>
+                <span className="hidden sm:inline">{t("Export")}</span>
               </button>
               <button
-                onClick={() => setDeleteModal({ isOpen: true, itemId: null, categoryId: null, deleteAll: true })}
-                className="flex items-center gap-2 bg-danger/10 text-danger px-4 py-2 rounded-lg hover:bg-danger/20 transition-colors border border-danger/20"
-                title="Delete All Items"
-              >
+              onClick={() => setDeleteModal({ isOpen: true, itemId: null, categoryId: null, deleteAll: true })}
+              className="flex items-center gap-2 bg-danger/10 text-danger px-4 py-2 rounded-lg hover:bg-danger/20 transition-colors border border-danger/20" title={t("Delete All Items")}>
+
+              
                 <Trash2 size={20} />
-                <span className="hidden sm:inline">Delete All</span>
+                <span className="hidden sm:inline">{t("Delete All")}</span>
               </button>
             </>
-          )}
+          }
           <button
             onClick={() => setActiveTab('categories')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'categories' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}
-          >
-            Categories
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'categories' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Categories")}
+
+
           </button>
           <button
             onClick={() => setActiveTab('items')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'items' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}
-          >
-            Menu Items
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'items' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Menu Items")}
+
+
           </button>
-          {user?.role === 'Admin' && activeTab === 'items' && (
-            <button
-              onClick={() => handleOpenModal()}
-              className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20"
-            >
+          {user?.role === 'Admin' && activeTab === 'items' &&
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20">
+            
               <Plus size={20} />
-              <span>Add Item</span>
+              <span>{t("Add Item")}</span>
             </button>
-          )}
-          {user?.role === 'Admin' && activeTab === 'categories' && (
-            <button
-              onClick={() => handleOpenCategoryModal()}
-              className="flex items-center gap-2 bg-secondary text-white px-4 py-2 rounded-lg hover:bg-accent transition-colors shadow-lg shadow-secondary/20"
-            >
+          }
+          {user?.role === 'Admin' && activeTab === 'categories' &&
+          <button
+            onClick={() => handleOpenCategoryModal()}
+            className="flex items-center gap-2 bg-secondary text-white px-4 py-2 rounded-lg hover:bg-accent transition-colors shadow-lg shadow-secondary/20">
+            
               <FolderPlus size={20} />
-              <span>Add Category</span>
+              <span>{t("Add Category")}</span>
             </button>
-          )}
+          }
         </div>
       </div>
 
@@ -571,43 +571,43 @@ const MenuManagement = ({ user, onNavigate }) => {
           placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main"
-        />
+          className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main" />
+        
       </div>
 
       {/* Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
         <div className="overflow-y-auto flex-1">
-          {activeTab === 'items' ? (
-            <table className="w-full text-left border-collapse">
+          {activeTab === 'items' ?
+          <table className="w-full text-left border-collapse">
               <thead className="bg-background sticky top-0 z-10">
                 <tr>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Name</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Category</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Type</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Price</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border text-right">Actions</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Name")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Category")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Type")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Price")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map(item => (
-                  <tr key={item._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
+                {paginatedItems.map((item) =>
+              <tr key={item._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
                     <td className="p-4 font-medium text-text-main">
                       <div className="flex items-center gap-3">
-                        {formatImageUrl(item.image) ? (
-                          <img
-                            src={formatImageUrl(item.image)}
-                            alt={item.name}
-                            className="w-10 h-10 rounded-xl object-cover bg-background border border-border shrink-0 shadow-sm"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                        {formatImageUrl(item.image) ?
+                    <img
+                      src={formatImageUrl(item.image)}
+                      alt={item.name}
+                      className="w-10 h-10 rounded-xl object-cover bg-background border border-border shrink-0 shadow-sm"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }} /> :
+
+
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                             {item.name.charAt(0).toUpperCase()}
                           </div>
-                        )}
+                    }
                         <span>{item.name}</span>
                       </div>
                     </td>
@@ -617,8 +617,8 @@ const MenuManagement = ({ user, onNavigate }) => {
                       </span>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
-                        }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`
+                  }>
                         {item.type === 'veg' ? 'Veg' : 'Non-Veg'}
                       </span>
                     </td>
@@ -626,254 +626,254 @@ const MenuManagement = ({ user, onNavigate }) => {
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => handleOpenModal(item, true)}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
-                          title="View Details"
-                        >
+                      onClick={() => handleOpenModal(item, true)}
+                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("View Details")}>
+
+                      
                           <Eye size={18} />
                         </button>
-                        {user?.role === 'Admin' && (
-                          <>
+                        {user?.role === 'Admin' &&
+                    <>
                             <button
-                              onClick={() => handleOpenModal(item, false)}
-                              className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
-                              title="Edit Item"
-                            >
+                        onClick={() => handleOpenModal(item, false)}
+                        className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("Edit Item")}>
+
+                        
                               <Edit2 size={18} />
                             </button>
                             <button
-                              onClick={() => handleDeleteClick(item._id)}
-                              className="p-2 hover:bg-background rounded-lg text-danger transition-colors"
-                              title="Delete Item"
-                            >
+                        onClick={() => handleDeleteClick(item._id)}
+                        className="p-2 hover:bg-background rounded-lg text-danger transition-colors" title={t("Delete Item")}>
+
+                        
                               <Trash2 size={18} />
                             </button>
                           </>
-                        )}
+                    }
                       </div>
                     </td>
                   </tr>
-                ))}
+              )}
               </tbody>
-            </table>
-          ) : (
-            <table className="w-full text-left border-collapse">
+            </table> :
+
+          <table className="w-full text-left border-collapse">
               <thead className="bg-background sticky top-0 z-10">
                 <tr>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Name</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Description</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Sort Order</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border">Status</th>
-                  <th className="p-4 font-semibold text-text-muted border-b border-border text-right">Actions</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Name")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Description")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Sort Order")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Status")}</th>
+                  <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Actions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedCategories.map(category => (
-                  <tr key={category._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
+                {paginatedCategories.map((category) =>
+              <tr key={category._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
                     <td className="p-4 font-medium text-text-main">{category.name}</td>
                     <td className="p-4 text-text-muted">{category.description || '-'}</td>
                     <td className="p-4 text-text-muted">{category.sortOrder}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${category.isActive ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
-                        }`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${category.isActive ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`
+                  }>
                         {category.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => handleOpenCategoryModal(category, true)}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
-                          title="View Details"
-                        >
+                      onClick={() => handleOpenCategoryModal(category, true)}
+                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("View Details")}>
+
+                      
                           <Eye size={18} />
                         </button>
-                        {user?.role === 'Admin' && (
-                          <>
+                        {user?.role === 'Admin' &&
+                    <>
                             <button
-                              onClick={() => handleOpenCategoryModal(category, false)}
-                              className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
-                              title="Edit Category"
-                            >
+                        onClick={() => handleOpenCategoryModal(category, false)}
+                        className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("Edit Category")}>
+
+                        
                               <Edit2 size={18} />
                             </button>
                             <button
-                              onClick={() => handleDeleteCategoryClick(category._id)}
-                              className="p-2 hover:bg-background rounded-lg text-danger transition-colors"
-                              title="Delete Category"
-                            >
+                        onClick={() => handleDeleteCategoryClick(category._id)}
+                        className="p-2 hover:bg-background rounded-lg text-danger transition-colors" title={t("Delete Category")}>
+
+                        
                               <Trash2 size={18} />
                             </button>
                           </>
-                        )}
+                    }
                       </div>
                     </td>
                   </tr>
-                ))}
+              )}
               </tbody>
             </table>
-          )}
+          }
         </div>
 
         {/* Pagination Controls */}
-        {((activeTab === 'items' && itemsTotalPages > 1) || (activeTab === 'categories' && categoriesTotalPages > 1)) && (
-          <div className="p-4 border-t border-border flex items-center justify-between bg-background">
-            <div className="text-sm text-text-muted">
-              Showing {activeTab === 'items' ? itemsStartIndex + 1 : categoriesStartIndex + 1} to{' '}
-              {activeTab === 'items'
-                ? Math.min(itemsEndIndex, filteredItems.length)
-                : Math.min(categoriesEndIndex, filteredCategories.length)
-              } of{' '}
+        {(activeTab === 'items' && itemsTotalPages > 1 || activeTab === 'categories' && categoriesTotalPages > 1) &&
+        <div className="p-4 border-t border-border flex items-center justify-between bg-background">
+            <div className="text-sm text-text-muted">{t("Showing")}
+            {activeTab === 'items' ? itemsStartIndex + 1 : categoriesStartIndex + 1}{t("to")}{' '}
+              {activeTab === 'items' ?
+            Math.min(itemsEndIndex, filteredItems.length) :
+            Math.min(categoriesEndIndex, filteredCategories.length)
+            }{t("of")}{' '}
               {activeTab === 'items' ? filteredItems.length : filteredCategories.length}{' '}
               {activeTab === 'items' ? 'items' : 'categories'}
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronLeft size={18} />
               </button>
               <div className="flex items-center gap-1">
                 {[...Array(activeTab === 'items' ? itemsTotalPages : categoriesTotalPages)].map((_, i) => {
-                  const page = i + 1;
-                  const totalPages = activeTab === 'items' ? itemsTotalPages : categoriesTotalPages;
-                  if (
-                    page === 1 ||
-                    page === totalPages ||
-                    (page >= currentPage - 1 && page <= currentPage + 1)
-                  ) {
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${currentPage === page
-                          ? 'bg-primary text-white'
-                          : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
-                          }`}
-                      >
+                const page = i + 1;
+                const totalPages = activeTab === 'items' ? itemsTotalPages : categoriesTotalPages;
+                if (
+                page === 1 ||
+                page === totalPages ||
+                page >= currentPage - 1 && page <= currentPage + 1)
+                {
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${currentPage === page ?
+                      'bg-primary text-white' :
+                      'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'}`
+                      }>
+                      
                         {page}
-                      </button>
-                    );
-                  } else if (page === currentPage - 2 || page === currentPage + 2) {
-                    return <span key={page} className="px-2 text-text-muted">...</span>;
-                  }
-                  return null;
-                })}
+                      </button>);
+
+                } else if (page === currentPage - 2 || page === currentPage + 2) {
+                  return <span key={page} className="px-2 text-text-muted">...</span>;
+                }
+                return null;
+              })}
               </div>
               <button
-                onClick={() => setCurrentPage(prev => Math.min(activeTab === 'items' ? itemsTotalPages : categoriesTotalPages, prev + 1))}
-                disabled={currentPage === (activeTab === 'items' ? itemsTotalPages : categoriesTotalPages)}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors"
-              >
+              onClick={() => setCurrentPage((prev) => Math.min(activeTab === 'items' ? itemsTotalPages : categoriesTotalPages, prev + 1))}
+              disabled={currentPage === (activeTab === 'items' ? itemsTotalPages : categoriesTotalPages)}
+              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
+              
                 <ChevronRight size={18} />
               </button>
             </div>
           </div>
-        )}
+        }
       </div>
 
       {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {isModalOpen &&
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center p-6 border-b border-border">
               <h2 className="text-xl font-bold text-text-main">
                 {isViewMode ? 'View Item' : currentItem ? 'Edit Item' : 'Add New Item'}
               </h2>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-text-muted hover:text-text-main transition-colors"
-              >
+              onClick={() => setIsModalOpen(false)}
+              className="text-text-muted hover:text-text-main transition-colors">
+              
                 <X size={24} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Item Name</label>
+                <label className="text-sm font-medium text-text-muted">{t("Item Name")}</label>
                 <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
-                    if (validationErrors.name) setValidationErrors({ ...validationErrors, name: null });
-                  }}
-                  className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.name ? 'border-danger' : 'border-border'
-                    }`}
-                  placeholder="e.g. Butter Chicken"
-                />
-                {validationErrors.name && (
-                  <p className="text-xs text-danger">{validationErrors.name}</p>
-                )}
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  if (validationErrors.name) setValidationErrors({ ...validationErrors, name: null });
+                }}
+                className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.name ? 'border-danger' : 'border-border'}`
+                } placeholder={t("e.g. Butter Chicken")} />
+
+              
+                {validationErrors.name &&
+              <p className="text-xs text-danger">{validationErrors.name}</p>
+              }
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-text-muted">Category</label>
+                  <label className="text-sm font-medium text-text-muted">{t("Category")}</label>
                   <select
-                    required
-                    value={formData.category}
-                    onChange={(e) => {
-                      setFormData({ ...formData, category: e.target.value });
-                      if (validationErrors.category) setValidationErrors({ ...validationErrors, category: null });
-                    }}
-                    className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.category ? 'border-danger' : 'border-border'
-                      }`}
-                  >
-                    <option value="">Select Category</option>
-                    {categories.map(cat => (
-                      <option key={cat._id} value={cat.name}>
+                  required
+                  value={formData.category}
+                  onChange={(e) => {
+                    setFormData({ ...formData, category: e.target.value });
+                    if (validationErrors.category) setValidationErrors({ ...validationErrors, category: null });
+                  }}
+                  className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.category ? 'border-danger' : 'border-border'}`
+                  }>
+                  
+                    <option value="">{t("Select Category")}</option>
+                    {categories.map((cat) =>
+                  <option key={cat._id} value={cat.name}>
                         {cat.name}
                       </option>
-                    ))}
-                  </select>
-                  {validationErrors.category && (
-                    <p className="text-xs text-danger">{validationErrors.category}</p>
                   )}
+                  </select>
+                  {validationErrors.category &&
+                <p className="text-xs text-danger">{validationErrors.category}</p>
+                }
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-text-muted">Price (₹)</label>
+                  <label className="text-sm font-medium text-text-muted">{t("Price (₹)")}</label>
                   <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => {
-                      setFormData({ ...formData, price: e.target.value });
-                      if (validationErrors.price) setValidationErrors({ ...validationErrors, price: null });
-                    }}
-                    className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.price ? 'border-danger' : 'border-border'
-                      }`}
-                    placeholder="0.00"
-                  />
-                  {validationErrors.price && (
-                    <p className="text-xs text-danger">{validationErrors.price}</p>
-                  )}
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={formData.price}
+                  onChange={(e) => {
+                    setFormData({ ...formData, price: e.target.value });
+                    if (validationErrors.price) setValidationErrors({ ...validationErrors, price: null });
+                  }}
+                  className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.price ? 'border-danger' : 'border-border'}`
+                  }
+                  placeholder="0.00" />
+                
+                  {validationErrors.price &&
+                <p className="text-xs text-danger">{validationErrors.price}</p>
+                }
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-text-muted">HSN Code</label>
+                  <label className="text-sm font-medium text-text-muted">{t("HSN Code")}</label>
                   <input
-                    type="text"
-                    value={formData.hsnCode}
-                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
-                    placeholder="e.g. 2106"
-                  />
+                  type="text"
+                  value={formData.hsnCode}
+                  onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                  className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary" placeholder={t("e.g. 2106")} />
+
+                
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-text-muted">GST Rate (%)</label>
+                  <label className="text-sm font-medium text-text-muted">{t("GST Rate (%)")}</label>
                   <select
-                    value={formData.taxRate}
-                    onChange={(e) => setFormData({ ...formData, taxRate: Number(e.target.value) })}
-                    className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
-                  >
+                  value={formData.taxRate}
+                  onChange={(e) => setFormData({ ...formData, taxRate: Number(e.target.value) })}
+                  className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary">
+                  
                     <option value="0">0%</option>
                     <option value="5">5%</option>
                     <option value="12">12%</option>
@@ -887,316 +887,316 @@ const MenuManagement = ({ user, onNavigate }) => {
               <div className="space-y-2 p-4 bg-background rounded-xl border border-border mt-4 mb-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-bold text-text-main">Item Variants (Sizes/Types)</label>
-                    <p className="text-xs text-text-muted">E.g., Mini, Half, Full. Overrides base price.</p>
+                    <label className="text-sm font-bold text-text-main">{t("Item Variants (Sizes/Types)")}</label>
+                    <p className="text-xs text-text-muted">{t("E.g., Mini, Half, Full. Overrides base price.")}</p>
                   </div>
                   <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, variants: [...(formData.variants || []), { name: '', price: '' }] })}
-                    className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-colors font-bold"
-                  >
-                    <Plus size={14} /> Add Variant
-                  </button>
+                  type="button"
+                  onClick={() => setFormData({ ...formData, variants: [...(formData.variants || []), { name: '', price: '' }] })}
+                  className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/20 transition-colors font-bold">
+                  
+                    <Plus size={14} />{t("Add Variant")}
+                </button>
                 </div>
-                {formData.variants && formData.variants.length > 0 && (
-                  <div className="space-y-2 mt-3">
-                    {formData.variants.map((variant, index) => (
-                      <div key={index} className="flex gap-2 items-center">
+                {formData.variants && formData.variants.length > 0 &&
+              <div className="space-y-2 mt-3">
+                    {formData.variants.map((variant, index) =>
+                <div key={index} className="flex gap-2 items-center">
                         <input
-                          type="text"
-                          placeholder="Variant Name (e.g. Half)"
-                          value={variant.name}
-                          onChange={(e) => {
-                            const newVariants = [...formData.variants];
-                            newVariants[index].name = e.target.value;
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none"
-                        />
+                    type="text" placeholder={t("Variant Name (e.g. Half)")}
+
+                    value={variant.name}
+                    onChange={(e) => {
+                      const newVariants = [...formData.variants];
+                      newVariants[index].name = e.target.value;
+                      setFormData({ ...formData, variants: newVariants });
+                    }}
+                    className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none" />
+                  
                         <input
-                          type="number"
-                          placeholder="Price (₹)"
-                          value={variant.price}
-                          min="0"
-                          step="0.01"
-                          onChange={(e) => {
-                            const newVariants = [...formData.variants];
-                            newVariants[index].price = e.target.value;
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="w-28 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none"
-                        />
+                    type="number" placeholder={t("Price (₹)")}
+
+                    value={variant.price}
+                    min="0"
+                    step="0.01"
+                    onChange={(e) => {
+                      const newVariants = [...formData.variants];
+                      newVariants[index].price = e.target.value;
+                      setFormData({ ...formData, variants: newVariants });
+                    }}
+                    className="w-28 bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text-main focus:border-primary focus:outline-none" />
+                  
                         <button
-                          type="button"
-                          onClick={() => {
-                            const newVariants = formData.variants.filter((_, i) => i !== index);
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="p-2 text-danger hover:bg-danger/10 rounded-lg transition-colors"
-                        >
+                    type="button"
+                    onClick={() => {
+                      const newVariants = formData.variants.filter((_, i) => i !== index);
+                      setFormData({ ...formData, variants: newVariants });
+                    }}
+                    className="p-2 text-danger hover:bg-danger/10 rounded-lg transition-colors">
+                    
                           <Trash2 size={18} />
                         </button>
                       </div>
-                    ))}
-                  </div>
                 )}
+                  </div>
+              }
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Type</label>
+                <label className="text-sm font-medium text-text-muted">{t("Type")}</label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="radio"
-                      name="type"
-                      value="veg"
-                      checked={formData.type === 'veg'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      className="text-primary focus:ring-primary"
-                    />
-                    <span className="text-text-main">Veg</span>
+                    type="radio"
+                    name="type"
+                    value="veg"
+                    checked={formData.type === 'veg'}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="text-primary focus:ring-primary" />
+                  
+                    <span className="text-text-main">{t("Veg")}</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="radio"
-                      name="type"
-                      value="non-veg"
-                      checked={formData.type === 'non-veg'}
-                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                      className="text-primary focus:ring-primary"
-                    />
-                    <span className="text-text-main">Non-Veg</span>
+                    type="radio"
+                    name="type"
+                    value="non-veg"
+                    checked={formData.type === 'non-veg'}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="text-primary focus:ring-primary" />
+                  
+                    <span className="text-text-main">{t("Non-Veg")}</span>
                   </label>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-text-muted">Item Image (Optional)</label>
+                <label className="text-sm font-medium text-text-muted">{t("Item Image (Optional)")}</label>
                 <div className="flex gap-2">
                   <input
-                    type="text"
-                    value={formData.image}
-                    onChange={(e) => setFormData({ ...formData, image: formatImageUrl(e.target.value) })}
-                    className="flex-1 bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary text-sm"
-                    placeholder="Paste image URL or upload file..."
-                  />
+                  type="text"
+                  value={formData.image}
+                  onChange={(e) => setFormData({ ...formData, image: formatImageUrl(e.target.value) })}
+                  className="flex-1 bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary text-sm" placeholder={t("Paste image URL or upload file...")} />
+
+                
                   <label className="bg-surface-hover hover:bg-border text-text-main px-3 py-2 rounded-lg cursor-pointer flex items-center gap-1 text-sm border border-border shrink-0 transition-colors">
-                    <span>Upload</span>
+                    <span>{t("Upload")}</span>
                     <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = (event) => {
-                            const img = new Image();
-                            img.onload = () => {
-                              const canvas = document.createElement('canvas');
-                              const MAX_WIDTH = 600;
-                              const MAX_HEIGHT = 600;
-                              let width = img.width;
-                              let height = img.height;
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = (event) => {
+                          const img = new Image();
+                          img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 600;
+                            const MAX_HEIGHT = 600;
+                            let width = img.width;
+                            let height = img.height;
 
-                              if (width > height) {
-                                if (width > MAX_WIDTH) {
-                                  height = Math.round((height * MAX_WIDTH) / width);
-                                  width = MAX_WIDTH;
-                                }
-                              } else {
-                                if (height > MAX_HEIGHT) {
-                                  width = Math.round((width * MAX_HEIGHT) / height);
-                                  height = MAX_HEIGHT;
-                                }
+                            if (width > height) {
+                              if (width > MAX_WIDTH) {
+                                height = Math.round(height * MAX_WIDTH / width);
+                                width = MAX_WIDTH;
                               }
+                            } else {
+                              if (height > MAX_HEIGHT) {
+                                width = Math.round(width * MAX_HEIGHT / height);
+                                height = MAX_HEIGHT;
+                              }
+                            }
 
-                              canvas.width = width;
-                              canvas.height = height;
-                              const ctx = canvas.getContext('2d');
-                              ctx.drawImage(img, 0, 0, width, height);
-                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                              setFormData({ ...formData, image: compressedDataUrl });
-                            };
-                            img.src = event.target.result;
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                            setFormData({ ...formData, image: compressedDataUrl });
                           };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                    />
+                          img.src = event.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                  
                   </label>
                 </div>
-                {formatImageUrl(formData.image) && (
-                  <div className="relative mt-2 w-full h-32 rounded-xl overflow-hidden bg-background border border-border flex items-center justify-center">
+                {formatImageUrl(formData.image) &&
+              <div className="relative mt-2 w-full h-32 rounded-xl overflow-hidden bg-background border border-border flex items-center justify-center">
                     <img src={formatImageUrl(formData.image)} alt="Preview" className="w-full h-full object-contain" />
                     <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, image: '' })}
-                      className="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full hover:bg-black/80 transition-colors text-xs"
-                      title="Remove image"
-                    >
+                  type="button"
+                  onClick={() => setFormData({ ...formData, image: '' })}
+                  className="absolute top-2 right-2 bg-black/60 text-white p-1.5 rounded-full hover:bg-black/80 transition-colors text-xs" title={t("Remove image")}>
+
+                  
                       <X size={14} />
                     </button>
                   </div>
-                )}
+              }
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Description</label>
+                <label className="text-sm font-medium text-text-muted">{t("Description")}</label>
                 <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary h-24 resize-none"
-                  placeholder="Item description..."
-                />
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary h-24 resize-none" placeholder={t("Item description...")} />
+
+              
               </div>
 
               {/* Recipe Builder */}
               <div className="space-y-2 border-t border-border pt-4">
                 <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-text-muted">Recipe (Raw Materials)</label>
-                  {!isViewMode && (
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, recipe: [...formData.recipe, { ingredientId: '', quantityRequired: 1 }] })}
-                      className="text-xs text-primary font-bold hover:underline"
-                    >
-                      + Add Ingredient
-                    </button>
-                  )}
+                  <label className="text-sm font-medium text-text-muted">{t("Recipe (Raw Materials)")}</label>
+                  {!isViewMode &&
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, recipe: [...formData.recipe, { ingredientId: '', quantityRequired: 1 }] })}
+                  className="text-xs text-primary font-bold hover:underline">{t("+ Add Ingredient")}
+
+
+                </button>
+                }
                 </div>
-                {formData.recipe.map((ingredient, index) => (
-                  <div key={index} className="flex gap-2 items-center">
+                {formData.recipe.map((ingredient, index) =>
+              <div key={index} className="flex gap-2 items-center">
                     <select
-                      value={ingredient.ingredientId || (ingredient.ingredientId && ingredient.ingredientId._id)}
-                      onChange={(e) => {
-                        const newRecipe = [...formData.recipe];
-                        newRecipe[index].ingredientId = e.target.value;
-                        setFormData({ ...formData, recipe: newRecipe });
-                      }}
-                      className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-sm"
-                      disabled={isViewMode}
-                    >
-                      <option value="">Select Ingredient...</option>
-                      {inventoryItems.map(inv => (
-                        <option key={inv._id} value={inv._id}>{inv.name} ({inv.unit})</option>
-                      ))}
+                  value={ingredient.ingredientId || ingredient.ingredientId && ingredient.ingredientId._id}
+                  onChange={(e) => {
+                    const newRecipe = [...formData.recipe];
+                    newRecipe[index].ingredientId = e.target.value;
+                    setFormData({ ...formData, recipe: newRecipe });
+                  }}
+                  className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-sm"
+                  disabled={isViewMode}>
+                  
+                      <option value="">{t("Select Ingredient...")}</option>
+                      {inventoryItems.map((inv) =>
+                  <option key={inv._id} value={inv._id}>{inv.name} ({inv.unit})</option>
+                  )}
                     </select>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={ingredient.quantityRequired}
-                      onChange={(e) => {
-                        const newRecipe = [...formData.recipe];
-                        newRecipe[index].quantityRequired = Number(e.target.value);
-                        setFormData({ ...formData, recipe: newRecipe });
-                      }}
-                      className="w-20 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-center"
-                      disabled={isViewMode}
-                    />
-                    {!isViewMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newRecipe = formData.recipe.filter((_, i) => i !== index);
-                          setFormData({ ...formData, recipe: newRecipe });
-                        }}
-                        className="text-danger p-1"
-                      >
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={ingredient.quantityRequired}
+                  onChange={(e) => {
+                    const newRecipe = [...formData.recipe];
+                    newRecipe[index].quantityRequired = Number(e.target.value);
+                    setFormData({ ...formData, recipe: newRecipe });
+                  }}
+                  className="w-20 bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-center"
+                  disabled={isViewMode} />
+                
+                    {!isViewMode &&
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newRecipe = formData.recipe.filter((_, i) => i !== index);
+                    setFormData({ ...formData, recipe: newRecipe });
+                  }}
+                  className="text-danger p-1">
+                  
                         <X size={16} />
                       </button>
-                    )}
+                }
                   </div>
-                ))}
+              )}
               </div>
 
-              {!isViewMode && (
-                <div className="pt-4">
+              {!isViewMode &&
+            <div className="pt-4">
                   <button
-                    type="submit"
-                    className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20"
-                  >
+                type="submit"
+                className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20">
+                
                     {currentItem ? 'Update Item' : 'Create Item'}
                   </button>
                 </div>
-              )}
+            }
             </form>
           </div>
         </div>
-      )}
+      }
 
       {/* Category Modal */}
-      {isCategoryModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      {isCategoryModalOpen &&
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center p-6 border-b border-border">
               <h2 className="text-xl font-bold text-text-main">
                 {isCategoryViewMode ? 'View Category' : currentCategory ? 'Edit Category' : 'Add New Category'}
               </h2>
               <button
-                onClick={() => setIsCategoryModalOpen(false)}
-                className="text-text-muted hover:text-text-main transition-colors"
-              >
+              onClick={() => setIsCategoryModalOpen(false)}
+              className="text-text-muted hover:text-text-main transition-colors">
+              
                 <X size={24} />
               </button>
             </div>
 
             <form onSubmit={handleCategorySubmit} className="p-6 space-y-4 overflow-y-auto">
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Category Name</label>
+                <label className="text-sm font-medium text-text-muted">{t("Category Name")}</label>
                 <input
-                  type="text"
-                  required
-                  value={categoryFormData.name}
-                  onChange={(e) => {
-                    setCategoryFormData({ ...categoryFormData, name: e.target.value });
-                    if (validationErrors.name) setValidationErrors({ ...validationErrors, name: null });
-                  }}
-                  className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.name ? 'border-danger' : 'border-border'
-                    }`}
-                  placeholder="e.g. Main Course"
-                />
-                {validationErrors.name && (
-                  <p className="text-xs text-danger">{validationErrors.name}</p>
-                )}
+                type="text"
+                required
+                value={categoryFormData.name}
+                onChange={(e) => {
+                  setCategoryFormData({ ...categoryFormData, name: e.target.value });
+                  if (validationErrors.name) setValidationErrors({ ...validationErrors, name: null });
+                }}
+                className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.name ? 'border-danger' : 'border-border'}`
+                } placeholder={t("e.g. Main Course")} />
+
+              
+                {validationErrors.name &&
+              <p className="text-xs text-danger">{validationErrors.name}</p>
+              }
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Description</label>
+                <label className="text-sm font-medium text-text-muted">{t("Description")}</label>
                 <textarea
-                  value={categoryFormData.description}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary h-24 resize-none"
-                  placeholder="Category description..."
-                />
+                value={categoryFormData.description}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary h-24 resize-none" placeholder={t("Category description...")} />
+
+              
               </div>
 
               <div className="space-y-1">
-                <label className="text-sm font-medium text-text-muted">Sort Order</label>
+                <label className="text-sm font-medium text-text-muted">{t("Sort Order")}</label>
                 <input
-                  type="number"
-                  value={categoryFormData.sortOrder}
-                  onChange={(e) => setCategoryFormData({ ...categoryFormData, sortOrder: e.target.value })}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
-                  placeholder="0"
-                />
+                type="number"
+                value={categoryFormData.sortOrder}
+                onChange={(e) => setCategoryFormData({ ...categoryFormData, sortOrder: e.target.value })}
+                className="w-full bg-background border border-border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary"
+                placeholder="0" />
+              
               </div>
 
-              {!isCategoryViewMode && (
-                <div className="pt-4">
+              {!isCategoryViewMode &&
+            <div className="pt-4">
                   <button
-                    type="submit"
-                    className="w-full bg-secondary text-white py-3 rounded-xl font-bold hover:bg-accent transition-colors shadow-lg shadow-secondary/20"
-                  >
+                type="submit"
+                className="w-full bg-secondary text-white py-3 rounded-xl font-bold hover:bg-accent transition-colors shadow-lg shadow-secondary/20">
+                
                     {currentCategory ? 'Update Category' : 'Create Category'}
                   </button>
                 </div>
-              )}
+            }
             </form>
           </div>
         </div>
-      )}
+      }
 
       <ConfirmationModal
         isOpen={deleteModal.isOpen}
@@ -1205,19 +1205,18 @@ const MenuManagement = ({ user, onNavigate }) => {
         title={deleteModal.deleteAll ? "Delete All Items" : deleteModal.itemId ? "Delete Item" : "Delete Category"}
         message={deleteModal.deleteAll ? "Are you sure you want to delete ALL menu items? This action cannot be undone and will empty your entire menu." : `Are you sure you want to delete this ${deleteModal.itemId ? 'menu item' : 'category'}? This action cannot be undone.`}
         confirmText="Delete"
-        isDanger={true}
-      />
+        isDanger={true} />
+      
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
-  );
+      {toast &&
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast(null)} />
+
+      }
+    </div>);
+
 };
 
 export default MenuManagement;
-

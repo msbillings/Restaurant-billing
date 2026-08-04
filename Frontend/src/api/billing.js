@@ -16,6 +16,9 @@ export const saveOrder = async (orderData) => {
       // CRITICAL: Queue the order for sync when back online
       await addToSyncQueue('/bills/save', 'post', orderData);
       
+      console.warn('[Billing API] Backend unreachable! Caching order locally.');
+      alert('WARNING: Backend API is unreachable (Offline Mode). Your order is saved locally but will not appear in Active Orders until backend is connected.');
+      
       // Return a fake order so the UI doesn't break
       const offlineOrder = {
         _id: 'offline_' + Date.now(),
@@ -134,8 +137,11 @@ export const deleteBill = async (id, password) => {
   return response.data;
 };
 
-export const getDailyStats = async () => {
-  const response = await api.get('/bills/stats');
+export const getDailyStats = async (startDate, endDate) => {
+  const params = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  const response = await api.get('/bills/stats', { params });
   return response.data;
 };
 

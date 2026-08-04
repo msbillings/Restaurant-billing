@@ -1,16 +1,12 @@
-import React from 'react';
+import { useLanguage } from "../context/LanguageContext";import React from 'react';
 import { ArrowLeft, Clock, Wrench } from 'lucide-react';
+import BackButton from './common/BackButton';
 
-const PlaceholderScreen = ({ onNavigate, title, description, icon: Icon = Wrench }) => {
+const PlaceholderScreen = ({ onNavigate, onGoBack, title, description, icon: Icon = Wrench }) => {const { t } = useLanguage();
   return (
     <div className="h-full flex flex-col bg-gray-50 p-6">
       <div className="flex items-center gap-4 mb-8">
-        <button 
-          onClick={() => onNavigate('operations')} 
-          className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-        >
-          <ArrowLeft size={24} className="text-gray-600" />
-        </button>
+        <BackButton onClick={onGoBack} />
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           {title}
         </h1>
@@ -25,11 +21,11 @@ const PlaceholderScreen = ({ onNavigate, title, description, icon: Icon = Wrench
           {description || "This feature is currently under active development. Stay tuned for upcoming updates!"}
         </p>
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-full font-bold text-sm border border-amber-200">
-          <Clock size={16} /> Coming Soon in Next Update
+          <Clock size={16} />{t("Coming Soon in Next Update")}
         </div>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default PlaceholderScreen;
