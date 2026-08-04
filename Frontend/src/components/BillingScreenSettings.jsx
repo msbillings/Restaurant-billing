@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import { ArrowLeft, Save, MonitorSmartphone, LayoutGrid, List } from 'lucide-react';
 
-const BillingScreenSettings = ({ onNavigate }) => {const { t } = useLanguage();
+const BillingScreenSettings = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [settings, setSettings] = useState({
     theme: 'light',
     layout: 'grid',

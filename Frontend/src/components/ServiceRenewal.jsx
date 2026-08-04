@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React from 'reac
 import BackButton from './common/BackButton';
 import { ArrowLeft, Clock, ShieldCheck, CreditCard, ChevronRight } from 'lucide-react';
 
-const ServiceRenewal = ({ onNavigate }) => {const { t } = useLanguage();
+const ServiceRenewal = ({ onNavigate, onGoBack }) =>{const { t } = useLanguage();
   return (
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
       <div className="flex items-center justify-between mb-8 shrink-0">

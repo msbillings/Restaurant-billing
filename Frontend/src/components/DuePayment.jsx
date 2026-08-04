@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { Plus, ArrowLeft, ArrowUpRight, ArrowDownLeft, Search, UserCheck } from 'lucide-react';
 
-const DuePayment = ({ onNavigate }) => {const { t } = useLanguage();
+const DuePayment = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

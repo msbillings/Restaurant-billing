@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import { ArrowLeft, Save, Plus, Trash2, GripVertical } from 'lucide-react';
 
-const CustomStatus = ({ onNavigate }) => {const { t } = useLanguage();
+const CustomStatus = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [statuses, setStatuses] = useState([
   { id: 1, name: 'Pending', color: 'bg-yellow-500', isDeletable: false },
   { id: 2, name: 'Preparing', color: 'bg-orange-500', isDeletable: false },

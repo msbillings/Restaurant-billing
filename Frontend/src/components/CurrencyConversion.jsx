@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import { ArrowLeft, Save, CircleDollarSign, RefreshCw, Check, Search } from 'lucide-react';
 
-const CurrencyConversion = ({ onNavigate }) => {const { t } = useLanguage();
+const CurrencyConversion = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [baseCurrency, setBaseCurrency] = useState(localStorage.getItem('primaryCurrency') || 'INR');
   const defaultCurrencies = [
     { code: 'USD', name: 'US Dollar', rate: 0.012, enabled: true },

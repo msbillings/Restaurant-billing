@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { Plus, ArrowLeft, Calendar, Clock, Users, Phone, Check, X, MapPin } from 'lucide-react';
 
-const Reservation = ({ onNavigate }) => {const { t } = useLanguage();
+const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);

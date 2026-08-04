@@ -6,6 +6,7 @@ import {
   UtensilsCrossed, Printer, Percent, Tags, MonitorSmartphone, Settings as SettingsIcon,
   Globe, ToggleLeft, Clock, ListChecks, Shield, Award, LineChart } from
 'lucide-react';
+import BackButton from './common/BackButton';
 
 const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLanguage();
   const operationsFeatures = [
@@ -87,7 +88,10 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
       
       <div className="mb-8">
-        <h2 className="text-sm font-bold text-gray-800 mb-4 tracking-wide">{t("Operations")}</h2>
+        <div className="flex items-center gap-4 mb-4">
+          <BackButton onClick={onGoBack} />
+          <h2 className="text-sm font-bold text-gray-800 tracking-wide">{t("Operations")}</h2>
+        </div>
         {renderGrid(operationsFeatures)}
       </div>
 

@@ -15,8 +15,9 @@ import {
   ChevronRight } from
 'lucide-react';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
-const PickupOrders = () => {const { t } = useLanguage();
+const PickupOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState('all'); // all, Swiggy, Zomato, Direct, Other
@@ -128,9 +129,12 @@ const PickupOrders = () => {const { t } = useLanguage();
   return (
     <div className="h-full flex flex-col bg-background p-6">
       <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-        <div>
-          <h1 className="text-2xl font-bold text-text-main">{t("Pickup Orders")}</h1>
-          <p className="text-text-muted">{t("View and manage pickup orders")}</p>
+        <div className="flex items-center gap-4">
+          <BackButton onClick={onGoBack} />
+          <div>
+            <h1 className="text-2xl font-bold text-text-main">{t("Pickup Orders")}</h1>
+            <p className="text-text-muted">{t("View and manage pickup orders")}</p>
+          </div>
         </div>
         
         <div className="flex gap-4">

@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, RefreshCw, CheckCircle, Clock, Database, Cloud, AlertCircle, Server } from 'lucide-react';
 
-const ManualSync = ({ onNavigate }) => {const { t } = useLanguage();
+const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [syncStatus, setSyncStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);

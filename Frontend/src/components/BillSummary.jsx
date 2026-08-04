@@ -53,7 +53,6 @@ const BillSummary = ({
     }
   }, [cart.length]);
 
-  const [paymentMode, setPaymentMode] = useState('Cash');
   const [isPaid, setIsPaid] = useState(false);
   const [useLoyalty, setUseLoyalty] = useState(true);
   const [sendSms, setSendSms] = useState(true);
@@ -161,29 +160,26 @@ const BillSummary = ({
 
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden border-l border-gray-300">
-      
+
       {/* Top Tabs */}
       <div className="flex w-[calc(100%-24px)] mx-3 mt-3 mb-1 bg-gray-100 h-10 shrink-0 p-1 gap-1 rounded-xl shadow-inner">
         <button
           onClick={() => !isLocked && setBillType('Dine-In')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${
-          billType === 'Dine-In' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Dine-In' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Dine In")}
 
 
         </button>
         <button
           onClick={() => !isLocked && setBillType('Delivery')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${
-          billType === 'Delivery' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Delivery' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Delivery")}
 
 
         </button>
         <button
           onClick={() => !isLocked && setBillType('Takeaway')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${
-          billType === 'Takeaway' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Takeaway' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Pick Up")}
 
 
@@ -196,7 +192,11 @@ const BillSummary = ({
           <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
             <span className="text-[9px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
             <span className="text-[13px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
-              {activeTable ? activeTable.includes('-') ? activeTable.split('-').pop().trim().replace('Table ', 'T') : activeTable.substring(0, 4) : '--'}
+              {activeTable ? (() => {
+                const p = activeTable.includes('-') ? activeTable.split('-').pop().trim() : activeTable;
+                const m = p.match(/^([a-zA-Z]+).*?(\d+)$/);
+                return m ? `${m[1][0].toUpperCase()} ${m[2]}` : p.substring(0, 4);
+              })() : '--'}
             </span>
           </div>
           <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-12 h-12 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
@@ -213,39 +213,39 @@ const BillSummary = ({
 
         <div className="flex-1 flex justify-end">
           {activeTable ?
-          <div className="flex flex-col items-end mr-2">
+            <div className="flex flex-col items-end mr-2">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("Current Table")}</span>
               <span className="text-[13px] font-black text-gray-700 truncate max-w-[180px]" title={activeTable}>{activeTable}</span>
             </div> :
-          <div className="relative h-10">
-            <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all shadow-md flex items-center justify-center px-4 animate-pulse gap-1.5">
-              {t("Select Table")}
-              <ChevronDown size={16} />
-            </button>
-            <select
-              value=""
-              onChange={(e) => onSelectTable && onSelectTable(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-            >
-              <option value="" disabled>{t("Select Table")}</option>
-              {floors.map((floor, index) => {
-                const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
-                if (!hasItems) return null;
-                return (
-                  <optgroup key={`f-${index}`} label={floor.name}>
-                    {floor.tables?.map((tObj, i) => <option key={`t-${i}`} value={tObj.name}>{tObj.name} {t("(Table)")}</option>)}
-                    {floor.cabins?.map((cObj, i) => <option key={`c-${i}`} value={cObj.name}>{cObj.name} {t("(Cabin)")}</option>)}
-                    {floor.sofas?.map((sObj, i) => <option key={`s-${i}`} value={sObj.name}>{sObj.name} {t("(Sofa)")}</option>)}
-                  </optgroup>
-                );
-              })}
-              {!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0) && [...Array(20)].map((_, i) => (
-                <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                  {t('table')} {String(i + 1).padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-          </div>
+            <div className="relative h-10">
+              <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all shadow-md flex items-center justify-center px-4 animate-pulse gap-1.5">
+                {t("Select Table")}
+                <ChevronDown size={16} />
+              </button>
+              <select
+                value=""
+                onChange={(e) => onSelectTable && onSelectTable(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              >
+                <option value="" disabled>{t("Select Table")}</option>
+                {floors.map((floor, index) => {
+                  const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
+                  if (!hasItems) return null;
+                  return (
+                    <optgroup key={`f-${index}`} label={floor.name}>
+                      {floor.tables?.map((tObj, i) => <option key={`t-${i}`} value={tObj.name}>{tObj.name} {t("(Table)")}</option>)}
+                      {floor.cabins?.map((cObj, i) => <option key={`c-${i}`} value={cObj.name}>{cObj.name} {t("(Cabin)")}</option>)}
+                      {floor.sofas?.map((sObj, i) => <option key={`s-${i}`} value={sObj.name}>{sObj.name} {t("(Sofa)")}</option>)}
+                    </optgroup>
+                  );
+                })}
+                {!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0) && [...Array(20)].map((_, i) => (
+                  <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
+                    {t('table')} {String(i + 1).padStart(2, '0')}
+                  </option>
+                ))}
+              </select>
+            </div>
           }
         </div>
       </div>
@@ -261,21 +261,21 @@ const BillSummary = ({
       {/* Cart Items List */}
       <div className="flex-1 overflow-y-auto bg-white p-1">
         {cart.length === 0 ?
-        <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <span className="text-sm">{t("No items added")}</span>
           </div> :
 
-        cart.map((item, index) =>
-        <div key={index} className="flex items-start py-2 px-2 border-b border-gray-100 hover:bg-gray-50 transition-colors group">
+          cart.map((item, index) =>
+            <div key={index} className="flex items-start py-2 px-2 border-b border-gray-100 hover:bg-gray-50 transition-colors group">
               {/* Delete Icon */}
               <button
-            onClick={() => updateQuantity(item._id || item.name, -item.quantity)}
-            disabled={isLocked}
-            className="w-6 h-6 rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center shrink-0 mt-0 mr-1 transition-all disabled:opacity-50">
-            
+                onClick={() => updateQuantity(item._id || item.name, -item.quantity)}
+                disabled={isLocked}
+                className="w-6 h-6 rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center shrink-0 mt-0 mr-1 transition-all disabled:opacity-50">
+
                 <X size={14} strokeWidth={3} />
               </button>
-              
+
               {/* Item Name */}
               <div className="flex-1 pr-2">
                 <div className="flex items-center gap-1.5">
@@ -290,7 +290,7 @@ const BillSummary = ({
                   </button>
                 </div>
                 {item.specialNote ? (
-                  <div 
+                  <div
                     onClick={() => handleItemNoteClick(item)}
                     className="text-[11px] text-amber-600 font-bold cursor-pointer hover:underline mt-0.5 flex items-center gap-1"
                   >
@@ -302,18 +302,18 @@ const BillSummary = ({
               {/* Quantity Controls */}
               <div className="flex items-center gap-2 w-[85px] shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
                 <button
-              onClick={() => updateQuantity(item._id || item.name, -1)}
-              disabled={isLocked}
-              className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
-              
+                  onClick={() => updateQuantity(item._id || item.name, -1)}
+                  disabled={isLocked}
+                  className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
+
                   <Minus size={14} />
                 </button>
                 <span className="font-bold text-sm text-gray-800 shrink-0 w-4 text-center">{item.quantity}</span>
                 <button
-              onClick={() => updateQuantity(item._id || item.name, 1)}
-              disabled={isLocked}
-              className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
-              
+                  onClick={() => updateQuantity(item._id || item.name, 1)}
+                  disabled={isLocked}
+                  className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
+
                   <Plus size={14} />
                 </button>
               </div>
@@ -324,54 +324,59 @@ const BillSummary = ({
                 <div className="text-[13px] font-bold text-gray-700">{(item.price * item.quantity).toFixed(2)}</div>
               </div>
             </div>
-        )
+          )
         }
         <div ref={cartEndRef} />
       </div>
 
       {/* Bottom Action Area */}
       <div className="shrink-0 flex flex-col w-full bg-white shadow-[0_-4px_15px_rgba(0,0,0,0.05)] z-20">
-        
+
         {/* Collapsible Charges Section */}
         <div className="bg-gray-50 flex flex-col relative w-full border-b border-gray-200">
           <button
             className="w-full h-6 bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors border-t border-gray-200"
             onClick={() => setShowCharges(!showCharges)}>
-            
+
             {showCharges ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </button>
-          
+
           {showCharges &&
-          <div className="flex flex-col px-4 py-3 space-y-3 text-sm text-gray-700">
+            <div className="flex flex-col px-4 py-3 space-y-3 text-sm text-gray-700">
               <div className="flex items-center justify-between font-bold">
                 <span className="w-1/3">{t("Sub Total")}</span>
                 <span className="w-1/3 text-center">{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
                 <span className="w-1/3 text-right">{subtotal.toFixed(2)}</span>
               </div>
               <div className="flex items-center justify-between font-bold">
-                <span className="w-1/3 flex items-center gap-1">{t("Discount")}<button className="text-primary underline text-[11px] ml-1 hover:text-red-700" onClick={() => setShowDiscountInput(!showDiscountInput)}>{t("More")}</button></span>
+                <span className="w-1/3 flex items-center gap-1">{t("Discount")}<button className="text-primary underline text-[11px] ml-1 hover:text-red-700" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button></span>
                 <span className="w-1/3 text-center"></span>
                 <span className="w-1/3 text-right text-green-600">({discountAmount.toFixed(2)})</span>
               </div>
               {showDiscountInput &&
-            <div className="flex items-center justify-between bg-gray-200/50 p-2 rounded-lg gap-2 border border-gray-200">
-                   <select
-                className="w-1/2 bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1"
-                value={discount?.type || 'percentage'}
-                onChange={(e) => setDiscount({ ...(discount || {}), type: e.target.value })}>
-                
-                     <option value="percentage">{t("% Percent")}</option>
-                     <option value="flat">{currencySymbol}{t("Flat")}</option>
-                   </select>
-                   <input
-                type="number"
-                className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
-                placeholder={t('Value')}
-                value={discount?.value || ''}
-                onChange={(e) => setDiscount({ ...(discount || {}), value: e.target.value })} />
-              
+                <div className="flex items-center justify-between bg-gray-200/50 p-2 rounded-lg gap-2 border border-gray-200">
+                  <select
+                    className="w-1/2 bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1"
+                    value={discount?.type || 'percentage'}
+                    onChange={(e) => setDiscount({ ...(discount || {}), type: e.target.value })}>
+
+                    <option value="percentage">{t("% Percent")}</option>
+                    <option value="flat">{currencySymbol}{t("Flat")}</option>
+                  </select>
+                  <input
+                    type="number"
+                    className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
+                    placeholder={t('Value')}
+                    value={discount?.value || ''}
+                    onChange={(e) => setDiscount({ ...(discount || {}), value: e.target.value })} />
+
                 </div>
-            }
+              }
+              <div className="flex items-center justify-between font-bold">
+                <span className="w-1/3">{t("GST")} {taxRate ? `(${taxRate}%)` : ''}</span>
+                <span className="w-1/3 text-center"></span>
+                <span className="w-1/3 text-right">{(taxAmount || 0).toFixed(2)}</span>
+              </div>
               <div className="flex items-center justify-between font-bold">
                 <span className="w-2/3">{t("Delivery Charge")}</span>
                 <span className="w-1/3 text-right">
@@ -387,7 +392,7 @@ const BillSummary = ({
             </div>
           }
           {showCharges &&
-          <div className="w-full h-3 bg-gray-50 flex items-center justify-center text-gray-500 border-t border-gray-200">
+            <div className="w-full h-3 bg-gray-50 flex items-center justify-center text-gray-500 border-t border-gray-200">
             </div>
           }
         </div>
@@ -411,23 +416,6 @@ const BillSummary = ({
           </div>
         </div>
 
-        {/* Row 2: Payment Modes */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50 gap-1.5">
-          {['Cash', 'Card', 'Due', 'Other', 'Part'].map((mode) =>
-          <button
-            key={mode}
-            onClick={() => setPaymentMode(mode)}
-            className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border ${
-            paymentMode === mode ?
-            'bg-white border-primary text-primary shadow-[0_2px_5px_rgba(239,68,68,0.15)]' :
-            'bg-transparent border-transparent text-gray-500 hover:bg-gray-200/50'}`
-            }>
-            
-              {t(mode)}
-            </button>
-          )}
-        </div>
-
         {/* Row 3: Settlement */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <span className="text-gray-600 text-[13px] font-bold uppercase tracking-wider">{t("Settlement Amount")}</span>
@@ -437,7 +425,7 @@ const BillSummary = ({
               value={settlementAmount}
               onChange={(e) => setSettlementAmount(e.target.value)}
               className="w-[100px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-[14px]" />
-            
+
             <button
               onClick={(e) => {
                 e.preventDefault();
@@ -485,7 +473,7 @@ const BillSummary = ({
 
 
           </button>
-          
+
           <button
             onClick={onPrintKOT}
             disabled={loading || cart.length === 0}
@@ -511,79 +499,79 @@ const BillSummary = ({
 
       {/* --- MODALS --- */}
       {showPaxModal &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <Users size={18} className="text-primary" />{t("Number of Persons (PAX)")}
 
-            </h3>
+              </h3>
               <button onClick={() => setShowPaxModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
               </button>
             </div>
             <div className="p-6">
               <input
-              type="number"
-              value={paxInput}
-              onChange={(e) => setPaxInput(e.target.value)}
-              placeholder={t('Enter PAX')}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all text-center text-2xl font-black text-gray-800"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && submitPax()} />
-            
+                type="number"
+                value={paxInput}
+                onChange={(e) => setPaxInput(e.target.value)}
+                placeholder={t('Enter PAX')}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all text-center text-2xl font-black text-gray-800"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && submitPax()} />
+
               <button
-              onClick={submitPax}
-              className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
+                onClick={submitPax}
+                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>
       }
 
       {showWaiterModal &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <UserCheck size={18} className="text-primary" />{t("Assign Waiter / Captain")}
 
-            </h3>
+              </h3>
               <button onClick={() => setShowWaiterModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
                 <X size={20} />
               </button>
             </div>
             <div className="p-6">
               <input
-              type="text"
-              value={waiterInput}
-              onChange={(e) => setWaiterInput(e.target.value)}
-              placeholder={t('Enter Name')}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-bold text-gray-800"
-              autoFocus
-              onKeyDown={(e) => e.key === 'Enter' && submitWaiter()} />
-            
+                type="text"
+                value={waiterInput}
+                onChange={(e) => setWaiterInput(e.target.value)}
+                placeholder={t('Enter Name')}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-bold text-gray-800"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && submitWaiter()} />
+
               <button
-              onClick={submitWaiter}
-              className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
+                onClick={submitWaiter}
+                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>
       }
 
       {showNoteModal &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <Clipboard size={18} className="text-primary" />
-                {selectedCartItemForNote 
-                  ? `${t("Note for")} ${selectedCartItemForNote.name}` 
+                {selectedCartItemForNote
+                  ? `${t("Note for")} ${selectedCartItemForNote.name}`
                   : t("Special Note for Kitchen")}
               </h3>
               <button onClick={() => setShowNoteModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
@@ -592,18 +580,18 @@ const BillSummary = ({
             </div>
             <div className="p-6">
               <textarea
-              value={noteInput}
-              onChange={(e) => setNoteInput(e.target.value)}
-              placeholder={t('Special requests, allergies...')}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-medium text-gray-800 min-h-[120px] resize-none"
-              autoFocus />
-            
+                value={noteInput}
+                onChange={(e) => setNoteInput(e.target.value)}
+                placeholder={t('Special requests, allergies...')}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-medium text-gray-800 min-h-[120px] resize-none"
+                autoFocus />
+
               <button
-              onClick={submitNote}
-              className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Save Note")}
+                onClick={submitNote}
+                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Save Note")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>
@@ -612,38 +600,38 @@ const BillSummary = ({
 
 
       {showSplitCalcModal &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-red-50 to-orange-50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <PieChart size={18} className="text-primary" />{t("Split Bill Calculator")}
 
-            </h3>
+              </h3>
               <button onClick={() => setShowSplitCalcModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-white">
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <span className="text-gray-500 font-semibold">{t("Total Amount")}</span>
                 <span className="text-xl font-black text-gray-800">{currencySymbol}{total.toFixed(2)}</span>
               </div>
-              
+
               <div className="mb-8">
                 <label className="block text-gray-500 font-semibold mb-3 text-center">{t("Split equally by how many people?")}</label>
                 <div className="flex items-center justify-center gap-4">
                   <button
-                  onClick={() => setSplitWays(Math.max(1, splitWays - 1))}
-                  className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
-                  
+                    onClick={() => setSplitWays(Math.max(1, splitWays - 1))}
+                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
+
                     <Minus size={20} />
                   </button>
                   <span className="text-3xl font-black w-16 text-center text-primary">{splitWays}</span>
                   <button
-                  onClick={() => setSplitWays(splitWays + 1)}
-                  className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
-                  
+                    onClick={() => setSplitWays(splitWays + 1)}
+                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
+
                     <Plus size={20} />
                   </button>
                 </div>
@@ -657,11 +645,11 @@ const BillSummary = ({
               </div>
 
               <button
-              onClick={() => setShowSplitCalcModal(false)}
-              className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Done")}
+                onClick={() => setShowSplitCalcModal(false)}
+                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Done")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>

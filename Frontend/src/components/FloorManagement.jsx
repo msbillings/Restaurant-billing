@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2 } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { io } from 'socket.io-client';
 import Toast from './Toast';
+import Invoice from './Invoice';
 
 const FloorManagement = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -19,6 +20,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [renameSpaceModal, setRenameSpaceModal] = useState({ isOpen: false, id: null, type: '', name: '' });
   const [merging, setMerging] = useState(false);
   const [showAIInsights, setShowAIInsights] = useState(false);
+  const [selectedBillForPrint, setSelectedBillForPrint] = useState(null);
+  const [selectedOrderForView, setSelectedOrderForView] = useState(null);
+
+  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
 
   const [floors, setFloors] = useState(() => {
     const saved = localStorage.getItem('msbillings_spaces');
@@ -43,6 +48,11 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa' }]
     }];
   });
+
+  const floorsRef = React.useRef(floors);
+  useEffect(() => {
+    floorsRef.current = floors;
+  }, [floors]);
 
   const [activeFloorId, setActiveFloorId] = useState(() => floors[0]?.id || null);
 
@@ -166,11 +176,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       onConfirm: (name) => {
         if (name && name.trim() !== '') {
           const newFloorId = Date.now().toString();
-          setFloors((prev) => {
-            const next = [...prev, { id: newFloorId, name: name.trim(), tables: [], cabins: [], sofas: [] }];
-            saveSpacesToCloud(next);
-            return next;
-          });
+          const next = [...floorsRef.current, { id: newFloorId, name: name.trim(), tables: [], cabins: [], sofas: [] }];
+          setFloors(next);
+          saveSpacesToCloud(next);
           setActiveFloorId(newFloorId);
           setToast({ message: 'Floor added successfully!', type: 'success' });
         }
@@ -185,14 +193,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       title: 'Remove Floor',
       message: 'Are you sure you want to completely remove this floor and all its tables?',
       onConfirm: () => {
-        setFloors((prev) => {
-          const nextFloors = prev.filter((f) => f.id !== id);
-          if (activeFloorId === id) {
-            setActiveFloorId(nextFloors[0]?.id || null);
-          }
-          saveSpacesToCloud(nextFloors);
-          return nextFloors;
-        });
+        const nextFloors = floorsRef.current.filter((f) => f.id !== id);
+        setFloors(nextFloors);
+        if (activeFloorId === id) {
+          setActiveFloorId(nextFloors[0]?.id || null);
+        }
+        saveSpacesToCloud(nextFloors);
       }
     });
   };
@@ -205,19 +211,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const submitAddSpace = () => {
     const { name, type } = addSpaceModal;
     if (name && name.trim() !== '' && type && type.trim() !== '') {
-      setFloors((prev) => {
-        const next = prev.map((floor) => {
-          if (floor.id === activeFloorId) {
-            return {
-              ...floor,
-              spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim() }]
-            };
-          }
-          return floor;
-        });
-        saveSpacesToCloud(next);
-        return next;
+      const next = floorsRef.current.map((floor) => {
+        if (floor.id === activeFloorId) {
+          return {
+            ...floor,
+            spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim() }]
+          };
+        }
+        return floor;
       });
+      setFloors(next);
+      saveSpacesToCloud(next);
       setAddSpaceModal({ isOpen: false, name: '', type: 'Table' });
       setToast({ message: `${type} added successfully!`, type: 'success' });
     }
@@ -230,24 +234,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       title: `Remove ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       message: `Are you sure you want to remove this ${type}?`,
       onConfirm: () => {
-        setFloors((prev) => {
-          const next = prev.map((floor) => {
-            if (floor.id === activeFloorId) {
-              const key = type + 's';
-              const newFloor = { ...floor };
-              if (newFloor[key]) {
-                newFloor[key] = newFloor[key].filter((item) => item.id !== id);
-              }
-              if (newFloor.spaces) {
-                newFloor.spaces = newFloor.spaces.filter((item) => item.id !== id);
-              }
-              return newFloor;
+        const next = floorsRef.current.map((floor) => {
+          if (floor.id === activeFloorId) {
+            const key = type + 's';
+            const newFloor = { ...floor };
+            if (newFloor[key]) {
+              newFloor[key] = newFloor[key].filter((item) => item.id !== id);
             }
-            return floor;
-          });
-          saveSpacesToCloud(next);
-          return next;
+            if (newFloor.spaces) {
+              newFloor.spaces = newFloor.spaces.filter((item) => item.id !== id);
+            }
+            return newFloor;
+          }
+          return floor;
         });
+        setFloors(next);
+        saveSpacesToCloud(next);
       }
     });
   };
@@ -260,24 +262,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const submitRenameSpace = () => {
     const { id, type, name } = renameSpaceModal;
     if (name && name.trim() !== '') {
-      setFloors((prev) => {
-        const next = prev.map((floor) => {
-          if (floor.id === activeFloorId) {
-            const key = type + 's';
-            const newFloor = { ...floor };
-            if (newFloor[key]) {
-              newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: name.trim() } : item);
-            }
-            if (newFloor.spaces) {
-              newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: name.trim() } : item);
-            }
-            return newFloor;
+      const next = floorsRef.current.map((floor) => {
+        if (floor.id === activeFloorId) {
+          const key = type + 's';
+          const newFloor = { ...floor };
+          if (newFloor[key]) {
+            newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: name.trim() } : item);
           }
-          return floor;
-        });
-        saveSpacesToCloud(next);
-        return next;
+          if (newFloor.spaces) {
+            newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: name.trim() } : item);
+          }
+          return newFloor;
+        }
+        return floor;
       });
+      setFloors(next);
+      saveSpacesToCloud(next);
       setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '' });
       setToast({ message: `${type} renamed successfully!`, type: 'success' });
     }
@@ -290,23 +290,21 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       title: `Remove ${typeName} Category`,
       message: `Are you sure you want to delete ALL spaces inside the ${typeName} category?`,
       onConfirm: () => {
-        setFloors((prev) => {
-          const next = prev.map((floor) => {
-            if (floor.id === activeFloorId) {
-              const newFloor = { ...floor };
-              if (typeName.toLowerCase() === 'table' && newFloor.tables) newFloor.tables = [];
-              if (typeName.toLowerCase() === 'cabin' && newFloor.cabins) newFloor.cabins = [];
-              if (typeName.toLowerCase() === 'sofa' && newFloor.sofas) newFloor.sofas = [];
-              if (newFloor.spaces) {
-                newFloor.spaces = newFloor.spaces.filter((s) => (s.type || '').toUpperCase() !== typeName.toUpperCase());
-              }
-              return newFloor;
+        const next = floorsRef.current.map((floor) => {
+          if (floor.id === activeFloorId) {
+            const newFloor = { ...floor };
+            if (typeName.toLowerCase() === 'table' && newFloor.tables) newFloor.tables = [];
+            if (typeName.toLowerCase() === 'cabin' && newFloor.cabins) newFloor.cabins = [];
+            if (typeName.toLowerCase() === 'sofa' && newFloor.sofas) newFloor.sofas = [];
+            if (newFloor.spaces) {
+              newFloor.spaces = newFloor.spaces.filter((s) => (s.type || '').toUpperCase() !== typeName.toUpperCase());
             }
-            return floor;
-          });
-          saveSpacesToCloud(next);
-          return next;
+            return newFloor;
+          }
+          return floor;
         });
+        setFloors(next);
+        saveSpacesToCloud(next);
       }
     });
   };
@@ -494,16 +492,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                onClick={(e) => {e.stopPropagation();handleSpaceClick(uniqueSpaceName);}}
+                onClick={(e) => {e.stopPropagation(); setSelectedOrderForView(activeOrder);}}
                 className="bg-white rounded-full p-1.5 hover:text-emerald-600 transition-colors shadow-sm text-gray-500" title={t("View Order Details")}>
-
-                
                   <Eye size={14} strokeWidth={2.5} />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handlePrintDirect(uniqueSpaceName, activeOrder);
+                    setSelectedBillForPrint(activeOrder);
                   }}
                   className="bg-white rounded-full p-1.5 hover:text-blue-600 hover:bg-blue-50 transition-colors shadow-sm text-gray-500" 
                   title={t("Print KOT & Bill directly")}>
@@ -962,6 +958,125 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           </div>
         </div>
       }
+
+      {/* Invoice Modal for Print Overview */}
+      {selectedBillForPrint && (
+        <Invoice 
+          bill={selectedBillForPrint} 
+          onClose={() => setSelectedBillForPrint(null)} 
+        />
+      )}
+
+      {/* Beautiful View Order Modal */}
+      {selectedOrderForView && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex justify-between items-center text-white shrink-0">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Receipt size={22} />
+                  {t("Order Overview")}
+                </h2>
+                <p className="text-emerald-100 text-sm font-medium mt-0.5">
+                  {selectedOrderForView.table} • #{selectedOrderForView.billNo || 'PENDING'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedOrderForView(null)}
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50">
+              <div className="space-y-4">
+                {selectedOrderForView.items?.map((item, index) => (
+                  <div key={index} className="flex justify-between items-start bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="flex-1 pr-3">
+                      <h4 className="font-bold text-gray-800 text-sm">{item.name}</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {item.quantity} × {currencySymbol}{item.price.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-bold text-gray-800 text-sm whitespace-nowrap">
+                        {currencySymbol}{(item.quantity * item.price).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Footer Summary */}
+            {(() => {
+              const itemsSubtotal = selectedOrderForView.items?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0;
+              const subTotal = selectedOrderForView.subtotal || itemsSubtotal || 0;
+              
+              let taxAmount = selectedOrderForView.taxTotal || 0;
+              let serviceCharge = selectedOrderForView.serviceCharge || 0;
+              let packagingCharge = selectedOrderForView.packagingCharge || 0;
+              
+              if (!selectedOrderForView.taxTotal) {
+                try {
+                  const s = JSON.parse(localStorage.getItem('restaurantSettings')) || {};
+                  const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+                  const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+                  const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+                  const totRate = cRate + sRate + gRate;
+                  
+                  const disc = Number(selectedOrderForView.discount || 0);
+                  const taxable = Math.max(0, subTotal - disc);
+                  taxAmount = taxable * (totRate / 100);
+                } catch(e) {
+                  // Fallback
+                  taxAmount = 0;
+                }
+              }
+              
+              const calculatedTotal = selectedOrderForView.finalTotal || (subTotal - (selectedOrderForView.discount || 0) + taxAmount + serviceCharge + packagingCharge);
+              
+              return (
+                <div className="bg-white border-t border-gray-100 p-6 shrink-0">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-500 font-medium">{t("Subtotal")}</span>
+                    <span className="font-semibold text-gray-700">{currencySymbol}{subTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-gray-500 font-medium">{t("Taxes & Charges")}</span>
+                    <span className="font-semibold text-gray-700">{currencySymbol}{(taxAmount + serviceCharge + packagingCharge).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-3 border-t border-dashed border-gray-200">
+                    <span className="text-lg font-black text-gray-800">{t("Total")}</span>
+                    <span className="text-xl font-black text-emerald-600">{currencySymbol}{Math.round(calculatedTotal).toFixed(2)}</span>
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <button 
+                      onClick={() => setSelectedOrderForView(null)}
+                      className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors"
+                    >
+                      {t("Close")}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const table = selectedOrderForView.table;
+                        setSelectedOrderForView(null);
+                        onNavigate('billing', table);
+                      }}
+                      className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-colors shadow-lg shadow-emerald-500/30"
+                    >
+                      {t("Open in Billing")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>);

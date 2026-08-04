@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import { ArrowLeft, Save, Languages, User } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
-const LanguageProfile = ({ onNavigate }) => {const { t } = useLanguage();
+const LanguageProfile = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const { language: currentLanguage, setLanguage: changeLanguage } = useLanguage();
   const [selectedLang, setSelectedLang] = useState(currentLanguage || 'en');
 

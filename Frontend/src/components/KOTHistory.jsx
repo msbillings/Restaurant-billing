@@ -6,7 +6,7 @@ import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
 import BackButton from './common/BackButton';
 
-const KOTHistory = ({ onNavigate }) => {const { t } = useLanguage();
+const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedKOT, setSelectedKOT] = useState(null);
@@ -52,10 +52,6 @@ const KOTHistory = ({ onNavigate }) => {const { t } = useLanguage();
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-
       {/* Header and Filters */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 shrink-0 bg-surface p-6 border border-border rounded-xl shadow-sm">
         <div className="flex items-center gap-3">

@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React from 'reac
 import BackButton from './common/BackButton';
 import { ArrowLeft, HelpCircle, Phone, Mail, BookOpen, MessageCircle } from 'lucide-react';
 
-const HelpSupport = ({ onNavigate }) => {const { t } = useLanguage();
+const HelpSupport = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const faqs = [
   { q: 'How do I add a new Cashier?', a: 'Go to Operations > Admin Dashboard and click "Create New User". Make sure to select the Cashier role.' },
   { q: 'Why is an item not showing on the POS?', a: 'Check Operations > Menu Item On/Off to see if the item was accidentally marked as Out of Stock.' },

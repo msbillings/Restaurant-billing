@@ -2,11 +2,12 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import { getExpenses, addExpense, deleteExpense } from '../api/expenses';
 import { Wallet, Plus, Trash2, Calendar, IndianRupee, Tag, Clock, CreditCard } from 'lucide-react';
 import Toast from './Toast';
+import BackButton from './common/BackButton';
 
 const CATEGORIES = ['Ingredients', 'Utility Bills', 'Staff Salary', 'Maintenance', 'Miscellaneous'];
 const PAYMENT_MODES = ['Cash', 'UPI', 'Card', 'Bank Transfer'];
 
-const Expenses = () => {const { t } = useLanguage();
+const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -100,12 +101,14 @@ const Expenses = () => {const { t } = useLanguage();
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="p-6 border-b border-border bg-gradient-to-r from-red-500/10 to-orange-500/10 flex justify-between items-center shrink-0">
-        <div>
-          <h2 className="text-2xl font-bold text-text-main flex items-center gap-3">
-            <Wallet className="text-red-500" />{t("Petty Cash & Expenses")}
-
-          </h2>
-          <p className="text-text-muted mt-1 text-sm">{t("Track your daily restaurant expenses and outflows.")}</p>
+        <div className="flex items-center gap-4">
+          <BackButton onClick={onGoBack} />
+          <div>
+            <h2 className="text-2xl font-bold text-text-main flex items-center gap-3">
+              <Wallet className="text-red-500" />{t("Petty Cash & Expenses")}
+            </h2>
+            <p className="text-text-muted mt-1 text-sm">{t("Track your daily restaurant expenses and outflows.")}</p>
+          </div>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}

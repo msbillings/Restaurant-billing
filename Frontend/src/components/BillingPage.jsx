@@ -648,7 +648,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       let currentId = orderId;
 
-      if (billType === 'Dine-In' && (!currentId || orderStatus === 'Open')) {
+      if (billType === 'Dine-In' && !currentId) {
         showToast(t('pleaseFireKOTFirst'), 'error');
         setLoading(false);
         return;

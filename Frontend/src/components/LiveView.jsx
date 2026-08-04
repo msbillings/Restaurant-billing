@@ -4,7 +4,7 @@ import BackButton from './common/BackButton';
 import axios from '../api/axios';
 import { ArrowLeft, MonitorPlay, Video, Plus, Settings, X, Trash2 } from 'lucide-react';
 
-const LiveView = ({ onNavigate }) => {
+const LiveView = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [cameras, setCameras] = useState([]);
   const [loading, setLoading] = useState(true);

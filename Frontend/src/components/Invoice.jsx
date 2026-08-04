@@ -205,7 +205,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
               <span className="text-left w-24">{t("Total Qty:")}{bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
               <div className="flex-1 flex justify-between pl-2">
                 <span className="text-left">{t("Sub Total")}</span>
-                <span className="w-16 text-right">{(bill.subtotal || bill.total || 0).toFixed(2)}</span>
+                <span className="w-16 text-right">{(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0).toFixed(2)}</span>
               </div>
             </div>
             {bill.discount > 0 &&
@@ -225,7 +225,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
               const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
               const totRate = cRate + sRate + gRate;
 
-              const sub = Number(bill.subtotal || bill.total || 0);
+              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
               const disc = Number(bill.discount || 0);
               const taxable = Math.max(0, sub - disc);
 
@@ -293,7 +293,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           {/* Total & Round off */}
           <div className="flex flex-col pb-1" style={{ fontSize: '14px' }}>
             {(() => {
-              const sub = Number(bill.subtotal || bill.total || 0);
+              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
               const disc = Number(bill.discount || 0);
               const taxable = Math.max(0, sub - disc);
               let finalTotal = bill.total;

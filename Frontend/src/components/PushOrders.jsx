@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, ExternalLink, Clock, Package, CheckCircle, Truck, PlayCircle } from 'lucide-react';
 
-const PushOrders = ({ onNavigate }) => {const { t } = useLanguage();
+const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 

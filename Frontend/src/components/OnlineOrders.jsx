@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, RefreshCw, CheckCircle, Clock, Truck, FileText, ShoppingBag, XCircle, ExternalLink } from 'lucide-react';
 
-const OnlineOrders = ({ onNavigate }) => {const { t } = useLanguage();
+const OnlineOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);

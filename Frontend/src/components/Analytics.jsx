@@ -241,7 +241,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   className="bg-transparent font-medium text-white focus:outline-none cursor-pointer">
                   
                     {getAvailableMonths().map((m) =>
-                  <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`}>
+                  <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`} className="bg-[#1e1e24] text-white">
                         {m.label}
                       </option>
                   )}
@@ -758,11 +758,11 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   value={fraudDays}
                   onChange={(e) => fetchFraudAnalysis(parseInt(e.target.value))}
                 >
-                  <option value={7}>{t("Last 7 Days")}</option>
-                  <option value={30}>{t("Last 30 Days")}</option>
-                  <option value={90}>{t("Last 3 Months")}</option>
-                  <option value={180}>{t("Last 6 Months")}</option>
-                  <option value={365}>{t("Last 1 Year")}</option>
+                  <option value={7} className="bg-[#09090b] text-red-500">{t("Last 7 Days")}</option>
+                  <option value={30} className="bg-[#09090b] text-red-500">{t("Last 30 Days")}</option>
+                  <option value={90} className="bg-[#09090b] text-red-500">{t("Last 3 Months")}</option>
+                  <option value={180} className="bg-[#09090b] text-red-500">{t("Last 6 Months")}</option>
+                  <option value={365} className="bg-[#09090b] text-red-500">{t("Last 1 Year")}</option>
                 </select>
                 <button onClick={() => setShowFraudModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 transition">
                   <X size={20} />

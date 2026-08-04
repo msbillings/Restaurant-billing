@@ -149,7 +149,14 @@ function App() {
   });
   const [profileOpen, setProfileOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [viewHistory, setViewHistory] = useState(['floor']);
+  const [viewHistory, setViewHistory] = useState(() => {
+    const path = window.location.pathname.replace(/^\/+/, '');
+    if (window.location.protocol === 'file:' || path.includes('.html')) return ['floor'];
+    if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
+      return ['floor', path];
+    }
+    return ['floor'];
+  });
   const [hasLicense, setHasLicense] = useState(false);
   const [ownerUnlocked, setOwnerUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');

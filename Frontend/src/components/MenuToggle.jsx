@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, ToggleLeft, Search, CheckCircle, XCircle } from 'lucide-react';
 
-const MenuToggle = ({ onNavigate }) => {const { t } = useLanguage();
+const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');

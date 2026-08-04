@@ -5,7 +5,7 @@ import { Plus, ArrowLeft, Star, MessageSquare, ThumbsUp, Utensils, Coffee, Setti
 import { QRCodeSVG } from 'qrcode.react';
 import logoImg from '../assets/images/logo.png';
 
-const Feedback = ({ onNavigate }) => {const { t } = useLanguage();
+const Feedback = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [feedbacks, setFeedbacks] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);

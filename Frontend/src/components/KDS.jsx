@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { ChefHat, CheckCircle, Clock } from 'lucide-react';
 import { io } from 'socket.io-client';
 import api from '../api/axios';
+import BackButton from './common/BackButton';
 
-const KDS = () => {
+const KDS = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,9 +64,12 @@ const KDS = () => {
   return (
     <div className="h-full flex flex-col bg-slate-900 text-slate-100 p-4 overflow-hidden">
       <div className="flex items-center justify-between mb-4 border-b border-slate-700 pb-2 shrink-0">
-        <h1 className="text-2xl font-black text-amber-500 flex items-center gap-2">
-          <ChefHat />{t("KITCHEN DISPLAY SYSTEM")}
-        </h1>
+        <div className="flex items-center gap-4">
+          <BackButton onClick={onGoBack} />
+          <h1 className="text-2xl font-black text-amber-500 flex items-center gap-2">
+            <ChefHat />{t("KITCHEN DISPLAY SYSTEM")}
+          </h1>
+        </div>
         <div className="text-slate-400 font-mono text-sm">
           {new Date().toLocaleTimeString()}
         </div>

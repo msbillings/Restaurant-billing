@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, Wallet, Award, Gift, TrendingUp, Users } from 'lucide-react';
 
-const LoyaltyProgram = ({ onNavigate }) => {const { t } = useLanguage();
+const LoyaltyProgram = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [enabled, setEnabled] = useState(true);
   const [conversionRate, setConversionRate] = useState('100'); // Rs 100 = 1 Point
   const [redemptionValue, setRedemptionValue] = useState('1'); // 1 Point = Rs 1

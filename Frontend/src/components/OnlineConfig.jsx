@@ -3,7 +3,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, Globe, Save, Settings, Clock, MapPin, DollarSign, Store } from 'lucide-react';
 
-const OnlineConfig = ({ onNavigate }) => {const { t } = useLanguage();
+const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

@@ -3,8 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { QrCode, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api/axios';
+import BackButton from './common/BackButton';
 
-const QRCodeGenerator = () => {
+const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState('ALL');
@@ -120,9 +121,12 @@ const QRCodeGenerator = () => {
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
-        <h1 className="text-2xl font-black text-text-main flex items-center gap-2">
-          <QrCode className="text-primary" />{t("QR MENU GENERATOR")}
-        </h1>
+        <div className="flex items-center gap-4">
+          <BackButton onClick={onGoBack} />
+          <h1 className="text-2xl font-black text-text-main flex items-center gap-2">
+            <QrCode className="text-primary" />{t("QR MENU GENERATOR")}
+          </h1>
+        </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <select
             value={selectedTable}
