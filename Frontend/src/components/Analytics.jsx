@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import { getAnalytics, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../api/analytics';
@@ -68,7 +69,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     setShowFraudModal(true);
     setFraudDays(days);
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       const res = await fetch(`${API_BASE_URL}/ai/fraud-analysis?days=${days}`, {
         headers: {
           'Content-Type': 'application/json',

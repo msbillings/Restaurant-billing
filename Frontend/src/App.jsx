@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "./config.js";
 import React, { useState, useEffect, Suspense } from 'react';
 import { useLanguage } from './context/LanguageContext';
 // Lazy load components for performance
@@ -243,7 +244,7 @@ function App() {
   // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
   const syncConfigFromBackend = async () => {
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       const res = await fetch(`${API_BASE_URL}/config/info`, {
         headers: {
           'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
@@ -311,7 +312,7 @@ function App() {
       try {
         const licenseKey = localStorage.getItem('resto_license');
         if (licenseKey) {
-          const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'https://restaurant-superadmin-api-maheer.vercel.app';
+          const SUPERADMIN_API_URL = getSuperadminApiUrl();
           const saRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/license/${licenseKey}`);
           if (saRes.ok) {
             const saData = await saRes.json();
@@ -348,7 +349,7 @@ function App() {
             // 3. Sync Passwords to Local Backend if present
             if (saData.plainTextPassword || saData.staffAccounts && saData.staffAccounts.length > 0) {
               try {
-                const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+                const API_BASE_URL = getApiUrl();
                 await fetch(`${API_BASE_URL}/config/sync-users`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -583,7 +584,7 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       const socketUrl = API_BASE_URL.replace('/api', '');
       const socket = io(socketUrl);
 

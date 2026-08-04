@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import { QrCode, Printer } from 'lucide-react';
@@ -85,7 +86,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (window.location.hostname === 'localhost') {
       const fetchIP = async () => {
         try {
-          const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+          const API_BASE_URL = getApiUrl();
           const response = await fetch(`${API_BASE_URL}/public/system-ip`);
           if (response.ok) {
             const data = await response.json();

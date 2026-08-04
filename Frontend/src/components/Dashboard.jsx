@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { getDailyStats, getBillById, deleteBill } from '../api/billing';
@@ -125,7 +126,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
     fetchTodayStats();
     
     // Realtime events
-    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+    const API_BASE_URL = getApiUrl();
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
 

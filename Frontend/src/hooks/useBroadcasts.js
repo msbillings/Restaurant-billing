@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
@@ -12,7 +13,7 @@ const useBroadcasts = (userRole) => {
       if (!tenantDb) return; // No tenant DB yet (not logged in or license not verified)
 
       // Use the actual SuperAdmin URL, or a local dev URL
-      const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'http://localhost:4000';
+      const SUPERADMIN_API_URL = getSuperadminApiUrl();
       
       const response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
         params: { role: userRole || 'Admin' }
@@ -53,7 +54,7 @@ const useBroadcasts = (userRole) => {
   useEffect(() => {
     fetchBroadcasts();
     
-    const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'http://localhost:4000';
+    const SUPERADMIN_API_URL = getSuperadminApiUrl();
     const socket = io(SUPERADMIN_API_URL);
 
     // When any broadcast event happens, we just fetch again for simplicity 

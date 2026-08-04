@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
 import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt } from 'lucide-react';
@@ -59,7 +60,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const saveSpacesToCloud = async (newFloors) => {
     localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       await fetch(`${API_BASE_URL}/floors`, {
         method: 'POST',
         headers: {
@@ -95,7 +96,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     window.addEventListener('spacesUpdated', handleSpacesUpdated);
 
     // Socket.io Real-Time Connection
-    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+    const API_BASE_URL = getApiUrl();
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
     const tenantDb = localStorage.getItem('resto_db_name');
@@ -137,7 +138,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   async function syncSpaces() {
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       const res = await fetch(`${API_BASE_URL}/floors`, {
         headers: {
           'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',

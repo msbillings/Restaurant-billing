@@ -1,7 +1,8 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import axios from 'axios';
 
 // Use environment variable for API URL, fallback to localhost for development
-let API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+let API_BASE_URL = getApiUrl();
 
 // CRITICAL FIX: If running inside the Desktop Electron App, force localhost
 if (navigator.userAgent.toLowerCase().indexOf('electron') > -1) {

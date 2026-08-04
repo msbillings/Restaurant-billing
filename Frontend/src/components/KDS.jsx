@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import { ChefHat, CheckCircle, Clock } from 'lucide-react';
@@ -24,7 +25,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
   useEffect(() => {
     fetchKOTs();
 
-    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+    const API_BASE_URL = getApiUrl();
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
 

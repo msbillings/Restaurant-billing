@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
 import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles } from 'lucide-react';
 import BackgroundSlideshow from './BackgroundSlideshow';
@@ -21,7 +22,7 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
     setError(null);
 
     try {
-      const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'https://restaurant-superadmin-api-maheer.vercel.app';
+      const SUPERADMIN_API_URL = getSuperadminApiUrl();
       const response = await fetch(`${SUPERADMIN_API_URL}/api/clients/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -34,7 +35,7 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
         // Setup local database configuration
         if (data.databaseName && data.plainTextPassword) {
           try {
-            const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+            const API_BASE_URL = getApiUrl();
             const setupResponse = await fetch(`${API_BASE_URL}/config/setup`, {
               method: 'POST',
               headers: {
@@ -72,7 +73,7 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
         if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
 
         try {
-          const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+          const API_BASE_URL = getApiUrl();
           await fetch(`${API_BASE_URL}/config/info`, {
             method: 'POST',
             headers: {

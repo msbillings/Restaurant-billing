@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -16,7 +17,7 @@ const OnlineOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       // Direct platform means they ordered directly from the restaurant's website
       let url = `${API_BASE_URL}/push-orders?platform=Direct`;
       if (filter !== 'all') {
@@ -41,7 +42,7 @@ const OnlineOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const updateOrderStatus = async (id, newStatus) => {
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       await axios.put(`${API_BASE_URL}/push-orders/${id}/status`, { status: newStatus }, {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
@@ -73,7 +74,7 @@ const OnlineOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         paymentStatus: 'paid_online'
       };
 
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       await axios.post(`${API_BASE_URL}/push-orders`, mockOrder, {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('accessToken')}`,

@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { Users, Search, Star, TrendingUp, Calendar } from 'lucide-react';
 import BackButton from './common/BackButton';
@@ -9,7 +10,7 @@ const CRM = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchCustomers = async () => {
     try {
-      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+      const API_BASE_URL = getApiUrl();
       const response = await fetch(`${API_BASE_URL}/customers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,

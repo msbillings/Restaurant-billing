@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { ArrowLeft, Bell, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send } from 'lucide-react';
@@ -88,7 +89,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
 
     setIsSubmittingReply(true);
     try {
-      const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'http://localhost:4000';
+      const SUPERADMIN_API_URL = getSuperadminApiUrl();
       const tenantDb = localStorage.getItem('resto_db_name');
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const senderName = user.username || userRole;
@@ -134,7 +135,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
     return new Date(timeB) - new Date(timeA);
   });
 
-  const SUPERADMIN_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'http://localhost:4000';
+  const SUPERADMIN_URL = getSuperadminApiUrl();
 
   return (
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">

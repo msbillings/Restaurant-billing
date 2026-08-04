@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MenuGrid from './MenuGrid';
 import BillSummary from './BillSummary';
@@ -58,7 +59,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     fetchOpenOrdersList();
 
     // Set up Real-Time WebSocket connection
-    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+    const API_BASE_URL = getApiUrl();
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
 
@@ -122,7 +123,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const syncSpacesFromBackend = async () => {
       try {
-        const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+        const API_BASE_URL = getApiUrl();
         const res = await fetch(`${API_BASE_URL}/config/info`, {
           headers: {
             'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
@@ -281,7 +282,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     if (customerPhone && customerPhone.length === 10) {
       const fetchCustomer = async () => {
         try {
-          const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
+          const API_BASE_URL = getApiUrl();
           const res = await fetch(`${API_BASE_URL}/customers/${customerPhone}`, {
             headers: {
               'Content-Type': 'application/json',
