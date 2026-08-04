@@ -60,7 +60,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
   };
 
   return (
-    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm flex flex-col z-50 overflow-y-auto animate-in fade-in duration-200 items-center p-4 print:p-0 print:block print:w-full print:h-full">
+    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
       <style>
         {`
           @media print {
@@ -77,7 +77,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
       </style>
       
       {/* Controls - Hidden on Print */}
-      <div className="sticky top-4 right-4 flex justify-end gap-3 print:hidden w-full max-w-3xl z-10">
+      <div className="sticky top-4 flex justify-end gap-3 print:hidden w-full max-w-3xl mx-auto z-10">
         {onSave &&
         <button
           onClick={onSave}

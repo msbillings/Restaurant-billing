@@ -319,7 +319,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
   const foodCostPercent = dishSellingPrice > 0 ? (totalRecipeCost / dishSellingPrice * 100).toFixed(1) : 0;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 w-full mx-auto space-y-4">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="flex items-center gap-4 mb-2">
@@ -327,10 +327,10 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
       </div>
 
       {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-6 rounded-2xl text-white shadow-lg">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-4 rounded-xl text-white shadow-md">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Package className="w-8 h-8" />{t("Inventory & Stock Management")}
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <Package className="w-6 h-6" />{t("Inventory & Stock Management")}
           </h1>
           <p className="text-amber-100 mt-1">{t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
 
@@ -353,34 +353,34 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">{t("Total Stock Items")}</p>
-            <h3 className="text-3xl font-bold text-gray-900 mt-1">{items.length}</h3>
+            <p className="text-xs font-medium text-gray-500">{t("Total Stock Items")}</p>
+            <h3 className="text-2xl font-bold text-gray-900 mt-0.5">{items.length}</h3>
           </div>
-          <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl">
-            <Layers className="w-8 h-8" />
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <Layers className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">{t("Low Stock Alerts")}</p>
-            <h3 className="text-3xl font-bold text-red-600 mt-1">{lowStockItems.length}</h3>
+            <p className="text-xs font-medium text-gray-500">{t("Low Stock Alerts")}</p>
+            <h3 className="text-2xl font-bold text-red-600 mt-0.5">{lowStockItems.length}</h3>
           </div>
-          <div className="p-4 bg-red-50 text-red-600 rounded-2xl">
-            <AlertTriangle className={`w-8 h-8 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
+          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+            <AlertTriangle className={`w-6 h-6 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">{t("Total Stock Value")}</p>
-            <h3 className="text-3xl font-bold text-emerald-600 mt-1">₹{totalStockValue.toLocaleString()}</h3>
+            <p className="text-xs font-medium text-gray-500">{t("Total Stock Value")}</p>
+            <h3 className="text-2xl font-bold text-emerald-600 mt-0.5">₹{totalStockValue.toLocaleString()}</h3>
           </div>
-          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl">
-            <DollarSign className="w-8 h-8" />
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <DollarSign className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -461,9 +461,9 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50/80 backdrop-blur-sm sticky top-0 shadow-sm z-10">
+          <div className="overflow-x-auto overflow-y-auto max-h-[55vh]">
+            <table className="w-full text-left relative">
+              <thead className="bg-gray-50/90 backdrop-blur-sm sticky top-0 shadow-sm z-20">
                 <tr>
                   <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider rounded-tl-xl">{t("Item Details")}</th>
                   <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Current Stock")}</th>

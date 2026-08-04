@@ -9,7 +9,11 @@ export const getApiUrl = () => {
     }
 
     if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.includes('vercel.app')) {
-        return `http://${window.location.hostname}:5002/api`;
+        let envUrl = import.meta.env.VITE_API_URL;
+        if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+            return envUrl.replace(/localhost|127\.0\.0\.1/, window.location.hostname);
+        }
+        return envUrl || `http://${window.location.hostname}:5002/api`;
     }
 
     return import.meta.env.VITE_API_URL || 'http://127.0.0.1:5002/api';
@@ -24,8 +28,12 @@ export const getSuperadminApiUrl = () => {
 
     // If running on a local device and they want the local superadmin API
     if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && !window.location.hostname.includes('vercel.app')) {
-        // Fallback to local network superadmin if VITE_SUPERADMIN_API_URL is missing
-        return import.meta.env.VITE_SUPERADMIN_API_URL || `http://${window.location.hostname}:4001`;
+        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
+        // If .env points to localhost, we dynamically swap it for the actual local IP
+        if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+            return envUrl.replace(/localhost|127\.0\.0\.1/, window.location.hostname);
+        }
+        return envUrl || `http://${window.location.hostname}:4001`;
     }
 
     // For Desktop Electron App, if local superadmin is running

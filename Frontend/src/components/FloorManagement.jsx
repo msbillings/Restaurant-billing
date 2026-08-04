@@ -597,14 +597,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           }>
           
             {t(floor.name)}
-            {floors.length > 1 &&
           <button
             onClick={(e) => handleRemoveFloor(e, floor.id)}
             className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
             
                 <Trash2 size={12} />
               </button>
-          }
           </div>
         )}
         <button

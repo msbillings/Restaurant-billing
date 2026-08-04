@@ -207,15 +207,21 @@ function App() {
         setToastMessage("You have a new Notification!");
       }
       
+      prevUnreadCountRef.current = totalUnreadCount;
+    }
+    prevUnreadCountRef.current = totalUnreadCount;
+  }, [totalUnreadCount, realTimeNotifs, rtUnreadCount]);
+
+  // Auto-hide toast messages after 5 seconds
+  useEffect(() => {
+    if (toastMessage || toastNotifInfo) {
       const timer = setTimeout(() => {
         setToastMessage(null);
         setToastNotifInfo(null);
       }, 5000);
-      prevUnreadCountRef.current = totalUnreadCount;
       return () => clearTimeout(timer);
     }
-    prevUnreadCountRef.current = totalUnreadCount;
-  }, [totalUnreadCount]);
+  }, [toastMessage, toastNotifInfo]);
 
   // Format broadcasts for the dropdown
   const formattedBroadcasts = broadcasts.map((b) => ({
@@ -996,13 +1002,30 @@ function App() {
                             <div>
                               <p className="text-[1.05rem] font-bold text-gray-800 leading-tight">{n.title}</p>
                               <p className="text-xs text-gray-500 mt-1">{n.message}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                {n.time ? new Date(n.time).toLocaleString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                }) : ''}
+                              </p>
                             </div>
                           </div>
                     )}
                       </div>
                       <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
-                        <button className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}</button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            rtClearNotification('ALL');
+                            setShowNotifications(false);
+                          }}
+                          className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}
+                        </button>
                       </div>
                     </div>
                   </>
@@ -1334,9 +1357,7 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
         </Suspense>
 
-
-
-        <main className={`flex-1 overflow-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
+        <main className={`flex-1 overflow-y-auto overflow-x-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
           <Suspense fallback={
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-4">

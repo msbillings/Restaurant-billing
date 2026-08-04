@@ -1,4 +1,4 @@
-import { getApiUrl, getSuperadminApiUrl } from "../config.js";
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import { QrCode, Printer } from 'lucide-react';
@@ -11,14 +11,19 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const [tables, setTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState('ALL');
   const [restaurantName, setRestaurantName] = useState('MSBillings');
-  const [localIP, setLocalIP] = useState(window.location.hostname);
+
+  // Detect Electron (file: protocol)
+  const isElectron = window.location.protocol === 'file:';
+  // Default: use current hostname (works for network access). Electron starts at 127.0.0.1 until we fetch the real IP.
+  const [localIP, setLocalIP] = useState(isElectron ? '127.0.0.1' : window.location.hostname);
+  // Port: For Electron, default to Vite dev port 5173. For browser, use current port.
+  const [localPort, setLocalPort] = useState(isElectron ? '5173' : (window.location.port || ''));
 
   const extractAllSpaces = (floorsList) => {
     const tableNames = new Set();
     if (Array.isArray(floorsList)) {
       floorsList.forEach((floor) => {
         if (!floor) return;
-        // Collect from all array properties of floor (tables, cabins, sofas, spaces, custom categories, etc.)
         Object.keys(floor).forEach((key) => {
           if (Array.isArray(floor[key])) {
             floor[key].forEach((item) => {
@@ -83,23 +88,31 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     };
     window.addEventListener('spacesUpdated', handleSpacesUpdated);
 
-    if (window.location.hostname === 'localhost') {
-      const fetchIP = async () => {
-        try {
-          const API_BASE_URL = getApiUrl();
-          const response = await fetch(`${API_BASE_URL}/public/system-ip`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.ip && data.ip !== 'localhost') {
-              setLocalIP(data.ip);
-            }
+    // Always fetch the real local IP from the backend.
+    // This is needed for both localhost (browser) and Electron (file: protocol).
+    const fetchIP = async () => {
+      try {
+        const API_BASE_URL = getApiUrl();
+        const response = await fetch(`${API_BASE_URL}/public/system-ip`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ip && data.ip !== 'localhost' && data.ip !== '127.0.0.1') {
+            setLocalIP(data.ip);
           }
-        } catch (err) {
-          console.error('Error fetching system IP:', err);
+          if (data.port) {
+            setLocalPort(String(data.port));
+          }
         }
-      };
-      fetchIP();
-    }
+      } catch (err) {
+        // If backend is unreachable, keep using window.location.hostname as fallback
+        if (!isElectron && window.location.hostname !== 'localhost') {
+          setLocalIP(window.location.hostname);
+          setLocalPort(window.location.port || '');
+        }
+        console.warn('Could not fetch system IP, using hostname fallback:', err);
+      }
+    };
+    fetchIP();
 
     return () => {
       window.removeEventListener('spacesUpdated', handleSpacesUpdated);
@@ -107,8 +120,9 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   }, []);
 
   const getQRUrl = (table) => {
-    const port = window.location.port ? `:${window.location.port}` : '';
-    const baseUrl = `${window.location.protocol}//${localIP}${port}`;
+    // ALWAYS use http:// — never file:// — so phones can actually open the URL
+    const portStr = localPort ? `:${localPort}` : '';
+    const baseUrl = `http://${localIP}${portStr}`;
     const dbName = localStorage.getItem('resto_db_name') || 'default';
     return `${baseUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
   };
@@ -134,8 +148,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             onChange={(e) => setSelectedTable(e.target.value)}
             className="w-full sm:w-48 bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-primary text-text-main">
             <option value="ALL">{t("All Tables")}</option>
-            {tables.map((t, index) => (
-              <option key={`${t}-${index}`} value={t}>{t}</option>
+            {tables.map((tbl, index) => (
+              <option key={`${tbl}-${index}`} value={tbl}>{tbl}</option>
             ))}
           </select>
           <button

@@ -47,6 +47,15 @@ const ServiceRequestAlert = () => {const { t } = useLanguage();
           playChime();
         }
 
+        // Auto-resolve new requests after 5.5 seconds so they disappear
+        currentIds.forEach((id) => {
+          if (!prevRequestIds.current.has(id)) {
+            setTimeout(() => {
+              handleResolve(id);
+            }, 5500);
+          }
+        });
+
         prevRequestIds.current = currentIds;
       } catch (err) {
         console.error("Failed to fetch service requests", err);

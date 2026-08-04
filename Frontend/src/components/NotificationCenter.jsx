@@ -69,14 +69,21 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   };
 
   const formatTimeAgo = (dateStr) => {
-    const date = new Date(dateStr);
-    const seconds = Math.floor((new Date() - date) / 1000);
-    if (seconds < 60) return t('Just now');
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}${t('m ago')}`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}${t('h ago')}`;
-    return `${Math.floor(hours / 24)}${t('d ago')}`;
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return '';
+    }
   };
 
   const handleReplyChange = (id, text) => {
@@ -150,12 +157,10 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
           </div>
         </div>
         
-        {localNotifications.length > 0 &&
+        {allNotifications.length > 0 &&
         <button
-          onClick={clearAllLocal}
-          className="text-sm font-bold text-gray-500 hover:text-red-500 transition-colors">{t("Clear Local Alerts")}
-
-
+          onClick={() => { clearAllLocal(); clearNotification('ALL'); }}
+          className="text-sm font-bold text-gray-500 hover:text-red-500 transition-colors">{t("Clear All")}
         </button>
         }
       </div>
@@ -185,7 +190,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
                     <h3 className="font-bold text-gray-800 text-lg">{t(notif.title)}</h3>
                     <div className="flex items-center gap-1 text-xs text-gray-400 font-medium">
                       <Clock size={12} />
-                      {formatTimeAgo(notif.timestamp)}
+                      {formatTimeAgo(notif.timestamp || notif.time)}
                     </div>
                   </div>
                   
@@ -232,9 +237,15 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
                 </div>
                 
                 <button
-                onClick={() => isBroadcast ? markBroadcastRead(notif.id) : markLocalAsRead(notif.id)}
+                onClick={() => {
+                  if (isBroadcast) {
+                    markBroadcastRead(notif.id);
+                  } else {
+                    markLocalAsRead(notif.id);
+                    clearNotification(notif.id);
+                  }
+                }}
                 className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-colors shrink-0" title={t("Mark as read / Dismiss")}>
-
                 
                   <CheckCircle size={20} />
                 </button>

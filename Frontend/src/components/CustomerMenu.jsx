@@ -1,6 +1,6 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -46,6 +46,34 @@ const CustomerMenu = () => {
   const [serviceMessage, setServiceMessage] = useState(null);
   const [selectedItemForAdd, setSelectedItemForAdd] = useState(null);
   const [specialNote, setSpecialNote] = useState('');
+
+  // Draggable bell button
+  const [bellPos, setBellPos] = useState({ x: window.innerWidth - 60, y: window.innerHeight - 80 });
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const didDrag = useRef(false);
+
+  // Order tracking modal
+  const [showOrderModal, setShowOrderModal] = useState(false);
+
+  const handleBellPointerDown = useCallback((e) => {
+    isDragging.current = true;
+    didDrag.current = false;
+    dragOffset.current = { x: e.clientX - bellPos.x, y: e.clientY - bellPos.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }, [bellPos]);
+
+  const handleBellPointerMove = useCallback((e) => {
+    if (!isDragging.current) return;
+    didDrag.current = true;
+    const newX = Math.max(0, Math.min(window.innerWidth - 48, e.clientX - dragOffset.current.x));
+    const newY = Math.max(0, Math.min(window.innerHeight - 48, e.clientY - dragOffset.current.y));
+    setBellPos({ x: newX, y: newY });
+  }, []);
+
+  const handleBellPointerUp = useCallback(() => {
+    isDragging.current = false;
+  }, []);
 
   const urlParams = new URLSearchParams(window.location.search);
   const tenant = urlParams.get('tenant');
@@ -419,71 +447,131 @@ const CustomerMenu = () => {
         })}
       </main>
 
-      {/* Live Order Tracking Banner */}
-      <AnimatePresence>
-        {activeOrderData && cart.length === 0 && orderStatus === 'menu' && activeOrderData.kitchenStatus !== 'Completed' && (
+      {/* Live Order Tracking — Mini tappable bar + Full Modal */}
+      {activeOrderData && cart.length === 0 && orderStatus === 'menu' && activeOrderData.kitchenStatus !== 'Completed' && (
+        <>
+          {/* Mini bar at bottom — tap to open modal */}
           <motion.div
             initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-            className="fixed bottom-6 left-0 right-0 px-4 z-30">
-            <div className={`w-full text-white rounded-2xl p-4 shadow-2xl flex flex-col gap-2 transition-all ${
-              activeOrderData.kitchenStatus === 'Ready' 
-                ? 'bg-emerald-600 border-2 border-emerald-400 shadow-emerald-600/30' 
-                : activeOrderData.kitchenStatus === 'Preparing'
-                ? 'bg-amber-600 shadow-amber-600/30'
-                : 'bg-blue-600 shadow-blue-600/30'
-            }`}>
-              <div className="flex items-center justify-between">
-                <span className="font-bold flex items-center gap-2 text-base">
-                  {activeOrderData.kitchenStatus === 'Ready' ? (
-                    <span className="text-xl">🎉</span>
-                  ) : activeOrderData.kitchenStatus === 'Preparing' ? (
-                    <span className="animate-pulse text-xl">👨‍🍳</span>
-                  ) : (
-                    <span className="text-xl">📋</span>
-                  )}
-                  {activeOrderData.kitchenStatus === 'Ready' 
-                    ? t("Order Ready & Served!") 
-                    : activeOrderData.kitchenStatus === 'Preparing'
-                    ? t("Order in Kitchen")
-                    : t("Order Received")}
-                </span>
-                <span className="font-black text-lg">₹{activeOrderData.total}</span>
-              </div>
-
-              <div className="flex items-center gap-2 text-white/90 text-sm">
-                <div className="h-2 flex-1 bg-black/20 rounded-full overflow-hidden">
-                  <div className={`h-full bg-white rounded-full transition-all duration-500 ${
-                    activeOrderData.kitchenStatus === 'Ready'
-                      ? 'w-full'
-                      : activeOrderData.kitchenStatus === 'Preparing'
-                      ? 'w-2/3 animate-[progress_2s_ease-in-out_infinite]'
-                      : 'w-1/3 animate-[progress_2s_ease-in-out_infinite]'
-                  }`}></div>
-                </div>
-                <span className="font-bold text-xs shrink-0">{activeOrderData.itemsCount} {t("items")}</span>
-              </div>
-
-              <p className="text-xs text-white/90 font-medium mt-0.5">
-                {t("Status")}: {' '}
-                <span className="font-bold underline decoration-2">
-                  {activeOrderData.kitchenStatus === 'Ready'
-                    ? t("Food is Ready! Hot & Fresh 🍲")
-                    : activeOrderData.kitchenStatus === 'Preparing'
-                    ? t("Chef is preparing your food...")
-                    : t("Sent to Kitchen ⏳")}
-                </span>
-              </p>
-            </div>
-            
-            <style jsx="true">{`
-              @keyframes progress {
-                0% { transform: translateX(-100%); }
-                100% { transform: translateX(200%); }
-              }
-            `}</style>
+            className="fixed bottom-6 left-0 right-0 px-4 z-30"
+          >
+            <button
+              onClick={() => setShowOrderModal(true)}
+              className={`w-full text-white rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
+                activeOrderData.kitchenStatus === 'Ready'
+                  ? 'bg-emerald-600 border-2 border-emerald-400'
+                  : activeOrderData.kitchenStatus === 'Preparing'
+                  ? 'bg-amber-600'
+                  : 'bg-blue-600'
+              }`}
+            >
+              <span className="font-bold flex items-center gap-2 text-sm">
+                {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
+                {activeOrderData.kitchenStatus === 'Ready'
+                  ? t("Order Ready & Served!")
+                  : activeOrderData.kitchenStatus === 'Preparing'
+                  ? t("Order in Kitchen")
+                  : t("Order Received")}
+              </span>
+              <span className="font-black text-base shrink-0">₹{activeOrderData.total}</span>
+            </button>
           </motion.div>
-        )}
-      </AnimatePresence>
+
+          {/* Full tracking modal */}
+          <AnimatePresence>
+            {showOrderModal && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex flex-col justify-end"
+                onClick={() => setShowOrderModal(false)}
+              >
+                <motion.div
+                  initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+                  transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`rounded-t-3xl text-white p-6 shadow-2xl flex flex-col gap-4 ${
+                    activeOrderData.kitchenStatus === 'Ready'
+                      ? 'bg-emerald-600'
+                      : activeOrderData.kitchenStatus === 'Preparing'
+                      ? 'bg-amber-600'
+                      : 'bg-blue-600'
+                  }`}
+                >
+                  {/* Modal Header */}
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-black flex items-center gap-2">
+                      {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
+                      {activeOrderData.kitchenStatus === 'Ready'
+                        ? t("Order Ready & Served!")
+                        : activeOrderData.kitchenStatus === 'Preparing'
+                        ? t("Order in Kitchen")
+                        : t("Order Received")}
+                    </h2>
+                    <span className="font-black text-2xl">₹{activeOrderData.total}</span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-3 flex-1 bg-black/20 rounded-full overflow-hidden">
+                      <div className={`h-full bg-white rounded-full transition-all duration-500 ${
+                        activeOrderData.kitchenStatus === 'Ready' ? 'w-full'
+                          : activeOrderData.kitchenStatus === 'Preparing' ? 'w-2/3'
+                          : 'w-1/3'
+                      }`} />
+                    </div>
+                    <span className="font-bold text-sm shrink-0">{activeOrderData.itemsCount} {t("items")}</span>
+                  </div>
+
+                  {/* Status Text */}
+                  <p className="text-sm text-white/90 font-medium">
+                    {t("Status")}:{' '}
+                    <span className="font-black underline decoration-2">
+                      {activeOrderData.kitchenStatus === 'Ready'
+                        ? t("Food is Ready! Hot & Fresh 🍲")
+                        : activeOrderData.kitchenStatus === 'Preparing'
+                        ? t("Chef is preparing your food...")
+                        : t("Sent to Kitchen ⏳")}
+                    </span>
+                  </p>
+
+                  {/* Steps indicator */}
+                  <div className="flex items-center gap-2 mt-1">
+                    {['Order Received', 'Preparing', 'Ready'].map((step, i) => {
+                      const currentIdx = activeOrderData.kitchenStatus === 'Ready' ? 2 : activeOrderData.kitchenStatus === 'Preparing' ? 1 : 0;
+                      return (
+                        <React.Fragment key={step}>
+                          <div className={`flex flex-col items-center gap-1`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                              i <= currentIdx ? 'bg-white text-emerald-700' : 'bg-white/30 text-white'
+                            }`}>{i + 1}</div>
+                            <span className={`text-[10px] font-bold ${ i <= currentIdx ? 'text-white' : 'text-white/50'}`}>{t(step)}</span>
+                          </div>
+                          {i < 2 && <div className={`flex-1 h-0.5 mb-4 ${ i < currentIdx ? 'bg-white' : 'bg-white/30'}`} />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {/* Close button — only closes the modal, does NOT cancel the order */}
+                  <button
+                    onClick={() => setShowOrderModal(false)}
+                    className="mt-2 w-full bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-2xl transition-colors"
+                  >
+                    {t("Close")}
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <style>{`
+            @keyframes progress {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(200%); }
+            }
+          `}</style>
+        </>
+      )}
 
       {/* Floating Cart Button */}
       {cart.length > 0 && orderStatus === 'menu' &&
@@ -509,41 +597,72 @@ const CustomerMenu = () => {
         </motion.div>
       }
 
-      {/* Floating Call Waiter Button */}
-      {orderStatus === 'menu' &&
-      <div className={`fixed right-4 ${cart.length > 0 ? 'bottom-28' : 'bottom-6'} z-30 flex flex-col items-end gap-3 transition-all duration-300`}>
+      {/* Bell ring animation */}
+      <style>{`
+        @keyframes bell-ring {
+          0%,100%{transform:rotate(0deg)}
+          10%{transform:rotate(15deg)}
+          20%{transform:rotate(-13deg)}
+          30%{transform:rotate(11deg)}
+          40%{transform:rotate(-9deg)}
+          50%{transform:rotate(7deg)}
+          60%{transform:rotate(-5deg)}
+          70%{transform:rotate(3deg)}
+          80%{transform:rotate(-2deg)}
+          90%{transform:rotate(1deg)}
+        }
+        .bell-ring { animation: bell-ring 1.4s ease-in-out infinite; transform-origin: top center; display:inline-block; }
+      `}</style>
+
+      {/* Floating Draggable Call Waiter Button */}
+      {orderStatus === 'menu' && (
+        <>
+          {/* Service options popup anchored near bell */}
           <AnimatePresence>
-            {isServiceOpen &&
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col w-48">
-            
-                <button onClick={() => requestService('Call Waiter')} className="p-4 flex items-center gap-3 hover:bg-orange-50 text-slate-700 font-bold border-b">
-                  <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Bell size={16} /></div>{t("Call Waiter")}
-
-            </button>
-                <button onClick={() => requestService('Need Water')} className="p-4 flex items-center gap-3 hover:bg-blue-50 text-slate-700 font-bold border-b">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><Droplets size={16} /></div>{t("Need Water")}
-
-            </button>
-                <button onClick={() => requestService('Pay the Bill')} className="p-4 flex items-center gap-3 hover:bg-green-50 text-slate-700 font-bold">
-                  <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center"><CreditCard size={16} /></div>{t("Pay the Bill")}
-
-            </button>
+            {isServiceOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                style={{ position:'fixed', left: Math.min(bellPos.x, window.innerWidth - 200), top: Math.max(8, bellPos.y - 164), zIndex: 50 }}
+                className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden flex flex-col w-48"
+              >
+                <button onClick={() => requestService('Call Waiter')} className="p-3 flex items-center gap-3 hover:bg-orange-50 text-slate-700 font-bold border-b">
+                  <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Bell size={14} /></div>{t("Call Waiter")}
+                </button>
+                <button onClick={() => requestService('Need Water')} className="p-3 flex items-center gap-3 hover:bg-blue-50 text-slate-700 font-bold border-b">
+                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><Droplets size={14} /></div>{t("Need Water")}
+                </button>
+                <button onClick={() => requestService('Pay the Bill')} className="p-3 flex items-center gap-3 hover:bg-green-50 text-slate-700 font-bold">
+                  <div className="w-7 h-7 rounded-full bg-green-100 text-green-600 flex items-center justify-center"><CreditCard size={14} /></div>{t("Pay the Bill")}
+                </button>
               </motion.div>
-          }
+            )}
           </AnimatePresence>
 
-          <button
-          onClick={() => setIsServiceOpen(!isServiceOpen)}
-          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-colors ${isServiceOpen ? 'bg-slate-800 text-white' : 'bg-white text-orange-600 border-2 border-orange-500'}`}>
-          
-            {isServiceOpen ? <X size={24} /> : <Bell size={24} className="animate-bounce" />}
-          </button>
-        </div>
-      }
+          {/* Full-screen transparent backdrop — tapping anywhere outside closes the panel */}
+          {isServiceOpen && (
+            <div
+              style={{ position:'fixed', inset:0, zIndex: 39 }}
+              onPointerUp={() => setIsServiceOpen(false)}
+            />
+          )}
+
+          {/* Draggable bell */}
+          <div
+            onPointerDown={handleBellPointerDown}
+            onPointerMove={handleBellPointerMove}
+            onPointerUp={(e) => {
+              handleBellPointerUp(e);
+              // Toggle panel only on tap (not drag). Use pointerUp for instant response on all screen types.
+              if (!didDrag.current) setIsServiceOpen(o => !o);
+            }}
+            style={{ position:'fixed', left: bellPos.x, top: bellPos.y, zIndex: 60, touchAction:'none', cursor:'grab' }}
+            className={`w-11 h-11 rounded-full flex items-center justify-center shadow-2xl select-none transition-colors ${isServiceOpen ? 'bg-slate-800 text-white' : 'bg-white text-orange-600 border-2 border-orange-500'}`}
+          >
+            {isServiceOpen ? <X size={18} /> : <span className="bell-ring"><Bell size={18} /></span>}
+          </div>
+        </>
+      )}
+
 
       {/* Service Request Toast */}
       <AnimatePresence>
