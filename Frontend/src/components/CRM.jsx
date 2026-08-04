@@ -9,7 +9,7 @@ const CRM = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchCustomers = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       const response = await fetch(`${API_BASE_URL}/customers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,

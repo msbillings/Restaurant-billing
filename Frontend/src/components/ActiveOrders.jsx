@@ -13,7 +13,7 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {const { t } =
     fetchOrders();
 
     // Set up Real-Time WebSocket connection
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
 

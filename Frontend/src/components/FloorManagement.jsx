@@ -59,7 +59,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const saveSpacesToCloud = async (newFloors) => {
     localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       await fetch(`${API_BASE_URL}/floors`, {
         method: 'POST',
         headers: {
@@ -95,7 +95,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     window.addEventListener('spacesUpdated', handleSpacesUpdated);
 
     // Socket.io Real-Time Connection
-    const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+    const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
     const socketUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketUrl);
     const tenantDb = localStorage.getItem('resto_db_name');
@@ -137,7 +137,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   async function syncSpaces() {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       const res = await fetch(`${API_BASE_URL}/floors`, {
         headers: {
           'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',

@@ -57,7 +57,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
       // Save restaurant settings to localStorage
       localStorage.setItem('restaurantSettings', JSON.stringify(settings));
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+        const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
         const tenantDb = localStorage.getItem('resto_db_name') || '';
         const token = localStorage.getItem('accessToken') || '';
         await fetch(`${API_BASE_URL}/config/info`, {

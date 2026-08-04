@@ -7,7 +7,7 @@ import {
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
 
 const getHeaders = () => ({
   'Content-Type': 'application/json',

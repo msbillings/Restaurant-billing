@@ -22,7 +22,7 @@ const AdminDashboard = ({ onNavigate }) => {const { t } = useLanguage();
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       const response = await axios.get(`${API_BASE_URL}/admin/users`, {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
@@ -41,7 +41,7 @@ const AdminDashboard = ({ onNavigate }) => {const { t } = useLanguage();
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       const headers = { 
         Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
         'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
@@ -68,7 +68,7 @@ const AdminDashboard = ({ onNavigate }) => {const { t } = useLanguage();
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
       await axios.delete(`${API_BASE_URL}/admin/users/${id}`, {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('accessToken')}`,

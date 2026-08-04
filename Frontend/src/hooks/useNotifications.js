@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002';
+const SOCKET_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002' : (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:5002'));
 
 // Create a singleton socket for notifications so we don't open multiple connections
 let notificationSocket = null;

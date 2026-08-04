@@ -168,7 +168,7 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
                 onClick={async () => {
                   if (window.confirm('Are you sure you want to reset your license? You will need to re-enter your license key.')) {
                     try {
-                      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+                      const API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
                       await fetch(`${API_BASE_URL}/config/reset`, {
                         method: 'POST',
                         headers: {

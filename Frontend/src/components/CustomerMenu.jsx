@@ -5,7 +5,7 @@ import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, Chec
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
-let API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+let API_BASE_URL = (navigator.userAgent.toLowerCase().includes('electron') ? 'http://localhost:5002/api' : (import.meta.env.VITE_API_URL || 'http://localhost:5002/api'));
 if (API_BASE_URL.includes('localhost') && window.location.hostname !== 'localhost') {
   API_BASE_URL = API_BASE_URL.replace('localhost', window.location.hostname);
 }
