@@ -57,31 +57,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔐 Decode Android Keystore
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend/android
         run: |
           $keystoreBytes = [System.Convert]::FromBase64String("${{ secrets.KEYSTORE_BASE64 }}")
           [System.IO.File]::WriteAllBytes("keystore.jks", $keystoreBytes)
 
       - name: 🔍 Verify Capacitor
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend
         run: npx cap --version
 
       - name: 📱 Sync Capacitor Android
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend
         run: npx cap sync android
 
       - name: ☕ Setup Java
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: 🔨 Build Android APK
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend/android
         env:
           CI: "true"
@@ -91,7 +91,7 @@ jobs:
         run: .\gradlew.bat assembleRelease
 
       - name: ✅ Verify APK Exists
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         shell: pwsh
         run: |
           if (!(Test-Path "Frontend/android/app/build/outputs/apk/release/*.apk")) {
@@ -100,7 +100,7 @@ jobs:
           }
 
       - name: 🚀 Upload APK to GitHub Releases
-        if: matrix.os == 'windows-latest'
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         uses: softprops/action-gh-release@v2
         with:
           files: Frontend/android/app/build/outputs/apk/release/*.apk
@@ -108,7 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🧹 Cleanup Keystore
-        if: always() && matrix.os == 'windows-latest'
+        if: false # always() && matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend/android
         shell: pwsh
         run: Remove-Item keystore.jks -Force -ErrorAction SilentlyContinue
