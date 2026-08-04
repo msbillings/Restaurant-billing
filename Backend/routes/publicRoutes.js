@@ -8,6 +8,7 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import SettingDefault from '../models/Setting.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
+import { emitNotification } from '../utils/notificationHelper.js';
 
 // Public endpoint to fetch categories and active menu items
 router.get('/menu', async (req, res) => {
@@ -140,6 +141,33 @@ router.post('/order', async (req, res) => {
       console.warn('[QR KOT Print Trigger Failed]:', printErr.message);
     }
 
+    // Emit persistent notification for Navbar Panel (including items)
+    const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+    
+    // Get actual restaurant name
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    let shopName = 'Unknown Shop';
+    if (settingsDoc?.value) {
+      if (typeof settingsDoc.value === 'string') {
+        try {
+          const parsed = JSON.parse(settingsDoc.value);
+          shopName = parsed.restaurantName || 'Unknown Shop';
+        } catch (e) {}
+      } else {
+        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+      }
+    }
+    
+    const cleanTable = tableNo.replace('Table ', '');
+    emitNotification(
+      req, 
+      `${shopName} | Table ${cleanTable} Order`, 
+      `${itemNames}`, 
+      'success', 
+      ['Admin', 'Manager', 'Captain', 'Chef']
+    );
+
     res.status(201).json(bill);
   } catch (error) {
     console.error("Error submitting public order:", error);
@@ -166,6 +194,31 @@ router.post('/request-service', async (req, res) => {
     
     await newRequest.save();
     
+    // Emit persistent notification for Navbar Panel
+    // Get actual restaurant name
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    let shopName = 'Unknown Shop';
+    if (settingsDoc?.value) {
+      if (typeof settingsDoc.value === 'string') {
+        try {
+          const parsed = JSON.parse(settingsDoc.value);
+          shopName = parsed.restaurantName || 'Unknown Shop';
+        } catch (e) {}
+      } else {
+        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+      }
+    }
+    
+    const cleanTable = tableNumber.replace('Table ', '');
+    emitNotification(
+      req,
+      `${shopName} | Table ${cleanTable} Service`,
+      `${requestType}`,
+      'warning',
+      ['Admin', 'Manager', 'Captain']
+    );
+
     res.status(201).json({ message: 'Request sent successfully', request: newRequest });
   } catch (error) {
     console.error("Error requesting service:", error);
@@ -235,7 +288,7 @@ router.get('/system-ip', (req, res) => {
       }
     }
   }
-  res.status(200).json({ ip: localIP });
+  res.status(200).json({ ip: localIP, port: process.env.VITE_PORT || 5173 });
 });
 
 export default router;

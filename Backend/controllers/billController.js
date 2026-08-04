@@ -1356,9 +1356,11 @@ export const updateKOTItemStatus = async (req, res) => {
     emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, status });
     
     if (status === 'Preparing') {
-      emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${order.tableNo} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
+      const cleanTable = order.tableNo.replace('Table ', '');
+      emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${cleanTable} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
     } else if (status === 'Ready') {
-      emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${order.tableNo}`, 'success', ['Captain', 'Manager', 'Admin']);
+      const cleanTable = order.tableNo.replace('Table ', '');
+      emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${cleanTable}`, 'success', ['Captain', 'Manager', 'Admin']);
     }
 
     res.json({ message: 'Item status updated successfully', kot });

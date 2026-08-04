@@ -67,9 +67,13 @@ app.use('/api', limiter);
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
-// Initialize Socket.io
+// Initialize Socket.io with same CORS config as express
 const io = new Server(server, {
-  cors: corsOptions
+  cors: {
+    origin: true, // Mirror the same open-CORS policy as express
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  }
 });
 app.locals.io = io;
 
