@@ -100,14 +100,17 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const transcriptRef = React.useRef('');
+
   // Local AI Parser Logic
-  const handleAiCalculate = (e) => {
+  const handleAiCalculate = (e, customInput) => {
     if (e) e.preventDefault();
-    if (!aiInput.trim()) return;
+    const inputToParse = customInput !== undefined ? customInput : aiInput;
+    if (!inputToParse.trim()) return;
 
     // Convert spoken numbers/words to math symbols to help the parser
     // Includes English, Hindi, and Telugu common math words and numbers
-    let str = aiInput.toLowerCase()
+    let str = inputToParse.toLowerCase()
     // Convert Native Digits to ASCII (Devanagari, Telugu, Fullwidth)
     .replace(/[०-९]/g, (d) => d.charCodeAt(0) - 0x0966).
     replace(/[౦-౯]/g, (d) => d.charCodeAt(0) - 0x0C66).
@@ -275,6 +278,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     recognition.onstart = () => {
       setIsListening(true);
       setAiInput('');
+      transcriptRef.current = '';
     };
 
     recognition.onresult = (event) => {
@@ -282,6 +286,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       map((result) => result[0].transcript).
       join('');
       setAiInput(transcript);
+      transcriptRef.current = transcript;
     };
 
     recognition.onerror = (event) => {
@@ -291,10 +296,9 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
 
     recognition.onend = () => {
       setIsListening(false);
-      // Wait a tiny bit for state to settle, then simulate submit
+      // Wait a tiny bit for state to settle, then calculate using the ref
       setTimeout(() => {
-        const formEvent = new Event('submit', { cancelable: true });
-        handleAiCalculate(formEvent);
+        handleAiCalculate(null, transcriptRef.current);
       }, 300);
     };
 
@@ -431,9 +435,9 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
                   className="absolute right-[4.5rem] top-2 p-1.5 bg-transparent text-gray-400 hover:text-white text-xs font-bold focus:outline-none appearance-none cursor-pointer transition-colors z-10" title={t("Select Voice Language")}>
 
                   
-                  <option value="en-IN">{t("EN")}</option>
-                  <option value="te-IN">{t("TE")}</option>
-                  <option value="hi-IN">{t("HI")}</option>
+                  <option value="en-IN" className="bg-slate-900 text-white">{t("EN")}</option>
+                  <option value="te-IN" className="bg-slate-900 text-white">{t("TE")}</option>
+                  <option value="hi-IN" className="bg-slate-900 text-white">{t("HI")}</option>
                 </select>
 
                 <button

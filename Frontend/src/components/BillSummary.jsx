@@ -187,6 +187,41 @@ const BillSummary = ({
         </button>
       </div>
 
+      {/* Delivery Platform Selection */}
+      {billType === 'Delivery' && (
+        <div className="flex w-[calc(100%-24px)] mx-3 mt-1 mb-1 items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+          <select
+            value={['Direct', 'Swiggy', 'Zomato'].includes(orderSource) ? orderSource : 'Custom'}
+            onChange={(e) => {
+              if (e.target.value === 'Custom') {
+                setOrderSource('');
+              } else {
+                setOrderSource(e.target.value);
+              }
+            }}
+            disabled={isLocked}
+            className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
+          >
+            <option value="Direct">{t("Direct Delivery")}</option>
+            <option value="Swiggy">{t("Swiggy")}</option>
+            <option value="Zomato">{t("Zomato")}</option>
+            <option value="Custom">{t("Custom / Other")}</option>
+          </select>
+
+          {!['Direct', 'Swiggy', 'Zomato'].includes(orderSource) && (
+            <input
+              type="text"
+              placeholder={t("Platform Name")}
+              value={orderSource}
+              onChange={(e) => setOrderSource(e.target.value)}
+              disabled={isLocked}
+              className="flex-1 bg-white border border-gray-200 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
+              autoFocus
+            />
+          )}
+        </div>
+      )}
+
       {/* Info Bar */}
       <div className="flex items-center gap-2 p-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-1.5">

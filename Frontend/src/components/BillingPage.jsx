@@ -328,17 +328,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           type: order.discountType || 'percentage',
           value: order.discountValue || ''
         });
-        if (order.tax !== undefined && order.tax !== null) {
-          setTaxRate(order.tax);
-        } else {
-          try {
-            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-            let tot = 0;
-            if (s.enableCgst !== false) tot += s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5;
-            if (s.enableSgst !== false) tot += s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5;
-            if (s.enableGst === true) tot += s.gstRate !== undefined ? Number(s.gstRate) : 5;
-            if (tot > 0) setTaxRate(tot);
-          } catch (error) {console.error('Error parsing settings:', error);}
+        try {
+          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          let tot = 0;
+          if (s.enableCgst !== false) tot += s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5;
+          if (s.enableSgst !== false) tot += s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5;
+          if (s.enableGst === true) tot += s.gstRate !== undefined ? Number(s.gstRate) : 5;
+          setTaxRate(tot > 0 ? tot : '');
+        } catch (error) {
+          console.error('Error parsing settings:', error);
+          setTaxRate('');
         }
       } else {
         setCart([]);
