@@ -23,7 +23,19 @@ const getCategoryIcon = (catName) => {
   if (name.includes('meal')) return <UtensilsCrossed size={20} className="shrink-0 text-blue-600" />;
   if (name.includes('offer') || name.includes('weekly')) return <Gift size={20} className="shrink-0 text-purple-500" />;
 
-  return <Utensils size={20} className="shrink-0 opacity-70" />;
+  // Generate a deterministic random icon and color for unhandled categories
+  const icons = [Utensils, Cookie, Star, Smile, Flame, Popcorn, Soup, Pizza, Sandwich, Scroll, Beef, Gift, UtensilsCrossed];
+  const colors = ['text-red-500', 'text-blue-500', 'text-green-500', 'text-yellow-500', 'text-purple-500', 'text-pink-500', 'text-indigo-500', 'text-teal-500', 'text-orange-500', 'text-cyan-500'];
+  
+  let hash = 0;
+  for (let i = 0; i < catName.length; i++) {
+    hash = catName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const IconComponent = icons[Math.abs(hash) % icons.length];
+  const colorClass = colors[Math.abs(hash) % colors.length];
+
+  return <IconComponent size={20} className={`shrink-0 ${colorClass}`} />;
 };
 
 const formatImageUrl = (url) => {
@@ -419,6 +431,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
               className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors">
               
                 <X size={24} />
+                
               </button>
             </div>
             <div className="p-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">

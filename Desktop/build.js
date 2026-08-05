@@ -33,7 +33,7 @@ if (fs.existsSync(desktopBackend)) fs.rmSync(desktopBackend, { recursive: true, 
 
 // Build Frontend
 console.log('Building Frontend...');
-execSync('npm run build', { cwd: path.join(__dirname, '../Frontend'), stdio: 'inherit' });
+execSync('npm.cmd run build', { cwd: path.join(__dirname, '../Frontend'), stdio: 'inherit' });
 
 // Copy Frontend
 console.log('Copying Frontend...');

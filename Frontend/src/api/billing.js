@@ -127,6 +127,10 @@ export const getBills = async (page = 1, limit = 50, search = '') => {
   return response.data;
 };
 
+export const getEditedBills = async () => {
+  const response = await api.get('/bills/edited');
+  return response.data;
+};
 export const getBillById = async (id) => {
   const response = await api.get(`/bills/${id}`);
   return response.data;

@@ -225,7 +225,7 @@ const BillSummary = ({
       {/* Info Bar */}
       <div className="flex items-center gap-2 p-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-1.5">
-          <div className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm">
+          <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
             <span className="text-[9px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
             <span className="text-[13px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
               {activeTable ? (() => {
@@ -265,17 +265,18 @@ const BillSummary = ({
               >
                 <option value="" disabled>{t("Select Table")}</option>
                 {floors.map((floor, index) => {
-                  const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
+                  const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0 || floor.spaces?.length > 0;
                   if (!hasItems) return null;
                   return (
                     <optgroup key={`f-${index}`} label={floor.name}>
-                      {floor.tables?.map((tObj, i) => <option key={`t-${i}`} value={tObj.name}>{tObj.name} {t("(Table)")}</option>)}
-                      {floor.cabins?.map((cObj, i) => <option key={`c-${i}`} value={cObj.name}>{cObj.name} {t("(Cabin)")}</option>)}
-                      {floor.sofas?.map((sObj, i) => <option key={`s-${i}`} value={sObj.name}>{sObj.name} {t("(Sofa)")}</option>)}
+                      {floor.tables?.map((tObj, i) => <option key={`t-${i}`} value={`${floor.name} - ${tObj.name}`}>{tObj.name} {t("(Table)")}</option>)}
+                      {floor.cabins?.map((cObj, i) => <option key={`c-${i}`} value={`${floor.name} - ${cObj.name}`}>{cObj.name} {t("(Cabin)")}</option>)}
+                      {floor.sofas?.map((sObj, i) => <option key={`s-${i}`} value={`${floor.name} - ${sObj.name}`}>{sObj.name} {t("(Sofa)")}</option>)}
+                      {floor.spaces?.map((spObj, i) => <option key={`sp-${i}`} value={`${floor.name} - ${spObj.name}`}>{spObj.name} {t(`(${spObj.type || 'Space'})`)}</option>)}
                     </optgroup>
                   );
                 })}
-                {!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0) && [...Array(20)].map((_, i) => (
+                {!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0 || f.spaces?.length > 0) && [...Array(20)].map((_, i) => (
                   <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
                     {t('table')} {String(i + 1).padStart(2, '0')}
                   </option>
@@ -517,10 +518,10 @@ const BillSummary = ({
             {t("KOT")}
           </button>
           <button
-            onClick={onPrintKOT}
-            disabled={loading || cart.length === 0}
-            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[12px] sm:text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
-            {t("UPDATE KOT")}
+            onClick={onReopenOrder}
+            disabled={loading || !isLocked}
+            className="col-span-1 bg-blue-50 text-blue-600 py-3 rounded-xl text-[12px] sm:text-[13px] font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
+            {t("EDIT")}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
