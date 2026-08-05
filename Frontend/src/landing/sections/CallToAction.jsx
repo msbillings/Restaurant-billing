@@ -1,3 +1,4 @@
+import { getApiUrl } from "../../config.js";
 import React, { useState, memo } from 'react';
 import { motion as Motion } from 'framer-motion';
 import { ArrowRight, LogIn, Sparkles, Send } from 'lucide-react';
@@ -45,7 +46,7 @@ const CallToAction = () => {
     setStatus('loading');
     
     try {
-      const response = await fetch('http://localhost:5002/api/contact', {
+      const response = await fetch(`${getApiUrl()}/contact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

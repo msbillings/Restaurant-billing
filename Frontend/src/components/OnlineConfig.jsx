@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { getApiUrl } from "../config.js";
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, Globe, Save, Settings, Clock, MapPin, DollarSign, Store } from 'lucide-react';
 
-const OnlineConfig = ({ onNavigate }) => {
+const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -13,7 +15,7 @@ const OnlineConfig = ({ onNavigate }) => {
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/online-configs', {
+      const response = await axios.get(`${getApiUrl()}/online-configs`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setConfig(response.data);
@@ -36,7 +38,7 @@ const OnlineConfig = ({ onNavigate }) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await axios.put('http://localhost:5002/api/online-configs', config, {
+      await axios.put(`${getApiUrl()}/online-configs`, config, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       alert('Online order settings saved successfully!');
@@ -56,12 +58,10 @@ const OnlineConfig = ({ onNavigate }) => {
     <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-          <button onClick={() => onNavigate('operations')} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-            <ArrowLeft size={24} className="text-gray-600" />
-          </button>
+          <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Online Order Configuration</h1>
-            <p className="text-sm text-gray-500">Manage settings for your direct ordering website</p>
+            <h1 className="text-2xl font-bold text-gray-800">{t("Online Order Configuration")}</h1>
+            <p className="text-sm text-gray-500">{t("Manage settings for your direct ordering website")}</p>
           </div>
         </div>
       </div>
@@ -73,20 +73,20 @@ const OnlineConfig = ({ onNavigate }) => {
               <Globe size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-800">Direct Website Store</h2>
-              <p className="text-sm text-gray-500">Your personal zero-commission ordering platform</p>
+              <h2 className="text-lg font-bold text-gray-800">{t("Direct Website Store")}</h2>
+              <p className="text-sm text-gray-500">{t("Your personal zero-commission ordering platform")}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-gray-700">Enable Ordering</span>
+            <span className="text-sm font-medium text-gray-700">{t("Enable Ordering")}</span>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 name="isOnlineEnabled"
                 className="sr-only peer"
                 checked={config?.isOnlineEnabled || false}
-                onChange={handleInputChange}
-              />
+                onChange={handleInputChange} />
+              
               <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
             </label>
           </div>
@@ -96,42 +96,42 @@ const OnlineConfig = ({ onNavigate }) => {
           
           {/* General Settings */}
           <div>
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2"><Settings size={16}/> General Settings</h3>
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2"><Settings size={16} />{t("General Settings")}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Your Website Domain</label>
-                <input 
-                  type="text" 
-                  name="domainName"
-                  placeholder="e.g. order.myrestaurant.com"
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("Your Website Domain")}</label>
+                <input
+                  type="text"
+                  name="domainName" placeholder={t("e.g. order.myrestaurant.com")}
+
                   value={config?.domainName || ''}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Store Status</label>
-                <select 
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("Store Status")}</label>
+                <select
                   name="storeStatus"
                   value={config?.storeStatus || 'open'}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                >
-                  <option value="open">Accepting Orders (Open)</option>
-                  <option value="busy">Too Busy (Pause temporarily)</option>
-                  <option value="closed">Closed for the day</option>
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                  
+                  <option value="open">{t("Accepting Orders (Open)")}</option>
+                  <option value="busy">{t("Too Busy (Pause temporarily)")}</option>
+                  <option value="closed">{t("Closed for the day")}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone Number</label>
-                <input 
-                  type="text" 
-                  name="contactPhone"
-                  placeholder="For customer inquiries"
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("Contact Phone Number")}</label>
+                <input
+                  type="text"
+                  name="contactPhone" placeholder={t("For customer inquiries")}
+
                   value={config?.contactPhone || ''}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
             </div>
           </div>
@@ -140,68 +140,68 @@ const OnlineConfig = ({ onNavigate }) => {
 
           {/* Delivery & Ordering Rules */}
           <div>
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2"><Store size={16}/> Delivery & Ordering Rules</h3>
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2"><Store size={16} />{t("Delivery & Ordering Rules")}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><DollarSign size={14}/> Minimum Order Value (₹)</label>
-                <input 
-                  type="number" 
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><DollarSign size={14} />{t("Minimum Order Value (₹)")}</label>
+                <input
+                  type="number"
                   name="minOrderValue"
                   value={config?.minOrderValue || 0}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><DollarSign size={14}/> Standard Delivery Fee (₹)</label>
-                <input 
-                  type="number" 
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><DollarSign size={14} />{t("Standard Delivery Fee (₹)")}</label>
+                <input
+                  type="number"
                   name="deliveryFee"
                   value={config?.deliveryFee || 0}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><MapPin size={14}/> Delivery Radius (km)</label>
-                <input 
-                  type="number" 
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><MapPin size={14} />{t("Delivery Radius (km)")}</label>
+                <input
+                  type="number"
                   name="deliveryRadiusKm"
                   value={config?.deliveryRadiusKm || 5}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Clock size={14}/> Est. Preparation Time (mins)</label>
-                <input 
-                  type="number" 
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"><Clock size={14} />{t("Est. Preparation Time (mins)")}</label>
+                <input
+                  type="number"
                   name="prepTimeMinutes"
                   value={config?.prepTimeMinutes || 30}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                
               </div>
             </div>
           </div>
 
           <div className="flex justify-end pt-4">
-            <button 
+            <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 shadow-sm"
-            >
-              {saving ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Saving...</>
-              ) : (
-                <><Save size={18} /> Save Configuration</>
-              )}
+              className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-70 shadow-sm">
+              
+              {saving ?
+              <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>{t("Saving...")}</> :
+
+              <><Save size={18} />{t("Save Configuration")}</>
+              }
             </button>
           </div>
         </form>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default OnlineConfig;
