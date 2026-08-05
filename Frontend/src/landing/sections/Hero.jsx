@@ -11,6 +11,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import './Hero.css';
+import heroVideo from '../../assets/video/hero_video.webm';
 
 // ─── Trust Badge Data ───────────────────────────────────────────────────────
 const TRUST_BADGES = [
@@ -218,7 +219,7 @@ const Hero = () => {
       {/* ── Background video ──────────────────────────────────────── */}
       <video
         className="hero-bg-video"
-        src="/src/assets/video/hero_video.webm"
+        src={heroVideo}
         autoPlay
         loop
         muted

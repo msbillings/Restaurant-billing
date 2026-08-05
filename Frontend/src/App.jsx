@@ -1,3 +1,4 @@
+import { getApiUrl, getSuperadminApiUrl } from "./config.js";
 import React, { useState, useEffect, Suspense } from 'react';
 import { useLanguage } from './context/LanguageContext';
 // Lazy load components for performance
@@ -149,6 +150,14 @@ function App() {
   });
   const [profileOpen, setProfileOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [viewHistory, setViewHistory] = useState(() => {
+    const path = window.location.pathname.replace(/^\/+/, '');
+    if (window.location.protocol === 'file:' || path.includes('.html')) return ['floor'];
+    if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
+      return ['floor', path];
+    }
+    return ['floor'];
+  });
   const [hasLicense, setHasLicense] = useState(false);
   const [ownerUnlocked, setOwnerUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
@@ -184,18 +193,35 @@ function App() {
   const totalUnreadCount = unreadCount + rtUnreadCount;
 
   const [toastMessage, setToastMessage] = useState(null);
+  const [toastNotifInfo, setToastNotifInfo] = useState(null);
   const prevUnreadCountRef = React.useRef(totalUnreadCount);
 
   useEffect(() => {
     if (totalUnreadCount > prevUnreadCountRef.current) {
-      // New broadcast arrived!
-      setToastMessage("You have a new Notification!");
-      const timer = setTimeout(() => setToastMessage(null), 5000);
+      // New broadcast or real-time notification arrived!
+      const isRealTime = rtUnreadCount > prevUnreadCountRef.current;
+      if (isRealTime && realTimeNotifs.length > 0) {
+        const latest = realTimeNotifs[0];
+        setToastNotifInfo({ title: latest.title, message: latest.message, type: latest.type || 'success' });
+      } else {
+        setToastMessage("You have a new Notification!");
+      }
+      
       prevUnreadCountRef.current = totalUnreadCount;
-      return () => clearTimeout(timer);
     }
     prevUnreadCountRef.current = totalUnreadCount;
-  }, [totalUnreadCount]);
+  }, [totalUnreadCount, realTimeNotifs, rtUnreadCount]);
+
+  // Auto-hide toast messages after 5 seconds
+  useEffect(() => {
+    if (toastMessage || toastNotifInfo) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+        setToastNotifInfo(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage, toastNotifInfo]);
 
   // Format broadcasts for the dropdown
   const formattedBroadcasts = broadcasts.map((b) => ({
@@ -224,7 +250,7 @@ function App() {
   // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
   const syncConfigFromBackend = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = getApiUrl();
       const res = await fetch(`${API_BASE_URL}/config/info`, {
         headers: {
           'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
@@ -292,7 +318,7 @@ function App() {
       try {
         const licenseKey = localStorage.getItem('resto_license');
         if (licenseKey) {
-          const SUPERADMIN_API_URL = import.meta.env.VITE_SUPERADMIN_API_URL || 'https://restaurant-superadmin-api-maheer.vercel.app';
+          const SUPERADMIN_API_URL = getSuperadminApiUrl();
           const saRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/license/${licenseKey}`);
           if (saRes.ok) {
             const saData = await saRes.json();
@@ -329,7 +355,7 @@ function App() {
             // 3. Sync Passwords to Local Backend if present
             if (saData.plainTextPassword || saData.staffAccounts && saData.staffAccounts.length > 0) {
               try {
-                const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+                const API_BASE_URL = getApiUrl();
                 await fetch(`${API_BASE_URL}/config/sync-users`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -564,7 +590,7 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+      const API_BASE_URL = getApiUrl();
       const socketUrl = API_BASE_URL.replace('/api', '');
       const socket = io(socketUrl);
 
@@ -616,8 +642,16 @@ function App() {
       }
       if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
         setView(path);
+        setViewHistory(prev => {
+          if (prev[prev.length - 1] === path) return prev;
+          return [...prev, path];
+        });
       } else {
         setView('floor');
+        setViewHistory(prev => {
+          if (prev[prev.length - 1] === 'floor') return prev;
+          return [...prev, 'floor'];
+        });
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -629,12 +663,40 @@ function App() {
       setSelectedTable(tableSelection);
     }
     setView(newView);
+    setViewHistory(prev => {
+      // Don't push duplicate sequential views
+      if (prev[prev.length - 1] === newView) return prev;
+      return [...prev, newView];
+    });
     setMobileMenuOpen(false);
 
     if (newView === 'floor') {
       window.history.pushState(null, '', '/dashboard');
     } else {
       window.history.pushState(null, '', '/' + newView);
+    }
+  };
+
+  const handleGoBack = () => {
+    if (viewHistory.length <= 1) {
+      setView('floor');
+      window.history.pushState(null, '', '/dashboard');
+      return;
+    }
+    
+    const previousView = viewHistory[viewHistory.length - 2];
+    
+    setViewHistory(prev => {
+      const newHistory = [...prev];
+      newHistory.pop();
+      return newHistory;
+    });
+    
+    setView(previousView);
+    if (previousView === 'floor') {
+      window.history.pushState(null, '', '/dashboard');
+    } else {
+      window.history.pushState(null, '', '/' + previousView);
     }
   };
 
@@ -737,20 +799,35 @@ function App() {
 
       {/* Broadcast Toast Notification */}
       <AnimatePresence>
-        {toastMessage &&
+        {(toastMessage || toastNotifInfo) &&
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 20 }}
           exit={{ opacity: 0, y: -50 }}
-          className="absolute top-0 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl font-bold flex items-center gap-3 cursor-pointer"
+          className={`absolute top-0 right-6 z-9999 ${toastNotifInfo ? 'bg-white border-l-4 ' + (toastNotifInfo.type === 'warning' ? 'border-amber-500 text-slate-800' : 'border-green-500 text-slate-800') : 'bg-linear-to-r from-purple-600 to-indigo-600 text-white'} px-6 py-4 rounded-xl shadow-2xl flex items-start gap-4 cursor-pointer min-w-[320px] max-w-md`}
           onClick={() => {
             setToastMessage(null);
+            setToastNotifInfo(null);
             handleViewChange('notification');
           }}>
           
-            <Bell className="animate-bounce" size={20} />
-            {toastMessage}
-            <X size={16} className="ml-2 hover:bg-white/20 rounded-full p-0.5 transition-colors" onClick={(e) => {e.stopPropagation();setToastMessage(null);}} />
+            {toastNotifInfo ? (
+              <>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${toastNotifInfo.type === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
+                  <Bell className="animate-bounce" size={20} />
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-sm mb-1">{toastNotifInfo.title}</h4>
+                  <p className="text-xs text-slate-500 leading-tight">{toastNotifInfo.message}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Bell className="animate-bounce" size={20} />
+                <span className="font-bold">{toastMessage}</span>
+              </>
+            )}
+            <X size={16} className={`ml-2 rounded-full p-0.5 transition-colors ${toastNotifInfo ? 'text-slate-400 hover:bg-slate-100' : 'hover:bg-white/20'}`} onClick={(e) => {e.stopPropagation();setToastMessage(null);setToastNotifInfo(null);}} />
           </motion.div>
         }
       </AnimatePresence>
@@ -780,7 +857,7 @@ function App() {
 
       {/* NEW PETPOOJA STYLE TOP HEADER */}
       <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
-          <div className="flex items-center min-w-0 flex-shrink-0">
+          <div className="flex items-center min-w-0 shrink-0">
             <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors z-10 relative shrink-0 mr-1 sm:mr-2">
@@ -789,7 +866,7 @@ function App() {
             </button>
             <div className="flex items-center cursor-pointer" onClick={() => handleViewChange('floor')}>
               <div className="relative w-40 sm:w-56 h-10 sm:h-16 flex items-center overflow-visible">
-                <img src={logoImg} alt="msbillings" className="absolute left-[-20px] sm:left-[-35px] w-[200px] sm:w-[300px] max-w-none object-contain" />
+                <img src={logoImg} alt="msbillings" className="absolute -left-5 sm:-left-8.75 w-50 sm:w-75 max-w-none object-contain" />
               </div>
             </div>
           </div>
@@ -840,7 +917,7 @@ function App() {
           }
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5 flex-shrink-0">
+          <div className="flex items-center gap-3 sm:gap-5 shrink-0">
             <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
               <PhoneCall size={18} className="text-red-500" />
               <div className="flex flex-col leading-none">
@@ -918,20 +995,37 @@ function App() {
 
                     </span>
                       </div>
-                      <div className="max-h-[300px] overflow-y-auto">
+                      <div className="max-h-75 overflow-y-auto">
                         {notifications.map((n) =>
                     <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
                             <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
                             <div>
                               <p className="text-[1.05rem] font-bold text-gray-800 leading-tight">{n.title}</p>
                               <p className="text-xs text-gray-500 mt-1">{n.message}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">{n.time}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                {n.time ? new Date(n.time).toLocaleString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                }) : ''}
+                              </p>
                             </div>
                           </div>
                     )}
                       </div>
                       <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
-                        <button className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}</button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            rtClearNotification('ALL');
+                            setShowNotifications(false);
+                          }}
+                          className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}
+                        </button>
                       </div>
                     </div>
                   </>
@@ -1002,7 +1096,7 @@ function App() {
               <div className="space-y-0.5">
               <button
                   onClick={() => handleViewChange('floor')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'floor' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'floor' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                 <LayoutGrid size={22} />
                 <span>{t('Floor Management')}</span>
@@ -1010,7 +1104,7 @@ function App() {
               
               <button
                   onClick={() => handleViewChange('billing')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'billing' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'billing' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                 <LayoutDashboard size={22} />
                 <span>{isCaptain ? t('Captain Order') : t('New Order')}</span>
@@ -1018,7 +1112,7 @@ function App() {
 
               <button
                   onClick={() => handleViewChange('orders')}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'orders' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'orders' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                 <div className="flex items-center gap-3">
                   <ClipboardList size={22} />
@@ -1034,7 +1128,7 @@ function App() {
               {!isCaptain &&
                 <button
                   onClick={() => handleViewChange('history')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                   <History size={22} />
                   <span>{t('Bill History')}</span>
@@ -1043,7 +1137,7 @@ function App() {
 
               <button
                   onClick={() => handleViewChange('kothistory')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-linear-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                 <Printer size={22} />
                 <span>{t('KOT History')}</span>
@@ -1068,7 +1162,7 @@ function App() {
                 {features.kds !== false &&
                 <button
                   onClick={() => handleViewChange('kds')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-linear-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <UtensilsCrossed size={22} />
                     <span>{t('Kitchen Display (KDS)')}</span>
@@ -1078,7 +1172,7 @@ function App() {
                 {!isChef && features.delivery !== false &&
                 <button
                   onClick={() => handleViewChange('delivery')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'delivery' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'delivery' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <Truck size={22} />
                     <span>{t('Delivery Orders')}</span>
@@ -1088,7 +1182,7 @@ function App() {
                 {!isChef && features.delivery !== false &&
                 <button
                   onClick={() => handleViewChange('pickup')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'pickup' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'pickup' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <ShoppingBag size={22} />
                     <span>{t('Pickup Orders')}</span>
@@ -1098,7 +1192,7 @@ function App() {
                 {!isChef && features.expenses !== false &&
                 <button
                   onClick={() => handleViewChange('expenses')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'expenses' ? 'bg-gradient-to-r from-rose-500 to-red-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'expenses' ? 'bg-linear-to-r from-rose-500 to-red-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <Wallet size={22} />
                     <span>{t('Petty Cash')}</span>
@@ -1108,7 +1202,7 @@ function App() {
                 {!isChef &&
                 <button
                   onClick={() => handleViewChange('operations')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'operations' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'operations' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                   <LayoutGrid size={22} />
                   <span>{t('Extra Operations')}</span>
@@ -1133,7 +1227,7 @@ function App() {
               <div className="space-y-0.5">
                 <button
                   onClick={() => handleViewChange('dashboard')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'dashboard' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'dashboard' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                   <Home size={22} />
                   <span>{t('Dashboard')}</span>
@@ -1142,7 +1236,7 @@ function App() {
                 {(isAdmin || isManager) && features.analytics !== false &&
                 <button
                   onClick={() => handleViewChange('analytics')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'analytics' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'analytics' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <BarChart3 size={22} />
                     <span>{t('Analytics')}</span>
@@ -1152,7 +1246,7 @@ function App() {
                 {features.daybook !== false &&
                 <button
                   onClick={() => handleViewChange('daybook')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'daybook' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'daybook' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <BookOpen size={22} />
                     <span>{t('DayBook')}</span>
@@ -1178,7 +1272,7 @@ function App() {
                 {(isAdmin || isManager) && features.inventory !== false &&
                 <button
                   onClick={() => handleViewChange('inventory')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'inventory' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'inventory' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <Package size={22} />
                     <span>{t("Inventory")}</span>
@@ -1188,7 +1282,7 @@ function App() {
                 {features.crm !== false &&
                 <button
                   onClick={() => handleViewChange('crm')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'crm' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'crm' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <UsersIcon size={22} />
                     <span>{t("Customer CRM")}</span>
@@ -1198,7 +1292,7 @@ function App() {
                 {(isAdmin || isManager) && features.staff !== false &&
                 <button
                   onClick={() => handleViewChange('staff')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'staff' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'staff' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <UserCheck size={22} />
                     <span>{t("Staff HR")}</span>
@@ -1208,7 +1302,7 @@ function App() {
                 {(isAdmin || isManager) && features.qrcode !== false &&
                 <button
                   onClick={() => handleViewChange('qrcode')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'qrcode' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'qrcode' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <QrCode size={22} />
                     <span>{t("QR Menu Generator")}</span>
@@ -1217,7 +1311,7 @@ function App() {
 
                 <button
                   onClick={() => handleViewChange('menu')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'menu' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'menu' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                   <UtensilsCrossed size={22} />
                   <span>{t("Menu")}</span>
@@ -1226,7 +1320,7 @@ function App() {
                 {isAdmin &&
                 <button
                   onClick={() => handleViewChange('settings')}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'settings' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'settings' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
                   
                     <SettingsIcon size={22} />
                     <span>{t('Settings')}</span>
@@ -1263,9 +1357,7 @@ function App() {
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
         </Suspense>
 
-
-
-        <main className={`flex-1 overflow-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
+        <main className={`flex-1 overflow-y-auto overflow-x-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
           <Suspense fallback={
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-4">
@@ -1331,8 +1423,8 @@ function App() {
               </div> :
 
               <>
-                {view === 'dashboard' && <Dashboard onNavigate={handleViewChange} />}
-                {view === 'floor' && <FloorManagement onNavigate={handleViewChange} />}
+                {view === 'dashboard' && <Dashboard onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'floor' && <FloorManagement onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 {view === 'orders' &&
                 <ActiveOrders
                   onSelectOrder={(tableNo) => {
@@ -1340,49 +1432,49 @@ function App() {
                     handleViewChange('billing');
                   }}
                   onOrderUpdate={fetchActiveOrdersCount}
-                  onNavigate={handleViewChange} />
+                  onNavigate={handleViewChange} onGoBack={handleGoBack} />
 
                 }
-                {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
-                {view === 'history' && <BillHistory onNavigate={handleViewChange} />}
-                {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} />}
-                {view === 'analytics' && <Analytics onNavigate={handleViewChange} />}
-                {view === 'daybook' && <DayBook onNavigate={handleViewChange} />}
-                {view === 'operations' && <Operations onNavigate={handleViewChange} userRole={user?.role?.toLowerCase()} />}
-                {view === 'tax' && <TaxConfig onNavigate={handleViewChange} />}
-                {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} />}
-                {(view === 'withdrawal' || view === 'cash-topup') && <CashOperations onNavigate={handleViewChange} />}
-                {view === 'due-payment' && <DuePayment onNavigate={handleViewChange} />}
-                {view === 'reservation' && <Reservation onNavigate={handleViewChange} />}
-                {view === 'feedback' && <Feedback onNavigate={handleViewChange} />}
-                {view === 'push-orders' && <PushOrders onNavigate={handleViewChange} />}
-                {view === 'bill-print' && <PrinterConfig onNavigate={handleViewChange} />}
-                {view === 'online-config' && <OnlineConfig onNavigate={handleViewChange} />}
-                {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} />}
-                {view === 'sync' && <ManualSync onNavigate={handleViewChange} />}
-                {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} />}
-                {view === 'menu' && <MenuManagement user={user} onNavigate={handleViewChange} />}
-                {view === 'delivery' && <DeliveryOrders onNavigate={handleViewChange} />}
-                {view === 'pickup' && <PickupOrders />}
-                {view === 'expenses' && <Expenses />}
-                {view === 'inventory' && <InventoryManagement onNavigate={handleViewChange} />}
-                {view === 'crm' && <CRM onNavigate={handleViewChange} />}
-                {view === 'staff' && <StaffManagement onNavigate={handleViewChange} />}
-                {view === 'qrcode' && <QRCodeGenerator />}
-                {view === 'settings' && <Settings user={user} setUser={setUser} onNavigate={handleViewChange} />}
-                {view === 'kds' && <KDS />}
+                {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} onGoBack={handleGoBack} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
+                {view === 'history' && <BillHistory onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'analytics' && <Analytics onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'daybook' && <DayBook onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'operations' && <Operations onNavigate={handleViewChange} onGoBack={handleGoBack} userRole={user?.role?.toLowerCase()} />}
+                {view === 'tax' && <TaxConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {(view === 'withdrawal' || view === 'cash-topup') && <CashOperations onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'due-payment' && <DuePayment onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'reservation' && <Reservation onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'feedback' && <Feedback onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'push-orders' && <PushOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'bill-print' && <PrinterConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'online-config' && <OnlineConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'sync' && <ManualSync onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'menu' && <MenuManagement user={user} onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'delivery' && <DeliveryOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'pickup' && <PickupOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'expenses' && <Expenses onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'inventory' && <InventoryManagement onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'crm' && <CRM onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'staff' && <StaffManagement onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'qrcode' && <QRCodeGenerator onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'settings' && <Settings user={user} setUser={setUser} onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'kds' && <KDS onNavigate={handleViewChange} onGoBack={handleGoBack} />}
 
                 {/* Placeholder Routes */}
-                {view === 'notification' && <NotificationCenter onNavigate={handleViewChange} userRole={userRole} />}
-                {view === 'help' && <HelpSupport onNavigate={handleViewChange} />}
-                {view === 'live-view' && <LiveView onNavigate={handleViewChange} />}
-                {view === 'language' && <LanguageProfile onNavigate={handleViewChange} />}
-                {view === 'currency' && <CurrencyConversion onNavigate={handleViewChange} />}
-                {view === 'billing-screen' && <BillingScreenSettings onNavigate={handleViewChange} />}
-                {view === 'menu-toggle' && <MenuToggle onNavigate={handleViewChange} />}
-                {view === 'renewal' && <ServiceRenewal onNavigate={handleViewChange} />}
-                {view === 'custom-status' && <CustomStatus onNavigate={handleViewChange} />}
-                {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} />}
+                {view === 'notification' && <NotificationCenter onNavigate={handleViewChange} onGoBack={handleGoBack} userRole={userRole} />}
+                {view === 'help' && <HelpSupport onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'live-view' && <LiveView onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'language' && <LanguageProfile onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'currency' && <CurrencyConversion onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'billing-screen' && <BillingScreenSettings onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'menu-toggle' && <MenuToggle onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'renewal' && <ServiceRenewal onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'custom-status' && <CustomStatus onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} />}
               </>
               }
@@ -1391,7 +1483,7 @@ function App() {
 
         {/* Native Android Bottom Navigation Bar (Google MD3 Style - Mobile Only) */}
         {!isChef && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 min-h-[70px] pt-1.5 pb-[calc(10px+env(safe-area-inset-bottom,0px))] bg-surface/98 backdrop-blur-xl border-t border-border/80 z-50 flex items-center justify-around px-2 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 min-h-17.5 pt-1.5 pb-[calc(10px+env(safe-area-inset-bottom,0px))] bg-surface/98 backdrop-blur-xl border-t border-border/80 z-50 flex items-center justify-around px-2 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
           <button
               onClick={() => handleViewChange('floor')}
               className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
@@ -1463,15 +1555,15 @@ function App() {
 
       {/* License Expiry Warning Popup */}
       {showExpiryPopup && daysRemaining !== null &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-9999 animate-in fade-in duration-200">
           <div className="bg-surface rounded-3xl border border-border shadow-2xl max-w-md w-full mx-4 overflow-hidden">
             {/* Header */}
             <div className={`px-6 py-5 flex items-center justify-between ${
           daysRemaining <= 0 ?
-          'bg-gradient-to-r from-red-500/20 to-red-400/10' :
+          'bg-linear-to-r from-red-500/20 to-red-400/10' :
           daysRemaining > 365 ?
-          'bg-gradient-to-r from-emerald-500/20 to-emerald-400/10' :
-          'bg-gradient-to-r from-amber-500/20 to-amber-400/10'}`
+          'bg-linear-to-r from-emerald-500/20 to-emerald-400/10' :
+          'bg-linear-to-r from-amber-500/20 to-amber-400/10'}`
           }>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
@@ -1595,7 +1687,7 @@ function App() {
 
       {/* Global Broadcast Modal */}
       {activeBroadcast &&
-      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] animate-fade-in p-4 backdrop-blur-sm">
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-100 animate-fade-in p-4 backdrop-blur-sm">
           <div className="bg-surface border border-primary/50 p-1 rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-transform overflow-hidden relative">
             <div className="bg-background rounded-xl p-6 sm:p-8 relative">
               <button
@@ -1645,7 +1737,7 @@ function App() {
 
       {/* Logout Confirmation Toast Modal */}
       {showLogoutConfirm &&
-      <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+      <div className="fixed inset-0 z-100 flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
             <div className="flex flex-col items-center text-center">
               <p className="text-text-main font-medium text-base mb-6">{t("Are you sure you want to logout")}

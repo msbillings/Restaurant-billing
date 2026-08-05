@@ -1,8 +1,11 @@
-import PrinterConfig from '../models/PrinterConfig.js';
+import PrinterConfigDefault from '../models/PrinterConfig.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
+import { sendRawToNetworkPrinter, generateESCPOSTestReceipt } from '../services/printerService.js';
 
 // Get all printer configs
 export const getPrinterConfigs = async (req, res) => {
   try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const configs = await PrinterConfig.find();
     res.status(200).json(configs);
   } catch (error) {
@@ -13,6 +16,7 @@ export const getPrinterConfigs = async (req, res) => {
 // Create a new printer config
 export const createPrinterConfig = async (req, res) => {
   try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const newConfig = new PrinterConfig(req.body);
     await newConfig.save();
     res.status(201).json(newConfig);
@@ -24,6 +28,7 @@ export const createPrinterConfig = async (req, res) => {
 // Update a printer config
 export const updatePrinterConfig = async (req, res) => {
   try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const updatedConfig = await PrinterConfig.findByIdAndUpdate(id, req.body, { new: true });
     
@@ -40,6 +45,7 @@ export const updatePrinterConfig = async (req, res) => {
 // Delete a printer config
 export const deletePrinterConfig = async (req, res) => {
   try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const deletedConfig = await PrinterConfig.findByIdAndDelete(id);
     
@@ -53,9 +59,10 @@ export const deletePrinterConfig = async (req, res) => {
   }
 };
 
-// Print test page (Mock)
+// Print test page (Real TCP Socket for Network Printer)
 export const testPrinter = async (req, res) => {
   try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const config = await PrinterConfig.findById(id);
     
@@ -63,13 +70,18 @@ export const testPrinter = async (req, res) => {
       return res.status(404).json({ message: 'Printer config not found' });
     }
     
-    // In a real scenario, this would send an ESC/POS command to the printer IP
-    console.log(`[Printer] Simulating test print to ${config.type} printer at ${config.ipAddress || 'USB'}`);
-    
-    // Simulate slight delay to mimic network request
-    setTimeout(() => {
-      res.status(200).json({ message: 'Test page sent to printer successfully' });
-    }, 1000);
+    if (config.connectionType === 'network' && config.ipAddress) {
+      const buffer = generateESCPOSTestReceipt(config);
+      try {
+        const result = await sendRawToNetworkPrinter(config.ipAddress, config.port || 9100, buffer);
+        return res.status(200).json({ message: `Test receipt printed to ${config.name} (${config.ipAddress})` });
+      } catch (err) {
+        return res.status(400).json({ message: `Failed to print to ${config.name}: ${err.message}` });
+      }
+    }
+
+    // Fallback response for non-network printers
+    res.status(200).json({ message: `Test command sent to ${config.name} (${config.connectionType})` });
     
   } catch (error) {
     res.status(500).json({ message: 'Error testing printer', error: error.message });

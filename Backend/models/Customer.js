@@ -29,7 +29,15 @@ const customerSchema = new mongoose.Schema({
   favoriteItems: [{
     itemName: String,
     count: Number
-  }]
+  }],
+  points: {
+    type: Number,
+    default: 0
+  },
+  walletBalance: {
+    type: Number,
+    default: 0
+  }
 }, {
   timestamps: true
 });

@@ -25,8 +25,23 @@ io.on('connection', (socket) => {
   });
 });
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ...(process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*'
+    ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+    : [])
+];
+
+const corsOptions = {
+  origin: true,
+  credentials: true
+};
+
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -156,7 +171,7 @@ const connectDB = async () => {
 
 if (process.env.NODE_ENV !== 'production' || process.env.RENDER) {
   connectDB().then(() => {
-    const PORT = process.env.PORT || 4000;
+    const PORT = process.env.PORT || 4001;
     httpServer.listen(PORT, '0.0.0.0', () => console.log(`SuperAdmin Server running on 0.0.0.0:${PORT}`));
   });
 } else {

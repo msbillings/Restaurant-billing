@@ -3,20 +3,21 @@ name: Build and Release MS Billing
 on:
   push:
     tags:
-      - 'v*' # This triggers the workflow ONLY when you push a tag like v1.4.0
+      - "v*" # This triggers the workflow ONLY when you push a tag like v1.4.0
   workflow_dispatch: # This adds the "Run workflow" button!
 
 jobs:
   release:
     name: Build & Publish for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       matrix:
         os: [macos-latest, windows-latest]
-    
+
     # This permission is required for the automatic GITHUB_TOKEN to upload releases
     permissions:
-      contents: write 
+      contents: write
 
     steps:
       - name: 📥 Check out Git repository
@@ -25,7 +26,7 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "22"
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
@@ -54,3 +55,60 @@ jobs:
         run: npx electron-builder -p always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔐 Decode Android Keystore
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        working-directory: ./Frontend/android
+        run: |
+          $keystoreBytes = [System.Convert]::FromBase64String("${{ secrets.KEYSTORE_BASE64 }}")
+          [System.IO.File]::WriteAllBytes("keystore.jks", $keystoreBytes)
+
+      - name: 🔍 Verify Capacitor
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        working-directory: ./Frontend
+        run: npx cap --version
+
+      - name: 📱 Sync Capacitor Android
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        working-directory: ./Frontend
+        run: npx cap sync android
+
+      - name: ☕ Setup Java
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🔨 Build Android APK
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        working-directory: ./Frontend/android
+        env:
+          CI: "true"
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: .\gradlew.bat assembleRelease
+
+      - name: ✅ Verify APK Exists
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        shell: pwsh
+        run: |
+          if (!(Test-Path "Frontend/android/app/build/outputs/apk/release/*.apk")) {
+            Write-Error "APK not generated."
+            exit 1
+          }
+
+      - name: 🚀 Upload APK to GitHub Releases
+        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Frontend/android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🧹 Cleanup Keystore
+        if: false # always() && matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        working-directory: ./Frontend/android
+        shell: pwsh
+        run: Remove-Item keystore.jks -Force -ErrorAction SilentlyContinue

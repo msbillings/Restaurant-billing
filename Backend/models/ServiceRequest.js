@@ -22,4 +22,7 @@ const serviceRequestSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Auto-delete documents older than 2 days (172800 seconds)
+serviceRequestSchema.index({ createdAt: 1 }, { expireAfterSeconds: 172800 });
+
 export default mongoose.model('ServiceRequest', serviceRequestSchema);

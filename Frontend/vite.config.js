@@ -80,6 +80,15 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    watch: {
+      ignored: ['**/android/**', '**/ios/**', '**/dist/**']
+    }
+  },
+  optimizeDeps: {
+    exclude: [],
+    entries: ['index.html', 'src/**/*.{js,jsx,ts,tsx}']
+  },
   build: {
     rollupOptions: {
       output: {

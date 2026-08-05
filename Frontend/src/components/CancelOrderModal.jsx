@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
 import { X, ShieldAlert, FileText, Eye, EyeOff } from 'lucide-react';
 
-const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPin }) => {
+const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPin }) => {const { t } = useLanguage();
   const [pin, setPin] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -35,42 +35,42 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPin }) => {
         <div className="bg-danger/10 p-4 border-b border-danger/20 flex justify-between items-center">
           <div className="flex items-center gap-3 text-danger font-bold text-lg">
             <ShieldAlert size={24} />
-            <h2>Cancel Order</h2>
+            <h2>{t("Cancel Order")}</h2>
           </div>
-          <button 
+          <button
             onClick={onClose}
-            className="text-text-muted hover:text-text-main transition-colors p-1 rounded-lg hover:bg-background"
-          >
+            className="text-text-muted hover:text-text-main transition-colors p-1 rounded-lg hover:bg-background">
+            
             <X size={20} />
           </button>
         </div>
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {error && (
-            <div className="bg-danger/10 text-danger text-sm p-3 rounded-lg border border-danger/20">
+          {error &&
+          <div className="bg-danger/10 text-danger text-sm p-3 rounded-lg border border-danger/20">
               {error}
             </div>
-          )}
+          }
           
           <div className="space-y-2">
             <label className="text-xs font-bold text-text-muted uppercase tracking-wider flex items-center gap-2">
-              <ShieldAlert size={14} /> Owner / Admin PIN
+              <ShieldAlert size={14} />{t("Owner / Admin PIN")}
             </label>
             <div className="relative">
               <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Enter PIN to authorize"
+                type={showPassword ? 'text' : 'password'} placeholder={t("Enter PIN to authorize")}
+
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 className="w-full bg-background border border-border rounded-xl px-4 py-3 pr-12 text-sm focus:outline-none focus:border-danger transition-colors text-text-main"
-                autoFocus
-              />
+                autoFocus />
+              
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-main transition-colors"
-              >
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-main transition-colors">
+                
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
@@ -78,15 +78,15 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPin }) => {
 
           <div className="space-y-2">
             <label className="text-xs font-bold text-text-muted uppercase tracking-wider flex items-center gap-2">
-              <FileText size={14} /> Cancellation Reason
+              <FileText size={14} />{t("Cancellation Reason")}
             </label>
-            <textarea
-              placeholder="Please explain why this order is being cancelled..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-danger transition-colors text-text-main resize-none"
-            />
+            <textarea placeholder={t("Please explain why this order is being cancelled...")}
+
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="w-full bg-background border border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-danger transition-colors text-text-main resize-none" />
+            
           </div>
 
           {/* Footer */}
@@ -94,21 +94,21 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPin }) => {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl font-bold text-text-muted bg-background hover:bg-border/50 border border-border transition-colors"
-            >
-              Keep Order
+              className="flex-1 py-3 rounded-xl font-bold text-text-muted bg-background hover:bg-border/50 border border-border transition-colors">{t("Keep Order")}
+
+
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 rounded-xl font-bold text-white bg-danger hover:bg-danger/90 shadow-lg shadow-danger/20 transition-all active:scale-[0.98]"
-            >
-              Confirm Cancel
+              className="flex-1 py-3 rounded-xl font-bold text-white bg-danger hover:bg-danger/90 shadow-lg shadow-danger/20 transition-all active:scale-[0.98]">{t("Confirm Cancel")}
+
+
             </button>
           </div>
         </form>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default CancelOrderModal;

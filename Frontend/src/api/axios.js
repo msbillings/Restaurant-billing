@@ -1,7 +1,8 @@
+import { getApiUrl } from "../config.js";
 import axios from 'axios';
 
 // Use environment variable for API URL, fallback to localhost for development
-let API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+let API_BASE_URL = getApiUrl();
 
 // CRITICAL FIX: If running inside the Desktop Electron App, force localhost
 if (navigator.userAgent.toLowerCase().indexOf('electron') > -1) {
@@ -111,10 +112,16 @@ api.interceptors.response.use(
       console.error('Request Error:', error.message);
     }
 
+    // Check if we are on the public customer QR menu page.
+    // This page is public and requires NO authentication — never force-logout from here.
+    const isPublicOrderPage = window.location.pathname === '/order';
+
     // Handle 401 (Unauthorized) - Session invalid/expired -> Logout immediately
     if (error.response?.status === 401) {
-      // Don't reload if the request was to the login endpoint, just pass the error
-      if (!originalRequest.url?.includes('/auth/login')) {
+      // Don't logout if:
+      // 1. The request was to the login endpoint (just pass the error to show message)
+      // 2. The user is on the public /order page (QR customer menu — no auth needed)
+      if (!originalRequest.url?.includes('/auth/login') && !isPublicOrderPage) {
         console.warn('401 Unauthorized - Logging out user');
         forceLogout();
       }
@@ -125,7 +132,7 @@ api.interceptors.response.use(
     // CRITICAL FIX: Skip refresh logic for auth endpoints (login/register/refresh).
     // A 403 from /auth/login means "max sessions reached" and MUST be shown to the user!
     const isAuthEndpoint = originalRequest.url?.includes('/auth/');
-    if (error.response?.status === 403 && !originalRequest._retry && !isAuthEndpoint) {
+    if (error.response?.status === 403 && !originalRequest._retry && !isAuthEndpoint && !isPublicOrderPage) {
       if (isRefreshing) {
         // If already refreshing, queue this request
         return new Promise((resolve, reject) => {

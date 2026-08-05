@@ -25,6 +25,26 @@ const menuSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  nameTranslations: {
+    hi: { type: String, default: '' },
+    te: { type: String, default: '' },
+    ta: { type: String, default: '' },
+    kn: { type: String, default: '' },
+    ml: { type: String, default: '' },
+    mr: { type: String, default: '' },
+    bn: { type: String, default: '' },
+    gu: { type: String, default: '' }
+  },
+  descriptionTranslations: {
+    hi: { type: String, default: '' },
+    te: { type: String, default: '' },
+    ta: { type: String, default: '' },
+    kn: { type: String, default: '' },
+    ml: { type: String, default: '' },
+    mr: { type: String, default: '' },
+    bn: { type: String, default: '' },
+    gu: { type: String, default: '' }
+  },
   image: {
     type: String,
     trim: true,

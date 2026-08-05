@@ -6,6 +6,7 @@ import { updateTableStatusHelper } from './floorController.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 import { updateCustomerFromBill, syncCustomer } from './customerController.js';
 import { emitNotification } from '../utils/notificationHelper.js';
+import { printKOTToPrinters } from '../services/printerService.js';
 
 const emitSocketEvent = (req, eventName, data) => {
   try {
@@ -335,12 +336,12 @@ export const transferTable = async (req, res) => {
     const order = await Bill.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     
-    if (order.status !== 'Open') {
-      return res.status(400).json({ message: 'Only open orders can be transferred' });
+    if (order.status !== 'Open' && order.status !== 'Billed') {
+      return res.status(400).json({ message: 'Only open or billed orders can be transferred' });
     }
 
-    // Check if new table is already occupied by an Open order
-    const existingOrder = await Bill.findOne({ tableNo: newTableNo, status: 'Open' });
+    // Check if new table is already occupied by an Open or Billed order
+    const existingOrder = await Bill.findOne({ tableNo: newTableNo, status: { $in: ['Open', 'Billed'] } });
     if (existingOrder) {
       return res.status(400).json({ message: `Table ${newTableNo} is already occupied` });
     }
@@ -720,9 +721,17 @@ export const getDailyStats = async (req, res) => {
     // Use UTC dates to avoid timezone issues in production
     // MongoDB stores dates in UTC, so we need to query in UTC
     const now = new Date();
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    let today, tomorrow;
+    
+    if (req.query.startDate && req.query.endDate) {
+      today = new Date(req.query.startDate);
+      tomorrow = new Date(req.query.endDate);
+    } else {
+      today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      tomorrow = new Date(today);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    }
+
     
     // Ensure dates are valid
     if (isNaN(today.getTime()) || isNaN(tomorrow.getTime())) {
@@ -751,7 +760,7 @@ export const getDailyStats = async (req, res) => {
       paidStats = await Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: today, $lt: tomorrow },
+            updatedAt: { $gte: today, $lt: tomorrow },
             status: 'Paid'
           }
         },
@@ -785,7 +794,7 @@ export const getDailyStats = async (req, res) => {
       paymentStats = await Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: today, $lt: tomorrow },
+            updatedAt: { $gte: today, $lt: tomorrow },
             status: 'Paid',
             paymentMode: { $exists: true, $ne: null }
           }
@@ -813,7 +822,7 @@ export const getDailyStats = async (req, res) => {
       topItems = await Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: today, $lt: tomorrow },
+            updatedAt: { $gte: today, $lt: tomorrow },
             status: 'Paid'
           }
         },
@@ -835,7 +844,7 @@ export const getDailyStats = async (req, res) => {
 
     try {
       recentBills = await Bill.find({
-        createdAt: { $gte: today, $lt: tomorrow },
+        updatedAt: { $gte: today, $lt: tomorrow },
         status: 'Paid'
       })
       .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt')
@@ -867,7 +876,7 @@ export const getDailyStats = async (req, res) => {
       // Get delivery orders count (paid delivery orders today)
       // Only count orders with billType === 'Delivery'
       deliveryStats = await Bill.countDocuments({
-        createdAt: { $gte: today, $lt: tomorrow },
+        updatedAt: { $gte: today, $lt: tomorrow },
         status: 'Paid',
         billType: 'Delivery'
       });
@@ -882,7 +891,7 @@ export const getDailyStats = async (req, res) => {
     try {
       // Get dine-in orders count
       dineInStats = await Bill.countDocuments({
-        createdAt: { $gte: today, $lt: tomorrow },
+        updatedAt: { $gte: today, $lt: tomorrow },
         status: 'Paid',
         billType: 'Dine-In'
       });
@@ -894,7 +903,7 @@ export const getDailyStats = async (req, res) => {
     try {
       // Get takeaway orders count
       takeawayStats = await Bill.countDocuments({
-        createdAt: { $gte: today, $lt: tomorrow },
+        updatedAt: { $gte: today, $lt: tomorrow },
         status: 'Paid',
         billType: 'Takeaway'
       });
@@ -906,7 +915,7 @@ export const getDailyStats = async (req, res) => {
     let cancelledOrders = [];
     try {
       cancelledOrders = await Bill.find({
-        createdAt: { $gte: today, $lt: tomorrow },
+        updatedAt: { $gte: today, $lt: tomorrow },
         $or: [
           { status: { $in: ['Cancelled', 'Deleted'] } },
           { 'kots.kotNumber': { $regex: '^CANCEL' } }
@@ -932,6 +941,58 @@ export const getDailyStats = async (req, res) => {
     } catch (error) {
       console.error('Error fetching edited orders:', error);
       editedOrders = [];
+    }
+
+    // Smart sales breakdown for the Sales Overview chart (REAL data)
+    // For single day → hourly breakdown, for multi-day → daily breakdown
+    const rangeMs = tomorrow.getTime() - today.getTime();
+    const isSingleDay = rangeMs <= 86400000 + 1000; // 24 hours + 1s tolerance
+
+    let salesTimeline = [];
+    try {
+      if (isSingleDay) {
+        // HOURLY breakdown for Today
+        const hourlyBreakdown = await Bill.aggregate([
+          { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+          { $group: { _id: { $hour: '$updatedAt' }, sales: { $sum: '$total' }, orders: { $sum: 1 } } },
+          { $sort: { _id: 1 } }
+        ]);
+        const hourlyMap = {};
+        hourlyBreakdown.forEach(h => { hourlyMap[h._id] = h; });
+        for (let hr = 0; hr < 24; hr++) {
+          const entry = hourlyMap[hr] || { sales: 0, orders: 0 };
+          salesTimeline.push({ time: `${hr.toString().padStart(2, '0')}:00`, sales: entry.sales, orders: entry.orders });
+        }
+      } else {
+        // DAILY breakdown for multi-day ranges
+        const dailyBreakdown = await Bill.aggregate([
+          { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+          {
+            $group: {
+              _id: { $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' } },
+              sales: { $sum: '$total' },
+              orders: { $sum: 1 }
+            }
+          },
+          { $sort: { _id: 1 } }
+        ]);
+        // Build a map of existing data
+        const dailyMap = {};
+        dailyBreakdown.forEach(d => { dailyMap[d._id] = d; });
+        // Fill in all days in the range (including days with 0 sales)
+        const cursor = new Date(today);
+        while (cursor < tomorrow) {
+          const dateStr = cursor.toISOString().split('T')[0];
+          const entry = dailyMap[dateStr] || { sales: 0, orders: 0 };
+          // Format label based on range length
+          const dayLabel = `${cursor.getUTCDate().toString().padStart(2, '0')}/${(cursor.getUTCMonth() + 1).toString().padStart(2, '0')}`;
+          salesTimeline.push({ time: dayLabel, sales: entry.sales, orders: entry.orders });
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+      }
+    } catch (error) {
+      console.error('Error in sales timeline aggregation:', error);
+      salesTimeline = [];
     }
 
     const result = paidStats[0] || { 
@@ -964,7 +1025,8 @@ export const getDailyStats = async (req, res) => {
       recentBills: recentBills || [],
       openKOTs: openKOTs || [],
       cancelledOrders: cancelledOrders || [],
-      editedOrders: editedOrders || []
+      editedOrders: editedOrders || [],
+      hourlySales: salesTimeline
     };
     
     // Cache removed to ensure immediate reflection on dashboard
@@ -1049,6 +1111,11 @@ export const generateKOT = async (req, res) => {
     await bill.save();
 
     emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: newKOT });
+
+    // Trigger physical network thermal printing to configured IP printers
+    printKOTToPrinters(req, bill, kotNumber, kotItems).catch(err => {
+      console.error('[KOT Print Error]:', err.message);
+    });
 
     res.status(200).json({
       message: 'KOT generated successfully',
@@ -1306,9 +1373,11 @@ export const updateKOTItemStatus = async (req, res) => {
     emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, status });
     
     if (status === 'Preparing') {
-      emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${order.tableNo} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
+      const cleanTable = order.tableNo.replace('Table ', '');
+      emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${cleanTable} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
     } else if (status === 'Ready') {
-      emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${order.tableNo}`, 'success', ['Captain', 'Manager', 'Admin']);
+      const cleanTable = order.tableNo.replace('Table ', '');
+      emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${cleanTable}`, 'success', ['Captain', 'Manager', 'Admin']);
     }
 
     res.json({ message: 'Item status updated successfully', kot });

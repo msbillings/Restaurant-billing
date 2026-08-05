@@ -239,12 +239,13 @@ export const runFraudAnalysis = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     
-    // Get last 30 days of bills
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get specified days of bills, default to 30
+    const days = parseInt(req.query.days) || 30;
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - days);
     
     const bills = await Bill.find({
-      createdAt: { $gte: thirtyDaysAgo }
+      createdAt: { $gte: pastDate }
     }).lean();
 
     const alerts = [];

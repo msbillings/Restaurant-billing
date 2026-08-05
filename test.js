@@ -1,0 +1,1 @@
+fetch('https://restaurant-superadmin-api-maheer.vercel.app/api/clients/login', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email: 'test4@restaurant.com', password: 'TestPass@4'})}).then(r = 

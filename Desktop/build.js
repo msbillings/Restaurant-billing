@@ -61,8 +61,13 @@ if (fs.existsSync(assetsDir)) {
 console.log('Copying Backend...');
 copySync(backendSrc, desktopBackend, ['node_modules', '.git']);
 
+const backendLock = path.join(desktopBackend, 'package-lock.json');
+if (fs.existsSync(backendLock)) {
+  fs.rmSync(backendLock);
+}
+
 // Install Backend dependencies inside the Desktop folder
 console.log('Installing Backend dependencies for production...');
-execSync('npm install --omit=dev', { cwd: desktopBackend, stdio: 'inherit' });
+execSync('npm install --omit=dev --no-package-lock', { cwd: desktopBackend, stdio: 'inherit' });
 
 console.log('Files ready for electron-builder!');
