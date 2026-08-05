@@ -1,15 +1,37 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
-import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect } from 'react';
+import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles, Settings, X, Save } from 'lucide-react';
 import BackgroundSlideshow from './BackgroundSlideshow';
 import logoImg from '../assets/images/logo.png';
 
-const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
+const LicenseScreen = ({ onValidLicense }) => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  const [showSettings, setShowSettings] = useState(false);
+  const [serverIp, setServerIp] = useState('');
+  const [superadminIp, setSuperadminIp] = useState('');
+
+  useEffect(() => {
+    setServerIp(localStorage.getItem('resto_server_ip') || '');
+    setSuperadminIp(localStorage.getItem('resto_superadmin_ip') || '');
+  }, []);
+
+  const handleSaveSettings = () => {
+    if (serverIp) localStorage.setItem('resto_server_ip', serverIp);
+    else localStorage.removeItem('resto_server_ip');
+    
+    if (superadminIp) localStorage.setItem('resto_superadmin_ip', superadminIp);
+    else localStorage.removeItem('resto_superadmin_ip');
+    
+    setShowSettings(false);
+    window.location.reload();
+  };
 
   const handleActivate = async (e) => {
     e.preventDefault();
@@ -107,32 +129,34 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
       <div className="w-full max-w-md relative z-10 animate-fade-in mx-auto">
         
         {/* Logo Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-2xl rounded-full relative">
+        <div className="text-center mb-8 relative">
+          <button 
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="absolute top-0 right-0 p-2 text-white/50 hover:text-white transition-colors z-30"
+            title="Server Settings"
+          >
+            <Settings size={24} />
+          </button>
+          
+          <div className="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-2xl rounded-full relative mt-4">
             <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
             <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={20} />
           </div>
-          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}
-
-          </h1>
-          <p className="text-gray-300 font-bold uppercase tracking-widest text-sm">{t("Software Activation")}
-
-          </p>
+          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}</h1>
+          <p className="text-gray-300 font-bold uppercase tracking-widest text-sm">{t("Software Activation")}</p>
         </div>
 
         {/* Activation Form (Premium Glassmorphism) */}
         <div className="bg-white/10 backdrop-blur-xl p-8 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative overflow-hidden w-full" style={{ borderRadius: '24px' }}>
           
           <div className="relative z-10">
-            <p className="text-center text-gray-300 mb-8 font-medium">{t("Please enter your registered Email and Password to activate your terminal.")}
-
-            </p>
+            <p className="text-center text-gray-300 mb-8 font-medium">{t("Please enter your registered Email and Password to activate your terminal.")}</p>
 
             <form onSubmit={handleActivate} className="space-y-6">
               <div>
                 <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
                   <User size={16} />{t("Email Address")}
-
                 </label>
                 <div className="relative">
                   <User size={20} className="absolute left-4 top-4 text-gray-400" />
@@ -140,19 +164,16 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)} placeholder={t("restaurant@example.com")}
-
                     className="w-full py-4 px-4 pl-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
                     style={{ borderRadius: '16px' }}
                     autoFocus
                     required />
-                  
                 </div>
               </div>
 
               <div>
                 <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
                   <Key size={16} />{t("Password")}
-
                 </label>
                 <div className="relative">
                   <Key size={20} className="absolute left-4 top-4 text-gray-400" />
@@ -169,7 +190,6 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors">
-                    
                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
                 </div>
@@ -213,12 +233,72 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
               onClick={handleQuickDemo}
               className="w-full py-4 px-6 font-bold text-white border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2"
               style={{ borderRadius: '16px' }}>{t("🚀 Quick Demo Mode (No License Required)")}
-
-
             </button>
           </div>
         </div>
       </div>
+      
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-gray-900 border border-white/10 p-6 shadow-2xl w-full max-w-sm relative" style={{ borderRadius: '24px' }}>
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+            >
+              <X size={24} />
+            </button>
+            
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <Settings size={20} className="text-orange-500" />
+              Network Settings
+            </h2>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-sm font-bold text-gray-300 block mb-2">
+                  Server IP (e.g. 192.168.1.10)
+                </label>
+                <input
+                  type="text"
+                  value={serverIp}
+                  onChange={(e) => setServerIp(e.target.value)}
+                  placeholder="Leave empty for default"
+                  className="w-full py-3 px-4 border border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus:outline-none focus:border-orange-500 transition-colors"
+                  style={{ borderRadius: '12px' }}
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-bold text-gray-300 block mb-2">
+                  Superadmin IP
+                </label>
+                <input
+                  type="text"
+                  value={superadminIp}
+                  onChange={(e) => setSuperadminIp(e.target.value)}
+                  placeholder="Leave empty for default"
+                  className="w-full py-3 px-4 border border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus:outline-none focus:border-orange-500 transition-colors"
+                  style={{ borderRadius: '12px' }}
+                />
+              </div>
+              
+              <p className="text-xs text-gray-400">
+                If the app fails to connect from a mobile device on the same WiFi, enter your PC's local IP address here.
+              </p>
+            </div>
+            
+            <button
+              onClick={handleSaveSettings}
+              className="w-full py-3 px-4 font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
+              style={{ borderRadius: '12px' }}
+            >
+              <Save size={18} />
+              Save & Reload
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes fade-in {
@@ -230,11 +310,11 @@ const LicenseScreen = ({ onValidLicense }) => {const { t } = useLanguage();
           25% { transform: translateX(-5px); }
           75% { transform: translateX(5px); }
         }
-        .animate-fade-in { animation: fade-in 0.6s ease-out; }
+        .animate-fade-in { animation: fade-in 0.3s ease-out; }
         .animate-shake { animation: shake 0.4s ease-in-out; }
       `}</style>
-    </BackgroundSlideshow>);
-
+    </BackgroundSlideshow>
+  );
 };
 
 export default LicenseScreen;
