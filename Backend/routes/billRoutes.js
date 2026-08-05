@@ -18,7 +18,8 @@ import {
   cancelOrder,
   refundOrder,
   transferTable,
-  mergeTableOrders
+  mergeTableOrders,
+  getEditedBills
 } from '../controllers/billController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
@@ -26,6 +27,7 @@ import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 // Order matters: specific routes before parameterized routes
 router.get('/active/:tableNo', authenticateToken, getActiveOrder);
 router.get('/open', authenticateToken, getOpenOrders);
+router.get('/edited', authenticateToken, getEditedBills);
 router.get('/stats', authenticateToken, getDailyStats);
 router.get('/kots/active', authenticateToken, getActiveKOTs);
 router.get('/kots/today', authenticateToken, getTodayKOTs);

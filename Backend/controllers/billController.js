@@ -130,7 +130,9 @@ export const saveOrder = async (req, res) => {
         subtotal: order.subtotal,
         totalDiscount: order.discount || 0,
         totalTax: order.tax || 0,
-        total: order.total
+        total: order.total,
+        discountType: order.discountType || 'flat',
+        discountValue: order.discountValue || 0
       };
 
       const dType = discountType || order.discountType || 'flat';
@@ -348,6 +350,34 @@ export const transferTable = async (req, res) => {
 
     const oldTableNo = order.tableNo;
     order.tableNo = newTableNo;
+
+    // Log the transfer in edit history
+    order.editHistory = order.editHistory || [];
+    order.editHistory.push({
+      editedAt: new Date(),
+      previousState: {
+        tableNo: oldTableNo,
+        items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+        subtotal: order.subtotal,
+        totalDiscount: order.discount || 0,
+        totalTax: order.tax || 0,
+        total: order.total,
+        discountType: order.discountType || 'flat',
+        discountValue: order.discountValue || 0
+      },
+      newState: {
+        tableNo: newTableNo,
+        items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+        subtotal: order.subtotal,
+        totalDiscount: order.discount || 0,
+        totalTax: order.tax || 0,
+        total: order.total,
+        discountType: order.discountType || 'flat',
+        discountValue: order.discountValue || 0
+      }
+    });
+    order.isEdited = true;
+
     await order.save();
     
     cache.clear('openOrders');
@@ -1384,5 +1414,24 @@ export const updateKOTItemStatus = async (req, res) => {
   } catch (error) {
     console.error('Error updating KOT item status:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getEditedBills = async (req, res) => {
+  try {
+    const TenantBill = getTenantModel(req, 'Bill', BillDefault);
+    
+    // Find all bills that have been edited, sorted by the most recently updated
+    const editedBills = await TenantBill.find({
+      isEdited: true,
+      $expr: { $gt: [{ $size: { $ifNull: ["$editHistory", []] } }, 0] }
+    })
+    .sort({ updatedAt: -1 })
+    .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited');
+    
+    res.json(editedBills);
+  } catch (error) {
+    console.error('Error fetching edited bills:', error);
+    res.status(500).json({ message: 'Server error while fetching edited bills' });
   }
 };

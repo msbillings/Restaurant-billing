@@ -41,6 +41,7 @@ const Expenses = React.lazy(() => import('./components/Expenses'));
 const DeliveryOrders = React.lazy(() => import('./components/DeliveryOrders'));
 const PickupOrders = React.lazy(() => import('./components/PickupOrders'));
 const KOTHistory = React.lazy(() => import('./components/KOTHistory'));
+const EditedBills = React.lazy(() => import('./components/EditedBills'));
 const LicenseScreen = React.lazy(() => import('./components/LicenseScreen'));
 const DayBook = React.lazy(() => import('./components/DayBook'));
 const InventoryManagement = React.lazy(() => import('./components/InventoryManagement'));
@@ -1126,6 +1127,7 @@ function App() {
               </button>
 
               {!isCaptain &&
+                <>
                 <button
                   onClick={() => handleViewChange('history')}
                   className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
@@ -1133,6 +1135,14 @@ function App() {
                   <History size={22} />
                   <span>{t('Bill History')}</span>
                 </button>
+                <button
+                  onClick={() => handleViewChange('edited-bills')}
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'edited-bills' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                  
+                  <History size={22} />
+                  <span>{t('Edited Bills')}</span>
+                </button>
+                </>
                 }
 
               <button
@@ -1437,6 +1447,7 @@ function App() {
                 }
                 {view === 'billing' && <BillingPage initialTable={selectedTable} onOrderUpdate={fetchActiveOrdersCount} onNavigate={handleViewChange} onGoBack={handleGoBack} userRole={userRole} onToggleMenu={() => setMobileMenuOpen(true)} />}
                 {view === 'history' && <BillHistory onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                {view === 'edited-bills' && <EditedBills onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 {view === 'analytics' && <Analytics onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 {view === 'daybook' && <DayBook onNavigate={handleViewChange} onGoBack={handleGoBack} />}

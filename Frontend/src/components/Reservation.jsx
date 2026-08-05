@@ -167,6 +167,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                     ${res.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : ''}
                     ${res.status === 'confirmed' ? 'bg-blue-100 text-blue-700' : ''}
                     ${res.status === 'seated' ? 'bg-green-100 text-green-700' : ''}
+                    ${res.status === 'completed' ? 'bg-gray-100 text-gray-700' : ''}
                     ${res.status === 'cancelled' || res.status === 'no-show' ? 'bg-red-100 text-red-700' : ''}
                   `}>
                     {res.status}
@@ -198,7 +199,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   </div>
           }
 
-                {(res.status === 'pending' || res.status === 'confirmed') &&
+                {(res.status === 'pending' || res.status === 'confirmed' || res.status === 'seated') &&
           <div className="flex gap-2 mt-auto border-t border-gray-100 pt-4">
                     {res.status === 'pending' &&
             <button
@@ -212,6 +213,14 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             <button
               onClick={() => updateStatus(res._id, 'seated')}
               className="flex-1 py-2 text-sm font-medium rounded-lg text-green-700 bg-green-50 hover:bg-green-100 transition-colors">{t("Mark Seated")}
+
+
+            </button>
+            }
+                    {res.status === 'seated' &&
+            <button
+              onClick={() => updateStatus(res._id, 'completed')}
+              className="flex-1 py-2 text-sm font-medium rounded-lg text-teal-700 bg-teal-50 hover:bg-teal-100 transition-colors">{t("Finish")}
 
 
             </button>

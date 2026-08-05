@@ -986,6 +986,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         </div>
 
         <div className="items-center gap-6 hidden sm:flex">
+          {activeTable && activeTable !== 'NEW_ORDER' && billType !== 'Delivery' && billType !== 'Takeaway' && orderId && (
+            <button
+              onClick={() => setShowTransfer(true)}
+              className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-3 py-1.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-1.5 relative z-20 cursor-pointer border border-primary/20 shadow-sm"
+              title={t('transferTable', { defaultValue: 'Transfer Table' })}
+            >
+              <ArrowRightLeft size={16} />
+              <span className="hidden sm:inline">{t('Transfer')}</span>
+            </button>
+          )}
+
           <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
             <div className="flex flex-col items-end">
               <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1">
@@ -1193,6 +1204,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       <TransferTableModal
         floors={floors}
         currentTable={activeTable}
+        currentOrderId={orderId}
         openOrdersList={openOrdersList}
         onClose={() => setShowTransfer(false)}
         onTransfer={handleTransferTable} />

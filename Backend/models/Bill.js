@@ -138,6 +138,7 @@ const billSchema = new mongoose.Schema({
       default: Date.now
     },
     previousState: {
+      tableNo: String,
       items: [{
         name: String,
         quantity: Number,
@@ -147,9 +148,12 @@ const billSchema = new mongoose.Schema({
       subtotal: Number,
       totalDiscount: Number,
       totalTax: Number,
-      total: Number
+      total: Number,
+      discountType: String,
+      discountValue: Number
     },
     newState: {
+      tableNo: String,
       items: [{
         name: String,
         quantity: Number,
@@ -159,7 +163,9 @@ const billSchema = new mongoose.Schema({
       subtotal: Number,
       totalDiscount: Number,
       totalTax: Number,
-      total: Number
+      total: Number,
+      discountType: String,
+      discountValue: Number
     }
   }]
 }, {
