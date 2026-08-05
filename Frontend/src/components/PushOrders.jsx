@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -9,7 +10,7 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchOrders = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/push-orders', {
+      const response = await axios.get(`${getApiUrl()}/push-orders`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setOrders(response.data);
@@ -47,7 +48,7 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     };
 
     try {
-      await axios.post('http://localhost:5002/api/push-orders', mockOrder);
+      await axios.post(`${getApiUrl()}/push-orders`, mockOrder);
       fetchOrders();
     } catch (error) {
       console.error('Error simulating order', error);
@@ -57,7 +58,7 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const updateStatus = async (id, status) => {
     try {
-      await axios.put(`http://localhost:5002/api/push-orders/${id}/status`, { status }, {
+      await axios.put(`${getApiUrl()}/push-orders/${id}/status`, { status }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       fetchOrders();

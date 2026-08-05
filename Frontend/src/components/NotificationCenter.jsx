@@ -23,7 +23,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   const fetchLocalNotifications = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://localhost:5002/api/inventory');
+      const res = await axios.get(`${getApiUrl()}/inventory`);
       const inventory = res.data;
 
       const lowStockAlerts = inventory.

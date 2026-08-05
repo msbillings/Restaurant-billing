@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Trash2, Edit2, Tags, ArrowLeft } from 'lucide-react';
@@ -18,7 +19,7 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
 
   const fetchDiscounts = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/discounts', {
+      const response = await axios.get(`${getApiUrl()}/discounts`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setDiscounts(response.data);
@@ -37,11 +38,11 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
     e.preventDefault();
     try {
       if (editingDiscount) {
-        await axios.put(`http://localhost:5002/api/discounts/${editingDiscount._id}`, formData, {
+        await axios.put(`${getApiUrl()}/discounts/${editingDiscount._id}`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       } else {
-        await axios.post('http://localhost:5002/api/discounts', formData, {
+        await axios.post(`${getApiUrl()}/discounts`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       }
@@ -58,7 +59,7 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this discount?')) {
       try {
-        await axios.delete(`http://localhost:5002/api/discounts/${id}`, {
+        await axios.delete(`${getApiUrl()}/discounts/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         fetchDiscounts();

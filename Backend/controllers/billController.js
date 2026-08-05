@@ -106,6 +106,23 @@ export const saveOrder = async (req, res) => {
         return newItem;
       });
 
+      // Preserve items that were already printed but are now removed from cart, so KOT can generate cancellations
+      order.items.forEach(oldItem => {
+        if (oldItem.printedQuantity > 0) {
+          const stillExists = updatedItems.find(i => i.name === oldItem.name);
+          if (!stillExists) {
+            updatedItems.push({
+              name: oldItem.name,
+              price: oldItem.price,
+              quantity: 0,
+              total: 0,
+              printedQuantity: oldItem.printedQuantity,
+              specialNote: oldItem.specialNote || ''
+            });
+          }
+        }
+      });
+
       // Update existing order
       // Track edit history if a KOT was already printed or the bill was somehow not open
       const previousState = {

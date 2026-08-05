@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Trash2, Edit2, Percent, ArrowLeft } from 'lucide-react';
@@ -18,7 +19,7 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchTaxes = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/taxes', {
+      const response = await axios.get(`${getApiUrl()}/taxes`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setTaxes(response.data);
@@ -37,11 +38,11 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     e.preventDefault();
     try {
       if (editingTax) {
-        await axios.put(`http://localhost:5002/api/taxes/${editingTax._id}`, formData, {
+        await axios.put(`${getApiUrl()}/taxes/${editingTax._id}`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       } else {
-        await axios.post('http://localhost:5002/api/taxes', formData, {
+        await axios.post(`${getApiUrl()}/taxes`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       }
@@ -58,7 +59,7 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this tax?')) {
       try {
-        await axios.delete(`http://localhost:5002/api/taxes/${id}`, {
+        await axios.delete(`${getApiUrl()}/taxes/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         fetchTaxes();

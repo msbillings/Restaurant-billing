@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -15,7 +16,7 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchSyncStatus = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/sync/status', {
+      const response = await axios.get(`${getApiUrl()}/sync/status`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setSyncStatus(response.data);
@@ -43,7 +44,7 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     setSyncResult(null);
 
     try {
-      const response = await axios.post('http://localhost:5002/api/sync/trigger', {}, {
+      const response = await axios.post(`${getApiUrl()}/sync/trigger`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
 

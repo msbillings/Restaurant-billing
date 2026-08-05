@@ -900,6 +900,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       await apiTransferTable(idToTransfer, newTableNo);
       showToast(`${t('billTransferred')} ${newTableNo}`, 'success');
       setShowTransfer(false);
+      await fetchOpenOrdersList(); // Refresh open orders to reflect transfer
       if (!sourceTableNo || sourceTableNo === activeTable) {
         setActiveTable(newTableNo);
       }
@@ -916,11 +917,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     <div className="h-full flex flex-col overflow-hidden bg-background">
       <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 z-10">
 
-        <div className="flex items-center gap-1 bg-background border border-border rounded-xl px-2 py-1 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20">
-          
-          <div className="relative flex items-center gap-2 flex-1 cursor-pointer px-1 py-0.5">
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer">
             <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
-            <div className="flex items-center flex-1 pointer-events-none">
+            <div className="flex items-center pointer-events-none">
               <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
                 {activeTable ?
                 activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable :
@@ -984,22 +984,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               </select>
             }
           </div>
-          
-          {activeTable && orderStatus === 'Open' && orderId && billType !== 'Delivery' &&
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              setShowTransfer(true);
-            }}
-            title={t('transferBill')}
-            className="p-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors border border-primary/20 flex items-center justify-center shrink-0 z-20">
-            
-              <ArrowRightLeft size={16} />
-            </button>
-          }
         </div>
-
-
 
         <div className="items-center gap-6 hidden sm:flex">
           <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
@@ -1102,6 +1087,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             </button>
             <div className={`w-full h-full flex flex-col overflow-hidden ${isCartCollapsed ? 'hidden' : 'flex'}`}>
               <BillSummary
+                orderId={orderId}
                 cart={cart}
                 updateQuantity={updateQuantity}
                 updateItemNote={updateItemNote}

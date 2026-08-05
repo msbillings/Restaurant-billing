@@ -1,6 +1,6 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, useMemo } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
-import { Printer, Calendar, Search, FileText, ArrowLeft } from 'lucide-react';
+import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
@@ -11,6 +11,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [selectedKOT, setSelectedKOT] = useState(null);
   const [toast, setToast] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -47,6 +48,38 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     const summary = items.map((i) => `${i.quantity}x ${t(i.name)}`).join(', ');
     return summary.length > 50 ? summary.substring(0, 47) + '...' : summary;
   };
+
+  const getKOTStatus = (items) => {
+    if (!items || items.length === 0) return 'Pending';
+    const allReady = items.every(i => i.status === 'Ready');
+    const anyPreparing = items.some(i => i.status === 'Preparing');
+    if (allReady) return 'Prepared';
+    if (anyPreparing) return 'Preparing';
+    return 'Ordered';
+  };
+
+  const groupedKOTs = useMemo(() => {
+    const groups = {};
+    kots.forEach(kot => {
+      const groupId = kot.billId || kot.tableNo;
+      if (!groups[groupId]) {
+        groups[groupId] = {
+          id: groupId,
+          tableNo: kot.tableNo,
+          createdAt: kot.createdAt,
+          items: [],
+          kots: []
+        };
+      }
+      if (new Date(kot.createdAt) < new Date(groups[groupId].createdAt)) {
+        groups[groupId].createdAt = kot.createdAt;
+      }
+      groups[groupId].kots.push(kot);
+      groups[groupId].items.push(...kot.items);
+    });
+    return Object.values(groups).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [kots]);
+
 
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
@@ -127,45 +160,95 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Time")}</th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Table / Order")}</th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider hidden md:table-cell">{t("Items Summary")}</th>
+                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Status")}</th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider text-right">{t("Action")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {kots.map((kot) =>
-                <tr key={`${kot.billId}-${kot.kotNumber}`} className="hover:bg-background/50 transition-colors group">
-                      <td className="p-4 whitespace-nowrap">
-                        <span className={`px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-sm border ${
-                    kot.kotNumber.startsWith('CANCEL') ?
-                    'bg-red-50 text-red-700 border-red-200' :
-                    'bg-orange-50 text-orange-700 border-orange-200'}`
-                    }>
-                          {kot.kotNumber}
-                        </span>
-                      </td>
-                      <td className="p-4 whitespace-nowrap">
-                        <span className="font-mono font-medium text-text-main">
-                          {new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </td>
-                      <td className="p-4 whitespace-nowrap">
-                        <span className="font-bold text-text-main">{t(kot.tableNo)}</span>
-                      </td>
-                      <td className="p-4 w-full max-w-xs hidden md:table-cell">
-                        <p className="text-sm font-medium text-text-muted truncate">
-                          {getItemsSummary(kot.items)}
-                        </p>
-                      </td>
-                      <td className="p-4 whitespace-nowrap text-right">
-                        <button
-                      onClick={() => handleReprint(kot)}
-                      className="px-3 py-1.5 bg-surface hover:bg-orange-50 text-orange-600 font-bold text-sm rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-2 group-hover:bg-orange-600 group-hover:text-white">
-                      
-                          <Printer size={14} />{t("Reprint")}
-
-                    </button>
-                      </td>
-                    </tr>
-                )}
+                  {groupedKOTs.map((group) => (
+                    <React.Fragment key={group.id}>
+                      <tr 
+                        onClick={() => setExpandedRow(expandedRow === group.id ? null : group.id)}
+                        className="hover:bg-background/50 transition-colors cursor-pointer group-row"
+                      >
+                        <td className="p-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            {expandedRow === group.id ? <ChevronUp size={16} className="text-text-muted" /> : <ChevronDown size={16} className="text-text-muted" />}
+                            <span className="px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-sm border bg-slate-50 text-slate-700 border-slate-200">
+                              {group.kots.length} KOT{group.kots.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className="font-mono font-medium text-text-main">
+                            {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className="font-bold text-text-main">{t(group.tableNo)}</span>
+                        </td>
+                        <td className="p-4 w-full max-w-xs hidden md:table-cell">
+                          <p className="text-sm font-medium text-text-muted truncate">
+                            {getItemsSummary(group.items)}
+                          </p>
+                        </td>
+                        <td className="p-4 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-sm border ${
+                            getKOTStatus(group.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
+                            getKOTStatus(group.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {t(getKOTStatus(group.items))}
+                          </span>
+                        </td>
+                        <td className="p-4 whitespace-nowrap text-right">
+                          
+                        </td>
+                      </tr>
+                      {expandedRow === group.id && group.kots.map(kot => (
+                        <tr key={`${kot.billId}-${kot.kotNumber}`} className="bg-surface/30">
+                          <td className="p-4 whitespace-nowrap pl-10">
+                            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-sm border ${
+                              kot.kotNumber.startsWith('CANCEL') ?
+                              'bg-red-50 text-red-700 border-red-200' :
+                              'bg-orange-50 text-orange-700 border-orange-200'}`
+                            }>
+                              {kot.kotNumber}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <span className="font-mono font-medium text-text-muted text-sm">
+                              {new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-sm text-text-muted">
+                            
+                          </td>
+                          <td className="p-4 w-full max-w-xs hidden md:table-cell">
+                            <p className="text-sm font-medium text-text-muted truncate">
+                              {getItemsSummary(kot.items)}
+                            </p>
+                          </td>
+                          <td className="p-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-lg font-mono border ${
+                              getKOTStatus(kot.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
+                              getKOTStatus(kot.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              'bg-blue-50 text-blue-700 border-blue-200'
+                            }`}>
+                              {t(getKOTStatus(kot.items))}
+                            </span>
+                          </td>
+                          <td className="p-4 whitespace-nowrap text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleReprint(kot); }}
+                              className="px-3 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-sm rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-2">
+                              <Printer size={14} />{t("Reprint")}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>

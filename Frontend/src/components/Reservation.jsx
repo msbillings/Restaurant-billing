@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -23,7 +24,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchReservations = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/reservations', {
+      const response = await axios.get(`${getApiUrl()}/reservations`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setReservations(response.data);
@@ -93,7 +94,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5002/api/reservations', formData, {
+      await axios.post(`${getApiUrl()}/reservations`, formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setIsModalOpen(false);
@@ -115,7 +116,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const updateStatus = async (id, status) => {
     try {
-      await axios.put(`http://localhost:5002/api/reservations/${id}`, { status }, {
+      await axios.put(`${getApiUrl()}/reservations/${id}`, { status }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       fetchReservations();

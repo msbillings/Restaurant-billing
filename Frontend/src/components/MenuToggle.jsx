@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -15,7 +16,7 @@ const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const fetchMenuItems = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://localhost:5002/api/menu');
+      const res = await axios.get(`${getApiUrl()}/menu`);
       setMenuItems(res.data);
     } catch (error) {
       console.error('Error fetching menu items:', error);
@@ -29,7 +30,7 @@ const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       // Optimistic UI update
       setMenuItems((prev) => prev.map((item) => item._id === id ? { ...item, isAvailable: !currentStatus } : item));
 
-      await axios.put(`http://localhost:5002/api/menu/${id}`,
+      await axios.put(`${getApiUrl()}/menu/${id}`,
       { isAvailable: !currentStatus },
       { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );

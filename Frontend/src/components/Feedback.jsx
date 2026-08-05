@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -33,10 +34,10 @@ const Feedback = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const fetchData = async () => {
     try {
       const [feedbackRes, statsRes] = await Promise.all([
-      axios.get('http://localhost:5002/api/feedback', {
+      axios.get(`${getApiUrl()}/feedback`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       }),
-      axios.get('http://localhost:5002/api/feedback/stats', {
+      axios.get(`${getApiUrl()}/feedback/stats`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })]
       );
@@ -56,7 +57,7 @@ const Feedback = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5002/api/feedback', formData, {
+      await axios.post(`${getApiUrl()}/feedback`, formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setIsModalOpen(false);

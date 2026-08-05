@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -27,7 +28,7 @@ const DuePayment = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchAccounts = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/credit-accounts', {
+      const response = await axios.get(`${getApiUrl()}/credit-accounts`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setAccounts(response.data);
@@ -45,7 +46,7 @@ const DuePayment = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleCreateAccount = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5002/api/credit-accounts', accountFormData, {
+      await axios.post(`${getApiUrl()}/credit-accounts`, accountFormData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setIsNewAccountModalOpen(false);
@@ -60,7 +61,7 @@ const DuePayment = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleAddTransaction = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`http://localhost:5002/api/credit-accounts/${selectedAccount._id}/transactions`, transactionFormData, {
+      await axios.post(`${getApiUrl()}/credit-accounts/${selectedAccount._id}/transactions`, transactionFormData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       });
       setIsTransactionModalOpen(false);

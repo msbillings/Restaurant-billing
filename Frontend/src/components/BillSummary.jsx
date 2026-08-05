@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart } from 'lucide-react';
 
 const BillSummary = ({
+  orderId,
   cart,
   updateQuantity,
   updateItemNote,
@@ -189,7 +190,7 @@ const BillSummary = ({
       {/* Info Bar */}
       <div className="flex items-center gap-2 p-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-1.5">
-          <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
+          <div className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm">
             <span className="text-[9px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
             <span className="text-[13px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
               {activeTable ? (() => {
@@ -477,16 +478,14 @@ const BillSummary = ({
           <button
             onClick={onPrintKOT}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">{t("KOT")}
-
-
+            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
+            {t("KOT")}
           </button>
           <button
             onClick={onPrintKOT}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[12px] sm:text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">{t("KOT & PRINT")}
-
-
+            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[12px] sm:text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
+            {t("UPDATE KOT")}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
@@ -556,8 +555,6 @@ const BillSummary = ({
               <button
                 onClick={submitWaiter}
                 className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
-
-
               </button>
             </div>
           </div>

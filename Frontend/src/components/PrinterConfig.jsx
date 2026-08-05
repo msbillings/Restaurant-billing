@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { ArrowLeft, Printer, Save, CheckCircle, Network, Usb, Bluetooth, ReceiptText, ChefHat, Plus, Trash2, Edit, X } from 'lucide-react';
@@ -28,7 +29,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
 
   const fetchConfigs = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/printer-configs', {
+      const response = await axios.get(`${getApiUrl()}/printer-configs`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setConfigs(response.data);
@@ -84,11 +85,11 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
     e.preventDefault();
     try {
       if (editingConfig) {
-        await axios.put(`http://localhost:5002/api/printer-configs/${editingConfig._id}`, formData, {
+        await axios.put(`${getApiUrl()}/printer-configs/${editingConfig._id}`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       } else {
-        await axios.post('http://localhost:5002/api/printer-configs', formData, {
+        await axios.post(`${getApiUrl()}/printer-configs`, formData, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
       }
@@ -103,7 +104,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this printer?')) {
       try {
-        await axios.delete(`http://localhost:5002/api/printer-configs/${id}`, {
+        await axios.delete(`${getApiUrl()}/printer-configs/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         fetchConfigs();
@@ -116,7 +117,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
 
   const handleTestPrint = async (id) => {
     try {
-      await axios.post(`http://localhost:5002/api/printer-configs/${id}/test`, {}, {
+      await axios.post(`${getApiUrl()}/printer-configs/${id}/test`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       alert('Test print sent successfully!');

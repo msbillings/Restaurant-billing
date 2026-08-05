@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -14,7 +15,7 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:5002/api/online-configs', {
+      const response = await axios.get(`${getApiUrl()}/online-configs`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setConfig(response.data);
@@ -37,7 +38,7 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     e.preventDefault();
     setSaving(true);
     try {
-      await axios.put('http://localhost:5002/api/online-configs', config, {
+      await axios.put(`${getApiUrl()}/online-configs`, config, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       alert('Online order settings saved successfully!');

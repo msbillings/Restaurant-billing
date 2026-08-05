@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -15,7 +16,7 @@ const SalesForecasting = ({ onNavigate }) => {const { t } = useLanguage();
   useEffect(() => {
     const fetchForecast = async () => {
       try {
-        const response = await axios.get('http://localhost:5002/api/analytics/forecast', {
+        const response = await axios.get(`${getApiUrl()}/analytics/forecast`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         

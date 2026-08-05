@@ -1,3 +1,4 @@
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
@@ -15,7 +16,7 @@ const LoyaltyProgram = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
     const fetchData = async () => {
       try {
         // Fetch config
-        const configRes = await axios.get('http://localhost:5002/api/loyalty/config', {
+        const configRes = await axios.get(`${getApiUrl()}/loyalty/config`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         const config = configRes.data;
@@ -27,7 +28,7 @@ const LoyaltyProgram = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
         }
 
         // Fetch stats
-        const statsRes = await axios.get('http://localhost:5002/api/loyalty/stats', {
+        const statsRes = await axios.get(`${getApiUrl()}/loyalty/stats`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         });
         if (statsRes.data) {
@@ -44,7 +45,7 @@ const LoyaltyProgram = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
 
   const handleSave = async () => {
     try {
-      await axios.post('http://localhost:5002/api/loyalty/config', {
+      await axios.post(`${getApiUrl()}/loyalty/config`, {
         enabled,
         conversionRate: Number(conversionRate),
         redemptionValue: Number(redemptionValue),
