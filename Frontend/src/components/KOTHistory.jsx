@@ -202,7 +202,11 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                           </span>
                         </td>
                         <td className="p-4 whitespace-nowrap text-right">
-                          
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setExpandedRow(expandedRow === group.id ? null : group.id); }}
+                            className="px-3 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-sm rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-2">
+                            {expandedRow === group.id ? t("Close") : t("View Actions")}
+                          </button>
                         </td>
                       </tr>
                       {expandedRow === group.id && group.kots.map(kot => (

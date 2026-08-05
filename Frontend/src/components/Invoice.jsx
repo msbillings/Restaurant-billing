@@ -38,11 +38,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
   }, []);
 
   const handlePrint = () => {
-    if (window.electronAPI && settings.billingPrinter) {
+    if (window.electronAPI && settings.billingPrinter && settings.silentPrinting !== false) {
       const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-      const isSilent = settings.silentPrinting !== false;
-      window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, isSilent);
+      window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, true);
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {

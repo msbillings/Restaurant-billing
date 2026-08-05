@@ -86,8 +86,7 @@ const billSchema = new mongoose.Schema({
     default: 'Dine-In'
   },
   orderSource: {
-    type: String,
-    enum: ['Direct', 'Swiggy', 'Zomato', 'Other']
+    type: String
     // No default - only set for Delivery orders
   },
   customerName: String,
