@@ -50,8 +50,17 @@ jobs:
         working-directory: ./Frontend
         run: npx cap sync android
 
+      - name: 🔑 Generate Release Keystore
+        working-directory: ./Frontend/android
+        run: |
+          keytool -genkeypair -v -keystore keystore.jks -alias msbilling -keyalg RSA -keysize 2048 -validity 10000 -storepass "MsBilling@2026#Secure!" -keypass "MsBilling@2026#Secure!" -dname "CN=MS Billing, OU=Restaurant, O=MS Billings, L=City, ST=State, C=IN"
+
       - name: 🔨 Build Android APK (.apk)
         working-directory: ./Frontend/android
+        env:
+          KEYSTORE_PASSWORD: "MsBilling@2026#Secure!"
+          KEY_ALIAS: "msbilling"
+          KEY_PASSWORD: "MsBilling@2026#Secure!"
         run: .\gradlew.bat assembleRelease assembleDebug
 
       - name: 🚀 Build and Publish Desktop App (.exe)
