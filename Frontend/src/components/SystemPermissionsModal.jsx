@@ -67,10 +67,49 @@ const SystemPermissionsModal = ({ onComplete }) => {
     checkStatus();
   }, []);
 
-  const toggle = (key) => {
-    // Can't re-toggle already granted or denied permissions on native
+  const refreshStatuses = async () => {
+    try {
+      const statuses = await checkAllPermissions();
+      setPermStatus(statuses);
+      if (isNative) {
+        const anyDenied = Object.values(statuses).some(s => s === 'denied');
+        setHasDenied(anyDenied);
+      }
+      return statuses;
+    } catch (err) {
+      console.warn('Could not refresh permission status:', err);
+      return null;
+    }
+  };
+
+  const requestSinglePermission = async (key) => {
     if (permStatus[key] === 'granted') return;
-    setSelected(prev => ({ ...prev, [key]: !prev[key] }));
+    setLoading(true);
+    try {
+      if (key === 'camera') {
+        setStatusMsg('Requesting Camera...');
+        await requestCameraPermissions();
+      } else if (key === 'location') {
+        setStatusMsg('Requesting Location...');
+        await requestLocationPermissions();
+      } else if (key === 'mic') {
+        setStatusMsg('Requesting Microphone...');
+        await requestMicPermissions();
+      } else if (key === 'notifications') {
+        setStatusMsg('Requesting Notifications...');
+        await requestNotificationPermissions();
+      }
+      await refreshStatuses();
+    } catch (err) {
+      console.warn(`Failed requesting permission for ${key}`, err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggle = (key) => {
+    if (permStatus[key] === 'granted') return;
+    requestSinglePermission(key);
   };
 
   const requestPermissions = async () => {
@@ -95,6 +134,7 @@ const SystemPermissionsModal = ({ onComplete }) => {
         setStatusMsg('Requesting Location...');
         await requestLocationPermissions();
       }
+      await refreshStatuses();
     } catch (err) {
       console.warn("Some permissions were denied or failed", err);
     } finally {

@@ -29,12 +29,9 @@ const LicenseScreen = ({ onValidLicense }) => {
     setServerIp(localStorage.getItem('resto_server_ip') || '');
     setSuperadminIp(localStorage.getItem('resto_superadmin_ip') || '');
 
-    // On APK: auto-show IP panel if no server IP is configured
     if (isAPK) {
       const storedIp = localStorage.getItem('resto_server_ip');
-      if (!storedIp) {
-        setShowApkIpPanel(true);
-      } else {
+      if (storedIp) {
         setApkIpInput(storedIp);
       }
     }
@@ -177,96 +174,7 @@ const LicenseScreen = ({ onValidLicense }) => {
     <BackgroundSlideshow formPosition="left">
       <div className="w-full max-w-md relative z-10 animate-fade-in mx-auto px-2 sm:px-0">
 
-        {/* APK Server Connection Panel — shown on Android if no IP configured */}
-        {isAPK && showApkIpPanel && (
-          <div className="mb-4 bg-orange-500/20 border border-orange-500/40 backdrop-blur-xl rounded-2xl p-5 animate-fade-in">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-orange-500/30 flex items-center justify-center">
-                <Wifi size={20} className="text-orange-400" />
-              </div>
-              <div>
-                <p className="font-black text-white text-base">Connect to POS Server</p>
-                <p className="text-orange-200 text-xs">Enter your PC/Desktop IP address</p>
-              </div>
-            </div>
 
-            {/* Step instructions */}
-            <div className="space-y-1.5 mb-4">
-              {[
-                { step: '1', text: 'Open the MS Billing Desktop app on your PC' },
-                { step: '2', text: 'Go to Settings → Network / QR Code to find your IP' },
-                { step: '3', text: 'Make sure both PC and Phone are on the same WiFi' },
-              ].map(({ step, text }) => (
-                <div key={step} className="flex items-start gap-2 text-xs text-orange-100">
-                  <span className="w-5 h-5 rounded-full bg-orange-500/50 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">{step}</span>
-                  <span>{text}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={apkIpInput}
-                onChange={(e) => setApkIpInput(e.target.value)}
-                placeholder="e.g. 192.168.1.10"
-                className="flex-1 py-2.5 px-3 bg-white/10 border border-white/20 text-white placeholder:text-gray-400 text-sm focus:outline-none focus:border-orange-400 transition-colors"
-                style={{ borderRadius: '10px' }}
-                onKeyDown={(e) => e.key === 'Enter' && handleApkTestConnection()}
-              />
-              <button
-                onClick={handleApkTestConnection}
-                disabled={apkIpStatus === 'testing' || !apkIpInput.trim()}
-                className="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm disabled:opacity-50 flex items-center gap-1.5 transition-colors"
-                style={{ borderRadius: '10px' }}
-              >
-                {apkIpStatus === 'testing' ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : apkIpStatus === 'ok' ? (
-                  <CheckCircle2 size={16} />
-                ) : (
-                  <Server size={16} />
-                )}
-                {apkIpStatus === 'testing' ? 'Testing...' : apkIpStatus === 'ok' ? 'Connected!' : 'Test'}
-              </button>
-            </div>
-
-            {apkIpStatus === 'fail' && (
-              <p className="text-red-300 text-xs mt-2 font-semibold">⚠️ Could not connect. Check the IP and ensure the Desktop app is running.</p>
-            )}
-            {apkIpStatus === 'ok' && (
-              <p className="text-green-300 text-xs mt-2 font-semibold">✅ Server found! Connecting...</p>
-            )}
-
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={handleApkSaveIp}
-                disabled={!apkIpInput.trim()}
-                className="flex-1 py-2 text-xs font-bold text-white/70 hover:text-white border border-white/20 rounded-lg transition-colors disabled:opacity-40"
-              >
-                Save Without Testing
-              </button>
-              <button
-                onClick={() => setShowApkIpPanel(false)}
-                className="flex-1 py-2 text-xs font-bold text-white/50 hover:text-white/80 transition-colors"
-              >
-                Skip (Use Cloud)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* APK: compact banner when IP is already set */}
-        {isAPK && !showApkIpPanel && (
-          <button
-            onClick={() => setShowApkIpPanel(true)}
-            className="w-full mb-3 flex items-center gap-2 px-4 py-2.5 bg-green-500/20 border border-green-500/30 rounded-xl text-green-200 text-xs font-semibold hover:bg-green-500/30 transition-colors"
-          >
-            <CheckCircle2 size={14} className="text-green-400" />
-            <span>Server: {localStorage.getItem('resto_server_ip') || 'Cloud'} — Tap to change</span>
-            <Smartphone size={14} className="ml-auto" />
-          </button>
-        )}
 
         {/* Logo Header */}
         <div className="text-center mb-4 sm:mb-8 relative">

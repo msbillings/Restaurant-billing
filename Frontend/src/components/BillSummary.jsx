@@ -162,10 +162,10 @@ const BillSummary = ({
 
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden border-l border-gray-300">
+    <div className="flex flex-col h-full bg-white overflow-x-auto overflow-y-auto border-l border-gray-300 w-full max-w-full">
 
       {/* Top Tabs */}
-      <div className="flex w-[calc(100%-12px)] mx-1.5 mt-1.5 mb-0.5 bg-gray-100 h-7 shrink-0 p-0.5 gap-0.5 rounded-lg shadow-inner">
+      <div className="flex w-[calc(100%-12px)] mx-1.5 mt-1.5 mb-0.5 bg-gray-100 h-7 shrink-0 p-0.5 gap-0.5 rounded-lg shadow-inner overflow-x-auto no-scrollbar">
         <button
           onClick={() => !isLocked && setBillType('Dine-In')}
           className={`flex-1 font-bold text-[10px] flex items-center justify-center transition-all rounded-md ${billType === 'Dine-In' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
@@ -414,8 +414,8 @@ const BillSummary = ({
           }
         </div>
 
-        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
+          <div className="flex items-center gap-1 shrink-0">
             <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
             <button
               onClick={() => {
@@ -425,16 +425,16 @@ const BillSummary = ({
               className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
             </button>
           </div>
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 shrink-0">
             <span className="text-gray-500 text-[9px] font-bold uppercase tracking-wider">{t("Total")}</span>
             <span className="text-primary text-base font-black">{currencySymbol}{total.toFixed(0)}</span>
           </div>
         </div>
 
         {/* Row 3: Settlement */}
-        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100">
+        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
           <span className="text-gray-600 text-[9px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
-          <div className="flex items-center gap-1 ml-1">
+          <div className="flex items-center gap-1 ml-1 shrink-0">
             <input
               type="number"
               value={settlementAmount}
@@ -452,7 +452,7 @@ const BillSummary = ({
         </div>
 
         {/* Row 4: Checkboxes */}
-        <div className="flex items-center justify-center gap-6 py-1 bg-gray-50/30">
+        <div className="flex items-center justify-center gap-6 py-1 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
           <label className="flex items-center gap-1 text-gray-600 text-[10px] font-bold cursor-pointer">
             <div className={`w-3 h-3 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
               {isPaid && <CheckCircle size={8} className="text-white shrink-0" strokeWidth={3} />}
@@ -462,7 +462,7 @@ const BillSummary = ({
         </div>
 
         {/* Row 5: Action Buttons */}
-        <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-white border-t border-gray-100">
+        <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-white border-t border-gray-100 w-full overflow-x-auto no-scrollbar">
           <button
             onClick={onSaveOrder}
             disabled={loading || cart.length === 0}
