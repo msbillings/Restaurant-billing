@@ -38,10 +38,17 @@ const Invoice = ({ bill, onClose, onSave }) => {
   }, []);
 
   const handlePrint = () => {
-    if (window.electronAPI && settings.billingPrinter && settings.silentPrinting !== false) {
+    if (window.electronAPI) {
       const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-      window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, true);
+      const isSilent = settings.silentPrinting !== false;
+      if (isSilent && settings.billingPrinter) {
+        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, true);
+      } else if (window.electronAPI.printPreview) {
+        window.electronAPI.printPreview(htmlContent, settings.billingPrinter);
+      } else {
+        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, false);
+      }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {
@@ -182,17 +189,21 @@ const Invoice = ({ bill, onClose, onSave }) => {
           {/* Items List */}
           <div className="mb-1 pb-1" style={{ borderBottom: '1px solid black' }}>
             {bill.items && bill.items.length > 0 ?
-            bill.items.map((item, idx) =>
-            <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontSize: '14px', fontWeight: 'normal' }}>
+            bill.items.filter(item => !item.isCancelled).map((item, idx) => {
+              const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+              if (activeQty <= 0) return null;
+              return (
+                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontSize: '14px', fontWeight: 'normal' }}>
                   <div className="flex-1 pr-1 break-words">
                     {item.name || 'Unknown Item'}
                     {item.hsnCode ? <span style={{ fontSize: '12px' }}>{t("(HSN:")}{item.hsnCode})</span> : ''}
                   </div>
-                  <div className="w-8 text-right">{item.quantity || 0}</div>
+                  <div className="w-8 text-right">{activeQty}</div>
                   <div className="w-14 text-right">{(item.price || 0).toFixed(2)}</div>
-                  <div className="w-16 text-right">{(item.total || item.price * item.quantity || 0).toFixed(2)}</div>
+                  <div className="w-16 text-right">{(item.price * activeQty).toFixed(2)}</div>
                 </div>
-            ) :
+              );
+            }) :
 
             <div className="text-center py-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("No items")}</div>
             }
@@ -201,10 +212,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
           {/* Tax / Discount / Items summary */}
           <div className="flex flex-col gap-0.5 mt-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
             <div className="flex justify-between w-full">
-              <span className="text-left w-24">{t("Total Qty:")}{bill.items?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
+              <span className="text-left w-24">{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
               <div className="flex-1 flex justify-between pl-2">
                 <span className="text-left">{t("Sub Total")}</span>
-                <span className="w-16 text-right">{(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0).toFixed(2)}</span>
+                <span className="w-16 text-right">{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
               </div>
             </div>
             {bill.discount > 0 &&

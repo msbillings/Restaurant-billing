@@ -350,91 +350,42 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose} />
-      
-      
-      <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in-95 duration-200">
-        
-        <div className="w-full md:w-2/5 bg-gray-50 flex flex-col relative z-20">
-          <div className="p-4 bg-white border-b border-gray-100 grid grid-cols-4 gap-2 pt-4">
-            <button onClick={() => addCash(500)} className="py-2 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl hover:bg-emerald-100 transition-colors">
-              <span className="text-[10px] uppercase font-bold text-emerald-600/70 mb-0.5">{t("Note")}</span>
-              <span className="font-bold text-sm">₹500</span>
-            </button>
-            <button onClick={() => addCash(200)} className="py-2 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl hover:bg-emerald-100 transition-colors">
-               <span className="text-[10px] uppercase font-bold text-emerald-600/70 mb-0.5">{t("Note")}</span>
-              <span className="font-bold text-sm">₹200</span>
-            </button>
-            <button onClick={() => applyPercentage(10, false)} className="py-2 flex flex-col items-center justify-center bg-rose-50 text-rose-700 border border-rose-100 rounded-xl hover:bg-rose-100 transition-colors">
-               <span className="text-[10px] uppercase font-bold text-rose-600/70 mb-0.5">{t("Disc")}</span>
-              <span className="font-bold text-sm">-10%</span>
-            </button>
-            <button onClick={() => applyPercentage(5, true)} className="py-2 flex flex-col items-center justify-center bg-blue-50 text-blue-700 border border-blue-100 rounded-xl hover:bg-blue-100 transition-colors">
-               <span className="text-[10px] uppercase font-bold text-blue-600/70 mb-0.5">{t("GST")}</span>
-              <span className="font-bold text-sm">+5%</span>
-            </button>
-          </div>
 
-          <div className="p-5 grid grid-cols-4 gap-3 bg-gray-50 flex-grow">
-            <button onClick={handleClear} className="p-3 bg-red-100 text-red-600 font-bold rounded-xl hover:bg-red-200 transition-colors text-sm">{t("AC")}</button>
-            <button onClick={handleDelete} className="p-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-colors flex justify-center items-center"><Delete size={18} /></button>
-            <button onClick={handlePercent} className="p-3 bg-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-300 transition-colors flex justify-center items-center"><Percent size={18} /></button>
-            <button onClick={() => handleOperator('/')} className="p-3 bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-lg">÷</button>
-
-            <button onClick={() => handleNumber('7')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">7</button>
-            <button onClick={() => handleNumber('8')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">8</button>
-            <button onClick={() => handleNumber('9')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">9</button>
-            <button onClick={() => handleOperator('*')} className="p-3 bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-lg">×</button>
-
-            <button onClick={() => handleNumber('4')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">4</button>
-            <button onClick={() => handleNumber('5')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">5</button>
-            <button onClick={() => handleNumber('6')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">6</button>
-            <button onClick={() => handleOperator('-')} className="p-3 bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-lg">−</button>
-
-            <button onClick={() => handleNumber('1')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">1</button>
-            <button onClick={() => handleNumber('2')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">2</button>
-            <button onClick={() => handleNumber('3')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">3</button>
-            <button onClick={() => handleOperator('+')} className="p-3 bg-indigo-100 text-indigo-700 font-bold rounded-xl hover:bg-indigo-200 transition-colors text-lg">+</button>
-
-            <button onClick={() => handleNumber('0')} className="col-span-2 p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">0</button>
-            <button onClick={() => handleNumber('.')} className="p-3 bg-white border border-gray-200/60 text-gray-800 font-bold rounded-xl hover:bg-gray-100 transition-colors text-xl shadow-sm">.</button>
-            <button onClick={handleEqual} className="p-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover transition-colors text-2xl shadow-lg shadow-primary/30">=</button>
-          </div>
-        </div>
-
-        <div className="w-full md:w-3/5 bg-slate-900 text-white flex flex-col relative overflow-hidden shadow-[-10px_0_30px_-15px_rgba(0,0,0,0.5)] z-30">
-          <div className="absolute -top-32 -left-32 w-64 h-64 bg-primary/20 rounded-full blur-3xl opacity-50" />
+      <div className="relative bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col md:flex-row my-auto max-h-[92vh] border border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+        {/* Top / Right Screen: Header, Voice AI & Result Display */}
+        <div className="w-full md:w-3/5 bg-slate-900 text-white flex flex-col relative overflow-hidden shadow-xl z-30 shrink-0">
+          <div className="absolute -top-32 -left-32 w-64 h-64 bg-primary/20 rounded-full blur-3xl opacity-50 pointer-events-none" />
           
-          <div className="px-6 py-5 flex justify-between items-center relative z-10 border-b border-white/10">
-            <h3 className="font-black text-xl flex items-center gap-2">{t("Smart Calculator")}
-
+          <div className="px-4 sm:px-6 py-3.5 sm:py-4 flex justify-between items-center relative z-10 border-b border-white/10 shrink-0">
+            <h3 className="font-black text-base sm:text-xl flex items-center gap-2 text-white">
+              <Sparkles size={18} className="text-primary" />
+              <span>{t("Smart Calculator")}</span>
             </h3>
-            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors">
+            <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors touch-target flex items-center justify-center">
               <X size={20} />
             </button>
           </div>
 
-          <div className="p-6 relative z-10 border-b border-white/10 bg-white/5">
+          <div className="px-3 sm:px-6 py-3 relative z-10 border-b border-white/10 bg-white/5 shrink-0">
             <form onSubmit={handleAiCalculate}>
-              <div className="relative">
+              <div className="relative flex items-center">
                 <input
                   type="text"
                   value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)} placeholder={t("e.g. 500 + 1000 - 5% discount")}
-
-                  className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 pr-24 text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-white placeholder-gray-500 transition-all" />
-                
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder={t("e.g. 500 + 1000 - 5% discount")}
+                  className="w-full bg-black/40 border border-white/15 rounded-xl py-2.5 px-3.5 pr-24 text-xs sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-white placeholder-slate-400 transition-all font-medium" />
                 
                 {/* Language Selector */}
                 <select
                   value={micLang}
                   onChange={(e) => setMicLang(e.target.value)}
-                  className="absolute right-[4.5rem] top-2 p-1.5 bg-transparent text-gray-400 hover:text-white text-xs font-bold focus:outline-none appearance-none cursor-pointer transition-colors z-10" title={t("Select Voice Language")}>
-
-                  
+                  className="absolute right-[4.25rem] top-1/2 -translate-y-1/2 p-1 bg-transparent text-slate-400 hover:text-white text-[10px] sm:text-xs font-bold focus:outline-none cursor-pointer transition-colors z-10"
+                  title={t("Select Voice Language")}>
                   <option value="en-IN" className="bg-slate-900 text-white">{t("EN")}</option>
                   <option value="te-IN" className="bg-slate-900 text-white">{t("TE")}</option>
                   <option value="hi-IN" className="bg-slate-900 text-white">{t("HI")}</option>
@@ -443,45 +394,95 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
                 <button
                   type="button"
                   onClick={toggleListening}
-                  className={`absolute right-10 top-2 p-1.5 rounded-lg transition-colors flex items-center justify-center ${isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/20'}`} title={t("Voice Input")}>
-
-                  
-                  <Mic size={16} />
+                  className={`absolute right-9 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors flex items-center justify-center ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                  title={t("Voice Input")}>
+                  <Mic size={15} />
                 </button>
 
-                <button type="submit" className="absolute right-2 top-2 p-1.5 bg-primary/20 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors">
-                  <ArrowRight size={16} />
+                <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 bg-primary/20 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors">
+                  <ArrowRight size={15} />
                 </button>
               </div>
             </form>
+
             {aiResult &&
-            <div className="mt-3 text-xs font-medium text-emerald-400 bg-emerald-400/10 p-2.5 rounded-lg border border-emerald-400/20 flex items-start gap-2">
+              <div className="mt-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20 flex items-start gap-1.5">
                 <span className="leading-tight">{aiResult}</span>
               </div>
             }
           </div>
 
-          <div className="p-8 flex-grow flex flex-col items-end justify-end relative z-10">
-            <div className="text-gray-400 text-lg h-8 font-mono">{equation}</div>
-            <div className="text-6xl font-black font-mono tracking-tight overflow-x-auto w-full text-right hide-scrollbar truncate text-primary-50">
+          <div className="p-4 sm:p-6 flex-1 flex flex-col items-end justify-end relative z-10 min-h-[90px] sm:min-h-[120px]">
+            <div className="text-slate-400 text-xs sm:text-base font-mono h-6">{equation}</div>
+            <div className="text-3xl sm:text-5xl font-black font-mono tracking-tight overflow-x-auto w-full text-right hide-scrollbar text-white">
               {display}
             </div>
             
             <button
               onClick={handleCopy}
-              className={`mt-6 px-4 py-2 rounded-xl flex items-center gap-2 text-sm font-medium transition-all ${
-              copied ?
-              'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-              'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'}`
-              }>
-              
-              {copied ? <Check size={16} /> : <Copy size={16} />}
-              {copied ? 'Copied to Clipboard' : 'Copy Amount'}
+              className={`mt-3 sm:mt-4 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all touch-target ${
+                copied ?
+                'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                'bg-white/10 text-slate-300 hover:text-white hover:bg-white/20 border border-white/10'
+              }`}>
+              {copied ? <Check size={14} /> : <Copy size={14} />}
+              <span>{copied ? t('Copied!') : t('Copy Amount')}</span>
             </button>
           </div>
         </div>
+
+        {/* Keypad & Quick Modifiers Section */}
+        <div className="w-full md:w-2/5 bg-slate-50 flex flex-col relative z-20 overflow-y-auto custom-scrollbar">
+          {/* Quick Cash/Discount Preset Strip */}
+          <div className="p-2.5 sm:p-3 bg-white border-b border-slate-200/80 grid grid-cols-4 gap-1.5 shrink-0">
+            <button onClick={() => addCash(500)} className="py-2 px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-xl hover:bg-emerald-100 transition-colors touch-target">
+              <span className="text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
+              <span className="font-bold text-xs sm:text-sm">₹500</span>
+            </button>
+            <button onClick={() => addCash(200)} className="py-2 px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-xl hover:bg-emerald-100 transition-colors touch-target">
+              <span className="text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
+              <span className="font-bold text-xs sm:text-sm">₹200</span>
+            </button>
+            <button onClick={() => applyPercentage(10, false)} className="py-2 px-1 flex flex-col items-center justify-center bg-rose-50 text-rose-700 border border-rose-200/60 rounded-xl hover:bg-rose-100 transition-colors touch-target">
+              <span className="text-[9px] uppercase font-bold text-rose-600/80 mb-0.5">{t("Disc")}</span>
+              <span className="font-bold text-xs sm:text-sm">-10%</span>
+            </button>
+            <button onClick={() => applyPercentage(5, true)} className="py-2 px-1 flex flex-col items-center justify-center bg-blue-50 text-blue-700 border border-blue-200/60 rounded-xl hover:bg-blue-100 transition-colors touch-target">
+              <span className="text-[9px] uppercase font-bold text-blue-600/80 mb-0.5">{t("GST")}</span>
+              <span className="font-bold text-xs sm:text-sm">+5%</span>
+            </button>
+          </div>
+
+          {/* Numeric Key Grid */}
+          <div className="p-3 sm:p-4 grid grid-cols-4 gap-2 bg-slate-50 flex-1">
+            <button onClick={handleClear} className="p-3 bg-red-100 text-red-700 font-black rounded-xl hover:bg-red-200 transition-colors text-xs sm:text-sm touch-target">{t("AC")}</button>
+            <button onClick={handleDelete} className="p-3 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Delete size={18} /></button>
+            <button onClick={handlePercent} className="p-3 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Percent size={18} /></button>
+            <button onClick={() => handleOperator('/')} className="p-3 bg-indigo-100 text-indigo-700 font-black rounded-xl hover:bg-indigo-200 transition-colors text-base sm:text-lg touch-target">÷</button>
+
+            <button onClick={() => handleNumber('7')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">7</button>
+            <button onClick={() => handleNumber('8')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">8</button>
+            <button onClick={() => handleNumber('9')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">9</button>
+            <button onClick={() => handleOperator('*')} className="p-3 bg-indigo-100 text-indigo-700 font-black rounded-xl hover:bg-indigo-200 transition-colors text-base sm:text-lg touch-target">×</button>
+
+            <button onClick={() => handleNumber('4')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">4</button>
+            <button onClick={() => handleNumber('5')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">5</button>
+            <button onClick={() => handleNumber('6')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">6</button>
+            <button onClick={() => handleOperator('-')} className="p-3 bg-indigo-100 text-indigo-700 font-black rounded-xl hover:bg-indigo-200 transition-colors text-base sm:text-lg touch-target">−</button>
+
+            <button onClick={() => handleNumber('1')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">1</button>
+            <button onClick={() => handleNumber('2')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">2</button>
+            <button onClick={() => handleNumber('3')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">3</button>
+            <button onClick={() => handleOperator('+')} className="p-3 bg-indigo-100 text-indigo-700 font-black rounded-xl hover:bg-indigo-200 transition-colors text-base sm:text-lg touch-target">+</button>
+
+            <button onClick={() => handleNumber('0')} className="col-span-2 p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">0</button>
+            <button onClick={() => handleNumber('.')} className="p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-base sm:text-xl shadow-xs touch-target">.</button>
+            <button onClick={handleEqual} className="p-3 bg-primary text-white font-black rounded-xl hover:bg-primary-hover transition-colors text-xl sm:text-2xl shadow-md touch-target">=</button>
+          </div>
+        </div>
       </div>
-    </div>);
+    </div>
+  );
 
 };
 

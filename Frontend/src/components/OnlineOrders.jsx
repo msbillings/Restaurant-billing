@@ -102,165 +102,166 @@ const OnlineOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-slate-50 p-3 sm:p-6 overflow-y-auto custom-scrollbar w-full">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Direct Online Orders")}</h1>
-            <div className="flex items-center gap-2 mt-1">
-              <p className="text-sm text-gray-500">{t("Manage orders placed through your own website")}</p>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{t("Direct Online Orders")}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+              <p className="text-xs sm:text-sm text-slate-500 font-medium">{t("Manage orders placed through your own website")}</p>
               {config?.domainName &&
-              <a
-                href={`https://${config.domainName.replace(/^https?:\/\//, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors">
-                
+                <a
+                  href={`https://${config.domainName.replace(/^https?:\/\//, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 hover:bg-blue-100 transition-colors">
                   {config.domainName} <ExternalLink size={12} />
                 </a>
               }
             </div>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
             onClick={fetchOrders}
-            className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md font-medium transition-colors shadow-sm">
-            
-            <RefreshCw size={18} />{t("Refresh")}
-
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2.5 rounded-xl font-bold transition-colors shadow-xs touch-target text-xs sm:text-sm">
+            <RefreshCw size={16} />
+            <span>{t("Refresh")}</span>
           </button>
           <button
             onClick={simulateIncomingOrder}
-            className="flex items-center gap-2 bg-[#000000] hover:bg-gray-800 text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm">
-            
-            <ShoppingBag size={18} />{t("Simulate Website Order")}
-
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2.5 rounded-xl font-bold transition-colors shadow-xs touch-target text-xs sm:text-sm">
+            <ShoppingBag size={16} />
+            <span>{t("Simulate Website Order")}</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
+      <div className="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden flex flex-col flex-1">
         {/* Filters */}
-        <div className="flex border-b border-gray-100 overflow-x-auto bg-gray-50/50">
+        <div className="flex border-b border-slate-100 overflow-x-auto bg-slate-50/50 custom-scrollbar">
           {['all', 'new', 'accepted', 'preparing', 'ready', 'dispatched'].map((status) =>
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-6 py-4 text-sm font-medium whitespace-nowrap capitalize transition-colors ${
-            filter === status ?
-            'text-primary border-b-2 border-primary bg-primary/5' :
-            'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`
-            }>
-            
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-4 sm:px-6 py-3.5 text-xs sm:text-sm font-bold whitespace-nowrap capitalize transition-colors touch-target ${
+                filter === status ?
+                'text-primary border-b-2 border-primary bg-primary/5' :
+                'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+              }`}>
               {status === 'all' ? t('All Active Orders') : t(status.charAt(0).toUpperCase() + status.slice(1))}
             </button>
           )}
         </div>
 
         {/* Orders List */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50/30">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-slate-50/30 custom-scrollbar">
           {loading ?
-          <div className="flex justify-center py-10"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
-          orders.length === 0 ?
-          <div className="text-center py-20">
-              <ShoppingBag size={48} className="mx-auto text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-1">{t("No orders found")}</h3>
-              <p className="text-gray-500">{t("There are no")}{filter !== 'all' ? filter : ''}{t("direct online orders right now.")}</p>
+            <div className="flex justify-center py-10">
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            </div> :
+            orders.length === 0 ?
+            <div className="text-center py-16 p-4 max-w-sm mx-auto">
+              <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <ShoppingBag size={32} className="text-slate-400" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-1">{t("No orders found")}</h3>
+              <p className="text-xs sm:text-sm text-slate-500">{t("There are no")} {filter !== 'all' ? filter : ''} {t("direct online orders right now.")}</p>
             </div> :
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
               {orders.map((order) =>
-            <div key={order._id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                <div key={order._id} className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col hover:shadow-md transition-shadow">
                   {/* Header */}
-                  <div className="flex justify-between items-start p-4 bg-gray-50 border-b border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-black text-white px-2 py-1 rounded text-xs font-bold tracking-wider">{t("DIRECT WEB")}</div>
+                  <div className="flex justify-between items-center p-3.5 sm:p-4 bg-slate-50 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-slate-900 text-white px-2 py-0.5 rounded text-[10px] font-bold tracking-wider font-mono">{t("DIRECT WEB")}</div>
                       <div>
-                        <span className="font-bold text-gray-800">{order.platformOrderId}</span>
-                        <p className="text-xs text-gray-500 mt-1">{new Date(order.createdAt).toLocaleString()}</p>
+                        <span className="font-bold text-slate-800 text-xs sm:text-sm font-mono">{order.platformOrderId}</span>
+                        <p className="text-[10px] text-slate-400 font-medium">{new Date(order.createdAt).toLocaleString()}</p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${getStatusColor(order.status)}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getStatusColor(order.status)}`}>
                       {order.status}
                     </span>
                   </div>
 
                   {/* Body */}
-                  <div className="p-5 flex-1 flex flex-col md:flex-row gap-6">
-                    <div className="flex-1 space-y-4">
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col md:flex-row gap-4 sm:gap-6">
+                    <div className="flex-1 space-y-3">
                       <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">{t("Customer")}</h4>
-                        <p className="font-medium text-gray-800">{order.customerDetails?.name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-600">{order.customerDetails?.phone || 'N/A'}</p>
-                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">{order.customerDetails?.address || 'N/A'}</p>
+                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{t("Customer")}</h4>
+                        <p className="font-bold text-slate-800 text-sm">{order.customerDetails?.name || 'Unknown'}</p>
+                        <p className="text-xs text-slate-600 font-mono">{order.customerDetails?.phone || 'N/A'}</p>
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{order.customerDetails?.address || 'N/A'}</p>
                       </div>
                       
                       <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">{t("Payment")}</h4>
+                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{t("Payment")}</h4>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 text-xs font-medium rounded ${order.paymentStatus === 'paid_online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${order.paymentStatus === 'paid_online' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                             {order.paymentStatus === 'paid_online' ? 'Paid Online' : 'Cash on Delivery'}
                           </span>
-                          <span className="font-bold text-gray-800">₹{order.totalAmount}</span>
+                          <span className="font-black text-slate-800 text-sm">₹{order.totalAmount}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="flex-1 bg-gray-50 rounded-lg p-3 border border-gray-100">
-                      <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">{t("Order Items")}</h4>
-                      <ul className="space-y-2 max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="flex-1 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{t("Order Items")}</h4>
+                      <ul className="space-y-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                         {order.items.map((item, idx) =>
-                    <li key={idx} className="flex justify-between items-start text-sm">
-                            <span className="text-gray-800"><span className="font-medium">{item.quantity}x</span> {item.name}</span>
-                            <span className="font-medium text-gray-600">₹{item.price * item.quantity}</span>
+                          <li key={idx} className="flex justify-between items-start text-xs">
+                            <span className="text-slate-700"><span className="font-bold text-slate-900 font-mono">{item.quantity}x</span> {item.name}</span>
+                            <span className="font-bold text-slate-800">₹{item.price * item.quantity}</span>
                           </li>
-                    )}
+                        )}
                       </ul>
                     </div>
                   </div>
 
                   {/* Footer Actions */}
-                  <div className="p-4 bg-gray-50 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {order.status === 'new' &&
-                <>
-                        <button onClick={() => updateOrderStatus(order._id, 'accepted')} className="col-span-2 sm:col-span-2 bg-primary hover:bg-primary-hover text-white py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                          <CheckCircle size={16} />{t("Accept Order")}
-                  </button>
-                        <button onClick={() => updateOrderStatus(order._id, 'cancelled')} className="col-span-2 sm:col-span-2 bg-white hover:bg-red-50 text-red-600 border border-gray-300 hover:border-red-200 py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                          <XCircle size={16} />{t("Reject")}
-                  </button>
+                      <>
+                        <button onClick={() => updateOrderStatus(order._id, 'accepted')} className="col-span-1 sm:col-span-2 bg-primary hover:bg-primary-hover text-white py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                          <CheckCircle size={16} /><span>{t("Accept Order")}</span>
+                        </button>
+                        <button onClick={() => updateOrderStatus(order._id, 'cancelled')} className="col-span-1 sm:col-span-2 bg-white hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                          <XCircle size={16} /><span>{t("Reject")}</span>
+                        </button>
                       </>
-                }
+                    }
                     {order.status === 'accepted' &&
-                <button onClick={() => updateOrderStatus(order._id, 'preparing')} className="col-span-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                        <Clock size={16} />{t("Start Preparing (Send to KDS)")}
-                </button>
-                }
+                      <button onClick={() => updateOrderStatus(order._id, 'preparing')} className="col-span-full bg-amber-500 hover:bg-amber-600 text-slate-950 py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                        <Clock size={16} /><span>{t("Start Preparing (Send to KDS)")}</span>
+                      </button>
+                    }
                     {order.status === 'preparing' &&
-                <button onClick={() => updateOrderStatus(order._id, 'ready')} className="col-span-full bg-green-500 hover:bg-green-600 text-white py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                        <CheckCircle size={16} />{t("Mark as Ready")}
-                </button>
-                }
+                      <button onClick={() => updateOrderStatus(order._id, 'ready')} className="col-span-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                        <CheckCircle size={16} /><span>{t("Mark as Ready")}</span>
+                      </button>
+                    }
                     {order.status === 'ready' &&
-                <button onClick={() => updateOrderStatus(order._id, 'dispatched')} className="col-span-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                        <Truck size={16} />{t("Dispatch / Hand over to Rider")}
-                </button>
-                }
+                      <button onClick={() => updateOrderStatus(order._id, 'dispatched')} className="col-span-full bg-blue-600 hover:bg-blue-500 text-white py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                        <Truck size={16} /><span>{t("Dispatch / Hand over to Rider")}</span>
+                      </button>
+                    }
                     {order.status === 'dispatched' &&
-                <button onClick={() => updateOrderStatus(order._id, 'delivered')} className="col-span-full bg-gray-800 hover:bg-gray-900 text-white py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2">
-                        <CheckCircle size={16} />{t("Mark as Delivered")}
-                </button>
-                }
+                      <button onClick={() => updateOrderStatus(order._id, 'delivered')} className="col-span-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5 touch-target shadow-xs">
+                        <CheckCircle size={16} /><span>{t("Mark as Delivered")}</span>
+                      </button>
+                    }
                   </div>
                 </div>
-            )}
+              )}
             </div>
           }
         </div>
       </div>
-    </div>);
+    </div>
+  );
 
 };
 

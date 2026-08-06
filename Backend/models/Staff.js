@@ -33,8 +33,13 @@ const staffSchema = new mongoose.Schema({
     enum: ['Active', 'Inactive'],
     default: 'Active'
   },
-  faceDescriptor: {
-    type: [Number],
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant', // If applicable, or just a string if they prefer
+    index: true
+  },
+  faceDescriptors: {
+    type: [[Number]], // Array of 128-dimensional embeddings
     default: []
   },
   attendance: [{
@@ -43,7 +48,8 @@ const staffSchema = new mongoose.Schema({
     clockOut: { type: Date },
     clockInPhoto: { type: String }, // Base64 image
     clockOutPhoto: { type: String }, // Base64 image
-    status: { type: String, enum: ['Present', 'Absent', 'Half-Day', 'Leave'], default: 'Present' }
+    status: { type: String, enum: ['Present', 'Absent', 'Half-Day', 'Leave'], default: 'Present' },
+    confidence: { type: Number } // Added confidence score for face recognition
   }]
 }, {
   timestamps: true

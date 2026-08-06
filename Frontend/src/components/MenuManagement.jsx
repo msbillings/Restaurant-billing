@@ -480,21 +480,21 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
 
   const categoriesStartIndex = (currentPage - 1) * itemsPerPage;
   const categoriesEndIndex = categoriesStartIndex + itemsPerPage;
-  const paginatedCategories = filteredCategories.slice(categoriesStartIndex, categoriesEndIndex);
+    const paginatedCategories = filteredCategories.slice(categoriesStartIndex, categoriesEndIndex);
 
   if (loading) return <div className="flex items-center justify-center h-full text-text-muted">{t("Loading...")}</div>;
 
   return (
-    <div className="h-full flex flex-col bg-background p-3 sm:p-6">
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-text-main">{t("Menu Management")}</h1>
-          <p className="text-xs sm:text-sm text-text-muted">{t("Manage your restaurant's menu items and categories")}</p>
+    <div className="h-full flex flex-col bg-background px-2.5 py-4 sm:p-6 overflow-hidden">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 p-3 sm:p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50 shrink-0">
+        <div className="flex items-start gap-3">
+          <BackButton onClick={onGoBack} className="mt-0.5 shrink-0" />
+          <div>
+            <h1 className="text-lg sm:text-2xl font-bold text-text-main">{t("Menu Management")}</h1>
+            <p className="text-[10px] sm:text-sm text-text-muted">{t("Manage your restaurant's menu items and categories")}</p>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-1.5 sm:gap-3 w-full sm:w-auto">
           <input
             type="file"
             accept=".csv"
@@ -506,57 +506,50 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
           <>
               <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border" title={t("Import CSV")}>
-
+              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Import CSV")}>
               
-                <Upload size={20} />
-                <span className="hidden sm:inline">{t("Import")}</span>
+                <Upload size={16} />
+                <span>{t("Import")}</span>
               </button>
               <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 bg-surface text-text-muted px-4 py-2 rounded-lg hover:bg-surface-hover transition-colors border border-border" title={t("Export CSV")}>
-
+              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Export CSV")}>
               
-                <Download size={20} />
-                <span className="hidden sm:inline">{t("Export")}</span>
+                <Download size={16} />
+                <span>{t("Export")}</span>
               </button>
               <button
               onClick={() => setDeleteModal({ isOpen: true, itemId: null, categoryId: null, deleteAll: true })}
-              className="flex items-center gap-2 bg-danger/10 text-danger px-4 py-2 rounded-lg hover:bg-danger/20 transition-colors border border-danger/20" title={t("Delete All Items")}>
-
+              className="flex items-center gap-1.5 bg-danger/10 text-danger px-2.5 py-1.5 rounded-lg hover:bg-danger/20 transition-colors border border-danger/20 text-xs sm:text-sm animate-fade-in" title={t("Delete All Items")}>
               
-                <Trash2 size={20} />
-                <span className="hidden sm:inline">{t("Delete All")}</span>
+                <Trash2 size={16} />
+                <span>{t("Delete All")}</span>
               </button>
             </>
           }
           <button
             onClick={() => setActiveTab('categories')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'categories' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Categories")}
-
-
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors text-xs sm:text-sm ${activeTab === 'categories' ? 'bg-primary text-white font-bold' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Categories")}
           </button>
           <button
             onClick={() => setActiveTab('items')}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === 'items' ? 'bg-primary text-white' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Menu Items")}
-
-
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors text-xs sm:text-sm ${activeTab === 'items' ? 'bg-primary text-white font-bold' : 'bg-surface text-text-muted hover:bg-surface-hover'}`}>{t("Menu Items")}
           </button>
           {user?.role === 'Admin' && activeTab === 'items' &&
           <button
             onClick={() => handleOpenModal()}
-            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20">
+            className="flex items-center gap-1.5 bg-primary text-white px-3 py-1.5 rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20 text-xs sm:text-sm font-bold">
             
-              <Plus size={20} />
+              <Plus size={16} />
               <span>{t("Add Item")}</span>
             </button>
           }
           {user?.role === 'Admin' && activeTab === 'categories' &&
           <button
             onClick={() => handleOpenCategoryModal()}
-            className="flex items-center gap-2 bg-secondary text-white px-4 py-2 rounded-lg hover:bg-accent transition-colors shadow-lg shadow-secondary/20">
+            className="flex items-center gap-1.5 bg-secondary text-white px-3 py-1.5 rounded-lg hover:bg-accent transition-colors shadow-lg shadow-secondary/20 text-xs sm:text-sm font-bold">
             
-              <FolderPlus size={20} />
+              <FolderPlus size={16} />
               <span>{t("Add Category")}</span>
             </button>
           }
@@ -564,21 +557,21 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
       </div>
 
       {/* Search Bar */}
-      <div className="mb-6 relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={20} />
+      <div className="mb-4 relative shrink-0">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
         <input
           type="text"
           placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main" />
-        
+          className="w-full pl-9 pr-4 py-2.5 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main font-medium" />
       </div>
 
       {/* Table */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
-        <div className="overflow-y-auto flex-1">
-          {activeTab === 'items' ?
+        <div className="overflow-auto flex-1">
+          <div className="min-w-[650px]">
+            {activeTab === 'items' ?
           <table className="w-full text-left border-collapse">
               <thead className="bg-background sticky top-0 z-10">
                 <tr>
@@ -713,6 +706,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               </tbody>
             </table>
           }
+          </div>
         </div>
 
         {/* Pagination Controls */}

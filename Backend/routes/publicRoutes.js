@@ -35,6 +35,41 @@ router.get('/menu', async (req, res) => {
   }
 });
 
+// Helper to dynamically load tax rates from restaurantSettings in DB
+const getDynamicTaxSettings = async (req) => {
+  let taxRate = 0;
+  let cgstRate = 0;
+  let sgstRate = 0;
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    let s = {};
+    if (settingsDoc?.value) {
+      s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
+    }
+    
+    if (s.enableCgst) {
+      cgstRate = Number(s.cgstRate || 0);
+    }
+    if (s.enableSgst) {
+      sgstRate = Number(s.sgstRate || 0);
+    }
+    if (s.enableGst) {
+      taxRate = Number(s.gstRate || 0);
+      cgstRate = 0;
+      sgstRate = 0;
+    } else {
+      taxRate = cgstRate + sgstRate;
+    }
+  } catch (e) {
+    console.error("Error reading dynamic tax settings:", e);
+    taxRate = 0;
+    cgstRate = 0;
+    sgstRate = 0;
+  }
+  return { taxRate, cgstRate, sgstRate };
+};
+
 // Public endpoint to submit an order from a customer
 router.post('/order', async (req, res) => {
   try {
@@ -56,7 +91,6 @@ router.post('/order', async (req, res) => {
     }));
 
     const itemsSubtotal = sanitizedItems.reduce((acc, i) => acc + i.total, 0);
-    const finalTotal = Math.round(subTotal || total || itemsSubtotal);
 
     // Case-insensitive table matching for open order
     const tableRegex = new RegExp('^' + tableNo.trim() + '$', 'i');
@@ -74,6 +108,8 @@ router.post('/order', async (req, res) => {
       createdAt: new Date()
     };
 
+    const { taxRate, cgstRate, sgstRate } = await getDynamicTaxSettings(req);
+
     if (bill) {
       // Append items to existing order safely
       sanitizedItems.forEach(newItem => {
@@ -90,8 +126,16 @@ router.post('/order', async (req, res) => {
         }
       });
 
-      bill.subtotal = bill.items.reduce((acc, i) => acc + (i.price * i.quantity), 0);
-      bill.total = Math.round(bill.subtotal);
+      bill.subtotal = bill.items.reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+      
+      const taxAmount = Number(((bill.subtotal * taxRate) / 100).toFixed(2));
+      bill.tax = taxRate;
+      bill.taxBreakdown = {
+        cgst: Number(((bill.subtotal * cgstRate) / 100).toFixed(2)),
+        sgst: Number(((bill.subtotal * sgstRate) / 100).toFixed(2)),
+        igst: 0
+      };
+      bill.total = Math.round(bill.subtotal + taxAmount);
       bill.status = 'Open';
       bill.billType = bill.billType || 'Dine-In';
 
@@ -101,12 +145,20 @@ router.post('/order', async (req, res) => {
       await bill.save();
     } else {
       // Create new order
+      const taxAmount = Number(((itemsSubtotal * taxRate) / 100).toFixed(2));
+      const orderTotal = Math.round(itemsSubtotal + taxAmount);
+
       bill = new Bill({
         tableNo,
         items: sanitizedItems.map(i => ({ ...i, printedQuantity: i.quantity })),
         subtotal: itemsSubtotal,
-        total: finalTotal,
-        tax: taxes || 0,
+        total: orderTotal,
+        tax: taxRate,
+        taxBreakdown: {
+          cgst: Number(((itemsSubtotal * cgstRate) / 100).toFixed(2)),
+          sgst: Number(((itemsSubtotal * sgstRate) / 100).toFixed(2)),
+          igst: 0
+        },
         status: 'Open',
         billType: 'Dine-In',
         kots: [newKotTicket],
@@ -264,30 +316,164 @@ router.get('/order-status', async (req, res) => {
       }
     }
 
+    const { taxRate, cgstRate, sgstRate } = await getDynamicTaxSettings(req);
+    const subTotal = bill.subtotal || bill.items.reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+    const currentTaxRate = (bill.tax && bill.tax > 0) ? bill.tax : taxRate;
+
+    let taxAmount = 0;
+    let taxBreakdown = { cgst: 0, sgst: 0, igst: 0 };
+    let computedTotal = bill.total;
+
+    if (bill.status === 'Open' || bill.status === 'open') {
+      taxAmount = Number(((subTotal * currentTaxRate) / 100).toFixed(2));
+      const effectiveCgst = currentTaxRate === taxRate ? cgstRate : currentTaxRate / 2;
+      const effectiveSgst = currentTaxRate === taxRate ? sgstRate : currentTaxRate / 2;
+      taxBreakdown = {
+        cgst: Number(((subTotal * effectiveCgst) / 100).toFixed(2)),
+        sgst: Number(((subTotal * effectiveSgst) / 100).toFixed(2)),
+        igst: 0
+      };
+      computedTotal = Math.round(subTotal + taxAmount);
+    } else {
+      taxAmount = bill.taxBreakdown ? Number(((bill.taxBreakdown.cgst || 0) + (bill.taxBreakdown.sgst || 0) + (bill.taxBreakdown.igst || 0)).toFixed(2)) : Number(((subTotal * (bill.tax || 0)) / 100).toFixed(2));
+      taxBreakdown = bill.taxBreakdown || { cgst: 0, sgst: 0, igst: 0 };
+    }
+
+    const processedItems = (bill.items || []).map(item => {
+      let prepMins = item.prepTimeMinutes;
+      let prepStart = item.prepStartTime;
+      
+      if (!prepMins && bill.kots) {
+        bill.kots.forEach(k => {
+          (k.items || []).forEach(ki => {
+            if (ki.name === item.name || (ki._id && ki._id.toString() === item._id?.toString())) {
+              if (ki.prepTimeMinutes) {
+                prepMins = ki.prepTimeMinutes;
+                prepStart = ki.prepStartTime;
+              }
+            }
+          });
+        });
+      }
+
+      const itemObj = item.toObject ? item.toObject() : item;
+      return {
+        ...itemObj,
+        prepTimeMinutes: prepMins || 0,
+        prepStartTime: prepStart || null
+      };
+    });
+
     res.status(200).json({
       _id: bill._id,
       status: bill.status,
       kitchenStatus,
-      total: bill.total,
-      subTotal: bill.subtotal || bill.total,
-      itemsCount: bill.items.reduce((acc, item) => acc + (item.quantity || 1), 0)
+      total: computedTotal,
+      tax: taxAmount,
+      taxBreakdown,
+      subTotal,
+      itemsCount: bill.items.reduce((acc, item) => acc + (item.isCancelled ? 0 : (item.quantity - (item.cancelledQuantity || 0))), 0),
+      items: processedItems
     });
   } catch (error) {
     console.error("Error fetching order status:", error);
     res.status(500).json({ message: error.message });
   }
 });
+
+// Public endpoint to request item cancellation
+router.post('/request-item-cancel', async (req, res) => {
+  try {
+    const { orderId, itemId, tableNo, cancelQty } = req.body;
+    if (!orderId || !itemId) {
+      return res.status(400).json({ message: 'orderId and itemId are required' });
+    }
+
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const bill = await Bill.findById(orderId);
+    
+    if (!bill) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const item = bill.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found in order' });
+    }
+
+    item.cancellationRequested = true;
+    item.cancellationRequestedQty = cancelQty || item.quantity;
+    bill.markModified('items');
+    await bill.save();
+
+    // Emit notification to admin
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    let shopName = 'Unknown Shop';
+    if (settingsDoc?.value) {
+      if (typeof settingsDoc.value === 'string') {
+        try {
+          const parsed = JSON.parse(settingsDoc.value);
+          shopName = parsed.restaurantName || 'Unknown Shop';
+        } catch (e) {}
+      } else {
+        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+      }
+    }
+
+    const cleanTable = (tableNo || bill.tableNo || '').replace('Table ', '');
+    const io = req.app?.locals?.io;
+    const tenantDb = req.headers['x-tenant-db'];
+
+    emitNotification(
+      req,
+      `${shopName} | Table ${cleanTable} Cancel Req`,
+      `${item.cancellationRequestedQty}x ${item.name}`,
+      'error',
+      ['Admin', 'Manager', 'Captain'],
+      { orderId: bill._id, itemId: item._id, type: 'cancel_item_request', itemName: item.name, cancelQty: item.cancellationRequestedQty }
+    );
+
+    if (io && tenantDb) {
+      io.to(tenantDb).emit('itemCancellationRequested', { 
+        orderId: bill._id, 
+        itemId: item._id, 
+        tableNo: bill.tableNo,
+        itemName: item.name,
+        cancelQty: item.cancellationRequestedQty
+      });
+      io.to(tenantDb).emit('orderUpdated', { tableNo: bill.tableNo, status: bill.status });
+    }
+
+    res.status(200).json({ message: 'Cancellation requested successfully', item });
+  } catch (error) {
+    console.error("Error requesting item cancellation:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 router.get('/system-ip', (req, res) => {
   const interfaces = os.networkInterfaces();
   let localIP = 'localhost';
+  let candidateIPs = [];
+
   for (const name of Object.keys(interfaces)) {
+    const isVirtual = /vbox|virtual|vmnet|vethernet|docker|wsl|tap|tun/i.test(name);
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
-        localIP = iface.address;
-        break;
+        if (!isVirtual) {
+          candidateIPs.unshift(iface.address);
+        } else {
+          candidateIPs.push(iface.address);
+        }
       }
     }
   }
+
+  if (candidateIPs.length > 0) {
+    localIP = candidateIPs[0];
+  }
+
   res.status(200).json({ ip: localIP, port: process.env.VITE_PORT || 5173 });
 });
 

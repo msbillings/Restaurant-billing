@@ -21,7 +21,13 @@ const billSchema = new mongoose.Schema({
     },
     hsnCode: { type: String },
     specialNote: { type: String },
-    total: { type: Number, min: [0, 'Total cannot be negative'] }
+    total: { type: Number, min: [0, 'Total cannot be negative'] },
+    cancellationRequested: { type: Boolean, default: false },
+    cancellationRequestedQty: { type: Number, default: 0 },
+    isCancelled: { type: Boolean, default: false },
+    cancelledQuantity: { type: Number, default: 0 },
+    prepTimeMinutes: { type: Number, default: 0 },
+    prepStartTime: { type: Date }
   }],
   subtotal: {
     type: Number,
@@ -119,9 +125,12 @@ const billSchema = new mongoose.Schema({
       specialNote: String,
       status: {
         type: String,
-        enum: ['Pending', 'Preparing', 'Ready'],
         default: 'Pending'
-      }
+      },
+      isCancelled: { type: Boolean, default: false },
+      cancelledQuantity: { type: Number, default: 0 },
+      prepTimeMinutes: { type: Number, default: 0 },
+      prepStartTime: { type: Date }
     }],
     createdAt: {
       type: Date,

@@ -16,11 +16,17 @@ const KOT = ({ order, onClose }) => {
   }, []);
 
   const handlePrint = () => {
-    if (window.electronAPI && settings.kotPrinter) {
+    if (window.electronAPI) {
       const receiptNode = document.querySelector('#kot-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
       const isSilent = settings.silentPrinting !== false;
-      window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, isSilent);
+      if (isSilent && settings.kotPrinter) {
+        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, true);
+      } else if (window.electronAPI.printPreview) {
+        window.electronAPI.printPreview(htmlContent, settings.kotPrinter);
+      } else {
+        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, false);
+      }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {
@@ -55,18 +61,16 @@ const KOT = ({ order, onClose }) => {
       </style>
 
       {/* Controls - Hidden on Print */}
-      <div className="sticky top-4 right-4 flex justify-end gap-3 print:hidden w-full max-w-3xl z-10">
+      <div className="sticky top-2 sm:top-4 right-2 sm:right-4 flex justify-end gap-2 sm:gap-3 print:hidden w-full max-w-3xl z-10 px-2">
         <button
           onClick={handlePrint}
-          className="flex items-center gap-2 px-4 py-2 bg-white text-black rounded-full hover:bg-gray-200 transition-colors shadow-lg">
-          
+          className="flex items-center gap-2 px-4 py-2.5 bg-white text-black rounded-full hover:bg-gray-200 transition-colors shadow-lg touch-target font-bold text-xs sm:text-sm">
           <Printer size={18} />
           <span>{t("Print KOT")}</span>
         </button>
         <button
           onClick={onClose}
-          className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors backdrop-blur-md">
-          
+          className="flex items-center gap-2 px-4 py-2.5 bg-white/20 text-white rounded-full hover:bg-white/30 transition-colors backdrop-blur-md touch-target font-bold text-xs sm:text-sm border border-white/30">
           <ArrowLeft size={18} />
           <span>{t("Close")}</span>
         </button>
@@ -118,17 +122,22 @@ const KOT = ({ order, onClose }) => {
           {/* Items List */}
           <div className="mb-1">
             {order.items && order.items.length > 0 ?
-            order.items.map((item, idx) =>
-            <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontWeight: 'normal' }}>
-                  <div className="flex-1 pr-1 break-words">
-                    {item.name || 'Unknown Item'}
+            order.items.map((item, idx) => {
+              const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+              return (
+                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontWeight: 'normal' }}>
+                  <div className={`flex-1 pr-1 break-words ${isCancelled ? 'line-through' : ''}`}>
+                    {item.name || 'Unknown Item'} {isCancelled ? '(CANCELLED)' : ''}
                   </div>
                   <div className="w-16 text-center text-gray-700 leading-tight">
                     {item.specialNote ? item.specialNote : '--'}
                   </div>
-                  <div className="w-8 text-center">{item.quantity || 0}</div>
+                  <div className={`w-8 text-center ${isCancelled ? 'line-through' : ''}`}>
+                    {isCancelled ? 0 : (item.quantity || 0)}
+                  </div>
                 </div>
-            ) :
+              );
+            }) :
 
             <div className="text-center py-1" style={{ fontWeight: 'normal' }}>{t("No items")}</div>
             }

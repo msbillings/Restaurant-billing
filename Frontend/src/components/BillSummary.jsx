@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import TableDropdown from './TableDropdown';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart } from 'lucide-react';
 
 const BillSummary = ({
@@ -253,35 +254,19 @@ const BillSummary = ({
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("Current Table")}</span>
               <span className="text-[13px] font-black text-gray-700 truncate max-w-[180px]" title={activeTable}>{activeTable}</span>
             </div> :
-            <div className="relative h-10">
-              <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all shadow-md flex items-center justify-center px-4 animate-pulse gap-1.5">
-                {t("Select Table")}
-                <ChevronDown size={16} />
-              </button>
-              <select
-                value=""
-                onChange={(e) => onSelectTable && onSelectTable(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-              >
-                <option value="" disabled>{t("Select Table")}</option>
-                {floors.map((floor, index) => {
-                  const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0 || floor.spaces?.length > 0;
-                  if (!hasItems) return null;
-                  return (
-                    <optgroup key={`f-${index}`} label={floor.name}>
-                      {floor.tables?.map((tObj, i) => <option key={`t-${i}`} value={`${floor.name} - ${tObj.name}`}>{tObj.name} {t("(Table)")}</option>)}
-                      {floor.cabins?.map((cObj, i) => <option key={`c-${i}`} value={`${floor.name} - ${cObj.name}`}>{cObj.name} {t("(Cabin)")}</option>)}
-                      {floor.sofas?.map((sObj, i) => <option key={`s-${i}`} value={`${floor.name} - ${sObj.name}`}>{sObj.name} {t("(Sofa)")}</option>)}
-                      {floor.spaces?.map((spObj, i) => <option key={`sp-${i}`} value={`${floor.name} - ${spObj.name}`}>{spObj.name} {t(`(${spObj.type || 'Space'})`)}</option>)}
-                    </optgroup>
-                  );
-                })}
-                {!floors.some(f => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0 || f.spaces?.length > 0) && [...Array(20)].map((_, i) => (
-                  <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                    {t('table')} {String(i + 1).padStart(2, '0')}
-                  </option>
-                ))}
-              </select>
+            <div className="relative h-10 w-full min-w-[140px]">
+              <TableDropdown
+                floors={floors}
+                activeTable={null}
+                align="right"
+                onSelect={(val) => onSelectTable && onSelectTable(val)}
+                customButton={
+                  <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all shadow-md flex items-center justify-center px-4 animate-pulse gap-1.5">
+                    {t("Select Table")}
+                    <ChevronDown size={16} />
+                  </button>
+                }
+              />
             </div>
           }
         </div>
@@ -303,11 +288,11 @@ const BillSummary = ({
           </div> :
 
           cart.map((item, index) =>
-            <div key={index} className="flex items-start py-2 px-2 border-b border-gray-100 hover:bg-gray-50 transition-colors group">
+            <div key={index} className={`flex items-start py-2 px-2 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
               {/* Delete Icon */}
               <button
                 onClick={() => updateQuantity(item._id || item.name, -item.quantity)}
-                disabled={isLocked}
+                disabled={isLocked || item.isCancelled}
                 className="w-6 h-6 rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center shrink-0 mt-0 mr-1 transition-all disabled:opacity-50">
 
                 <X size={14} strokeWidth={3} />
@@ -315,11 +300,15 @@ const BillSummary = ({
 
               {/* Item Name */}
               <div className="flex-1 pr-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[13px] text-gray-700 font-medium leading-tight">{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-[13px] text-gray-700 font-medium leading-tight ${item.isCancelled ? 'line-through' : ''}`}>{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
+                  {item.isCancelled ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">{t("Cancelled")}</span>
+                  : item.cancellationRejected ? <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-bold">{t("Rejected")}</span>
+                  : item.cancellationRequested ? <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-bold">{t("Pending Cancel")}</span>
+                  : item.cancelledQuantity > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold whitespace-nowrap">({item.cancelledQuantity} {t("Cancelled")})</span> : null}
                   <button
                     onClick={() => handleItemNoteClick(item)}
-                    disabled={isLocked}
+                    disabled={isLocked || item.isCancelled}
                     className="text-gray-400 hover:text-orange-500 transition-colors p-0.5"
                     title={t("Add special note for this item")}
                   >
@@ -340,15 +329,15 @@ const BillSummary = ({
               <div className="flex items-center gap-2 w-[85px] shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
                 <button
                   onClick={() => updateQuantity(item._id || item.name, -1)}
-                  disabled={isLocked}
+                  disabled={isLocked || item.isCancelled}
                   className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
 
                   <Minus size={14} />
                 </button>
-                <span className="font-bold text-sm text-gray-800 shrink-0 w-4 text-center">{item.quantity}</span>
+                <span className={`font-bold text-sm text-gray-800 shrink-0 w-4 text-center ${item.isCancelled ? 'line-through' : ''}`}>{item.quantity - (item.cancelledQuantity || 0)}</span>
                 <button
                   onClick={() => updateQuantity(item._id || item.name, 1)}
-                  disabled={isLocked}
+                  disabled={isLocked || item.isCancelled}
                   className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
 
                   <Plus size={14} />
@@ -357,8 +346,7 @@ const BillSummary = ({
 
               {/* Price */}
               <div className="w-[60px] shrink-0 text-right flex flex-col justify-center h-7 pr-2">
-                <div className="text-[10px] text-gray-400 line-through hidden">{item.price}</div>
-                <div className="text-[13px] font-bold text-gray-700">{(item.price * item.quantity).toFixed(2)}</div>
+                <div className={`text-[13px] font-bold text-gray-700 ${item.isCancelled ? 'line-through text-gray-400' : ''}`}>{(item.price * (item.quantity - (item.cancelledQuantity || 0))).toFixed(2)}</div>
               </div>
             </div>
           )
@@ -680,7 +668,6 @@ const BillSummary = ({
               <button
                 onClick={() => setShowSplitCalcModal(false)}
                 className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Done")}
-
 
               </button>
             </div>

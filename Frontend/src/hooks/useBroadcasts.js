@@ -20,11 +20,13 @@ const useBroadcasts = (userRole) => {
       });
 
       const fetchedBroadcasts = response.data;
-      setBroadcasts(fetchedBroadcasts);
+      const clearedIds = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
+      const visibleBroadcasts = fetchedBroadcasts.filter(b => !clearedIds.includes(b._id));
+      setBroadcasts(visibleBroadcasts);
 
       // Calculate unread count using localStorage to track read IDs
       const readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
-      const unread = fetchedBroadcasts.filter(b => !readBroadcasts.includes(b._id)).length;
+      const unread = visibleBroadcasts.filter(b => !readBroadcasts.includes(b._id)).length;
       setUnreadCount(unread);
 
     } catch (error) {
@@ -48,6 +50,16 @@ const useBroadcasts = (userRole) => {
       if (!readBroadcasts.includes(b._id)) readBroadcasts.push(b._id);
     });
     localStorage.setItem('read_broadcasts', JSON.stringify(readBroadcasts));
+    setUnreadCount(0);
+  };
+
+  const clearAllBroadcasts = () => {
+    const clearedIds = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
+    broadcasts.forEach(b => {
+      if (!clearedIds.includes(b._id)) clearedIds.push(b._id);
+    });
+    localStorage.setItem('cleared_broadcasts', JSON.stringify(clearedIds));
+    setBroadcasts([]);
     setUnreadCount(0);
   };
 
@@ -78,7 +90,7 @@ const useBroadcasts = (userRole) => {
     };
   }, [userRole]);
 
-  return { broadcasts, unreadCount, markAsRead, markAllAsRead, fetchBroadcasts };
+  return { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts, fetchBroadcasts };
 };
 
 export default useBroadcasts;

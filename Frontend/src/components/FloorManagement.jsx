@@ -1,11 +1,51 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt } from 'lucide-react';
+import { getMenuItems } from '../api/menu';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { io } from 'socket.io-client';
 import Toast from './Toast';
 import Invoice from './Invoice';
+
+const formatImageUrl = (url) => {
+  if (!url) return '';
+  let trimmed = url.trim();
+
+  if (trimmed.includes('google.com/imgres') || trimmed.includes('imgurl=')) {
+    try {
+      const urlObj = new URL(trimmed);
+      const extracted = urlObj.searchParams.get('imgurl');
+      if (extracted) trimmed = extracted;
+    } catch (e) {
+      const match = trimmed.match(/[?&]imgurl=([^&]+)/);
+      if (match && match[1]) trimmed = decodeURIComponent(match[1]);
+    }
+  } else if (trimmed.includes('mediaurl=')) {
+    try {
+      const urlObj = new URL(trimmed);
+      const extracted = urlObj.searchParams.get('mediaurl');
+      if (extracted) trimmed = extracted;
+    } catch (e) {}
+  }
+
+  if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  if (/^[A-Za-z0-9+/=]{30,}$/.test(trimmed) || trimmed.startsWith('iVBOR') || trimmed.startsWith('/9j/') || trimmed.startsWith('R0lGOD') || trimmed.startsWith('UklGR')) {
+    let mime = 'jpeg';
+    if (trimmed.startsWith('iVBOR')) mime = 'png';
+    else if (trimmed.startsWith('R0lGOD')) mime = 'gif';
+    else if (trimmed.startsWith('UklGR')) mime = 'webp';
+    return `data:image/${mime};base64,${trimmed}`;
+  }
+  return trimmed;
+};
+
+const normalizeTable = (tbl) => {
+  if (!tbl) return '';
+  return tbl.replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+};
 
 const FloorManagement = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -23,8 +63,25 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [selectedBillForPrint, setSelectedBillForPrint] = useState(null);
   const [selectedOrderForView, setSelectedOrderForView] = useState(null);
+  const [menuImagesMap, setMenuImagesMap] = useState({});
 
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
+
+  const fetchMenuItemsMap = async () => {
+    try {
+      const items = await getMenuItems();
+      const map = {};
+      (items || []).forEach(i => {
+        if (i.name) {
+          const key = i.name.trim().toLowerCase();
+          if (i.image) map[key] = i.image;
+        }
+      });
+      setMenuImagesMap(map);
+    } catch (e) {
+      console.error('Error fetching menu items for overview modal:', e);
+    }
+  };
 
   const [floors, setFloors] = useState(() => {
     const saved = localStorage.getItem('msbillings_spaces');
@@ -82,6 +139,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   useEffect(() => {
     fetchOrders();
     syncSpaces();
+    fetchMenuItemsMap();
     const interval = setInterval(() => {
       fetchOrders();
       syncSpaces();
@@ -335,7 +393,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   };
 
   const getSpaceOrder = (spaceName) => {
-    return orders.find((o) => o.tableNo?.toLowerCase() === spaceName?.toLowerCase());
+    if (!spaceName) return null;
+    const targetClean = normalizeTable(spaceName);
+    return orders.find((o) => normalizeTable(o.tableNo) === targetClean);
   };
 
   const getActiveSpacesForMerge = () => {
@@ -460,171 +520,183 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       <div
         key={item._id || `${item.id}-${index}`}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
-        className={`group relative flex flex-col items-center justify-center w-[160px] h-[155px] p-4 rounded-[1.25rem] border border-white/50 transition-all cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-1 ${statusBgClass}`}>
+        className={`group relative flex flex-col items-center justify-between w-full h-full min-h-[100px] sm:min-h-[145px] p-2 sm:p-4 rounded-2xl border border-white/50 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-1 ${statusBgClass}`}>
         
         {insightBadge}
-        {isOccupied && activeOrder.createdAt &&
-        <div className="absolute top-2.5 right-2.5 px-1.5 py-0.5 bg-white/90 text-[10px] font-bold text-gray-500 rounded-lg shadow-sm flex items-center gap-1 z-10 border border-gray-100/50">
+        {isOccupied && activeOrder.createdAt && (
+          <div className="absolute top-1 right-1 sm:top-2 sm:right-2 px-1.5 py-0.5 bg-white/90 text-[10px] font-bold text-gray-500 rounded-lg shadow-xs flex items-center gap-1 z-10 border border-gray-100/50">
             <Clock size={10} className="text-blue-500" />
             {(() => {
-            const diff = Math.max(0, Math.floor((new Date() - new Date(activeOrder.createdAt)) / 60000));
-            return diff < 60 ? `${diff}m` : `${Math.floor(diff / 60)}h ${diff % 60}m`;
-          })()}
+              const diff = Math.max(0, Math.floor((new Date() - new Date(activeOrder.createdAt)) / 60000));
+              return diff < 60 ? `${diff}m` : `${Math.floor(diff / 60)}h ${diff % 60}m`;
+            })()}
           </div>
-        }
+        )}
 
-        <div className="flex flex-col items-center gap-1 w-full h-full justify-between">
-          <div className={`p-2 rounded-full bg-white shadow-sm ${statusColorClass} mt-1`}>
-            <Icon size={24} strokeWidth={2.5} />
+        <div className="flex flex-col items-center gap-1.5 w-full h-full justify-between">
+          <div className={`p-1.5 sm:p-2 rounded-full bg-white shadow-xs ${statusColorClass} mt-0.5`}>
+            <Icon size={16} strokeWidth={2.5} className="sm:hidden" />
+            <Icon size={22} strokeWidth={2.5} className="hidden sm:block" />
           </div>
           
-          <h3 className="text-[17px] font-black text-gray-800 leading-tight text-center w-full truncate">
+          <h3 className="text-[11px] sm:text-base font-black text-gray-800 leading-tight text-center w-full truncate">
             {item.name}
           </h3>
           
-          {!isOccupied ?
-          <div className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white shadow-sm ${statusColorClass} mb-1`}>
+          {!isOccupied ? (
+            <div className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-white shadow-xs ${statusColorClass} mb-0.5`}>
               {statusText}
-            </div> :
-
-          <div className="flex items-center gap-2 mt-1 w-full justify-center mb-1">
-              <div className="px-2 py-1.5 rounded-full text-[12px] font-black uppercase tracking-wider bg-white shadow-sm text-gray-900 flex-1 text-center truncate">
-                ₹{activeOrder.total?.toLocaleString() || 0}
-              </div>
+            </div>
+          ) : (
+              <div className="flex items-center gap-1 mt-1 w-full justify-center mb-0.5">
+                <div className="px-1.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white shadow-xs text-gray-900 flex-1 text-center truncate">
+                  {currencySymbol}{(activeOrder.total !== undefined && activeOrder.total !== null ? Math.round(activeOrder.total) : 0).toLocaleString()}
+                </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                onClick={(e) => {e.stopPropagation(); setSelectedOrderForView(activeOrder);}}
-                className="bg-white rounded-full p-1.5 hover:text-emerald-600 transition-colors shadow-sm text-gray-500" title={t("View Order Details")}>
-                  <Eye size={14} strokeWidth={2.5} />
+                  onClick={(e) => {e.stopPropagation(); setSelectedOrderForView(activeOrder);}}
+                  className="bg-white rounded-full p-1 sm:p-1.5 hover:text-emerald-600 transition-colors shadow-xs text-gray-500" title={t("View Order Details")}>
+                  <Eye size={13} strokeWidth={2.5} />
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedBillForPrint(activeOrder);
                   }}
-                  className="bg-white rounded-full p-1.5 hover:text-blue-600 hover:bg-blue-50 transition-colors shadow-sm text-gray-500" 
+                  className="bg-white rounded-full p-1 sm:p-1.5 hover:text-blue-600 hover:bg-blue-50 transition-colors shadow-xs text-gray-500" 
                   title={t("Print KOT & Bill directly")}>
-                  <Printer size={14} strokeWidth={2.5} />
+                  <Printer size={13} strokeWidth={2.5} />
                 </button>
               </div>
             </div>
-          }
+          )}
         </div>
 
-        <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-30">
-          <button
-            onClick={(e) => handleRemoveSpace(e, type, item.id)}
-            className="absolute -top-2 -left-2 bg-red-500 text-white rounded-full p-2 shadow-lg hover:scale-110" title={t("Remove")}>
-
-            
-            <Trash2 size={14} />
-          </button>
-          <button
-            onClick={(e) => handleRenameClick(e, type, item.id, item.name)}
-            className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full p-2 shadow-lg hover:scale-110" title={t("Rename")}>
-
-            
-            <Edit2 size={14} />
-          </button>
-        </div>
-      </div>);
-
+        {!isOccupied && (
+          <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-30">
+            <button
+              onClick={(e) => handleRemoveSpace(e, type, item.id)}
+              className="absolute top-1 left-1 sm:-top-2 sm:-left-2 bg-red-500 text-white rounded-full p-1 sm:p-1.5 shadow-md hover:scale-110 animate-fade-in" title={t("Remove")}>
+              <Trash2 size={11} className="sm:hidden" />
+              <Trash2 size={13} className="hidden sm:block" />
+            </button>
+            <button
+              onClick={(e) => handleRenameClick(e, type, item.id, item.name)}
+              className="absolute top-1 right-1 sm:-top-2 sm:-right-2 bg-blue-500 text-white rounded-full p-1 sm:p-1.5 shadow-md hover:scale-110 animate-fade-in" title={t("Rename")}>
+              <Edit2 size={11} className="sm:hidden" />
+              <Edit2 size={13} className="hidden sm:block" />
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-white overflow-hidden w-full">
       {/* Top Header */}
-      <div className="px-6 py-4 flex flex-wrap gap-4 justify-between items-center shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500 tracking-tight">{t('Table View')}</h2>
+      <div className="px-2.5 sm:px-6 py-3 flex flex-wrap gap-2 sm:gap-4 justify-between items-center shrink-0 border-b border-gray-100">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500 tracking-tight">{t('Table View')}</h2>
         </div>
         
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <button
             onClick={() => setShowAIInsights(!showAIInsights)}
-            className={`px-3 py-1.5 rounded shadow transition-colors text-sm font-bold flex items-center gap-2 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>{t("✨ AI Predictor")}
-
-
+            className={`px-3 py-1.5 rounded-lg shadow-xs transition-colors text-xs sm:text-sm font-bold flex items-center gap-1.5 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
+            {t("✨ AI Predictor")}
           </button>
           
-          <button onClick={fetchOrders} className="p-2 text-gray-700 font-bold hover:bg-gray-100 rounded-full transition-colors" title={t("Refresh")}>
+          <button onClick={() => window.location.reload()} className="p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors touch-target flex items-center justify-center" title={t("Refresh")}>
             <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
           </button>
           
           <button
             onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })}
-            className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded shadow transition-colors text-sm">{t("Merge Bills")}
-
-
+            className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-xs transition-colors text-xs sm:text-sm">
+            {t("Merge Bills")}
           </button>
 
-          <button onClick={() => onNavigate('reservation')} className="px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors text-sm">{t("Reservation")}
-
+          <button onClick={() => onNavigate('reservation')} className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs sm:text-sm">
+            {t("Reservation")}
           </button>
 
-          <button onClick={() => onNavigate('billing', 'DEL-NEW')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">{t("Delivery")}
-
+          <button onClick={() => onNavigate('billing', 'DEL-NEW')} className="px-3.5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs sm:text-sm">
+            {t("Delivery")}
           </button>
           
-          <button onClick={() => onNavigate('billing', 'TAK-NEW')} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">{t("Pick Up")}
-
+          <button onClick={() => onNavigate('billing', 'TAK-NEW')} className="px-3.5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs sm:text-sm">
+            {t("Pick Up")}
           </button>
 
-          <button onClick={() => handleAddSpace()} className="px-5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-medium rounded shadow-sm transition-colors text-sm">{t("+ Add Space")}
-
+          <button onClick={() => handleAddSpace()} className="px-3.5 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs sm:text-sm">
+            {t("+ Add Space")}
           </button>
         </div>
       </div>
       
-      {/* Status Legend */}
-      <div className="px-6 flex items-center gap-4 text-xs font-medium text-gray-500 overflow-x-auto hide-scrollbar pb-2">
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-emerald-50 shadow-sm border-2 border-emerald-200"></span>{t("Available")}</div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-blue-50 shadow-sm border-2 border-blue-300"></span>{t("Running Table")}</div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-orange-50 shadow-sm border-2 border-orange-300"></span>{t("Printed Table")}</div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-gray-50 shadow-sm border-2 border-gray-300"></span>{t("Paid Table")}</div>
-          <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-full bg-amber-50 shadow-sm border-2 border-amber-300"></span>{t("Reserved KOT")}</div>
+      {/* Status Legend (Scrollable horizontal pill bar) */}
+      <div className="px-2.5 sm:px-6 flex items-center gap-2 sm:gap-3 text-xs font-medium text-gray-600 overflow-x-auto no-scrollbar py-2 border-b border-gray-100 shrink-0">
+        <div className="flex items-center gap-1.5 whitespace-nowrap bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+          <span>{t("Available")}</span>
         </div>
+        <div className="flex items-center gap-1.5 whitespace-nowrap bg-blue-50/60 px-2.5 py-1 rounded-full border border-blue-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+          <span>{t("Running Table")}</span>
+        </div>
+        <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50/60 px-2.5 py-1 rounded-full border border-orange-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
+          <span>{t("Printed Table")}</span>
+        </div>
+        <div className="flex items-center gap-1.5 whitespace-nowrap bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+          <span>{t("Paid Table")}</span>
+        </div>
+        <div className="flex items-center gap-1.5 whitespace-nowrap bg-amber-50/60 px-2.5 py-1 rounded-full border border-amber-200">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+          <span>{t("Reserved KOT")}</span>
+        </div>
+      </div>
 
       {/* Floor Tabs */}
-      <div className="px-6 pt-3 border-b border-gray-100 bg-white flex gap-2 overflow-x-auto">
-        {floors.map((floor, index) =>
-        <div
-          key={floor._id || `${floor.id}-${index}`}
-          onClick={() => setActiveFloorId(floor.id)}
-          className={`group relative flex items-center gap-2 px-5 py-2.5 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-[16px] ${activeFloorId === floor.id ?
-          'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl' :
-          'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'}`
-          }>
-          
+      <div className="px-2.5 sm:px-6 pt-2 border-b border-gray-100 bg-white flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+        {floors.map((floor, index) => (
+          <div
+            key={floor._id || `${floor.id}-${index}`}
+            onClick={() => setActiveFloorId(floor.id)}
+            className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${
+              activeFloorId === floor.id
+                ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
+                : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
+            }`}>
             {t(floor.name)}
-          <button
-            onClick={(e) => handleRemoveFloor(e, floor.id)}
-            className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
-            
-                <Trash2 size={12} />
-              </button>
+            <button
+              onClick={(e) => handleRemoveFloor(e, floor.id)}
+              className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
+              <Trash2 size={12} />
+            </button>
           </div>
-        )}
+        ))}
         <button
           onClick={handleAddFloor}
-          className="flex items-center gap-1.5 px-4 py-2.5 border-b-2 border-transparent text-gray-500 hover:bg-gray-50 font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl text-[16px]">
-          
+          className="flex items-center gap-1 px-3 py-2 border-b-2 border-transparent text-gray-500 hover:bg-gray-50 font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl text-sm sm:text-base">
           <Plus size={16} />{t("Add Floor")}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 bg-white">
+      <div className="flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-6 bg-gray-50/40">
         {/* Dynamic Spaces Rendering */}
         {(() => {
           const currentFloor = floors.find((f) => f.id === activeFloorId);
           if (!currentFloor) return null;
 
           const allSpaces = [
-          ...(currentFloor.tables || []).map((t) => ({ ...t, _origType: 'table' })),
-          ...(currentFloor.cabins || []).map((c) => ({ ...c, _origType: 'cabin' })),
-          ...(currentFloor.sofas || []).map((s) => ({ ...s, _origType: 'sofa' })),
-          ...(currentFloor.spaces || []).map((sp) => ({ ...sp, _origType: 'space' }))];
-
+            ...(currentFloor.tables || []).map((t) => ({ ...t, _origType: 'table' })),
+            ...(currentFloor.cabins || []).map((c) => ({ ...c, _origType: 'cabin' })),
+            ...(currentFloor.sofas || []).map((s) => ({ ...s, _origType: 'sofa' })),
+            ...(currentFloor.spaces || []).map((sp) => ({ ...sp, _origType: 'space' }))
+          ];
 
           const grouped = allSpaces.reduce((acc, space) => {
             const rawType = space.type || 'Table';
@@ -634,33 +706,33 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             return acc;
           }, {});
 
-          return Object.entries(grouped).map(([typeName, items], index) =>
-          <section key={`${typeName}-${index}`}>
-              <div className="flex items-center gap-3 mb-4 group/section w-max">
-                <h3 className="text-[11px] font-bold text-[#d32f2f] uppercase tracking-wider">
+          return Object.entries(grouped).map(([typeName, items], index) => (
+            <section key={`${typeName}-${index}`}>
+              <div className="flex items-center gap-2 mb-3 group/section w-max">
+                <h3 className="text-xs font-black text-[#d32f2f] uppercase tracking-wider">
                   {t(typeName)}
                 </h3>
                 <button
-                onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
-                className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50"
-                title={`Delete all ${typeName}s`}>
-                
+                  onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
+                  className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50"
+                  title={`Delete all ${typeName}s`}>
                   <Trash2 size={13} />
                 </button>
               </div>
-              <div className="flex flex-wrap gap-4">
+
+              {/* Grid Layout: Strictly 2 columns on 310px-600px screens */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-4 w-full">
                 {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
                 {/* Inline Add Button for this category */}
                 <button
-                onClick={() => setAddSpaceModal({ isOpen: true, name: '', type: typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase() })}
-                className="w-[160px] h-[130px] rounded-[16px] border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-emerald-600 transition-colors">
-                
-                  <Plus size={24} />
-                  <span className="text-[12px] font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
+                  onClick={() => setAddSpaceModal({ isOpen: true, name: '', type: typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase() })}
+                  className="w-full h-full min-h-[100px] sm:min-h-[145px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors">
+                  <Plus size={22} />
+                  <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
                 </button>
               </div>
             </section>
-          );
+          ));
         })()}
       </div>
 
@@ -966,106 +1038,149 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         />
       )}
 
-      {/* Beautiful View Order Modal */}
+      {/* Light Theme View Order Modal */}
       {selectedOrderForView && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-4 flex justify-between items-center text-white shrink-0">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white/95 backdrop-blur-xl border border-gray-200/80 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Header with Global Theme Gradient */}
+            <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 px-6 py-5 flex justify-between items-center text-white shrink-0 shadow-md">
               <div>
-                <h2 className="text-xl font-bold flex items-center gap-2">
+                <h2 className="text-xl font-black flex items-center gap-2.5 tracking-tight font-mono">
                   <Receipt size={22} />
                   {t("Order Overview")}
                 </h2>
-                <p className="text-emerald-100 text-sm font-medium mt-0.5">
-                  {selectedOrderForView.table} • #{selectedOrderForView.billNo || 'PENDING'}
+                <p className="text-orange-100 text-xs font-semibold mt-0.5">
+                  {selectedOrderForView.tableNo || selectedOrderForView.table} • #{selectedOrderForView.billNumber || selectedOrderForView.billNo || 'PENDING'}
                 </p>
               </div>
               <button 
                 onClick={() => setSelectedOrderForView(null)}
-                className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white"
+                className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white backdrop-blur-md"
               >
                 <X size={20} />
               </button>
             </div>
             
-            {/* Body */}
-            <div className="p-6 overflow-y-auto flex-1 bg-gray-50/50">
-              <div className="space-y-4">
-                {selectedOrderForView.items?.map((item, index) => (
-                  <div key={index} className="flex justify-between items-start bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                    <div className="flex-1 pr-3">
-                      <h4 className="font-bold text-gray-800 text-sm">{item.name}</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {item.quantity} × {currencySymbol}{item.price.toFixed(2)}
-                      </p>
+            {/* Light Body */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-gray-50/70">
+              <div className="space-y-3">
+                {selectedOrderForView.items?.map((item, index) => {
+                  const isCancelled = item.isCancelled || item.status === 'Cancelled';
+                  const activeQty = isCancelled ? 0 : Math.max(0, item.quantity - (item.cancelledQuantity || 0));
+                  const cleanName = (item.name || '').trim().toLowerCase();
+                  const itemImg = item.image || item.imageUrl || menuImagesMap[cleanName] || menuImagesMap[item.name];
+
+                  return (
+                    <div 
+                      key={index} 
+                      className={`flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all ${
+                        isCancelled 
+                          ? 'bg-red-50/80 border-red-200 text-red-700' 
+                          : 'bg-white border-gray-200/80 text-gray-800 shadow-sm hover:shadow-md'
+                      }`}
+                    >
+                      {/* Dish Image */}
+                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-orange-50 shrink-0 border border-orange-200/60 flex items-center justify-center">
+                        {itemImg ? (
+                          <img 
+                            src={formatImageUrl(itemImg)} 
+                            alt={item.name} 
+                            className={`w-full h-full object-cover ${isCancelled ? 'grayscale opacity-60' : ''}`} 
+                          />
+                        ) : (
+                          <Utensils size={20} className="text-orange-500" />
+                        )}
+                      </div>
+
+                      {/* Item Info */}
+                      <div className="flex-1 min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className={`font-bold text-sm truncate ${isCancelled ? 'line-through text-red-600' : 'text-gray-900'}`}>
+                            {item.name}
+                          </h4>
+                          {isCancelled && (
+                            <span className="text-[10px] bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded-full font-bold uppercase flex items-center gap-1">
+                              <Ban size={10} /> {t("Cancelled")}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 font-medium mt-0.5">
+                          {isCancelled ? 0 : activeQty} × {currencySymbol}{Number(item.price || 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      {/* Total */}
+                      <div className="text-right shrink-0">
+                        <span className={`font-bold text-sm whitespace-nowrap ${isCancelled ? 'line-through text-red-500' : 'text-orange-600'}`}>
+                          {currencySymbol}{(isCancelled ? 0 : (activeQty * Number(item.price || 0))).toFixed(2)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="font-bold text-gray-800 text-sm whitespace-nowrap">
-                        {currencySymbol}{(item.quantity * item.price).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
             
-            {/* Footer Summary */}
+            {/* Footer Summary with Light Theme */}
             {(() => {
-              const itemsSubtotal = selectedOrderForView.items?.reduce((sum, item) => sum + (item.price * item.quantity), 0) || 0;
-              const subTotal = selectedOrderForView.subtotal || itemsSubtotal || 0;
+              const activeSubtotal = selectedOrderForView.items?.reduce((sum, item) => {
+                if (item.isCancelled || item.status === 'Cancelled') return sum;
+                const activeQty = Math.max(0, item.quantity - (item.cancelledQuantity || 0));
+                return sum + (Number(item.price || 0) * activeQty);
+              }, 0) || 0;
+
+              const subTotal = selectedOrderForView.subtotal !== undefined ? selectedOrderForView.subtotal : activeSubtotal;
               
               let taxAmount = selectedOrderForView.taxTotal || 0;
               let serviceCharge = selectedOrderForView.serviceCharge || 0;
               let packagingCharge = selectedOrderForView.packagingCharge || 0;
               
-              if (!selectedOrderForView.taxTotal) {
+              if (selectedOrderForView.taxTotal === undefined || selectedOrderForView.taxTotal === null) {
                 try {
-                  const s = JSON.parse(localStorage.getItem('restaurantSettings')) || {};
-                  const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
-                  const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
-                  const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
-                  const totRate = cRate + sRate + gRate;
+                  const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+                  let totRate = 0;
+                  if (s.enableCgst) totRate += Number(s.cgstRate || 0);
+                  if (s.enableSgst) totRate += Number(s.sgstRate || 0);
+                  if (s.enableGst) totRate += Number(s.gstRate || 0);
                   
                   const disc = Number(selectedOrderForView.discount || 0);
                   const taxable = Math.max(0, subTotal - disc);
                   taxAmount = taxable * (totRate / 100);
                 } catch(e) {
-                  // Fallback
                   taxAmount = 0;
                 }
               }
               
-              const calculatedTotal = selectedOrderForView.finalTotal || (subTotal - (selectedOrderForView.discount || 0) + taxAmount + serviceCharge + packagingCharge);
+              const calculatedTotal = selectedOrderForView.finalTotal || (subTotal - Number(selectedOrderForView.discount || 0) + taxAmount + serviceCharge + packagingCharge);
               
               return (
-                <div className="bg-white border-t border-gray-100 p-6 shrink-0">
+                <div className="bg-white border-t border-gray-200/80 p-6 shrink-0">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-500 font-medium">{t("Subtotal")}</span>
-                    <span className="font-semibold text-gray-700">{currencySymbol}{subTotal.toFixed(2)}</span>
+                    <span className="text-gray-500 font-medium text-sm">{t("Subtotal")}</span>
+                    <span className="font-semibold text-gray-800 text-sm">{currencySymbol}{subTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-gray-500 font-medium">{t("Taxes & Charges")}</span>
-                    <span className="font-semibold text-gray-700">{currencySymbol}{(taxAmount + serviceCharge + packagingCharge).toFixed(2)}</span>
+                    <span className="text-gray-500 font-medium text-sm">{t("Taxes & Charges")}</span>
+                    <span className="font-semibold text-gray-800 text-sm">{currencySymbol}{(taxAmount + serviceCharge + packagingCharge).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center pt-3 border-t border-dashed border-gray-200">
-                    <span className="text-lg font-black text-gray-800">{t("Total")}</span>
-                    <span className="text-xl font-black text-emerald-600">{currencySymbol}{Math.round(calculatedTotal).toFixed(2)}</span>
+                    <span className="text-lg font-black text-gray-900 tracking-tight">{t("Total")}</span>
+                    <span className="text-2xl font-black text-orange-600">{currencySymbol}{Math.round(calculatedTotal).toFixed(2)}</span>
                   </div>
                   <div className="mt-6 flex gap-3">
                     <button 
                       onClick={() => setSelectedOrderForView(null)}
-                      className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-colors"
+                      className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold transition-all border border-gray-200"
                     >
                       {t("Close")}
                     </button>
                     <button 
                       onClick={() => {
-                        const table = selectedOrderForView.table;
+                        const table = selectedOrderForView.tableNo || selectedOrderForView.table;
                         setSelectedOrderForView(null);
                         onNavigate('billing', table);
                       }}
-                      className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-colors shadow-lg shadow-emerald-500/30"
+                      className="flex-1 py-3 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-2xl font-bold transition-all shadow-lg shadow-orange-500/20"
                     >
                       {t("Open in Billing")}
                     </button>

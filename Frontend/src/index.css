@@ -28,7 +28,9 @@
 }
 
 @layer base {
-  body {
+  html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
     background-color: var(--color-background);
     color: var(--color-text-main);
     font-family: 'Outfit', Inter, system-ui, sans-serif !important;
@@ -39,10 +41,41 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
+  
+  #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
   input, textarea, button, select {
     font-family: 'Outfit', Inter, system-ui, sans-serif !important;
     user-select: auto;
   }
+}
+
+/* Touch Target Minimum Sizing & Helper Classes */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Fluid Responsive Typography & Container Safeguards */
+.responsive-container {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Scrollbar hide helper for horizontal scroll containers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Custom Scrollbar */

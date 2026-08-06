@@ -1,7 +1,7 @@
 {
   "name": "vite-project",
   "private": true,
-  "version": "6.0.39",
+  "version": "6.0.40",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -11,9 +11,13 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/camera": "^8.2.2",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.4.1",
+    "@capacitor/local-notifications": "^8.2.1",
     "@fontsource/outfit": "^5.2.8",
     "axios": "^1.13.2",
     "dexie": "^4.4.4",

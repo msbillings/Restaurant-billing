@@ -22,8 +22,9 @@ const AboutModal = ({ isOpen, onClose, version }) => {const { t } = useLanguage(
 
         {/* Content */}
         <div className="pt-16 pb-8 px-8 text-center">
-          <div className="inline-flex items-center justify-center bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-3 py-1 rounded-full text-sm font-bold mb-4 border border-orange-200 dark:border-orange-800/50">{t("Version")}
-            {version || '6.0.0'}
+          <div className="inline-flex items-center justify-center gap-1 bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-3 py-1 rounded-full text-sm font-bold mb-4 border border-orange-200 dark:border-orange-800/50">
+            <span>{t("Version")}</span>
+            <span>{version || '6.0.0'}</span>
           </div>
 
           <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-2">{t("Premium Restaurant Management")}

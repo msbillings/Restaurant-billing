@@ -14,6 +14,15 @@ export const getStaff = async (req, res) => {
 export const addStaff = async (req, res) => {
   try {
     const Staff = getTenantModel(req, 'Staff', StaffSchema);
+    
+    // Check if PIN already exists
+    if (req.body.pin) {
+      const existing = await Staff.findOne({ pin: req.body.pin.trim() });
+      if (existing) {
+        return res.status(400).json({ message: 'This PIN is already assigned to another staff member. Please use a unique PIN.' });
+      }
+    }
+
     const newStaff = new Staff(req.body);
     await newStaff.save();
     res.status(201).json(newStaff);
@@ -25,6 +34,15 @@ export const addStaff = async (req, res) => {
 export const updateStaff = async (req, res) => {
   try {
     const Staff = getTenantModel(req, 'Staff', StaffSchema);
+
+    // Check if PIN already exists for another staff member
+    if (req.body.pin) {
+      const existing = await Staff.findOne({ pin: req.body.pin.trim(), _id: { $ne: req.params.id } });
+      if (existing) {
+        return res.status(400).json({ message: 'This PIN is already assigned to another staff member. Please use a unique PIN.' });
+      }
+    }
+
     const staff = await Staff.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
     res.json(staff);
@@ -46,7 +64,7 @@ export const deleteStaff = async (req, res) => {
 
 export const clockInOut = async (req, res) => {
   try {
-    const { pin, staffId, action, photo } = req.body; // action = 'clockIn' or 'clockOut'
+    const { pin, staffId, action, photo, confidence } = req.body; // action = 'clockIn' or 'clockOut'
     const Staff = getTenantModel(req, 'Staff', StaffSchema);
     
     let staff;
@@ -73,12 +91,13 @@ export const clockInOut = async (req, res) => {
         return res.status(400).json({ message: 'Already clocked in for today' });
       }
       if (!attendanceRecord) {
-        attendanceRecord = { date: today, clockIn: new Date(), status: 'Present' };
+        attendanceRecord = { date: today, clockIn: new Date(), status: 'Present', confidence };
         if (photo) attendanceRecord.clockInPhoto = photo;
         staff.attendance.push(attendanceRecord);
       } else {
         attendanceRecord.clockIn = new Date();
         attendanceRecord.status = 'Present';
+        attendanceRecord.confidence = confidence;
         if (photo) attendanceRecord.clockInPhoto = photo;
       }
     } else if (action === 'clockOut') {
@@ -104,9 +123,10 @@ export const clockInOut = async (req, res) => {
 export const getPublicStaff = async (req, res) => {
   try {
     const Staff = getTenantModel(req, 'Staff', StaffSchema);
-    const staff = await Staff.find({ status: 'Active' }).select('name faceDescriptor _id');
+    const staff = await Staff.find({ status: 'Active' }).select('name faceDescriptors _id');
     res.json(staff);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+

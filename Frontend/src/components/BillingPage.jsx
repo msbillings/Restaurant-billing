@@ -1,6 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import MenuGrid from './MenuGrid';
+import TableDropdown from './TableDropdown';
 import BillSummary from './BillSummary';
 import PaymentModal from './PaymentModal';
 import KOT from './KOT';
@@ -72,10 +73,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     });
 
     // Listen for real-time events
-    socket.on('orderUpdated', fetchOpenOrdersList);
+    const handleRealtimeUpdate = (data) => {
+      fetchOpenOrdersList();
+      if (data && data.tableNo) {
+        window.dispatchEvent(new CustomEvent('remoteOrderUpdated', { detail: data }));
+      } else {
+        window.dispatchEvent(new CustomEvent('remoteOrderUpdated', { detail: {} }));
+      }
+    };
+
+    socket.on('orderUpdated', handleRealtimeUpdate);
+    socket.on('cancellationResolved', handleRealtimeUpdate);
+    socket.on('itemCancellationRequested', handleRealtimeUpdate);
+    socket.on('kotUpdated', handleRealtimeUpdate);
+    socket.on('prepTimeUpdated', handleRealtimeUpdate);
     socket.on('billSettled', fetchOpenOrdersList);
     socket.on('tableStatusChanged', fetchOpenOrdersList);
-    socket.on('newKOT', fetchOpenOrdersList);
+    socket.on('newKOT', handleRealtimeUpdate);
 
     return () => {
       socket.disconnect();
@@ -262,7 +276,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   useEffect(() => {
     if (activeTable && !newlyGeneratedTables.current.has(activeTable)) {
-      fetchActiveOrder();
+      fetchActiveOrder(activeTable, true);
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
       if (cart.length === 0) {
         // eslint-disable-next-line
@@ -271,6 +285,35 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         setBillNumber(null);
       }
     }
+
+    const handleRemoteOrderUpdate = (e) => {
+      const data = e.detail;
+      if (data) {
+        if (!data.tableNo || data.tableNo === activeTable) {
+          fetchActiveOrder(activeTable);
+        } else {
+          const clean1 = (data.tableNo || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+          const clean2 = (activeTable || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+          if (clean1 && clean2 && (clean1 === clean2 || clean1.endsWith(clean2) || clean2.endsWith(clean1))) {
+            fetchActiveOrder(activeTable);
+          }
+        }
+      }
+    };
+    window.addEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
+
+    // 3-Second polling timer to guarantee real-time bill summary section UI updates without manual refresh
+    const pollInterval = setInterval(() => {
+      if (activeTable) {
+        fetchActiveOrder(activeTable);
+      }
+      fetchOpenOrdersList();
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
+      clearInterval(pollInterval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTable]);
 
@@ -308,13 +351,32 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   }, [customerPhone]);
 
-  async function fetchActiveOrder() {
-    if (!activeTable) return;
+  async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false) {
+    if (!tableToFetch) return;
     setLoading(true);
     try {
-      const order = await getActiveOrder(activeTable);
+      const order = await getActiveOrder(tableToFetch);
       if (order) {
-        setCart(order.items);
+        setCart((prevCart) => {
+          const backendItems = order.items.filter(i => i.quantity > 0 || i.isCancelled);
+          if (forceReset || !prevCart || prevCart.length === 0) return backendItems;
+
+          // Preserve local unsaved draft items (items added locally by shop owner that are not yet saved in backend)
+          const localDrafts = prevCart.filter(localItem =>
+            !backendItems.some(bItem => bItem.name === localItem.name || (localItem._id && bItem._id?.toString() === localItem._id?.toString()))
+          );
+
+          // Merge backend items with local draft quantities
+          const merged = backendItems.map(bItem => {
+            const localMatch = prevCart.find(localItem => localItem.name === bItem.name || (localItem._id && bItem._id?.toString() === localItem._id?.toString()));
+            if (localMatch && localMatch.quantity > bItem.quantity) {
+              return { ...bItem, quantity: localMatch.quantity };
+            }
+            return bItem;
+          });
+
+          return [...merged, ...localDrafts];
+        });
         setOrderId(order._id);
         setOrderStatus(order.status);
         setBillNumber(order.billNumber);
@@ -331,36 +393,40 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           let tot = 0;
-          if (s.enableCgst !== false) tot += s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5;
-          if (s.enableSgst !== false) tot += s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5;
-          if (s.enableGst === true) tot += s.gstRate !== undefined ? Number(s.gstRate) : 5;
+          if (s.enableCgst) tot += Number(s.cgstRate || 0);
+          if (s.enableSgst) tot += Number(s.sgstRate || 0);
+          if (s.enableGst) tot += Number(s.gstRate || 0);
           setTaxRate(tot > 0 ? tot : '');
         } catch (error) {
           console.error('Error parsing settings:', error);
           setTaxRate('');
         }
       } else {
-        setCart([]);
-        setOrderId(null);
-        setOrderStatus('Open');
-        setBillNumber(null);
-        if (billType !== 'Delivery') {
-          setOrderSource('Direct');
-        }
-        setCustomerPhone('');
-        setCustomerName('');
-        setCustomerInfo(null);
-        setDiscount({ type: 'percentage', value: '' });
-        try {
-          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-          let tot = 0;
-          if (s.enableCgst !== false) tot += s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5;
-          if (s.enableSgst !== false) tot += s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5;
-          if (s.enableGst === true) tot += s.gstRate !== undefined ? Number(s.gstRate) : 5;
-          setTaxRate(tot > 0 ? tot : '');
-        } catch (error) {
-          console.error('Error fetching settings:', error);
-          setTaxRate('');
+        // Only reset cart and order state if forceReset is explicitly true (e.g. on table switch)
+        // This prevents the 3-second polling interval from wiping unsaved draft items on new tables
+        if (forceReset) {
+          setCart([]);
+          setOrderId(null);
+          setOrderStatus('Open');
+          setBillNumber(null);
+          if (billType !== 'Delivery') {
+            setOrderSource('Direct');
+          }
+          setCustomerPhone('');
+          setCustomerName('');
+          setCustomerInfo(null);
+          setDiscount({ type: 'percentage', value: '' });
+          try {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            let tot = 0;
+            if (s.enableCgst) tot += Number(s.cgstRate || 0);
+            if (s.enableSgst) tot += Number(s.sgstRate || 0);
+            if (s.enableGst) tot += Number(s.gstRate || 0);
+            setTaxRate(tot > 0 ? tot : '');
+          } catch (error) {
+            console.error('Error fetching settings:', error);
+            setTaxRate('');
+          }
         }
       }
     } catch (error) {
@@ -445,8 +511,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return i;
     }).filter((i) => i.quantity > 0));
   };
-
-  const calculateSubtotal = () => cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const calculateSubtotal = () => cart.reduce((sum, item) => {
+    if (item.isCancelled) return sum;
+    const activeQty = item.quantity - (item.cancelledQuantity || 0);
+    return sum + (item.price * activeQty);
+  }, 0);
 
   const calculateDiscount = (subtotal) => {
     const val = discount.value === '' ? 0 : parseFloat(discount.value) || 0;
@@ -914,10 +983,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 z-10">
+      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 relative z-[1]">
 
         <div className="flex items-center gap-2">
-          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer">
+          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer z-[1]">
             <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
             <div className="flex items-center pointer-events-none">
               <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
@@ -929,58 +998,43 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             </div>
 
             {billType === 'Delivery' || billType === 'Takeaway' ?
-            <select
-              value={activeTable}
-              onChange={(e) => {
-                if (e.target.value === 'NEW_ORDER') {
-                  const generatedOrderNo = generateSequentialOrderNo(billType);
-                  newlyGeneratedTables.current.add(generatedOrderNo);
-                  setActiveTable(generatedOrderNo);
-                } else {
-                  setActiveTable(e.target.value);
+              <select
+                value={activeTable}
+                onChange={(e) => {
+                  if (e.target.value === 'NEW_ORDER') {
+                    const generatedOrderNo = generateSequentialOrderNo(billType);
+                    newlyGeneratedTables.current.add(generatedOrderNo);
+                    setActiveTable(generatedOrderNo);
+                  } else {
+                    setActiveTable(e.target.value);
+                  }
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0">
+                
+                  <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
+                  {openOrdersList.
+                filter((o) => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-')).
+                map((o) =>
+                <option key={o._id} value={o.tableNo} className="bg-surface text-white">
+                        {o.tableNo} ({o.status} - ₹{o.total || 0})
+                      </option>
+                )
                 }
-              }}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              
-                <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
-                {openOrdersList.
-              filter((o) => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-')).
-              map((o) =>
-              <option key={o._id} value={o.tableNo} className="bg-surface text-white">
-                      {o.tableNo} ({o.status} - ₹{o.total || 0})
+                  {activeTable && !openOrdersList.some((o) => o.tableNo === activeTable) &&
+                <option value={activeTable} className="bg-surface text-white">
+                      {activeTable} ({t('newCurrent')})
                     </option>
-              )
-              }
-                {activeTable && !openOrdersList.some((o) => o.tableNo === activeTable) &&
-              <option value={activeTable} className="bg-surface text-white">
-                    {activeTable} ({t('newCurrent')})
-                  </option>
-              }
-              </select> :
+                }
+                </select> :
 
-            <select
-              value={activeTable}
-              onChange={(e) => setActiveTable(e.target.value)}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              
-                <option value="">{t('selectTable', { defaultValue: 'Select Table' })}</option>
-                {floors.map((floor, index) => {
-                const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0;
-                if (!hasItems) return null;
-                return (
-                  <optgroup key={`${floor.id || 'f'}-${index}`} label={floor.name}>
-                      {floor.tables?.map((tableObj, i) => <option key={`t-${tableObj.id || 'x'}-${i}`} value={tableObj.name}>{tableObj.name} {t("(Table)")}</option>)}
-                      {floor.cabins?.map((c, i) => <option key={`c-${c.id || 'x'}-${i}`} value={c.name}>{c.name} {t("(Cabin)")}</option>)}
-                      {floor.sofas?.map((s, i) => <option key={`s-${s.id || 'x'}-${i}`} value={s.name}>{s.name} {t("(Sofa)")}</option>)}
-                    </optgroup>);
-
-              })}
-                {!floors.some((f) => f.tables?.length > 0 || f.cabins?.length > 0 || f.sofas?.length > 0) && [...Array(20)].map((_, i) =>
-              <option key={i} value={`TBL-${String(i + 1).padStart(2, '0')}`}>
-                    {t('table')} {String(i + 1).padStart(2, '0')}
-                  </option>
-              )}
-              </select>
+              <TableDropdown
+                floors={floors}
+                activeTable={activeTable}
+                align="left"
+                onSelect={(val) => setActiveTable(val)}
+                wrapperClass="absolute inset-0 w-full h-full z-10"
+                customButton={<div className="absolute inset-0 w-full h-full cursor-pointer z-10" />}
+              />
             }
           </div>
         </div>
@@ -1144,7 +1198,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         {cart.length > 0 && mobileTab === 'menu' &&
         <div className="md:hidden p-3 bg-surface border border-border rounded-2xl shadow-xl flex items-center justify-between shrink-0 animate-bounce-short">
             <div className="flex flex-col">
-              <span className="text-[10px] text-text-muted font-bold uppercase">{t('total')} ({cart.reduce((sum, item) => sum + item.quantity, 0)} {t('items')})</span>
+              <span className="text-[10px] text-text-muted font-bold uppercase">{t('total')} ({cart.reduce((sum, item) => item.isCancelled ? sum : sum + item.quantity - (item.cancelledQuantity || 0), 0)} {t('items')})</span>
               <span className="text-base font-black text-primary">₹{total.toFixed(2)}</span>
             </div>
             <button

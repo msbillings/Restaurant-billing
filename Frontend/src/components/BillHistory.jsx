@@ -166,38 +166,35 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
 
   return (
-    <div className="h-[90vh] sm:h-[95vh] lg:h-full flex flex-col bg-background p-2 sm:p-4 lg:p-6 overflow-hidden">
+    <div className="h-full flex flex-col bg-background p-3 sm:p-4 lg:p-6 overflow-hidden w-full">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 lg:mb-6 gap-3 shrink-0">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-text-main">{t("Bill History")}</h1>
-          <p className="text-xs sm:text-sm text-text-muted">{t("View and manage past transactions")}</p>
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-4 shrink-0 bg-surface p-4 sm:p-6 border border-border rounded-2xl shadow-xs">
+        <div className="flex items-start gap-3">
+          <BackButton onClick={onGoBack} className="mt-0.5 shrink-0" />
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-text-main">{t("Bill History")}</h1>
+            <p className="text-xs sm:text-sm text-text-muted font-medium">{t("View and manage past transactions")}</p>
+          </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-4 w-full md:w-auto">
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <input
-              type="text" placeholder={t("Search Bill #...")}
-
+              type="text" 
+              placeholder={t("Search Bill #...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-full" />
-            
+              className="pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main w-full font-medium" />
           </div>
 
           <div className="relative w-full sm:w-auto">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+            <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full sm:w-auto pl-10 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main appearance-none cursor-pointer">
-              
+              className="w-full sm:w-auto pl-10 pr-8 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main appearance-none cursor-pointer font-medium">
               <option value="All">{t("All")}</option>
               <option value="Dine-In">{t("Dine-In")}</option>
               <option value="Takeaway">{t("Takeaway")}</option>
@@ -209,29 +206,30 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
-        <div className="overflow-y-auto flex-1">
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden flex-1 flex flex-col shadow-xs">
+        {/* Desktop Wide Table (Visible on md and larger) */}
+        <div className="hidden md:block overflow-y-auto flex-1">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-background sticky top-0 z-10">
+            <thead className="bg-background sticky top-0 z-10 shadow-xs">
               <tr>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Bill #")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">
-                  <div className="flex items-center gap-2">{t("Date & Time")}
-
-                    <span className="text-xs text-primary font-normal">{t("(Latest First)")}</span>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Bill #")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">
+                  <div className="flex items-center gap-2">
+                    {t("Date & Time")}
+                    <span className="text-[10px] text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Type")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Status")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Payment")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Total")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">{t("Action")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Type")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Status")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Payment")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-right">{t("Total")}</th>
+                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-center">{t("Action")}</th>
               </tr>
             </thead>
             <tbody>
-              {loading ?
-              [...Array(8)].map((_, i) =>
-              <tr key={i} className="border-b border-border animate-pulse">
+              {loading ? (
+                [...Array(8)].map((_, i) => (
+                  <tr key={i} className="border-b border-border animate-pulse">
                     <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
                     <td className="p-4">
                       <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
@@ -241,69 +239,149 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                     <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
                     <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
                     <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="flex justify-end gap-2">
-                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                    </div></td>
+                    <td className="p-4">
+                      <div className="flex justify-center gap-2">
+                        <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                        <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                      </div>
+                    </td>
                   </tr>
-              ) :
-              filteredBills.length === 0 ?
-              <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted">{t("No transactions found")}
-
-                </td>
-                </tr> :
-
-              filteredBills.map((bill) =>
-              <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
-                    <td className="p-4 font-medium text-text-main">
+                ))
+              ) : filteredBills.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-8 text-center text-text-muted font-medium">{t("No transactions found")}</td>
+                </tr>
+              ) : (
+                filteredBills.map((bill) => (
+                  <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
+                    <td className="p-4 font-bold text-text-main font-mono text-sm">
                       #{bill.billNumber || 'CANCELLED'}
-                      {bill.status === 'Cancelled' && bill.cancelReason &&
-                  <div className="text-[10px] text-danger mt-1">{t("Reason:")}{bill.cancelReason}</div>
-                  }
+                      {bill.status === 'Cancelled' && bill.cancelReason && (
+                        <div className="text-[10px] text-danger mt-0.5">{t("Reason:")} {bill.cancelReason}</div>
+                      )}
                     </td>
                     <td className="p-4 text-text-muted">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()}</span>
-                        <span className="text-xs">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString()}</span>
+                      <div className="flex flex-col text-xs">
+                        <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()}</span>
+                        <span className="font-mono text-text-muted">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                  bill.billType === 'Dine-In' ?
-                  'bg-primary/10 text-primary border-primary/20' :
-                  'bg-accent/10 text-accent-dark border-accent/20'}`
-                  }>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
                         {t(bill.billType)}
                       </span>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                  bill.status === 'Paid' ?
-                  'bg-success/10 text-success border-success/20' :
-                  'bg-danger/10 text-danger border-danger/20'}`
-                  }>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                      }`}>
                         {t(bill.status || 'Paid')}
                       </span>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-2 text-text-main">
-                        <CreditCard size={16} className="text-text-muted" />
+                      <div className="flex items-center gap-1.5 text-xs text-text-main font-medium">
+                        <CreditCard size={15} className="text-text-muted shrink-0" />
                         <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
                       </div>
                     </td>
-                    <td className="p-4 font-bold text-text-main text-right">
+                    <td className="p-4 font-black text-text-main text-right text-sm">
                       <span className={bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}>
                         ₹{(bill.total || 0).toFixed(2)}
                       </span>
                     </td>
                     <td className="p-4 text-center">
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-1.5">
                         <button
+                          onClick={async () => {
+                            setLoadingBill(true);
+                            try {
+                              const fullBill = await getBillById(bill._id);
+                              setSelectedBill(fullBill);
+                            } catch (error) {
+                              console.error('Error fetching bill details:', error);
+                              setToast({ message: 'Failed to load bill details', type: 'error' });
+                            } finally {
+                              setLoadingBill(false);
+                            }
+                          }}
+                          disabled={loadingBill}
+                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-1 touch-target disabled:opacity-50" 
+                          title={t("View Invoice")}>
+                          <Eye size={18} />
+                        </button>
+                        {bill.status === 'Paid' && (
+                          <button
+                            onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
+                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-1 touch-target" 
+                            title={t("Refund Bill")}>
+                            <RefreshCcw size={18} />
+                          </button>
+                        )}
+                        {bill.status !== 'Deleted' && (
+                          <button
+                            onClick={() => handleDeleteClick(bill._id)}
+                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-1 touch-target" 
+                            title={t("Delete Bill (Requires Password)")}>
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Responsive Stacked Card List (Visible on screens < 768px) */}
+        <div className="md:hidden overflow-y-auto flex-1 p-3 space-y-3">
+          {loading ? (
+            [...Array(5)].map((_, i) => (
+              <div key={i} className="bg-background rounded-xl p-3.5 border border-border h-24 animate-pulse"></div>
+            ))
+          ) : filteredBills.length === 0 ? (
+            <div className="p-8 text-center text-text-muted text-sm font-medium">{t("No transactions found")}</div>
+          ) : (
+            filteredBills.map((bill) => (
+              <div key={bill._id} className={`bg-background rounded-xl p-3.5 border border-border space-y-2.5 ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold font-mono text-sm text-text-main">#{bill.billNumber || 'CANCELLED'}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {t(bill.billType)}
+                    </span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                  }`}>
+                    {t(bill.status || 'Paid')}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-text-muted">
+                  <span className="font-mono">
+                    {new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()} {new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <div className="flex items-center gap-1 font-medium text-text-main">
+                    <CreditCard size={13} className="text-text-muted" />
+                    <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                  <span className={`text-base font-black text-text-main ${bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}`}>
+                    ₹{(bill.total || 0).toFixed(2)}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
                       onClick={async () => {
                         setLoadingBill(true);
                         try {
-                          // Fetch full bill details with all items
                           const fullBill = await getBillById(bill._id);
                           setSelectedBill(fullBill);
                         } catch (error) {
@@ -314,167 +392,157 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                         }
                       }}
                       disabled={loadingBill}
-                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={t("View Invoice")}>
-
-                      
-                          <Eye size={18} />
-                        </button>
-                        {bill.status === 'Paid' &&
-                    <button
-                      onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                      className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-2" title={t("Refund Bill")}>
-
-                      
-                            <RefreshCcw size={18} />
-                          </button>
-                    }
-                        {bill.status !== 'Deleted' &&
-                    <button
-                      onClick={() => handleDeleteClick(bill._id)}
-                      className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-2" title={t("Delete Bill (Requires Password)")}>
-
-                      
-                            <Trash2 size={18} />
-                          </button>
-                    }
-                      </div>
-                    </td>
-                  </tr>
-              )
-              }
-            </tbody>
-          </table>
+                      className="px-3 py-1.5 bg-surface text-primary border border-border rounded-lg text-xs font-bold flex items-center gap-1 touch-target"
+                      title={t("View Invoice")}>
+                      <Eye size={15} />
+                      <span>{t("Invoice")}</span>
+                    </button>
+                    {bill.status === 'Paid' && (
+                      <button
+                        onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
+                        className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target"
+                        title={t("Refund Bill")}>
+                        <RefreshCcw size={15} />
+                      </button>
+                    )}
+                    {bill.status !== 'Deleted' && (
+                      <button
+                        onClick={() => handleDeleteClick(bill._id)}
+                        className="p-2 bg-red-50 text-danger border border-red-200 rounded-lg text-xs font-bold touch-target"
+                        title={t("Delete Bill")}>
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
         
-        {/* Pagination Controls - Same style as MenuManagement */}
-        {pagination.totalPages > 1 &&
-        <div className="p-4 border-t border-border flex items-center justify-between bg-background">
-            <div className="text-sm text-text-muted">{t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("bills")}
-          </div>
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="p-3 sm:p-4 border-t border-border flex flex-col sm:flex-row gap-2 items-center justify-between bg-background shrink-0 text-xs sm:text-sm">
+            <div className="text-text-muted font-medium">
+              {t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("bills")}
+            </div>
             <div className="flex items-center gap-2">
               <button
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              disabled={currentPage === 1 || loading}
-              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
-              
-                <ChevronLeft size={18} />
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1 || loading}
+                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors touch-target">
+                <ChevronLeft size={16} />
               </button>
               <div className="flex items-center gap-1">
                 {[...Array(pagination.totalPages)].map((_, i) => {
-                const page = i + 1;
-                if (
-                page === 1 ||
-                page === pagination.totalPages ||
-                page >= currentPage - 1 && page <= currentPage + 1)
-                {
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      disabled={loading}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      currentPage === page ?
-                      'bg-primary text-white' :
-                      'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'}`
-                      }>
-                      
+                  const page = i + 1;
+                  if (
+                    page === 1 ||
+                    page === pagination.totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        disabled={loading}
+                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                          currentPage === page
+                            ? 'bg-primary text-white shadow-xs'
+                            : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
+                        }`}>
                         {page}
-                      </button>);
-
-                } else if (page === currentPage - 2 || page === currentPage + 2) {
-                  return <span key={page} className="px-2 text-text-muted">...</span>;
-                }
-                return null;
-              })}
+                      </button>
+                    );
+                  } else if (page === currentPage - 2 || page === currentPage + 2) {
+                    return <span key={page} className="px-1 text-text-muted">...</span>;
+                  }
+                  return null;
+                })}
               </div>
               <button
-              onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
-              disabled={currentPage === pagination.totalPages || loading}
-              className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors">
-              
-                <ChevronRight size={18} />
+                onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                disabled={currentPage === pagination.totalPages || loading}
+                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors touch-target">
+                <ChevronRight size={16} />
               </button>
             </div>
           </div>
-        }
+        )}
       </div>
 
-      {selectedBill &&
-      <Invoice
-        bill={selectedBill}
-        onClose={() => setSelectedBill(null)} />
+      {selectedBill && (
+        <Invoice
+          bill={selectedBill}
+          onClose={() => setSelectedBill(null)} />
+      )}
 
-      }
-
-      {refundModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-          <div className="bg-surface rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border">
+      {refundModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+          <div className="bg-surface rounded-2xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-border max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-text-main mb-2">{t("Refund Order")}</h3>
-            <p className="text-text-muted text-sm mb-4">{t("Please provide a reason for the refund.")}</p>
+            <p className="text-text-muted text-xs sm:text-sm mb-4">{t("Please provide a reason for the refund.")}</p>
             <input
-            type="text"
-            value={refundModal.reason}
-            onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })} placeholder={t("e.g. Customer unhappy, wrong item")}
-
-            className="w-full bg-background border border-border rounded-xl px-4 py-2 mb-6 text-sm focus:outline-none focus:border-primary text-text-main" />
+              type="text"
+              value={refundModal.reason}
+              onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })} 
+              placeholder={t("e.g. Customer unhappy, wrong item")}
+              className="w-full bg-background border border-border rounded-xl px-4 py-2.5 mb-5 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium" />
           
             <div className="flex gap-3">
               <button
-              onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
-              className="flex-1 py-2 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors">{t("Cancel")}
-
-
-            </button>
+                onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
+                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors touch-target text-xs sm:text-sm">
+                {t("Cancel")}
+              </button>
               <button
-              onClick={confirmRefund}
-              className="flex-1 py-2 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors">{t("Confirm Refund")}
-
-
-            </button>
+                onClick={confirmRefund}
+                className="flex-1 py-2.5 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors touch-target text-xs sm:text-sm shadow-xs">
+                {t("Confirm Refund")}
+              </button>
             </div>
           </div>
         </div>
-      }
+      )}
 
-      {deleteModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
-          <div className="bg-surface rounded-2xl p-6 max-w-md w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="p-3 rounded-full shrink-0 bg-danger/10 text-danger">
+      {deleteModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start gap-3 sm:gap-4 mb-4">
+              <div className="p-3 rounded-2xl shrink-0 bg-danger/10 text-danger">
                 <Trash2 size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-text-main mb-1">{t("Security Verification Required")}</h3>
-                <p className="text-text-muted text-sm leading-relaxed">{t("Deleting a bill cannot be undone and will update daily sales reports. Please enter your Admin/User password to authorize this action:")}
-
-              </p>
+                <h3 className="text-base sm:text-lg font-bold text-text-main mb-1">{t("Security Verification Required")}</h3>
+                <p className="text-text-muted text-xs sm:text-sm leading-relaxed">
+                  {t("Deleting a bill cannot be undone and will update daily sales reports. Please enter your Admin/User password to authorize this action:")}
+                </p>
               </div>
             </div>
 
-            {deleteModal.error &&
-          <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-sm font-medium">
+            {deleteModal.error && (
+              <div className="mb-4 p-3 bg-danger/10 border border-danger/20 rounded-xl text-danger text-xs sm:text-sm font-medium">
                 {deleteModal.error}
               </div>
-          }
+            )}
 
             <div className="mb-6">
-              <label className="block text-xs font-semibold text-text-muted uppercase mb-2">{t("Password")}</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">{t("Password")}</label>
               <div className="relative">
                 <input
-                type={deleteModal.showPassword ? "text" : "password"}
-                value={deleteModal.password}
-                onChange={(e) => setDeleteModal((prev) => ({ ...prev, password: e.target.value, error: '' }))}
-                onKeyDown={(e) => e.key === 'Enter' && confirmDelete()} placeholder={t("Enter password...")}
-
-                autoFocus
-                className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-sm focus:outline-none focus:border-danger text-text-main" />
+                  type={deleteModal.showPassword ? "text" : "password"}
+                  value={deleteModal.password}
+                  onChange={(e) => setDeleteModal((prev) => ({ ...prev, password: e.target.value, error: '' }))}
+                  onKeyDown={(e) => e.key === 'Enter' && confirmDelete()} 
+                  placeholder={t("Enter password...")}
+                  autoFocus
+                  className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-xs sm:text-sm focus:outline-none focus:border-danger text-text-main font-medium" />
               
                 <button
-                type="button"
-                onClick={() => setDeleteModal((prev) => ({ ...prev, showPassword: !prev.showPassword }))}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
-                title={deleteModal.showPassword ? "Hide password" : "Show password"}>
-                
+                  type="button"
+                  onClick={() => setDeleteModal((prev) => ({ ...prev, showPassword: !prev.showPassword }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
+                  title={deleteModal.showPassword ? "Hide password" : "Show password"}>
                   {deleteModal.showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
@@ -482,28 +550,26 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
             <div className="flex gap-3">
               <button
-              onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
-              disabled={deleteModal.loading}
-              className="flex-1 py-2.5 rounded-xl font-medium border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50">{t("Cancel")}
-
-
-            </button>
+                onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
+                disabled={deleteModal.loading}
+                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50 touch-target text-xs sm:text-sm">
+                {t("Cancel")}
+              </button>
               <button
-              onClick={confirmDelete}
-              disabled={deleteModal.loading}
-              className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-lg shadow-danger/20 transition-all transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
-              
-                {deleteModal.loading ?
-              <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> :
-
-              <Trash2 size={18} />
-              }{t("Confirm Delete")}
-
-            </button>
+                onClick={confirmDelete}
+                disabled={deleteModal.loading}
+                className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-md shadow-danger/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 touch-target text-xs sm:text-sm">
+                {deleteModal.loading ? (
+                  <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <Trash2 size={16} />
+                )}
+                <span>{t("Confirm Delete")}</span>
+              </button>
             </div>
           </div>
         </div>
-      }
+      )}
 
       {toast &&
       <Toast
