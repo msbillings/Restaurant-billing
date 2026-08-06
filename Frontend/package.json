@@ -1,7 +1,7 @@
 {
   "name": "vite-project",
   "private": true,
-  "version": "6.0.42",
+  "version": "6.0.43",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -20,6 +20,7 @@
     "@capacitor/local-notifications": "^8.2.1",
     "@fontsource/outfit": "^5.2.8",
     "axios": "^1.13.2",
+    "capacitor-voice-recorder": "^7.0.6",
     "dexie": "^4.4.4",
     "face-api.js": "^0.22.2",
     "framer-motion": "^12.23.26",
