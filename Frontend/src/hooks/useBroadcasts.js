@@ -25,8 +25,13 @@ const useBroadcasts = (userRole) => {
       setBroadcasts(visibleBroadcasts);
 
       // Calculate unread count using localStorage to track read IDs
-      const readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
-      const unread = visibleBroadcasts.filter(b => !readBroadcasts.includes(b._id)).length;
+      let readBroadcasts = [];
+      try {
+        readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+      } catch (e) {
+        readBroadcasts = [];
+      }
+      const unread = visibleBroadcasts.filter(b => Array.isArray(readBroadcasts) && !readBroadcasts.includes(b._id)).length;
       setUnreadCount(unread);
 
     } catch (error) {
@@ -35,8 +40,13 @@ const useBroadcasts = (userRole) => {
   };
 
   const markAsRead = (broadcastId) => {
-    const readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
-    if (!readBroadcasts.includes(broadcastId)) {
+    let readBroadcasts = [];
+    try {
+      readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+    } catch (e) {
+      readBroadcasts = [];
+    }
+    if (Array.isArray(readBroadcasts) && !readBroadcasts.includes(broadcastId)) {
       readBroadcasts.push(broadcastId);
       localStorage.setItem('read_broadcasts', JSON.stringify(readBroadcasts));
       // Update local state without re-fetching
@@ -45,7 +55,13 @@ const useBroadcasts = (userRole) => {
   };
 
   const markAllAsRead = () => {
-    const readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+    let readBroadcasts = [];
+    try {
+      readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+    } catch (e) {
+      readBroadcasts = [];
+    }
+    if (!Array.isArray(readBroadcasts)) readBroadcasts = [];
     broadcasts.forEach(b => {
       if (!readBroadcasts.includes(b._id)) readBroadcasts.push(b._id);
     });

@@ -296,8 +296,13 @@ function App() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setTimeout(() => setUser(JSON.parse(savedUser)), 0);
+    if (savedUser && savedUser !== 'undefined' && savedUser !== 'null') {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error("Invalid user JSON in localStorage:", err);
+        localStorage.removeItem('user');
+      }
     }
     const savedLicense = localStorage.getItem('resto_license');
     const savedDbName = localStorage.getItem('resto_db_name');
