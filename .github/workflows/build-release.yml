@@ -23,6 +23,13 @@ jobs:
       - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
+      - name: 🏷️ Get App Version
+        id: get_version
+        shell: pwsh
+        run: |
+          $ver = (Get-Content ./Desktop/package.json | ConvertFrom-Json).version
+          echo "version=v$ver" >> $env:GITHUB_OUTPUT
+
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -73,6 +80,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success()
         with:
+          tag_name: ${{ steps.get_version.outputs.version }}
           files: |
             Frontend/android/app/build/outputs/apk/release/*.apk
             Frontend/android/app/build/outputs/apk/debug/*.apk
