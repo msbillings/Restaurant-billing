@@ -342,14 +342,21 @@ router.get('/order-status', async (req, res) => {
     const processedItems = (bill.items || []).map(item => {
       let prepMins = item.prepTimeMinutes;
       let prepStart = item.prepStartTime;
-      
-      if (!prepMins && bill.kots) {
+      let kdsStatus = 'Pending'; // default: not yet picked up by KDS
+
+      if (bill.kots) {
         bill.kots.forEach(k => {
           (k.items || []).forEach(ki => {
             if (ki.name === item.name || (ki._id && ki._id.toString() === item._id?.toString())) {
               if (ki.prepTimeMinutes) {
                 prepMins = ki.prepTimeMinutes;
                 prepStart = ki.prepStartTime;
+              }
+              // Capture the latest KDS status for this item
+              if (ki.status && (ki.status === 'Preparing' || ki.status === 'Ready')) {
+                kdsStatus = ki.status;
+              } else if (ki.status) {
+                kdsStatus = ki.status;
               }
             }
           });
@@ -360,7 +367,8 @@ router.get('/order-status', async (req, res) => {
       return {
         ...itemObj,
         prepTimeMinutes: prepMins || 0,
-        prepStartTime: prepStart || null
+        prepStartTime: prepStart || null,
+        kdsStatus // 'Pending' | 'Preparing' | 'Ready'
       };
     });
 

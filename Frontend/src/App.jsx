@@ -1601,75 +1601,7 @@ function App() {
           </Suspense>
         </main>
 
-        {/* Native Android Bottom Navigation Bar (Google MD3 Style - Mobile Only) */}
-        {!isChef && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 min-h-17.5 pt-1.5 pb-[calc(10px+env(safe-area-inset-bottom,0px))] bg-surface/98 backdrop-blur-xl border-t border-border/80 z-50 flex items-center justify-around px-2 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
-          <button
-              onClick={() => handleViewChange('floor')}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'floor' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
-              }>
-              
-            <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'floor' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
-              <LayoutGrid size={20} className={view === 'floor' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-            </div>
-            <span className="text-xs tracking-tight">{t("Tables")}</span>
-          </button>
-
-          <button
-              onClick={() => handleViewChange('orders')}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all relative ${
-              view === 'orders' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
-              }>
-              
-            <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center relative ${view === 'orders' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
-              <Clock size={20} className={view === 'orders' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-              {activeOrdersCount > 0 &&
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
-                  {activeOrdersCount}
-                </span>
-                }
-            </div>
-            <span className="text-xs tracking-tight">{t("KOTs")}</span>
-          </button>
-
-          <button
-              onClick={() => handleViewChange('billing')}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'billing' ? 'text-primary font-extrabold' : 'text-text-muted hover:text-text-main font-medium'}`
-              }>
-              
-            <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'billing' ? 'bg-primary/15 text-primary scale-105 shadow-sm' : 'text-text-muted'}`}>
-              <UtensilsCrossed size={22} className={view === 'billing' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-            </div>
-            <span className="text-xs tracking-tight font-black">{t("Billing")}</span>
-          </button>
-
-          <button
-              onClick={() => handleViewChange('history')}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              view === 'history' ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
-              }>
-              
-            <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${view === 'history' ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
-              <Receipt size={20} className={view === 'history' ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-            </div>
-            <span className="text-xs tracking-tight">{t("History")}</span>
-          </button>
-
-          <button
-              onClick={() => setMobileMenuOpen(true)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 transition-all ${
-              ['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'text-primary font-bold' : 'text-text-muted hover:text-text-main font-medium'}`
-              }>
-              
-            <div className={`px-4 py-1 rounded-full transition-all flex items-center justify-center ${['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'bg-primary/15 text-primary scale-105' : 'text-text-muted'}`}>
-              <Menu size={20} className={['dashboard', 'analytics', 'daybook', 'menu', 'settings', 'delivery', 'expenses'].includes(view) ? 'stroke-[2.5]' : 'stroke-[1.75]'} />
-            </div>
-            <span className="text-xs tracking-tight">{t("More")}</span>
-          </button>
-        </div>
-        )}
+        {/* Native Android Bottom Navigation Bar (Disabled per user request) */}
       </div>
       </div>{/* end flex-1 wrapper */}
 
