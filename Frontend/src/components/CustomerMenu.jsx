@@ -292,6 +292,7 @@ const CustomerMenu = () => {
         }
       });
       setCart([]);
+      setIsCartOpen(false);
       setOrderStatus('success');
       setTimeout(() => setOrderStatus('menu'), 5000);
       

@@ -82,28 +82,28 @@ const DuePayment = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const totalOutstanding = accounts.reduce((sum, acc) => sum + (acc.balance > 0 ? acc.balance : 0), 0);
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Due Payment (Khata)")}</h1>
-            <p className="text-sm text-gray-500">{t("Manage customer credit accounts and dues")}</p>
+            <h1 className="text-base sm:text-xl font-bold text-gray-800">{t("Due Payment (Khata)")}</h1>
+            <p className="text-xs text-gray-500">{t("Manage customer credit accounts and dues")}</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
-            <span className="text-sm text-gray-500 font-medium mr-2">{t("Total Outstanding:")}</span>
-            <span className="text-lg font-bold text-red-600">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 justify-between sm:justify-end">
+          <div className="bg-white px-3 py-1.5 rounded-lg border border-gray-200 shadow-sm flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-medium">{t("Total Outstanding:")}</span>
+            <span className="text-sm sm:text-base font-bold text-red-600">
               ₹{totalOutstanding.toFixed(2)}
             </span>
           </div>
           <button
             onClick={() => setIsNewAccountModalOpen(true)}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-lg transition-colors font-medium shadow-sm">
+            className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-3 py-2 rounded-lg transition-colors text-xs sm:text-sm font-bold shadow-sm">
             
-            <UserCheck size={20} />{t("New Customer Khata")}
+            <UserCheck size={16} />{t("New Customer Khata")}
           </button>
         </div>
       </div>

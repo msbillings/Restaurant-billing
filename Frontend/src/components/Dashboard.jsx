@@ -244,7 +244,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
             </button>
             
             {isFilterDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-40 bg-[#1a1a20] border border-white/10 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-40 bg-[#1a1a20] border border-white/10 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
                 {['Today', 'Last 7 Days', '1 Month', '3 Months', '6 Months', '1 Year', 'Custom'].map(filter => (
                   <button
                     key={filter}

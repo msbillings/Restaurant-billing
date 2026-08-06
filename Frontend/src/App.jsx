@@ -992,9 +992,45 @@ function App() {
                       {notifications.map((n) => (
                         <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
                           <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                          <div>
+                          <div className="flex-1">
                             <p className="text-xs font-bold text-gray-800 leading-tight">{n.title}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
+                            {n.data?.type === 'cancel_item_request' && (
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const token = localStorage.getItem('accessToken');
+                                      await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
+                                        orderId: n.data.orderId,
+                                        itemId: n.data.itemId,
+                                        action: 'accept'
+                                      }, { headers: { Authorization: `Bearer ${token}` } });
+                                      rtClearNotification(n.id);
+                                      window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data.orderId, itemId: n.data.itemId, action: 'accept' } }));
+                                    } catch (err) { console.error(err); alert('Failed to accept'); }
+                                  }}
+                                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
+                                >{t("Accept")}</button>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const token = localStorage.getItem('accessToken');
+                                      await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
+                                        orderId: n.data.orderId,
+                                        itemId: n.data.itemId,
+                                        action: 'reject'
+                                      }, { headers: { Authorization: `Bearer ${token}` } });
+                                      rtClearNotification(n.id);
+                                      window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data.orderId, itemId: n.data.itemId, action: 'reject' } }));
+                                    } catch (err) { console.error(err); alert('Failed to reject'); }
+                                  }}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-colors"
+                                >{t("Reject")}</button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1046,11 +1082,13 @@ function App() {
                   <span className="block text-sm font-bold text-text-main">{user.username}</span>
                   <span className="block text-[10px] text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
                 </div>
-                <button
-                  onClick={() => {handleViewChange('settings');setProfileOpen(false);}}
-                  className="w-full text-left px-4 py-2.5 text-xs font-medium text-text-main hover:bg-surface-hover flex items-center gap-2">
-                  <SettingsIcon size={16} className="text-text-muted" />{t("Settings")}
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => {handleViewChange('settings');setProfileOpen(false);}}
+                    className="w-full text-left px-4 py-2.5 text-xs font-medium text-text-main hover:bg-surface-hover flex items-center gap-2">
+                    <SettingsIcon size={16} className="text-text-muted" />{t("Settings")}
+                  </button>
+                )}
                 <button
                   onClick={() => {setShowLogoutConfirm(true);setProfileOpen(false);}}
                   className="w-full text-left px-4 py-2.5 text-xs font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border">
@@ -1121,15 +1159,17 @@ function App() {
                     <span>{t('Calculator')}</span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      handleViewChange('settings');
-                      setShowMobileQuickActions(false);
-                    }}
-                    className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
-                    <SettingsIcon size={16} className="text-blue-500" />
-                    <span>{t('Settings')}</span>
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        handleViewChange('settings');
+                        setShowMobileQuickActions(false);
+                      }}
+                      className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                      <SettingsIcon size={16} className="text-blue-500" />
+                      <span>{t('Settings')}</span>
+                    </button>
+                  )}
                 </div>
 
                 {daysRemaining !== null && (

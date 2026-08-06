@@ -237,15 +237,17 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
                     <label className="text-sm font-semibold text-text-main">{t("Silent Printing")}</label>
                     <p className="text-xs text-text-muted">{t("Print directly without showing the print dialog")}</p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
                     <input
                       type="checkbox"
-                      className="sr-only peer"
+                      className="sr-only"
                       checked={settings.silentPrinting !== false}
                       onChange={(e) => handleInputChange('silentPrinting', e.target.checked)}
                       disabled={!window.electronAPI} />
                     
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${settings.silentPrinting !== false ? 'bg-primary' : 'bg-gray-300'}`}>
+                      <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${settings.silentPrinting !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </div>
                   </label>
                 </div>
                 {!window.electronAPI &&

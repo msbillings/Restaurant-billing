@@ -71,15 +71,13 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <div className="flex items-center gap-3">
+          <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Tax Configuration")}</h1>
-            <p className="text-sm text-gray-500">{t("Manage taxes applied to your bills")}</p>
+            <h1 className="text-base sm:text-xl font-bold text-gray-800">{t("Tax Configuration")}</h1>
+            <p className="text-xs text-gray-500">{t("Manage taxes applied to your bills")}</p>
           </div>
         </div>
         <button
@@ -88,16 +86,16 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             setFormData({ name: '', percentage: '', type: 'exclusive', isActive: true });
             setIsModalOpen(true);
           }}
-          className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg transition-colors font-medium shadow-sm">
+          className="flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white px-3 py-2 rounded-lg transition-colors text-xs sm:text-sm font-bold shadow-sm self-end sm:self-auto">
           
-          <Plus size={20} />{t("Add Tax")}
+          <Plus size={16} />{t("Add Tax")}
         </button>
       </div>
 
       {loading ?
       <div className="flex justify-center py-10"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>

@@ -34,54 +34,56 @@ const CustomStatus = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Custom Order Status (KDS Workflow)")}</h1>
-            <p className="text-sm text-gray-500">{t("Define the exact stages a kitchen order goes through")}</p>
+            <h1 className="text-base sm:text-xl font-bold text-gray-800">{t("Custom Order Status (KDS Workflow)")}</h1>
+            <p className="text-xs text-gray-500">{t("Define the exact stages a kitchen order goes through")}</p>
           </div>
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-bold hover:bg-primary-dark transition-colors shadow-sm">
+          className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-bold hover:bg-primary-dark transition-colors shadow-sm self-end sm:self-auto">
           
-          <Save size={18} />{t("Save Workflow")}
+          <Save size={16} />{t("Save Workflow")}
         </button>
       </div>
 
-      <div className="flex-1 max-w-2xl mx-auto w-full bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="flex-1 max-w-2xl mx-auto w-full bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 overflow-y-auto">
         
-        <div className="mb-8">
-          <h2 className="text-sm font-bold text-gray-700 uppercase mb-4">{t("Add Custom Stage")}</h2>
-          <div className="flex gap-4 items-center bg-gray-50 p-4 rounded-lg border border-gray-100">
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-xs sm:text-sm font-bold text-gray-700 uppercase mb-3">{t("Add Custom Stage")}</h2>
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-gray-50 p-3 sm:p-4 rounded-xl border border-gray-100">
             <div className="flex-1">
               <input
                 type="text" placeholder={t("e.g. Plating, Quality Check")}
 
                 value={newStatus}
                 onChange={(e) => setNewStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
+                className="w-full px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-primary"
                 maxLength={20} />
               
             </div>
-            <div className="flex gap-2">
-              {colorOptions.map((color) =>
-              <button
-                key={color}
-                onClick={() => setSelectedColor(color)}
-                className={`w-8 h-8 rounded-full ${color} ${selectedColor === color ? 'ring-2 ring-offset-2 ring-gray-800' : ''}`} />
+            <div className="flex gap-2 items-center justify-between">
+              <div className="flex gap-1.5">
+                {colorOptions.map((color) =>
+                <button
+                  key={color}
+                  onClick={() => setSelectedColor(color)}
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full ${color} ${selectedColor === color ? 'ring-2 ring-offset-2 ring-gray-800' : ''}`} />
 
-              )}
+                )}
+              </div>
+              <button
+                onClick={addStatus}
+                disabled={!newStatus.trim() || statuses.length >= 6}
+                className="p-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                
+                <Plus size={18} />
+              </button>
             </div>
-            <button
-              onClick={addStatus}
-              disabled={!newStatus.trim() || statuses.length >= 6}
-              className="p-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
-              
-              <Plus size={20} />
-            </button>
           </div>
           {statuses.length >= 6 && <p className="text-xs text-red-500 mt-2">{t("Maximum 6 stages allowed in KDS view.")}</p>}
         </div>

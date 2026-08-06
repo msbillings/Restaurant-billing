@@ -1069,7 +1069,6 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 px-6 py-5 flex justify-between items-center text-white shrink-0 shadow-md">
               <div>
                 <h2 className="text-xl font-black flex items-center gap-2.5 tracking-tight font-mono">
-                  <Receipt size={22} />
                   {t("Order Overview")}
                 </h2>
                 <p className="text-orange-100 text-xs font-semibold mt-0.5">

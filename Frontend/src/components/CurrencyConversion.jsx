@@ -82,22 +82,22 @@ const CurrencyConversion = ({ onNavigate, onGoBack }) => {const { t } = useLangu
   const baseRate = getBaseRate();
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <CircleDollarSign className="text-primary" />{t("Currency Conversion")}
+            <h1 className="text-base sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+              <CircleDollarSign className="text-primary" size={20} />{t("Currency Conversion")}
             </h1>
-            <p className="text-sm text-gray-500">{t("Configure secondary currencies for tourist billing")}</p>
+            <p className="text-xs text-gray-500">{t("Configure secondary currencies for tourist billing")}</p>
           </div>
         </div>
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-bold hover:bg-primary-dark transition-colors shadow-sm">
+          className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-bold hover:bg-primary-dark transition-colors shadow-sm self-end sm:self-auto">
           
-          <Save size={18} />{t("Save Settings")}
+          <Save size={16} />{t("Save Settings")}
         </button>
       </div>
 

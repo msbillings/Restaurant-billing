@@ -60,7 +60,7 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{t("Online Order Configuration")}</h1>
+            <h1 className="text-base sm:text-xl font-black text-slate-800 tracking-tight">{t("Online Order Configuration")}</h1>
             <p className="text-xs sm:text-sm text-slate-500 font-medium">{t("Manage settings for your direct ordering website")}</p>
           </div>
         </div>
@@ -79,15 +79,17 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
           <div className="flex items-center gap-3 self-end sm:self-auto pt-2 sm:pt-0">
             <span className="text-xs sm:text-sm font-bold text-slate-700">{t("Enable Ordering")}</span>
-            <label className="relative inline-flex items-center cursor-pointer touch-target">
+            <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
               <input
                 type="checkbox"
                 name="isOnlineEnabled"
-                className="sr-only peer"
+                className="sr-only"
                 checked={config?.isOnlineEnabled || false}
                 onChange={handleInputChange} />
               
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+              <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${config?.isOnlineEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${config?.isOnlineEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </div>
             </label>
           </div>
         </div>

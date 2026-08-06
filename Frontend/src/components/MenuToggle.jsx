@@ -1,8 +1,8 @@
-import { getApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
-import axios from 'axios';
-import { ArrowLeft, ToggleLeft, Search, CheckCircle, XCircle } from 'lucide-react';
+import { getMenuItems, updateMenuItem } from '../api/menu';
+import { ToggleLeft, Search, CheckCircle, XCircle } from 'lucide-react';
 
 const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [menuItems, setMenuItems] = useState([]);
@@ -16,8 +16,8 @@ const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const fetchMenuItems = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${getApiUrl()}/menu`);
-      setMenuItems(res.data);
+      const data = await getMenuItems(true); // force refresh so we always get latest
+      setMenuItems(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching menu items:', error);
     } finally {
@@ -29,11 +29,7 @@ const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     try {
       // Optimistic UI update
       setMenuItems((prev) => prev.map((item) => item._id === id ? { ...item, isAvailable: !currentStatus } : item));
-
-      await axios.put(`${getApiUrl()}/menu/${id}`,
-      { isAvailable: !currentStatus },
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
+      await updateMenuItem(id, { isAvailable: !currentStatus });
     } catch (error) {
       console.error('Error updating availability:', error);
       // Revert on failure
@@ -47,35 +43,35 @@ const MenuToggle = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   );
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <ToggleLeft className="text-primary" />{t("Menu Item On/Off")}
+            <h1 className="text-base sm:text-xl font-bold text-gray-800 flex items-center gap-2">
+              <ToggleLeft className="text-primary" size={20} />{t("Menu Item On/Off")}
             </h1>
-            <p className="text-sm text-gray-500">{t("Quickly toggle availability of items to mark them out of stock")}</p>
+            <p className="text-xs text-gray-500">{t("Quickly toggle availability of items to mark them out of stock")}</p>
           </div>
         </div>
         
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input
             type="text" placeholder={t("Search items...")}
 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-primary" />
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary shadow-xs" />
           
         </div>
       </div>
 
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto p-4">
+      <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-y-auto p-3 sm:p-4">
         {loading ?
         <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {filteredItems.map((item) =>
           <div
             key={item._id}

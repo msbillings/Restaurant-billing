@@ -92,9 +92,11 @@ const GlobalHeader = ({
               </span>
             )}
           </button>
-          <button className="hover:text-primary transition-colors p-1.5 rounded-lg touch-target flex items-center justify-center" onClick={() => onNavigate('settings')}>
-            <User size={18} />
-          </button>
+          {(userRole === 'Admin' || userRole === 'admin') && (
+            <button className="hover:text-primary transition-colors p-1.5 rounded-lg touch-target flex items-center justify-center" onClick={() => onNavigate('settings')}>
+              <User size={18} />
+            </button>
+          )}
           <button onClick={onLogout} className="text-danger hover:text-red-700 transition-colors p-1.5 rounded-lg touch-target flex items-center justify-center">
             <Power size={18} />
           </button>

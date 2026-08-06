@@ -1,7 +1,7 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, Star, X, ChevronDown, Image as ImageIcon,
 Pizza, Sandwich, UtensilsCrossed, Flame, Gift, Menu as MenuIcon, Utensils,
-Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie } from
+Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus } from
 'lucide-react';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
@@ -73,11 +73,14 @@ const formatImageUrl = (url) => {
   return trimmed;
 };
 
-const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocked = false }) => {const { t, language } = useLanguage();
+import { useLanguage } from "../context/LanguageContext";
+
+const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocked = false, onNavigate, userRole = 'Admin' }) => {const { t, language } = useLanguage();
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('All');
+  const [sortBy, setSortBy] = useState('latest');
   const [selectedItemVariants, setSelectedItemVariants] = useState(null);
   const [showImages, setShowImages] = useState(() => {
     const saved = localStorage.getItem('menuGrid_showImages');
@@ -229,6 +232,23 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'latest':
+        return new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0);
+      case 'oldest':
+        return new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0);
+      case 'alphaAsc':
+        return a.name.localeCompare(b.name);
+      case 'alphaDesc':
+        return b.name.localeCompare(a.name);
+      case 'priceAsc':
+        return a.price - b.price;
+      case 'priceDesc':
+        return b.price - a.price;
+      default:
+        return 0;
+    }
   });
 
   if (loading) return (
@@ -333,14 +353,29 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
               style={{ outline: 'none', boxShadow: 'none', border: 'none' }} />
             
           </div>
-          <div className="w-30 flex items-center h-10.5 px-3 bg-white rounded-xl border border-gray-200 shadow-sm focus-within:border-red-500 transition-all sm:flex">
-            <input
-              type="text" placeholder={t("Short Code")}
 
-              className="w-full h-full bg-transparent border-none focus:border-none focus:ring-0 outline-none focus:outline-none shadow-none! text-[14px] font-bold text-gray-600 placeholder-gray-400 text-center"
-              style={{ outline: 'none', boxShadow: 'none', border: 'none' }} />
-            
-          </div>
+          <select 
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="h-10.5 px-3 border border-gray-200 rounded-xl bg-white text-gray-700 text-[13px] font-bold focus:outline-none focus:border-red-500 transition-all shadow-sm cursor-pointer"
+          >
+            <option value="latest">{t("Latest")}</option>
+            <option value="oldest">{t("Oldest")}</option>
+            <option value="alphaAsc">{t("A-Z")}</option>
+            <option value="alphaDesc">{t("Z-A")}</option>
+            <option value="priceAsc">{t("Price: Low-High")}</option>
+            <option value="priceDesc">{t("Price: High-Low")}</option>
+          </select>
+
+          {userRole === 'Admin' && (
+            <button
+              onClick={() => onNavigate && onNavigate('menu')}
+              className="flex items-center justify-center h-10.5 px-3 rounded-xl bg-red-500 text-white shadow-sm hover:bg-red-600 transition-all gap-1.5 font-bold text-[13px] whitespace-nowrap"
+            >
+              <Plus size={16} />
+              <span className="hidden sm:inline">{t("Add Item")}</span>
+            </button>
+          )}
           
           <button
             onClick={() => setShowImages(!showImages)}

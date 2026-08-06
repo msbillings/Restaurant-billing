@@ -58,27 +58,27 @@ const LiveView = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-gray-100 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-900 text-gray-100 p-3 sm:p-6 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <MonitorPlay className="text-primary" />{t("Live View")}
+            <h1 className="text-base sm:text-xl font-bold text-white flex items-center gap-2">
+              <MonitorPlay className="text-primary" size={20} />{t("Live View")}
             </h1>
-            <p className="text-sm text-gray-400">{t("Monitor your restaurant floor and kitchen in real-time")}</p>
+            <p className="text-xs text-gray-400">{t("Monitor your restaurant floor and kitchen in real-time")}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button 
             onClick={() => setShowSettingsModal(true)}
             className="p-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors">
-            <Settings size={20} />
+            <Settings size={18} />
           </button>
           <button 
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold hover:bg-primary-dark transition-colors">
-            <Plus size={18} />{t("Add Camera")}
+            className="flex items-center gap-1.5 bg-primary text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-bold hover:bg-primary-dark transition-colors">
+            <Plus size={16} />{t("Add Camera")}
           </button>
         </div>
       </div>
