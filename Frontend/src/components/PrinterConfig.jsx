@@ -128,22 +128,20 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+        <div className="flex items-center gap-3">
+          <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Printer Configuration")}</h1>
-            <p className="text-sm text-gray-500">{t("Manage ESC/POS thermal printers for Bills and Kitchen Orders")}</p>
+            <h1 className="text-base sm:text-xl font-bold text-gray-800">{t("Printer Configuration")}</h1>
+            <p className="text-xs text-gray-500">{t("Manage ESC/POS thermal printers for Bills and Kitchen Orders")}</p>
           </div>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-[#d83c31] hover:bg-[#c22e23] text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm">
+          className="flex items-center gap-1.5 bg-[#d83c31] hover:bg-[#c22e23] text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors shadow-sm self-end sm:self-auto">
           
-          <Plus size={18} />{t("Add Printer")}
+          <Plus size={16} />{t("Add Printer")}
 
         </button>
       </div>

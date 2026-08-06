@@ -4,7 +4,7 @@ import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, Users, Shield, Plus, Edit2, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 
-const AdminDashboard = ({ onNavigate }) => {const { t } = useLanguage();
+const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPassword, setShowPassword] = useState(false);

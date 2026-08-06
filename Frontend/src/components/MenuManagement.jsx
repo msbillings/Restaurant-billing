@@ -3,7 +3,7 @@ import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, deleteAllMen
 import { getAllCategories, createCategory, updateCategory, deleteCategory } from '../api/category';
 import { getInventory } from '../api/inventory';
 import Papa from 'papaparse';
-import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
@@ -58,7 +58,10 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, itemId: null, categoryId: null });
   const [toast, setToast] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
+  const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState('latest');
 
   useEffect(() => {
     setCurrentPage(1);
@@ -155,6 +158,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         variants: []
       });
     }
+    setShowCustomCategoryInput(false);
+    setCustomCategoryName('');
     setIsModalOpen(true);
   };
 
@@ -189,6 +194,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
 
     if (!formData.category || formData.category === '') {
       errors.category = 'Category is required';
+    } else if (formData.category === 'CUSTOM_NEW_CATEGORY' && (!customCategoryName || customCategoryName.trim() === '')) {
+      errors.category = 'Custom category name is required';
     }
 
     const price = parseFloat(formData.price);
@@ -216,11 +223,31 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     }
 
     try {
+      let finalCategory = formData.category;
+      
+      if (showCustomCategoryInput && customCategoryName.trim()) {
+        try {
+          const newCategory = await createCategory({
+            name: customCategoryName.trim(),
+            description: '',
+            sortOrder: categories.length,
+            isActive: true
+          });
+          finalCategory = newCategory.name;
+          setCategories(prev => [...prev, newCategory]);
+        } catch (catError) {
+          console.error('Error creating custom category:', catError);
+          setToast({ message: 'Failed to create new category', type: 'error' });
+          return;
+        }
+      }
+
       const price = parseFloat(formData.price);
       const taxRate = parseFloat(formData.taxRate) || 0;
 
       const itemData = {
         ...formData,
+        category: finalCategory,
         image: formatImageUrl(formData.image),
         price,
         taxRate
@@ -363,6 +390,16 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     setDeleteModal({ isOpen: true, itemId: id });
   };
 
+  const handleToggleAvailability = async (item) => {
+    try {
+      const updated = await updateMenuItem(item._id, { isAvailable: !item.isAvailable });
+      setItems((prev) => prev.map((i) => i._id === item._id ? { ...i, isAvailable: !item.isAvailable } : i));
+      setToast({ message: `"${item.name}" marked as ${!item.isAvailable ? 'Available' : 'Unavailable'}`, type: 'success' });
+    } catch (error) {
+      setToast({ message: 'Failed to update availability', type: 'error' });
+    }
+  };
+
   const confirmDelete = async () => {
     if (deleteModal.deleteAll) {
       try {
@@ -463,7 +500,24 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const filteredItems = items.filter((item) =>
   item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
   (item.category?.name || item.category || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).sort((a, b) => {
+    switch (sortBy) {
+      case 'latest':
+        return new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0);
+      case 'oldest':
+        return new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0);
+      case 'alphaAsc':
+        return a.name.localeCompare(b.name);
+      case 'alphaDesc':
+        return b.name.localeCompare(a.name);
+      case 'priceAsc':
+        return a.price - b.price;
+      case 'priceDesc':
+        return b.price - a.price;
+      default:
+        return 0;
+    }
+  });
 
   const filteredCategories = categories.filter((category) =>
   category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -508,14 +562,14 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Import CSV")}>
               
-                <Upload size={16} />
+                <Download size={16} />
                 <span>{t("Import")}</span>
               </button>
               <button
               onClick={handleExportCSV}
               className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Export CSV")}>
               
-                <Download size={16} />
+                <Upload size={16} />
                 <span>{t("Export")}</span>
               </button>
               <button
@@ -556,15 +610,32 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-4 relative shrink-0">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-        <input
-          type="text"
-          placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main font-medium" />
+      {/* Search and Sort */}
+      <div className="mb-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+          <input
+            type="text"
+            placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-sm bg-surface text-text-main shadow-sm" />
+        </div>
+        
+        {activeTab === 'items' && (
+          <select 
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2 border border-border rounded-xl bg-surface text-text-main text-sm focus:outline-none focus:border-primary transition-colors shadow-sm cursor-pointer"
+          >
+            <option value="latest">{t("Added: Latest")}</option>
+            <option value="oldest">{t("Added: Old to New")}</option>
+            <option value="alphaAsc">{t("Alphabetical (A-Z)")}</option>
+            <option value="alphaDesc">{t("Alphabetical (Z-A)")}</option>
+            <option value="priceAsc">{t("Price: Low to High")}</option>
+            <option value="priceDesc">{t("Price: High to Low")}</option>
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -617,7 +688,14 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                     </td>
                     <td className="p-4 font-bold text-text-main">₹{item.price}</td>
                     <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 items-center">
+                        {/* Toggle Availability Button */}
+                        <button
+                          onClick={() => handleToggleAvailability(item)}
+                          title={item.isAvailable ? t("Mark Unavailable") : t("Mark Available")}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none shrink-0 ${item.isAvailable ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.isAvailable ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
                         <button
                       onClick={() => handleOpenModal(item, true)}
                       className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("View Details")}>
@@ -807,23 +885,58 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-text-muted">{t("Category")}</label>
-                  <select
-                  required
-                  value={formData.category}
-                  onChange={(e) => {
-                    setFormData({ ...formData, category: e.target.value });
-                    if (validationErrors.category) setValidationErrors({ ...validationErrors, category: null });
-                  }}
-                  className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.category ? 'border-danger' : 'border-border'}`
-                  }>
-                  
-                    <option value="">{t("Select Category")}</option>
-                    {categories.map((cat) =>
-                  <option key={cat._id} value={cat.name}>
-                        {cat.name}
-                      </option>
+                  {!showCustomCategoryInput ? (
+                    <select
+                    required
+                    value={formData.category}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'CUSTOM_NEW_CATEGORY') {
+                        setShowCustomCategoryInput(true);
+                        setFormData({ ...formData, category: val });
+                      } else {
+                        setFormData({ ...formData, category: val });
+                      }
+                      if (validationErrors.category) setValidationErrors({ ...validationErrors, category: null });
+                    }}
+                    className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.category ? 'border-danger' : 'border-border'}`
+                    }>
+                    
+                      <option value="">{t("Select Category")}</option>
+                      {categories.map((cat) =>
+                    <option key={cat._id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                    )}
+                      <option value="CUSTOM_NEW_CATEGORY" className="font-bold text-primary">+ {t("Add Custom Category")}</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder={t("Enter category name")}
+                        value={customCategoryName}
+                        onChange={(e) => {
+                          setCustomCategoryName(e.target.value);
+                          if (validationErrors.category) setValidationErrors({ ...validationErrors, category: null });
+                        }}
+                        className={`w-full bg-background border rounded-lg px-4 py-2 text-text-main focus:outline-none focus:border-primary ${validationErrors.category ? 'border-danger' : 'border-border'}`}
+                        autoFocus
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setShowCustomCategoryInput(false);
+                          setCustomCategoryName('');
+                          setFormData({ ...formData, category: '' });
+                        }}
+                        className="p-2 border border-border rounded-lg hover:bg-surface-hover text-text-muted shrink-0 flex items-center justify-center"
+                        title={t("Cancel")}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
                   )}
-                  </select>
                   {validationErrors.category &&
                 <p className="text-xs text-danger">{validationErrors.category}</p>
                 }

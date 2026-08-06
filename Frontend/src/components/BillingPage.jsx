@@ -1179,7 +1179,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
           mobileTab === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 transition-all duration-300`
           }>
-            <MenuGrid onSelectItem={addToCart} searchTerm={searchTerm} onSearchChange={setSearchTerm} isLayoutLocked={isLayoutLocked} />
+            <MenuGrid onSelectItem={addToCart} searchTerm={searchTerm} onSearchChange={setSearchTerm} isLayoutLocked={isLayoutLocked} onNavigate={onNavigate} userRole={userRole} />
           </div>
 
           <div
