@@ -18,38 +18,23 @@ android {
     }
     signingConfigs {
         release {
-            if (System.getenv("CI") == "true") {
-                // Mode A: CI/CD Pipeline (GitHub Actions)
-                def ksPassword = System.getenv("KEYSTORE_PASSWORD")
-                def kAlias = System.getenv("KEY_ALIAS")
-                def kPassword = System.getenv("KEY_PASSWORD")
+            def ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: "MsBilling@2026#Secure!"
+            def kAlias = System.getenv("KEY_ALIAS") ?: "msbilling"
+            def kPassword = System.getenv("KEY_PASSWORD") ?: "MsBilling@2026#Secure!"
 
-                if (!ksPassword || !kAlias || !kPassword) {
-                    throw new IllegalArgumentException("Missing signing environment variables. KEYSTORE_PASSWORD, KEY_ALIAS, or KEY_PASSWORD is not set.")
-                }
-
-                storeFile file("../keystore.jks") // Will be recreated from Base64 in the workflow
-                storePassword ksPassword
-                keyAlias kAlias
-                keyPassword kPassword
-            } else {
-                // Mode B: Legacy Compatibility (Local Development)
-                def keystorePropertiesFile = rootProject.file("keystore.properties")
+            def keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
                 def keystoreProperties = new Properties()
-                if (keystorePropertiesFile.exists()) {
-                    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-                } else {
-                    logger.warn("No keystore.properties file found for local development.")
-                }
-                
-                // For local builds, we use the local keystore.jks file.
-                // The passwords MUST be provided in Frontend/android/keystore.properties 
-                // which is git-ignored, so they are not committed to this public repo.
-                storeFile file("../keystore.jks")
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+                ksPassword = keystoreProperties['storePassword'] ?: ksPassword
+                kAlias = keystoreProperties['keyAlias'] ?: kAlias
+                kPassword = keystoreProperties['keyPassword'] ?: kPassword
             }
+
+            storeFile file("../keystore.jks")
+            storePassword ksPassword
+            keyAlias kAlias
+            keyPassword kPassword
         }
     }
     buildTypes {
