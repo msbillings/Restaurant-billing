@@ -33,7 +33,8 @@ if (fs.existsSync(desktopBackend)) fs.rmSync(desktopBackend, { recursive: true, 
 
 // Build Frontend
 console.log('Building Frontend...');
-execSync('npm.cmd run build', { cwd: path.join(__dirname, '../Frontend'), stdio: 'inherit' });
+const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+execSync(`${npmCmd} run build`, { cwd: path.join(__dirname, '../Frontend'), stdio: 'inherit' });
 
 // Copy Frontend
 console.log('Copying Frontend...');
@@ -68,6 +69,6 @@ if (fs.existsSync(backendLock)) {
 
 // Install Backend dependencies inside the Desktop folder
 console.log('Installing Backend dependencies for production...');
-execSync('npm install --omit=dev --no-package-lock', { cwd: desktopBackend, stdio: 'inherit' });
+execSync(`${npmCmd} install --omit=dev --no-package-lock`, { cwd: desktopBackend, stdio: 'inherit' });
 
 console.log('Files ready for electron-builder!');
