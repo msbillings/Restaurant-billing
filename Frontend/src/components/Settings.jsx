@@ -1,6 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
@@ -125,17 +126,15 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
     <div className="h-full overflow-y-auto">
       <div className="w-full space-y-6">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-6 border border-border">
-          <div className="flex items-center gap-4 mb-4">
-            <BackButton onClick={onGoBack} />
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center">
-              <SettingsIcon className="text-primary" size={24} />
+        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-4 sm:p-6 border border-border">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <BackButton onClick={onGoBack} className="shrink-0" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
+              <SettingsIcon className="text-primary" size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-text-main">{t("Restaurant Settings")}</h1>
-              <p className="text-sm text-text-muted">{t("Configure your restaurant information and preferences")}</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-text-main">{t("Restaurant Settings")}</h1>
+              <p className="text-xs sm:text-sm text-text-muted">{t("Configure your restaurant information and preferences")}</p>
             </div>
           </div>
         </div>
@@ -587,28 +586,95 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
           </div>
 
           {/* Preview Section */}
-          <div className="bg-surface rounded-2xl p-4 border border-border shadow-lg">
+          <div className="lg:sticky lg:top-24 h-fit bg-surface rounded-2xl p-4 border border-border shadow-lg">
             <h2 className="text-xl font-bold text-text-main mb-4">{t("Receipt Preview")}</h2>
-            <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto">
+            <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm">
               {settings.logo &&
               <div className="flex justify-center mb-2">
                   <img src={settings.logo} alt="Logo Preview" className="max-h-14 max-w-[140px] object-contain" />
                 </div>
               }
-              <div className="text-center font-bold text-lg mb-2">{settings.restaurantName}</div>
+              <div className="text-center font-bold text-lg mb-2">{settings.restaurantName || 'Restaurant Name'}</div>
               <div className="text-center text-sm text-gray-600 mb-4">
                 {settings.restaurantType}<br />
-                {settings.address.split('\n').map((line, i) =>
+                {settings.address && settings.address.split('\n').map((line, i) =>
                 <div key={i}>{line}</div>
-                )}{t("Ph:")}
-                {settings.phone}<br />
-                {settings.gstin && `GSTIN: ${settings.gstin}`}<br />
+                )}
+                {settings.phone && <>{t("Ph:")} {settings.phone}<br /></>}
+                {settings.gstin && <>{`GSTIN: ${settings.gstin}`}<br /></>}
                 {settings.fssai && `FSSAI: ${settings.fssai}`}
               </div>
-              <div className="border-t border-b border-dashed py-2 my-4 text-center font-bold">{t("RECEIPT")}
-
+              
+              <div className="border-t border-b border-dashed py-2 my-2 text-center font-bold text-sm">
+                {t("RECEIPT")}
               </div>
-              <div className="text-center text-sm mb-4">
+              
+              {/* Mock Items Details */}
+              <div className="text-xs my-3 space-y-1.5 font-mono">
+                <div className="flex justify-between font-bold border-b border-dashed pb-1 mb-1">
+                  <span>ITEM</span>
+                  <span>AMT</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>1 x Chicken Biryani</span>
+                  <span>250.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>2 x Sweet Corn Soup</span>
+                  <span>180.00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>1 x Butter Naan</span>
+                  <span>40.00</span>
+                </div>
+                <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-medium">
+                  <span>Subtotal</span>
+                  <span>₹470.00</span>
+                </div>
+                {settings.enableCgst && (
+                  <div className="flex justify-between text-[11px] text-gray-600">
+                    <span>CGST ({settings.cgstRate || 0}%)</span>
+                    <span>₹{((470 * Number(settings.cgstRate || 0)) / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                {settings.enableSgst && (
+                  <div className="flex justify-between text-[11px] text-gray-600">
+                    <span>SGST ({settings.sgstRate || 0}%)</span>
+                    <span>₹{((470 * Number(settings.sgstRate || 0)) / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                {settings.enableGst && (
+                  <div className="flex justify-between text-[11px] text-gray-600">
+                    <span>GST ({settings.gstRate || 0}%)</span>
+                    <span>₹{((470 * Number(settings.gstRate || 0)) / 100).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-bold text-sm">
+                  <span>TOTAL</span>
+                  <span>₹{(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
+                <div className="border-t border-dashed pt-3 mt-3 text-center flex flex-col items-center">
+                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                    {t("SCAN TO PAY VIA UPI")}
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm my-1 inline-block">
+                    <QRCodeSVG
+                      value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}&cu=INR&tn=Bill%20Payment`}
+                      size={96}
+                      level="M"
+                      includeMargin={true}
+                    />
+                  </div>
+                  <div className="text-[10px] font-bold text-gray-600 font-mono mt-0.5">
+                    {t("UPI ID:")} {settings.upiId.trim()}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-dashed pt-3 mt-3 text-center text-xs font-medium">
                 {settings.footerMessage}
               </div>
             </div>

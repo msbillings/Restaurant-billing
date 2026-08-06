@@ -318,6 +318,85 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
   });
 });
 
+ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
+  let pdfRenderWindow = new BrowserWindow({
+    show: false,
+    width: 800,
+    height: 1000,
+    webPreferences: { nodeIntegration: false, contextIsolation: true }
+  });
+
+  let cssContent = '';
+  try {
+    const assetsPath = path.join(__dirname, 'frontend/assets');
+    if (fs.existsSync(assetsPath)) {
+      const files = fs.readdirSync(assetsPath);
+      const cssFile = files.find(f => f.endsWith('.css'));
+      if (cssFile) cssContent = fs.readFileSync(path.join(assetsPath, cssFile), 'utf8');
+    }
+  } catch (err) {
+    console.error('Could not load CSS for print preview:', err);
+  }
+
+  const fullHtml = `
+    <html>
+      <head>
+        <style>${cssContent}</style>
+        <style>
+          @page { margin: 5mm; }
+          body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 10px !important;
+          }
+          .print\\:hidden { display: none !important; }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+    </html>
+  `;
+
+  pdfRenderWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`);
+
+  pdfRenderWindow.webContents.once('did-finish-load', async () => {
+    try {
+      setTimeout(async () => {
+        const pdfBuffer = await pdfRenderWindow.webContents.printToPDF({
+          printBackground: true,
+          marginsType: 0
+        });
+        pdfRenderWindow.close();
+
+        const tempPath = path.join(app.getPath('temp'), `resto_bill_preview_${Date.now()}.pdf`);
+        fs.writeFileSync(tempPath, pdfBuffer);
+
+        let previewWindow = new BrowserWindow({
+          width: 600,
+          height: 800,
+          title: "Print Preview - MS Billing",
+          autoHideMenuBar: true,
+          webPreferences: {
+            plugins: true
+          }
+        });
+
+        previewWindow.loadURL(`file://${tempPath}`);
+
+        previewWindow.on('closed', () => {
+          try {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          } catch (e) {}
+        });
+      }, 400);
+    } catch (error) {
+      console.error('Failed to generate PDF for print preview:', error);
+      if (!pdfRenderWindow.isDestroyed()) pdfRenderWindow.close();
+    }
+  });
+});
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -352,6 +431,23 @@ function setupAutoUpdater() {
 
 app.on('ready', () => {
   startBackend();
+
+  // ✅ Auto-grant camera/mic/media permissions inside Electron
+  // Without this, Chromium blocks getUserMedia silently in the WebView.
+  const { session } = require('electron');
+  session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
+    const allowedPermissions = ['media', 'camera', 'microphone', 'geolocation', 'notifications'];
+    const isAllowed = allowedPermissions.includes(permission);
+    console.log(`[Permissions] Request for '${permission}': ${isAllowed ? 'GRANTED' : 'DENIED'}`);
+    callback(isAllowed);
+  });
+
+  // Also handle permission checks (for navigator.permissions.query)
+  session.defaultSession.setPermissionCheckHandler((_, permission) => {
+    const allowedPermissions = ['media', 'camera', 'microphone', 'geolocation', 'notifications'];
+    return allowedPermissions.includes(permission);
+  });
+
   // Wait a little bit for the backend to initialize
   setTimeout(() => {
     createMenu();

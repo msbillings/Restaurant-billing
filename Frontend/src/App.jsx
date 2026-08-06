@@ -1,5 +1,6 @@
 import { getApiUrl, getSuperadminApiUrl } from "./config.js";
 import React, { useState, useEffect, Suspense } from 'react';
+import axios from 'axios';
 import { useLanguage } from './context/LanguageContext';
 // Lazy load components for performance
 const BillingPage = React.lazy(() => import('./components/BillingPage'));
@@ -51,6 +52,7 @@ const QRCodeGenerator = React.lazy(() => import('./components/QRCodeGenerator'))
 const StaffManagement = React.lazy(() => import('./components/StaffManagement'));
 const CustomerMenu = React.lazy(() => import('./components/CustomerMenu'));
 const AIClockIn = React.lazy(() => import('./components/AIClockIn'));
+const SystemPermissionsModal = React.lazy(() => import('./components/SystemPermissionsModal'));
 const ServiceRequestAlert = React.lazy(() => import('./components/ServiceRequestAlert'));
 const ContactSupportModal = React.lazy(() => import('./components/ContactSupportModal'));
 const UserManualModal = React.lazy(() => import('./components/UserManualModal'));
@@ -61,7 +63,7 @@ import GlobalHeader from './components/GlobalHeader';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logoutUser } from './api/auth';
@@ -138,6 +140,7 @@ function App() {
 
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
+  const [resolvedDropdownNotifs, setResolvedDropdownNotifs] = useState({});
 
   const [, setRestaurantName] = useState(() => {
     try {
@@ -150,6 +153,7 @@ function App() {
     return 'msbillings';
   });
   const [profileOpen, setProfileOpen] = useState(false);
+  const [showMobileQuickActions, setShowMobileQuickActions] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [viewHistory, setViewHistory] = useState(() => {
     const path = window.location.pathname.replace(/^\/+/, '');
@@ -166,6 +170,7 @@ function App() {
   const [licenseExpiry, setLicenseExpiry] = useState(null); // Date object
   const [daysRemaining, setDaysRemaining] = useState(null);
   const [showExpiryPopup, setShowExpiryPopup] = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [sidebarSections, setSidebarSections] = useState({
     main: true,
     operations: true,
@@ -189,7 +194,7 @@ function App() {
   const isChef = userRole === 'Chef';
   const isManager = userRole === 'Manager';
 
-  const { broadcasts, unreadCount, markAsRead, markAllAsRead } = useBroadcasts(userRole);
+  const { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
   const totalUnreadCount = unreadCount + rtUnreadCount;
 
@@ -461,6 +466,17 @@ function App() {
     const interval = setInterval(calcDays, 60000); // update every minute
     return () => clearInterval(interval);
   }, [licenseExpiry]);
+
+  // Check for first login system permissions
+  useEffect(() => {
+    if (hasLicense && user && !localStorage.getItem('system_permissions_granted')) {
+      // Delay it slightly so it doesn't collide with the license popup animation
+      const timer = setTimeout(() => {
+        setShowPermissionsModal(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasLicense, user]);
 
   useEffect(() => {
     // Load restaurant settings
@@ -856,216 +872,300 @@ function App() {
         )}
         */}
 
-      {/* NEW PETPOOJA STYLE TOP HEADER */}
-      <header className="h-16 flex items-center justify-between px-4 sm:px-6 border-b border-border/40 bg-surface shadow-sm shrink-0 gap-4 w-full z-40 relative">
+      {/* NEW RESPONSIVE TOP HEADER */}
+      <header className="h-16 sm:h-20 flex items-center justify-between px-3 sm:px-6 border-b border-border/40 bg-surface shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative">
+          {/* Left: Hamburger & Logo */}
           <div className="flex items-center min-w-0 shrink-0">
             <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors z-10 relative shrink-0 mr-1 sm:mr-2">
-            
-              <Menu size={24} />
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover transition-colors shrink-0 mr-1 sm:mr-2 touch-target flex items-center justify-center">
+              <Menu size={22} />
             </button>
-            <div className="flex items-center cursor-pointer" onClick={() => handleViewChange('floor')}>
-              <div className="relative w-40 sm:w-56 h-10 sm:h-16 flex items-center overflow-visible">
-                <img src={logoImg} alt="msbillings" className="absolute -left-5 sm:-left-8.75 w-50 sm:w-75 max-w-none object-contain" />
+            <div className="flex items-center cursor-pointer relative shrink-0" onClick={() => handleViewChange('floor')}>
+              <div className="relative w-36 sm:w-56 h-10 sm:h-14 flex items-center justify-center overflow-hidden">
+                <img 
+                  src={logoImg} 
+                  alt="msbillings" 
+                  className="w-full h-full object-contain scale-[1.8] sm:scale-[2.2] pointer-events-none" 
+                />
               </div>
             </div>
           </div>
 
+          {/* Desktop Search & Actions */}
           <div className="hidden md:flex items-center gap-4 flex-1 max-w-xl ml-4">
             {!isChef && (
               <>
                 <button
-                onClick={() => handleViewChange('billing')}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded shadow transition-colors whitespace-nowrap">
-                
+                  onClick={() => handleViewChange('billing')}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors whitespace-nowrap text-sm">
                   {t('New Order')}
                 </button>
                 
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search size={18} className="text-gray-400" />
+                    <Search size={16} className="text-gray-400" />
                   </div>
                   <input
-                  type="text"
-                  placeholder={t('Bill No')}
-                  value={searchBillNo}
-                  onChange={(e) => setSearchBillNo(e.target.value)}
-                  onKeyDown={handleSearchKeyPress}
-                  className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 text-[1.05rem] transition-all text-gray-800" />
-                
+                    type="text"
+                    placeholder={t('Bill No')}
+                    value={searchBillNo}
+                    onChange={(e) => setSearchBillNo(e.target.value)}
+                    onKeyDown={handleSearchKeyPress}
+                    className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 text-sm text-gray-800" />
                 </div>
               </>
             )}
 
             {/* License Expiry Badge */}
-            {daysRemaining !== null &&
-          <button
-            onClick={() => setShowExpiryPopup(true)}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap ${
-            daysRemaining <= 0 ?
-            'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
-            daysRemaining <= 15 ?
-            'bg-amber-50 text-amber-600 border border-amber-200' :
-            'bg-emerald-50 text-emerald-600 border border-emerald-200'}`
-            }>
-            
+            {daysRemaining !== null && (
+              <button
+                onClick={() => setShowExpiryPopup(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap ${
+                  daysRemaining <= 0 ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
+                  daysRemaining <= 15 ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                  'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
                 <CalendarClock size={12} />
                 <span>
                   {daysRemaining <= 0 ? t('Expired!') : daysRemaining > 365 ? t('Lifetime') : `${daysRemaining}${t('d left')}`}
                 </span>
               </button>
-          }
+            )}
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+          {/* Right Section Header Controls */}
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
-              <PhoneCall size={18} className="text-red-500" />
+              <PhoneCall size={16} className="text-red-500" />
               <div className="flex flex-col leading-none">
-                <span className="text-[10px] text-gray-500 font-semibold uppercase">{t('Call For Support')}</span>
-                <span className="text-[1.05rem] font-bold text-gray-800">9701800140</span>
+                <span className="text-[9px] text-gray-500 font-semibold uppercase">{t('Call For Support')}</span>
+                <span className="text-xs font-bold text-gray-800">9701800140</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-3 text-gray-600">
-              {['dashboard', 'analytics', 'daybook'].includes(view) && ownerUnlocked &&
+            {/* Hold Bills Badge Button (Always visible on mobile & desktop) */}
             <button
-              onClick={() => setOwnerUnlocked(false)}
-              className="hidden md:flex items-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-600 border border-amber-200 rounded text-[10px] font-bold hover:bg-amber-100 transition-all shadow-sm">
-              
-                  <Lock size={12} />{t("Lock")}
+              onClick={() => handleViewChange('orders')}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0" 
+              title={t("View Hold Bills (Active Orders)")}>
+              <ClipboardList size={16} />
+              <span className="hidden sm:inline">{t('Hold Bills')}</span>
+              {activeOrdersCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
+                  {activeOrdersCount}
+                </span>
+              )}
             </button>
-            }
-              
-              <div className="hidden sm:block">
-                <React.Suspense fallback={<div className="w-16 h-8 bg-gray-100 rounded"></div>}>
-                  <LanguageSwitcher />
-                </React.Suspense>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                onClick={() => handleViewChange('orders')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-[11px] font-bold hover:bg-orange-100 transition-all shadow-sm relative" title={t("View Hold Bills (Active Orders)")}>
-
-                
-                  <ClipboardList size={14} />
-                  <span className="hidden sm:inline">{t('Hold Bills')}</span>
-                  {activeOrdersCount > 0 &&
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] px-1.5 rounded-full font-black border border-white">
-                      {activeOrdersCount}
-                    </span>
-                }
-                </button>
-              </div>
-
-              <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative" title={t("Calculator")}>
-                <Calculator size={20} />
-              </button>
-              
-              <div className="relative hidden sm:block">
-                <button
+            {/* Notifications Bell */}
+            <div className="relative">
+              <button
                 onClick={() => {
                   setShowNotifications(!showNotifications);
                   if (!showNotifications) {
-                    markAllAsRead(); // Mark broadcasts as read
-                    rtMarkAllAsRead(); // Mark real-time notifications as read
+                    markAllAsRead();
+                    rtMarkAllAsRead();
                   }
                 }}
-                className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
-                
-                  <Bell size={22} className="text-gray-200 hover:text-white transition-colors" />
-                  {totalUnreadCount > 0 &&
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center border-2 border-[#1e1e2d]">
-                    {totalUnreadCount}
+                className="p-1.5 text-gray-600 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative touch-target flex items-center justify-center">
+                <Bell size={20} />
+                {totalUnreadCount > 0 && (
+                  <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
                   </span>
-                }
-                </button>
-                
-                {/* Notifications Dropdown */}
-                {showNotifications &&
-              <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
-                    <div className="absolute right-0 top-10 mt-1 w-80 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
-                      <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                        <span className="font-bold text-gray-800">{t("Notifications")}</span>
-                        <span
-                      onClick={() => {setShowNotifications(false);handleViewChange('notification');}}
-                      className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200">{t("View All")}
-
-
-                    </span>
-                      </div>
-                      <div className="max-h-75 overflow-y-auto">
-                        {notifications.map((n) =>
-                    <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
-                            <div className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                            <div>
-                              <p className="text-[1.05rem] font-bold text-gray-800 leading-tight">{n.title}</p>
-                              <p className="text-xs text-gray-500 mt-1">{n.message}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">
-                                {n.time ? new Date(n.time).toLocaleString('en-IN', {
-                                  timeZone: 'Asia/Kolkata',
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  hour12: true
-                                }) : ''}
-                              </p>
-                            </div>
-                          </div>
-                    )}
-                      </div>
-                      <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            rtClearNotification('ALL');
-                            setShowNotifications(false);
-                          }}
-                          className="text-xs font-bold text-red-600 hover:text-red-700">{t("Mark all as read")}
-                        </button>
-                      </div>
+                )}
+              </button>
+              
+              {/* Notifications Dropdown */}
+              {showNotifications && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
+                  <div className="absolute right-0 top-11 mt-1 w-80 max-w-[calc(100vw-24px)] bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
+                    <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                      <span className="font-bold text-gray-800 text-sm">{t("Notifications")}</span>
+                      <span
+                        onClick={() => {setShowNotifications(false);handleViewChange('notification');}}
+                        className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200">{t("View All")}
+                      </span>
                     </div>
-                  </>
-              }
-              </div>
-
-              <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative">
-                <User size={20} />
-              </button>
-              <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 ml-1">
-                <Power size={20} />
-              </button>
-            </div>
-            
-            {/* Profile Dropdown */}
-            {profileOpen &&
-          <>
-                <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)}></div>
-                <div className="absolute right-4 top-14 mt-1 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
-                  <div className="px-4 py-2 border-b border-border/50 bg-gray-50/50">
-                    <span className="block text-[1.05rem] font-bold text-text-main">{user.username}</span>
-                    <span className="block text-xs text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
+                    <div className="max-h-75 overflow-y-auto">
+                      {notifications.map((n) => (
+                        <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
+                          <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-800 leading-tight">{n.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          rtClearNotification('ALL');
+                          clearAllBroadcasts();
+                          setShowNotifications(false);
+                        }}
+                        className="text-xs font-bold text-red-600 hover:text-red-700">{t("Clear All")}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                onClick={() => {handleViewChange('settings');setProfileOpen(false);}}
-                className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-text-main hover:bg-surface-hover flex items-center gap-2 mt-1">
-                
-                    <SettingsIcon size={18} className="text-text-muted" />{t("Settings")}
-              </button>
-                  <button
-                onClick={() => {setShowLogoutConfirm(true);setProfileOpen(false);}}
-                className="w-full text-left px-4 py-2.5 text-[1.05rem] font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border mt-1">
-                
-                    <LogOut size={18} /> {t('Logout')}
+                </>
+              )}
+            </div>
+
+            {/* Desktop-only Quick Icons */}
+            <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative text-gray-600" title={t("Calculator")}>
+              <Calculator size={20} />
+            </button>
+
+            <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative text-gray-600">
+              <User size={20} />
+            </button>
+
+            <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 hidden sm:block">
+              <Power size={20} />
+            </button>
+
+            {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}
+            <button
+              onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
+              className="md:hidden p-1.5 text-gray-700 hover:bg-surface-hover rounded-lg transition-colors touch-target flex items-center justify-center border border-border/60"
+              title="More Actions">
+              <MoreVertical size={20} />
+            </button>
+          </div>
+
+          {/* Mobile Profile Dropdown (Desktop) */}
+          {profileOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)}></div>
+              <div className="absolute right-4 top-14 mt-1 w-48 bg-surface rounded-xl shadow-xl border border-border overflow-hidden z-50 py-1">
+                <div className="px-4 py-2 border-b border-border/50 bg-gray-50/50">
+                  <span className="block text-sm font-bold text-text-main">{user.username}</span>
+                  <span className="block text-[10px] text-text-muted uppercase tracking-wider font-bold mt-0.5">{user.role}</span>
+                </div>
+                <button
+                  onClick={() => {handleViewChange('settings');setProfileOpen(false);}}
+                  className="w-full text-left px-4 py-2.5 text-xs font-medium text-text-main hover:bg-surface-hover flex items-center gap-2">
+                  <SettingsIcon size={16} className="text-text-muted" />{t("Settings")}
+                </button>
+                <button
+                  onClick={() => {setShowLogoutConfirm(true);setProfileOpen(false);}}
+                  className="w-full text-left px-4 py-2.5 text-xs font-medium text-danger hover:bg-danger/5 flex items-center gap-2 border-t border-border">
+                  <LogOut size={16} /> {t('Logout')}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* MOBILE QUICK ACTIONS MODAL / DROPDOWN (Ensures all desktop header buttons & search are cleanly usable on mobile) */}
+          {showMobileQuickActions && (
+            <>
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 md:hidden" onClick={() => setShowMobileQuickActions(false)} />
+              <div className="fixed top-14 right-2 left-2 z-[60] bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 space-y-3 max-h-[85vh] overflow-y-auto animate-fade-in md:hidden">
+                <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                  <span className="font-bold text-gray-800 text-sm">{t("Quick Actions")}</span>
+                  <button onClick={() => setShowMobileQuickActions(false)} className="p-1 text-gray-400 hover:text-gray-600">
+                    <X size={18} />
                   </button>
                 </div>
-              </>
-          }
-          </div>
+
+                {!isChef && (
+                  <>
+                    <button
+                      onClick={() => {
+                        handleViewChange('billing');
+                        setShowMobileQuickActions(false);
+                      }}
+                      className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 text-sm">
+                      <UtensilsCrossed size={18} />
+                      <span>{t('New Order')}</span>
+                    </button>
+
+                    <div className="relative w-full">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder={t('Search Bill No...')}
+                        value={searchBillNo}
+                        onChange={(e) => setSearchBillNo(e.target.value)}
+                        onKeyDown={(e) => {
+                          handleSearchKeyPress(e);
+                          if (e.key === 'Enter') setShowMobileQuickActions(false);
+                        }}
+                        className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:border-red-500" />
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      handleViewChange('reservation');
+                      setShowMobileQuickActions(false);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                    <CalendarClock size={16} className="text-emerald-500" />
+                    <span>{t('Reservation')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowCalculator(true);
+                      setShowMobileQuickActions(false);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                    <Calculator size={16} className="text-orange-500" />
+                    <span>{t('Calculator')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      handleViewChange('settings');
+                      setShowMobileQuickActions(false);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
+                    <SettingsIcon size={16} className="text-blue-500" />
+                    <span>{t('Settings')}</span>
+                  </button>
+                </div>
+
+                {daysRemaining !== null && (
+                  <button
+                    onClick={() => {
+                      setShowExpiryPopup(true);
+                      setShowMobileQuickActions(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-700">
+                    <span className="flex items-center gap-2">
+                      <CalendarClock size={16} />
+                      <span>{t('License Status')}</span>
+                    </span>
+                    <span>{daysRemaining <= 0 ? t('Expired!') : daysRemaining > 365 ? t('Lifetime') : `${daysRemaining}d left`}</span>
+                  </button>
+                )}
+
+                <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs">
+                  <span className="font-semibold text-gray-500">{t('Support')}</span>
+                  <span className="font-bold text-gray-800 flex items-center gap-1">
+                    <PhoneCall size={14} className="text-red-500" /> 9701800140
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowLogoutConfirm(true);
+                    setShowMobileQuickActions(false);
+                  }}
+                  className="w-full py-2.5 bg-red-50 border border-red-200 text-red-600 font-bold rounded-xl flex items-center justify-center gap-2 text-xs hover:bg-red-100">
+                  <Power size={16} />
+                  <span>{t('Logout')}</span>
+                </button>
+              </div>
+            </>
+          )}
         </header>
 
       <div className="flex-1 flex overflow-hidden relative">
@@ -1073,13 +1173,13 @@ function App() {
       {/* Drawer Backdrop Overlay (Mobile only) */}
       {mobileMenuOpen &&
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] transition-opacity lg:hidden"
           onClick={() => setMobileMenuOpen(false)} />
 
         }
 
       {/* Sidebar Drawer */}
-      <aside className={`fixed lg:relative inset-y-0 left-0 z-50 bg-surface flex flex-col shrink-0 shadow-2xl lg:shadow-none lg:border-r lg:border-border/40 transition-all duration-300 ease-in-out overflow-hidden ${mobileMenuOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:w-0 lg:translate-x-0'}`}>
+      <aside className={`fixed lg:relative inset-y-0 left-0 z-[110] bg-surface flex flex-col shrink-0 shadow-2xl lg:shadow-none lg:border-border/40 transition-all duration-300 ease-in-out overflow-hidden ${mobileMenuOpen ? 'w-64 translate-x-0 lg:border-r opacity-100 visible' : 'w-0 -translate-x-full lg:-translate-x-full opacity-0 invisible border-none'}`}>
 
         <nav className="flex-1 px-3 pt-8 pb-4 space-y-6 overflow-y-auto custom-scrollbar">
           
@@ -1196,6 +1296,15 @@ function App() {
                   
                     <ShoppingBag size={22} />
                     <span>{t('Pickup Orders')}</span>
+                  </button>
+                }
+
+                {!isChef &&
+                  <button
+                    onClick={() => handleViewChange('reservation')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'reservation' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                    <CalendarClock size={22} />
+                    <span>{t('Table Reservations')}</span>
                   </button>
                 }
 
@@ -1564,6 +1673,15 @@ function App() {
       </div>
       </div>{/* end flex-1 wrapper */}
 
+      {showPermissionsModal && (
+        <Suspense fallback={null}>
+          <SystemPermissionsModal onComplete={() => {
+            localStorage.setItem('system_permissions_granted', 'true');
+            setShowPermissionsModal(false);
+          }} />
+        </Suspense>
+      )}
+
       {/* License Expiry Warning Popup */}
       {showExpiryPopup && daysRemaining !== null &&
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-9999 animate-in fade-in duration-200">
@@ -1758,7 +1876,6 @@ function App() {
                 <button
                 onClick={() => setShowLogoutConfirm(false)}
                 className="flex-1 py-2.5 px-4 bg-surface-hover hover:bg-border text-text-main font-medium rounded-xl transition-colors">{t("Cancel")}
-
 
               </button>
                 <button

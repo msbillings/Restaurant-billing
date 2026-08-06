@@ -1,5 +1,6 @@
 import BillDefault from '../models/Bill.js';
 import UserDefault from '../models/User.js';
+import SettingDefault from '../models/Setting.js';
 import cache from '../utils/cache.js';
 import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
@@ -33,15 +34,46 @@ const getTableMatchCondition = (tblStr) => {
   return { $regex: new RegExp(`^.*${escaped}$`, 'i') };
 };
 
+// Helper to dynamically get active tax rate from restaurantSettings in DB
+const getDynamicTaxRate = async (req) => {
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    let s = {};
+    if (settingsDoc?.value) {
+      s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
+    }
+    let tot = 0;
+    if (s.enableCgst) tot += Number(s.cgstRate || 0);
+    if (s.enableSgst) tot += Number(s.sgstRate || 0);
+    if (s.enableGst) tot += Number(s.gstRate || 0);
+    return tot;
+  } catch (e) {
+    console.error("Error reading dynamic tax rate:", e);
+    return 0;
+  }
+};
+
 // Get active order for a table
 export const getActiveOrder = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { tableNo } = req.params;
-    const order = await Bill.findOne({ 
+    let order = await Bill.findOne({ 
       tableNo: getTableMatchCondition(tableNo), 
       status: { $in: ['Open', 'Billed'] } 
-    });
+    }).lean();
+
+    if (order && order.status === 'Open') {
+      const dynamicTaxRate = await getDynamicTaxRate(req);
+      const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+      const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+      const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+      order.tax = taxRate;
+      order.subtotal = subtotal;
+      order.total = Math.round(subtotal + taxAmount);
+    }
+
     res.json(order || null);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -76,13 +108,23 @@ export const saveOrder = async (req, res) => {
     }
 
     // Sanitize items and calculate item totals
-    const sanitizedItems = items.map(item => ({
-      name: item.name,
-      price: Number(item.price),
-      quantity: Number(item.quantity),
-      total: Number(item.price) * Number(item.quantity),
-      specialNote: item.specialNote || ''
-    }));
+    const sanitizedItems = items.map(item => {
+      const isCancelled = item.isCancelled || false;
+      const cancelledQty = item.cancelledQuantity || 0;
+      const activeQty = isCancelled ? 0 : Math.max(0, Number(item.quantity || 0) - cancelledQty);
+      return {
+        name: item.name,
+        price: Number(item.price || 0),
+        quantity: Number(item.quantity || 0),
+        total: Number(item.price || 0) * activeQty,
+        specialNote: item.specialNote || '',
+        isCancelled: isCancelled,
+        cancelledQuantity: cancelledQty,
+        cancellationRequested: item.cancellationRequested || false,
+        cancellationRequestedQty: item.cancellationRequestedQty || 0,
+        cancellationRejected: item.cancellationRejected || false
+      };
+    });
 
     let order;
     if (id) {
@@ -94,37 +136,55 @@ export const saveOrder = async (req, res) => {
       });
     }
 
-    const subtotal = sanitizedItems.reduce((sum, item) => sum + item.total, 0);
-
     if (order) {
-      // Preserve printedQuantity for existing items
+      // Preserve printedQuantity and cancellation status for existing items
       const updatedItems = sanitizedItems.map(newItem => {
         const existingItem = order.items.find(i => i.name === newItem.name);
-        if (existingItem && existingItem.printedQuantity !== undefined) {
-          return { ...newItem, printedQuantity: existingItem.printedQuantity, specialNote: newItem.specialNote || existingItem.specialNote || '' };
+        if (existingItem) {
+          const isCancelled = existingItem.isCancelled || newItem.isCancelled || false;
+          const cancelledQty = Math.max(existingItem.cancelledQuantity || 0, newItem.cancelledQuantity || 0);
+          const activeQty = isCancelled ? 0 : Math.max(0, Number(newItem.quantity || 0) - cancelledQty);
+          return { 
+            ...newItem, 
+            printedQuantity: existingItem.printedQuantity !== undefined ? existingItem.printedQuantity : newItem.printedQuantity,
+            specialNote: newItem.specialNote || existingItem.specialNote || '',
+            isCancelled,
+            cancelledQuantity: cancelledQty,
+            total: Number(newItem.price || 0) * activeQty,
+            cancellationRequested: newItem.cancellationRequested !== undefined ? newItem.cancellationRequested : (existingItem.cancellationRequested || false),
+            cancellationRequestedQty: newItem.cancellationRequestedQty !== undefined ? newItem.cancellationRequestedQty : (existingItem.cancellationRequestedQty || 0),
+            cancellationRejected: newItem.cancellationRejected !== undefined ? newItem.cancellationRejected : (existingItem.cancellationRejected || false)
+          };
         }
         return newItem;
       });
 
-      // Preserve items that were already printed but are now removed from cart, so KOT can generate cancellations
+      // Preserve items that were already printed or cancelled but removed from request
       order.items.forEach(oldItem => {
-        if (oldItem.printedQuantity > 0) {
+        if (oldItem.printedQuantity > 0 || oldItem.isCancelled) {
           const stillExists = updatedItems.find(i => i.name === oldItem.name);
           if (!stillExists) {
             updatedItems.push({
               name: oldItem.name,
               price: oldItem.price,
-              quantity: 0,
+              quantity: oldItem.quantity || 0,
               total: 0,
-              printedQuantity: oldItem.printedQuantity,
-              specialNote: oldItem.specialNote || ''
+              printedQuantity: oldItem.printedQuantity || 0,
+              specialNote: oldItem.specialNote || '',
+              isCancelled: oldItem.isCancelled || false,
+              cancelledQuantity: oldItem.cancelledQuantity || 0
             });
           }
         }
       });
 
+      const subtotal = updatedItems.reduce((sum, item) => {
+        if (item.isCancelled) return sum;
+        const activeQty = Math.max(0, Number(item.quantity || 0) - (item.cancelledQuantity || 0));
+        return sum + (Number(item.price || 0) * activeQty);
+      }, 0);
+
       // Update existing order
-      // Track edit history if a KOT was already printed or the bill was somehow not open
       const previousState = {
         items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
         subtotal: order.subtotal,
@@ -144,8 +204,9 @@ export const saveOrder = async (req, res) => {
         calculatedDiscount = dValue;
       }
 
-      const taxableAmount = subtotal - calculatedDiscount;
-      const tRate = tax !== undefined ? tax : (order.tax || 0);
+      const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
+      const dynamicTaxRate = await getDynamicTaxRate(req);
+      const tRate = (tax !== undefined && tax !== null && tax > 0) ? Number(tax) : (order.tax && order.tax > 0 ? order.tax : dynamicTaxRate);
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
@@ -191,11 +252,22 @@ export const saveOrder = async (req, res) => {
       
       order.subtotal = subtotal;
       order.tax = tRate;
+      order.taxBreakdown = {
+        cgst: Number(((subtotal * (tRate / 2)) / 100).toFixed(2)),
+        sgst: Number(((subtotal * (tRate / 2)) / 100).toFixed(2)),
+        igst: 0
+      };
       order.total = calculatedTotal;
       
       await order.save();
     } else {
       // Create new order
+      const subtotal = sanitizedItems.reduce((sum, item) => {
+        if (item.isCancelled) return sum;
+        const activeQty = Math.max(0, Number(item.quantity || 0) - (item.cancelledQuantity || 0));
+        return sum + (Number(item.price || 0) * activeQty);
+      }, 0);
+
       const dType = discountType || 'flat';
       const dValue = discountValue || 0;
       let calculatedDiscount = 0;
@@ -205,8 +277,8 @@ export const saveOrder = async (req, res) => {
         calculatedDiscount = dValue;
       }
 
-      const taxableAmount = subtotal - calculatedDiscount;
-      const tRate = tax !== undefined ? tax : 0;
+      const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
+      const tRate = tax !== undefined ? Number(tax) : 0;
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
@@ -729,15 +801,30 @@ export const getOpenOrders = async (req, res) => {
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
     })
-    .select('tableNo items total status billNumber billType orderSource createdAt') // Include orderSource for delivery filtering
+    .select('tableNo items total subtotal tax status billNumber billType orderSource createdAt')
     .sort({ createdAt: -1 })
-    .limit(100) // Limit to 100 most recent active orders
-    .lean(); // Use lean for faster queries
-    
-    // Cache for 10 seconds (active orders change frequently)
-    // cache.set(cacheKey, orders, 10000);
-    
-    res.json(orders);
+    .limit(100)
+    .lean();
+
+    const dynamicTaxRate = await getDynamicTaxRate(req);
+
+    const formattedOrders = orders.map(order => {
+      if (order.status === 'Open') {
+        const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+        const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+        const totalWithTax = Math.round(subtotal + taxAmount);
+        return {
+          ...order,
+          subtotal,
+          tax: taxRate,
+          total: totalWithTax
+        };
+      }
+      return order;
+    });
+
+    res.json(formattedOrders);
   } catch (error) {
     console.error('Error fetching open orders:', error);
     res.status(500).json({ message: error.message });
@@ -1178,17 +1265,39 @@ export const getTodayKOTs = async (req, res) => {
       updatedAt: { $gte: targetDate, $lt: nextDay },
       'kots.0': { $exists: true }
     })
-    .select('tableNo billType kots status')
+    .select('tableNo billType kots status items')
     .sort({ updatedAt: -1 })
     .lean();
 
     // Flatten KOTs into a single array
     let allKOTs = [];
     bills.forEach(bill => {
+      const itemCancelMap = {};
+      (bill.items || []).forEach(i => {
+        if (i.name) {
+          itemCancelMap[i.name] = {
+            isCancelled: i.isCancelled || false,
+            cancelledQuantity: i.cancelledQuantity || 0
+          };
+        }
+      });
+
       if (bill.kots) {
         bill.kots.forEach(kot => {
+          const processedItems = (kot.items || []).map(kItem => {
+            const itemStatus = itemCancelMap[kItem.name];
+            const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+            return {
+              ...kItem,
+              isCancelled: isCancelled,
+              status: isCancelled ? 'Cancelled' : kItem.status,
+              cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
+            };
+          });
+
           allKOTs.push({
             ...kot,
+            items: processedItems,
             billId: bill._id,
             tableNo: bill.tableNo,
             billType: bill.billType,
@@ -1358,9 +1467,31 @@ export const getActiveKOTs = async (req, res) => {
 
     const allKots = [];
     activeOrders.forEach(order => {
+      // Build a map of item cancellation status from order.items
+      const itemCancelMap = {};
+      (order.items || []).forEach(i => {
+        if (i.name) {
+          itemCancelMap[i.name] = {
+            isCancelled: i.isCancelled || false,
+            cancelledQuantity: i.cancelledQuantity || 0
+          };
+        }
+      });
+
       order.kots.forEach(kot => {
-        // Only include KOTs that have pending or preparing items
-        const hasUnfinishedItems = kot.items.some(item => item.status === 'Pending' || item.status === 'Preparing');
+        const processedItems = (kot.items || []).map(kItem => {
+          const itemStatus = itemCancelMap[kItem.name];
+          const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+          return {
+            ...kItem,
+            isCancelled: isCancelled,
+            status: isCancelled ? 'Cancelled' : kItem.status,
+            cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
+          };
+        });
+
+        // Include KOTs that have pending, preparing or cancelled items
+        const hasUnfinishedItems = processedItems.some(item => item.status === 'Pending' || item.status === 'Preparing' || item.status === 'Cancelled' || item.isCancelled);
         if (hasUnfinishedItems) {
           allKots.push({
             orderId: order._id,
@@ -1369,7 +1500,7 @@ export const getActiveKOTs = async (req, res) => {
             orderSource: order.orderSource,
             kotId: kot._id,
             kotNumber: kot.kotNumber,
-            items: kot.items,
+            items: processedItems,
             createdAt: kot.createdAt
           });
         }
@@ -1417,6 +1548,59 @@ export const updateKOTItemStatus = async (req, res) => {
   }
 };
 
+export const updateItemPrepTime = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { orderId, kotId, itemId, prepTimeMinutes, itemName } = req.body;
+
+    const order = await Bill.findById(orderId);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    let updated = false;
+
+    const prepStartTime = new Date();
+
+    // Update in bill.items
+    if (order.items && Array.isArray(order.items)) {
+      order.items.forEach(i => {
+        if (i._id?.toString() === itemId?.toString() || (itemName && i.name === itemName)) {
+          i.prepTimeMinutes = Number(prepTimeMinutes);
+          i.prepStartTime = prepStartTime;
+          updated = true;
+        }
+      });
+      order.markModified('items');
+    }
+
+    // Update in bill.kots
+    if (order.kots && Array.isArray(order.kots)) {
+      order.kots.forEach(kot => {
+        if (!kotId || kot._id?.toString() === kotId?.toString()) {
+          kot.items?.forEach(i => {
+            if (i._id?.toString() === itemId?.toString() || (itemName && i.name === itemName)) {
+              i.prepTimeMinutes = Number(prepTimeMinutes);
+              i.prepStartTime = prepStartTime;
+              updated = true;
+            }
+          });
+        }
+      });
+      order.markModified('kots');
+    }
+
+    await order.save();
+
+    emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, prepTimeMinutes, prepStartTime, itemName });
+    emitSocketEvent(req, 'prepTimeUpdated', { orderId, tableNo: order.tableNo, itemId, itemName, prepTimeMinutes, prepStartTime });
+    emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: order.status });
+
+    res.json({ message: 'Prep time updated successfully', prepTimeMinutes, prepStartTime });
+  } catch (error) {
+    console.error('Error updating prep time:', error);
+    res.status(500).json({ message: 'Server error updating prep time' });
+  }
+};
+
 export const getEditedBills = async (req, res) => {
   try {
     const TenantBill = getTenantModel(req, 'Bill', BillDefault);
@@ -1435,3 +1619,113 @@ export const getEditedBills = async (req, res) => {
     res.status(500).json({ message: 'Server error while fetching edited bills' });
   }
 };
+
+export const resolveItemCancel = async (req, res) => {
+  try {
+    const TenantBill = getTenantModel(req, 'Bill', BillDefault);
+    const { orderId, itemId, action } = req.body; // action: 'accept' or 'reject'
+
+    if (!orderId || !itemId || !action) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const bill = await TenantBill.findById(orderId);
+    if (!bill) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const item = bill.items.id(itemId);
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found in order' });
+    }
+
+    if (action === 'accept') {
+      const cancelQty = item.cancellationRequestedQty || item.quantity;
+      item.cancelledQuantity = (item.cancelledQuantity || 0) + cancelQty;
+      
+      if (item.cancelledQuantity >= item.quantity) {
+        item.isCancelled = true;
+      }
+      
+      item.cancellationRequested = false;
+      item.cancellationRequestedQty = 0;
+      
+      // Recalculate subtotal
+      bill.subtotal = bill.items.reduce((acc, i) => {
+        if (i.isCancelled) return acc;
+        const activeQty = i.quantity - (i.cancelledQuantity || 0);
+        return acc + (i.price * activeQty);
+      }, 0);
+      
+      const uncancelledItemsCount = bill.items.filter(i => !i.isCancelled).length;
+      const originalSubtotal = bill.subtotal + (item.price * cancelQty); // Approximate previous subtotal for tax ratio
+      
+      if (uncancelledItemsCount === 0 || bill.subtotal === 0) {
+        bill.tax = 0;
+        bill.taxBreakdown = { cgst: 0, sgst: 0, igst: 0 };
+        bill.total = 0;
+        if (uncancelledItemsCount === 0) bill.status = 'Cancelled';
+      } else {
+        const dynamicTaxRate = await getDynamicTaxRate(req);
+        const activeTaxRate = (bill.tax && bill.tax > 0) ? bill.tax : dynamicTaxRate;
+        const taxAmount = Number(((bill.subtotal * activeTaxRate) / 100).toFixed(2));
+        bill.tax = activeTaxRate;
+        bill.taxBreakdown = {
+          cgst: Number(((bill.subtotal * (activeTaxRate / 2)) / 100).toFixed(2)),
+          sgst: Number(((bill.subtotal * (activeTaxRate / 2)) / 100).toFixed(2)),
+          igst: 0
+        };
+        bill.total = Math.round(bill.subtotal + taxAmount - (bill.discountValue || 0));
+      }
+      
+      bill.isEdited = true;
+      
+      // Update inside bill.kots array
+      if (bill.kots && Array.isArray(bill.kots)) {
+        bill.kots.forEach(kot => {
+          if (kot.items && Array.isArray(kot.items)) {
+            kot.items.forEach(kItem => {
+              if (kItem.name === item.name || (itemId && kItem._id?.toString() === itemId.toString())) {
+                if (item.isCancelled) {
+                  kItem.status = 'Cancelled';
+                  kItem.isCancelled = true;
+                }
+                kItem.cancelledQuantity = (kItem.cancelledQuantity || 0) + cancelQty;
+              }
+            });
+          }
+        });
+        bill.markModified('kots');
+      }
+    } else {
+      item.cancellationRequested = false;
+      item.cancellationRequestedQty = 0;
+      item.cancellationRejected = true;
+    }
+
+    bill.markModified('items');
+    await bill.save();
+
+    const io = req.app?.locals?.io;
+    const tenantDb = req.headers['x-tenant-db'];
+
+    if (io && tenantDb) {
+      // Notify customer UI
+      io.to(tenantDb).emit('cancellationResolved', { 
+        orderId, 
+        itemId, 
+        action, 
+        tableNo: bill.tableNo,
+        itemName: item.name 
+      });
+      // Update POS/Kitchen screens
+      io.to(tenantDb).emit('orderUpdated', { tableNo: bill.tableNo, status: bill.status });
+    }
+
+    res.status(200).json({ message: `Cancellation ${action}ed successfully`, bill });
+  } catch (error) {
+    console.error('Error resolving item cancel:', error);
+    res.status(500).json({ message: 'Server error while resolving item cancellation' });
+  }
+};
+

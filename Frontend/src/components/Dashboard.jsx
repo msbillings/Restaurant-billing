@@ -215,7 +215,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-4 md:p-6 overflow-y-auto">
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 px-2.5 py-4 md:p-6 overflow-y-auto">
       {/* Dashboard Header Container - Forcing dark mode on this specific page */}
       <style>{`
         .glass-card {
@@ -226,25 +226,25 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
         }
       `}</style>
       
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold tracking-wide flex items-center gap-2">
-          <LayoutDashboard className="text-gray-400" size={24} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+        <h1 className="text-lg sm:text-2xl font-bold tracking-wide flex items-center gap-2">
+          <LayoutDashboard className="text-gray-400" size={20} />
           {t("Dashboard")}
         </h1>
         
-        <div className="text-sm text-gray-400 flex items-center gap-4 font-mono">
+        <div className="text-xs sm:text-sm text-gray-400 flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 font-mono">
           <div className="relative">
             <button 
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="flex items-center gap-2 bg-[#1e1e24] px-4 py-2 rounded-lg border border-white/10 hover:bg-white/10 transition-colors text-white text-sm"
+              className="flex items-center gap-1.5 bg-[#1e1e24] px-3 py-1.5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors text-white text-xs sm:text-sm"
             >
-              <Filter size={16} />
+              <Filter size={14} />
               {t(dateFilter)}
-              <ChevronDown size={16} />
+              <ChevronDown size={14} />
             </button>
             
             {isFilterDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-48 bg-[#1a1a20] border border-white/10 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-40 bg-[#1a1a20] border border-white/10 rounded-lg shadow-xl z-50 py-1 overflow-hidden">
                 {['Today', 'Last 7 Days', '1 Month', '3 Months', '6 Months', '1 Year', 'Custom'].map(filter => (
                   <button
                     key={filter}
@@ -257,7 +257,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
                         setIsFilterDropdownOpen(false);
                       }
                     }}
-                    className={`w-full text-left px-4 py-2 text-sm ${dateFilter === filter ? 'bg-orange-500/20 text-orange-400' : 'text-gray-300 hover:bg-white/5'}`}
+                    className={`w-full text-left px-3 py-2 text-xs ${dateFilter === filter ? 'bg-orange-500/20 text-orange-400' : 'text-gray-300 hover:bg-white/5'}`}
                   >
                     {t(filter)}
                   </button>
@@ -266,57 +266,57 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Clock size={16} className="text-gray-500" />
-            {currentDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+          <div className="flex items-center gap-1.5 text-xs sm:text-sm">
+            <Clock size={14} className="text-gray-500" />
+            <span>{currentDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         </div>
 
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="glass-card p-5 border-l-2 border-l-blue-500">
-          <p className="text-gray-400 text-sm mb-1">{t("Total Sales")}</p>
-          <p className="text-2xl font-bold text-white">{formatCurrency(stats.sales)}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div className="glass-card p-3 sm:p-5 border-l-2 border-l-blue-500">
+          <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Total Sales")}</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{formatCurrency(stats.sales)}</p>
         </div>
-        <div className="glass-card p-5 border-l-2 border-l-green-500">
-          <p className="text-gray-400 text-sm mb-1">{t("Orders")}</p>
-          <p className="text-2xl font-bold text-white">{stats.orders}</p>
+        <div className="glass-card p-3 sm:p-5 border-l-2 border-l-green-500">
+          <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Orders")}</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{stats.orders}</p>
         </div>
-        <div className="glass-card p-5 border-l-2 border-l-orange-500">
-          <p className="text-gray-400 text-sm mb-1">{t("Customers")}</p>
-          <p className="text-2xl font-bold text-white">{stats.recentBills.length}</p>
+        <div className="glass-card p-3 sm:p-5 border-l-2 border-l-orange-500">
+          <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Customers")}</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{stats.recentBills.length}</p>
         </div>
-        <div className="glass-card p-5 border-l-2 border-l-purple-500">
-          <p className="text-gray-400 text-sm mb-1">{t("Avg. Order Value")}</p>
-          <p className="text-2xl font-bold text-white">{formatCurrency(stats.averageOrderValue)}</p>
+        <div className="glass-card p-3 sm:p-5 border-l-2 border-l-purple-500">
+          <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Avg. Order Value")}</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{formatCurrency(stats.averageOrderValue)}</p>
         </div>
       </div>
 
       {/* Main Grid: Top Selling Items and Sales Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
         {/* Top Selling Items */}
-        <div className="glass-card p-5 flex flex-col h-[350px]">
-          <h3 className="text-lg font-bold mb-6">{t("Top Selling Items")}</h3>
-          <div className="flex-1 overflow-x-auto flex items-center gap-6 pb-4">
+        <div className="glass-card p-4 sm:p-5 flex flex-col h-[300px] sm:h-[350px]">
+          <h3 className="text-sm sm:text-lg font-bold mb-4 sm:mb-6">{t("Top Selling Items")}</h3>
+          <div className="flex-1 overflow-x-auto flex items-center gap-3 sm:gap-6 pb-2 no-scrollbar">
             {stats.topItems && stats.topItems.length > 0 ? (
               stats.topItems.slice(0, 5).map((item, idx) => (
-                <div key={idx} className="flex flex-col items-center min-w-[120px]">
-                  <div className="w-20 h-20 rounded-full border-2 border-orange-500/50 p-1 mb-3 bg-black/40">
+                <div key={idx} className="flex flex-col items-center min-w-[100px] sm:min-w-[120px]">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-orange-500/50 p-1 mb-2 sm:mb-3 bg-black/40">
                     <img 
                       src={getFoodImage(item._id)} 
                       alt={item._id} 
                       className="w-full h-full object-cover rounded-full"
                     />
                   </div>
-                  <p className="font-bold text-sm text-center mb-1 line-clamp-1">{t(item._id)}</p>
-                  <p className="text-orange-400 font-bold text-sm">{formatCurrency(item.revenue)}</p>
-                  <p className="text-xs text-gray-500">{item.quantity} {t("Orders")}</p>
+                  <p className="font-bold text-xs sm:text-sm text-center mb-1 line-clamp-1 w-full">{t(item._id)}</p>
+                  <p className="text-orange-400 font-bold text-xs sm:text-sm">{formatCurrency(item.revenue)}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500">{item.quantity} {t("Orders")}</p>
                 </div>
               ))
             ) : (
-              <div className="w-full flex items-center justify-center text-gray-500">
+              <div className="w-full flex items-center justify-center text-gray-500 text-xs sm:text-sm">
                 {t("No items sold today")}
               </div>
             )}

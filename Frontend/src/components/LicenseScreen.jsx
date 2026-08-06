@@ -1,9 +1,12 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles, Settings, X, Save } from 'lucide-react';
+import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles, Settings, X, Save, Wifi, CheckCircle2, Smartphone, Server } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 import BackgroundSlideshow from './BackgroundSlideshow';
 import logoImg from '../assets/images/logo.png';
+
+const isAPK = Capacitor.isNativePlatform();
 
 const LicenseScreen = ({ onValidLicense }) => {
   const { t } = useLanguage();
@@ -17,20 +20,66 @@ const LicenseScreen = ({ onValidLicense }) => {
   const [serverIp, setServerIp] = useState('');
   const [superadminIp, setSuperadminIp] = useState('');
 
+  // APK-specific: show IP panel if no server IP is stored
+  const [showApkIpPanel, setShowApkIpPanel] = useState(false);
+  const [apkIpInput, setApkIpInput] = useState('');
+  const [apkIpStatus, setApkIpStatus] = useState(null); // null | 'testing' | 'ok' | 'fail'
+
   useEffect(() => {
     setServerIp(localStorage.getItem('resto_server_ip') || '');
     setSuperadminIp(localStorage.getItem('resto_superadmin_ip') || '');
+
+    // On APK: auto-show IP panel if no server IP is configured
+    if (isAPK) {
+      const storedIp = localStorage.getItem('resto_server_ip');
+      if (!storedIp) {
+        setShowApkIpPanel(true);
+      } else {
+        setApkIpInput(storedIp);
+      }
+    }
   }, []);
 
   const handleSaveSettings = () => {
-    if (serverIp) localStorage.setItem('resto_server_ip', serverIp);
+    let cleanServer = serverIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    let cleanSuper = superadminIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+
+    if (cleanServer) localStorage.setItem('resto_server_ip', cleanServer);
     else localStorage.removeItem('resto_server_ip');
     
-    if (superadminIp) localStorage.setItem('resto_superadmin_ip', superadminIp);
+    if (cleanSuper) localStorage.setItem('resto_superadmin_ip', cleanSuper);
     else localStorage.removeItem('resto_superadmin_ip');
     
     setShowSettings(false);
     window.location.reload();
+  };
+
+  // APK: Test connection to a given IP and save if successful
+  const handleApkTestConnection = async () => {
+    const ip = apkIpInput.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    if (!ip) return;
+    setApkIpStatus('testing');
+    try {
+      const res = await fetch(`http://${ip}:5002/api/health`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        localStorage.setItem('resto_server_ip', ip);
+        setServerIp(ip);
+        setApkIpStatus('ok');
+        setTimeout(() => setShowApkIpPanel(false), 1200);
+      } else {
+        setApkIpStatus('fail');
+      }
+    } catch {
+      setApkIpStatus('fail');
+    }
+  };
+
+  const handleApkSaveIp = () => {
+    const ip = apkIpInput.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+    if (!ip) return;
+    localStorage.setItem('resto_server_ip', ip);
+    setServerIp(ip);
+    setShowApkIpPanel(false);
   };
 
   const handleActivate = async (e) => {
@@ -126,113 +175,214 @@ const LicenseScreen = ({ onValidLicense }) => {
 
   return (
     <BackgroundSlideshow formPosition="left">
-      <div className="w-full max-w-md relative z-10 animate-fade-in mx-auto">
-        
+      <div className="w-full max-w-md relative z-10 animate-fade-in mx-auto px-2 sm:px-0">
+
+        {/* APK Server Connection Panel — shown on Android if no IP configured */}
+        {isAPK && showApkIpPanel && (
+          <div className="mb-4 bg-orange-500/20 border border-orange-500/40 backdrop-blur-xl rounded-2xl p-5 animate-fade-in">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-orange-500/30 flex items-center justify-center">
+                <Wifi size={20} className="text-orange-400" />
+              </div>
+              <div>
+                <p className="font-black text-white text-base">Connect to POS Server</p>
+                <p className="text-orange-200 text-xs">Enter your PC/Desktop IP address</p>
+              </div>
+            </div>
+
+            {/* Step instructions */}
+            <div className="space-y-1.5 mb-4">
+              {[
+                { step: '1', text: 'Open the MS Billing Desktop app on your PC' },
+                { step: '2', text: 'Go to Settings → Network / QR Code to find your IP' },
+                { step: '3', text: 'Make sure both PC and Phone are on the same WiFi' },
+              ].map(({ step, text }) => (
+                <div key={step} className="flex items-start gap-2 text-xs text-orange-100">
+                  <span className="w-5 h-5 rounded-full bg-orange-500/50 text-white font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">{step}</span>
+                  <span>{text}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={apkIpInput}
+                onChange={(e) => setApkIpInput(e.target.value)}
+                placeholder="e.g. 192.168.1.10"
+                className="flex-1 py-2.5 px-3 bg-white/10 border border-white/20 text-white placeholder:text-gray-400 text-sm focus:outline-none focus:border-orange-400 transition-colors"
+                style={{ borderRadius: '10px' }}
+                onKeyDown={(e) => e.key === 'Enter' && handleApkTestConnection()}
+              />
+              <button
+                onClick={handleApkTestConnection}
+                disabled={apkIpStatus === 'testing' || !apkIpInput.trim()}
+                className="px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                style={{ borderRadius: '10px' }}
+              >
+                {apkIpStatus === 'testing' ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : apkIpStatus === 'ok' ? (
+                  <CheckCircle2 size={16} />
+                ) : (
+                  <Server size={16} />
+                )}
+                {apkIpStatus === 'testing' ? 'Testing...' : apkIpStatus === 'ok' ? 'Connected!' : 'Test'}
+              </button>
+            </div>
+
+            {apkIpStatus === 'fail' && (
+              <p className="text-red-300 text-xs mt-2 font-semibold">⚠️ Could not connect. Check the IP and ensure the Desktop app is running.</p>
+            )}
+            {apkIpStatus === 'ok' && (
+              <p className="text-green-300 text-xs mt-2 font-semibold">✅ Server found! Connecting...</p>
+            )}
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={handleApkSaveIp}
+                disabled={!apkIpInput.trim()}
+                className="flex-1 py-2 text-xs font-bold text-white/70 hover:text-white border border-white/20 rounded-lg transition-colors disabled:opacity-40"
+              >
+                Save Without Testing
+              </button>
+              <button
+                onClick={() => setShowApkIpPanel(false)}
+                className="flex-1 py-2 text-xs font-bold text-white/50 hover:text-white/80 transition-colors"
+              >
+                Skip (Use Cloud)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* APK: compact banner when IP is already set */}
+        {isAPK && !showApkIpPanel && (
+          <button
+            onClick={() => setShowApkIpPanel(true)}
+            className="w-full mb-3 flex items-center gap-2 px-4 py-2.5 bg-green-500/20 border border-green-500/30 rounded-xl text-green-200 text-xs font-semibold hover:bg-green-500/30 transition-colors"
+          >
+            <CheckCircle2 size={14} className="text-green-400" />
+            <span>Server: {localStorage.getItem('resto_server_ip') || 'Cloud'} — Tap to change</span>
+            <Smartphone size={14} className="ml-auto" />
+          </button>
+        )}
+
         {/* Logo Header */}
-        <div className="text-center mb-8 relative">
+        <div className="text-center mb-4 sm:mb-8 relative">
           <button 
             type="button"
             onClick={() => setShowSettings(true)}
             className="absolute top-0 right-0 p-2 text-white/50 hover:text-white transition-colors z-30"
             title="Server Settings"
           >
-            <Settings size={24} />
+            <Settings size={20} />
           </button>
           
-          <div className="inline-flex items-center justify-center w-24 h-24 mb-6 shadow-2xl rounded-full relative mt-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 mb-3 sm:mb-6 shadow-2xl rounded-full relative mt-2 sm:mt-4">
             <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
-            <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={20} />
+            <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={16} />
           </div>
-          <h1 className="text-4xl font-black text-white mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}</h1>
-          <p className="text-gray-300 font-bold uppercase tracking-widest text-sm">{t("Software Activation")}</p>
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-1 sm:mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}</h1>
+          <p className="text-gray-300 font-bold uppercase tracking-widest text-xs sm:text-sm">{t("Software Activation")}</p>
         </div>
 
         {/* Activation Form (Premium Glassmorphism) */}
-        <div className="bg-white/10 backdrop-blur-xl p-8 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative overflow-hidden w-full" style={{ borderRadius: '24px' }}>
+        <div className="bg-white/10 backdrop-blur-xl p-4 sm:p-8 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative overflow-hidden w-full max-w-full" style={{ borderRadius: '20px' }}>
           
           <div className="relative z-10">
-            <p className="text-center text-gray-300 mb-8 font-medium">{t("Please enter your registered Email and Password to activate your terminal.")}</p>
+            <p className="text-center text-[11px] sm:text-sm text-gray-300 mb-4 sm:mb-8 font-medium">{t("Please enter your registered Email and Password to activate your terminal.")}</p>
 
-            <form onSubmit={handleActivate} className="space-y-6">
+            <form onSubmit={handleActivate} className="space-y-4 sm:space-y-6">
               <div>
-                <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
-                  <User size={16} />{t("Email Address")}
+                <label className="text-xs sm:text-sm font-bold text-gray-200 flex items-center gap-2 mb-1.5 sm:mb-2">
+                  <User size={14} />{t("Email Address")}
                 </label>
                 <div className="relative">
-                  <User size={20} className="absolute left-4 top-4 text-gray-400" />
+                  <User size={18} className="absolute left-3.5 top-3.5 text-gray-400" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)} placeholder={t("restaurant@example.com")}
-                    className="w-full py-4 px-4 pl-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
-                    style={{ borderRadius: '16px' }}
+                    className="w-full py-3 sm:py-4 px-4 pl-11 sm:pl-12 border border-white/20 bg-white/5 text-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                    style={{ borderRadius: '12px' }}
                     autoFocus
                     required />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-bold text-gray-200 flex items-center gap-2 mb-2">
-                  <Key size={16} />{t("Password")}
+                <label className="text-xs sm:text-sm font-bold text-gray-200 flex items-center gap-2 mb-1.5 sm:mb-2">
+                  <Key size={14} />{t("Password")}
                 </label>
                 <div className="relative">
-                  <Key size={20} className="absolute left-4 top-4 text-gray-400" />
+                  <Key size={18} className="absolute left-3.5 top-3.5 text-gray-400" />
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full py-4 px-4 pl-12 pr-12 border border-white/20 bg-white/5 text-white placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
-                    style={{ borderRadius: '16px' }}
+                    className="w-full py-3 sm:py-4 px-4 pl-11 sm:pl-12 pr-10 border border-white/20 bg-white/5 text-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                    style={{ borderRadius: '12px' }}
                     required />
                   
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors">
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    className="absolute right-3.5 top-3.5 text-gray-400 hover:text-white transition-colors">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
 
               {error &&
-              <div className="bg-red-500/20 backdrop-blur-sm border border-red-500/50 text-red-100 p-4 text-sm font-bold flex items-start gap-3 animate-shake" style={{ borderRadius: '16px' }}>
-                  <ServerCrash size={20} className="shrink-0" />
-                  <p>{error}</p>
+                <div className="bg-red-500/20 backdrop-blur-sm border border-red-500/50 text-red-100 p-3 sm:p-4 text-xs sm:text-sm font-bold flex flex-col gap-2.5 animate-shake" style={{ borderRadius: '12px' }}>
+                  <div className="flex items-start gap-3">
+                    <ServerCrash size={18} className="shrink-0 mt-0.5" />
+                    <p>{error}</p>
+                  </div>
+                  {error.toLowerCase().includes('failed to fetch') && (
+                    <button 
+                      type="button" 
+                      onClick={() => setShowSettings(true)}
+                      className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-black self-start transition-all shadow-md flex items-center gap-1.5 active:scale-95"
+                    >
+                      <Settings size={14} /> Configure POS Server IP (WiFi)
+                    </button>
+                  )}
                 </div>
               }
 
               <button
                 type="submit"
                 disabled={loading || !email.trim() || !password.trim()}
-                className="w-full py-4 px-6 font-black text-white bg-orange-500 hover:bg-orange-600 transition-all duration-300 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
-                style={{ borderRadius: '16px' }}>
+                className="w-full py-3 sm:py-4 px-6 font-black text-white bg-orange-500 hover:bg-orange-600 transition-all duration-300 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm sm:text-base"
+                style={{ borderRadius: '12px' }}>
                 
                 {loading ?
-                <>
-                    <Loader2 size={20} className="animate-spin" />
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
                     <span>{t("Verifying License...")}</span>
                   </> :
-
-                <>
-                    <Shield size={20} />
+                  <>
+                    <Shield size={18} />
                     <span>{t("Activate Software")}</span>
                   </>
                 }
               </button>
             </form>
 
-            <div className="relative flex py-6 items-center">
+            <div className="relative flex py-4 sm:py-6 items-center">
               <div className="flex-grow border-t border-white/20"></div>
-              <span className="flex-shrink mx-4 text-xs font-bold text-gray-400 uppercase tracking-widest">{t("Or try it out")}</span>
+              <span className="flex-shrink mx-4 text-[10px] sm:text-xs font-bold text-gray-400 uppercase tracking-widest">{t("Or try it out")}</span>
               <div className="flex-grow border-t border-white/20"></div>
             </div>
 
             <button
               type="button"
               onClick={handleQuickDemo}
-              className="w-full py-4 px-6 font-bold text-white border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2"
-              style={{ borderRadius: '16px' }}>{t("🚀 Quick Demo Mode (No License Required)")}
+              className="w-full py-3 sm:py-4 px-6 font-bold text-white border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300 flex items-center justify-center gap-2 text-sm sm:text-base"
+              style={{ borderRadius: '12px' }}>{t("🚀 Quick Demo Mode (No License Required)")}
             </button>
           </div>
         </div>

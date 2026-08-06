@@ -322,19 +322,17 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
     <div className="p-4 w-full mx-auto space-y-4">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex items-center gap-4 mb-2">
-        <BackButton onClick={onGoBack} />
-      </div>
-
       {/* Header & Stats */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-4 rounded-xl text-white shadow-md">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Package className="w-6 h-6" />{t("Inventory & Stock Management")}
-          </h1>
-          <p className="text-amber-100 mt-1">{t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
-
-          </p>
+        <div className="flex items-start gap-3">
+          <BackButton onClick={onGoBack} className="shrink-0 mt-0.5 invert" />
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <Package className="w-6 h-6" />{t("Inventory & Stock Management")}
+            </h1>
+            <p className="text-amber-100 mt-1">{t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -386,46 +384,42 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-4 rounded-t-2xl">
+      <div className="flex border-b border-gray-200 bg-white px-2 sm:px-4 rounded-t-2xl overflow-x-auto">
         <button
           onClick={() => setActiveTab('stock')}
-          className={`py-4 px-6 font-semibold text-sm flex items-center gap-2 border-b-2 transition ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
           activeTab === 'stock' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          
-          <Package className="w-4 h-4" />{t("Stock Room (Raw Materials)")}
+          <Package className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Stock Room (Raw Materials)")}</span><span className="sm:hidden">{t("Stock")}</span>
         </button>
         <button
           onClick={() => setActiveTab('recipes')}
-          className={`py-4 px-6 font-semibold text-sm flex items-center gap-2 border-b-2 transition ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
           activeTab === 'recipes' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          
-          <Utensils className="w-4 h-4" />{t("Recipe Mapping & Costing")}
+          <Utensils className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Recipe Mapping & Costing")}</span><span className="sm:hidden">{t("Recipes")}</span>
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`py-4 px-6 font-semibold text-sm flex items-center gap-2 border-b-2 transition ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
           activeTab === 'logs' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          
-          <FileText className="w-4 h-4" />{t("Stock Audit Logs")}
+          <FileText className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Stock Audit Logs")}</span><span className="sm:hidden">{t("Logs")}</span>
         </button>
         <button
           onClick={() => {setActiveTab('predictions');fetchPredictions();}}
-          className={`py-4 px-6 font-semibold text-sm flex items-center gap-2 border-b-2 transition ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
           activeTab === 'predictions' ?
           'border-purple-600 text-purple-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          
-          <Brain className="w-4 h-4" />{t("🤖 AI Restock")}
+          <Brain className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("🤖 AI Restock")}</span><span className="sm:hidden">{t("AI")}</span>
         </button>
       </div>
 

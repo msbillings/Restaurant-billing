@@ -1,16 +1,19 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useEffect, useRef, useState } from 'react';
 import * as faceapi from 'face-api.js';
-import { Camera, X, Loader2, CheckCircle2, UserCircle, KeyRound, ArrowLeft } from 'lucide-react';
+import { Camera, X, Loader2, CheckCircle2, UserCircle, KeyRound, ArrowLeft, RefreshCw } from 'lucide-react';
 import { getPublicStaff, clockInOut } from '../api/staff';
+import { loadFaceModels, resetFaceModels } from '../services/faceService';
 
 const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
   const videoRef = useRef();
+  const streamRef = useRef(null);
   const [isModelsLoaded, setIsModelsLoaded] = useState(false);
   const [staffList, setStaffList] = useState([]);
   const [faceMatcher, setFaceMatcher] = useState(null);
 
   const [error, setError] = useState(null);
   const [statusMsg, setStatusMsg] = useState('Loading AI...');
+  const [recognitionError, setRecognitionError] = useState(null);
 
   const [matchedStaff, setMatchedStaff] = useState(null);
   const [actionSelection, setActionSelection] = useState(false); // When true, asks Clock In or Clock Out
@@ -20,68 +23,96 @@ const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
   const [pinInput, setPinInput] = useState('');
   const [capturedImage, setCapturedImage] = useState(null);
 
-  // 1. Load models and staff on mount
+  // Clear recognition error on navigation or panel state change
   useEffect(() => {
-    const init = async () => {
-      try {
-        await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-        faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-        faceapi.nets.faceRecognitionNet.loadFromUri('/models')]
-        );
+    if (usePinFallback || actionSelection || successMsg) {
+      setRecognitionError(null);
+    }
+  }, [usePinFallback, actionSelection, successMsg]);
 
-        setIsModelsLoaded(true);
-        setStatusMsg('Initializing Camera...');
+  // 1. Load models and staff on mount
+  const initAI = async () => {
+    try {
+      // Use centralized faceService which handles Capacitor/Electron/Browser path resolution
+      await loadFaceModels();
 
-        // Fetch all staff and their face descriptors (public)
-        const tenantDb = localStorage.getItem('resto_db_name');
-        const data = await getPublicStaff(tenantDb);
-        setStaffList(data);
+      setIsModelsLoaded(true);
+      setStatusMsg('Initializing Camera...');
 
-        // Build FaceMatcher
-        const labeledDescriptors = [];
-        data.forEach((s) => {
-          if (s.faceDescriptor && s.faceDescriptor.length > 0) {
-            labeledDescriptors.push(
-              new faceapi.LabeledFaceDescriptors(s._id, [new Float32Array(s.faceDescriptor)])
-            );
-          }
-        });
+      // Fetch all staff and their face descriptors (public)
+      const tenantDb = localStorage.getItem('resto_db_name');
+      const data = await getPublicStaff(tenantDb);
+      setStaffList(data);
 
-        if (labeledDescriptors.length > 0) {
-          setFaceMatcher(new faceapi.FaceMatcher(labeledDescriptors, 0.6));
+      // Build FaceMatcher
+      const labeledDescriptors = [];
+      data.forEach((s) => {
+        if (s.faceDescriptors && s.faceDescriptors.length > 0) {
+          const descriptors = s.faceDescriptors.map(desc => new Float32Array(desc));
+          labeledDescriptors.push(
+            new faceapi.LabeledFaceDescriptors(s._id, descriptors)
+          );
         }
+      });
 
-        startVideo();
-      } catch (err) {
-        console.error("AI Error:", err);
-        setError("Failed to initialize AI or Camera.");
+      if (labeledDescriptors.length > 0) {
+        setFaceMatcher(new faceapi.FaceMatcher(labeledDescriptors, 0.45));
       }
-    };
 
-    init();
+      await startVideo();
+    } catch (err) {
+      console.error("AI Error:", err);
+      if (isMountedRef.current) {
+        setError(err.message || "Failed to initialize AI or Camera. Please check permissions and try again.");
+      }
+    }
+  };
 
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    initAI();
     return () => {
+      isMountedRef.current = false;
       stopVideo();
     };
   }, []);
 
-  const startVideo = () => {
-    navigator.mediaDevices.getUserMedia({ video: true }).
-    then((stream) => {
+  const startVideo = async () => {
+    try {
+      const { requestCameraPermissions } = await import('../services/permissionsService.js');
+      const hasPermission = await requestCameraPermissions();
+      if (!hasPermission) {
+        if (isMountedRef.current) {
+          setError("Camera permission denied. Please use PIN Fallback.");
+        }
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (!isMountedRef.current) {
+        // Unmounted during getUserMedia resolve - stop camera immediately
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
-      setStatusMsg('Looking for faces...');
-    }).
-    catch((err) => {
-      setError("Camera permission denied. Please use PIN Fallback.");
-    });
+      if (isMountedRef.current) {
+        setStatusMsg('Looking for faces...');
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setError("Camera permission denied. Please use PIN Fallback.");
+      }
+    }
   };
 
   const stopVideo = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
   };
 
@@ -90,6 +121,9 @@ const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
     if (!isModelsLoaded || !faceMatcher || actionSelection || successMsg || usePinFallback || error) return;
 
     let interval;
+    // We maintain an array of recent detections to ensure recognition across consecutive frames
+    const recentRecognitions = [];
+
     const detect = async () => {
       if (!videoRef.current) return;
 
@@ -100,22 +134,46 @@ const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
 
       if (detection) {
         const match = faceMatcher.findBestMatch(detection.descriptor);
-        if (match.label !== 'unknown' && match.distance < 0.6) {
-          const staff = staffList.find((s) => s._id === match.label);
-          if (staff) {
-            setCapturedImage(capturePhoto());
-            setMatchedStaff(staff);
-            setActionSelection(true); // Pause detection, show options
+        if (match.label !== 'unknown' && match.distance < 0.45) {
+          recentRecognitions.push(match.label);
+          if (recentRecognitions.length > 3) recentRecognitions.shift();
+          
+          // Require 3 consecutive frames of the same person
+          if (recentRecognitions.length === 3 && recentRecognitions.every(l => l === match.label)) {
+            const staff = staffList.find((s) => s._id === match.label);
+            if (staff) {
+              setCapturedImage(capturePhoto());
+              setMatchedStaff(staff);
+              setActionSelection(true); // Pause detection, show options
+              recentRecognitions.length = 0; // Clear
+              setRecognitionError(null);
+            }
           }
+        } else {
+          recentRecognitions.length = 0; // Reset if unknown
+          setRecognitionError('Face is not registered. Please check.');
         }
+      } else {
+        recentRecognitions.length = 0;
+        setRecognitionError(null);
       }
     };
 
-    videoRef.current?.addEventListener('play', () => {
-      interval = setInterval(detect, 1000);
-    });
+    const startDetecting = () => {
+      if (interval) clearInterval(interval);
+      interval = setInterval(detect, 300); // Faster interval for continuous checks
+    };
 
-    return () => clearInterval(interval);
+    if (videoRef.current && !videoRef.current.paused) {
+      startDetecting();
+    }
+
+    videoRef.current?.addEventListener('play', startDetecting);
+
+    return () => {
+      clearInterval(interval);
+      videoRef.current?.removeEventListener('play', startDetecting);
+    };
   }, [isModelsLoaded, faceMatcher, actionSelection, successMsg, usePinFallback, staffList, error]);
 
   const capturePhoto = () => {
@@ -239,8 +297,16 @@ const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
               {error &&
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10 p-6 text-center">
                   <Camera className="text-red-500 mb-4" size={48} />
-                  <span className="text-red-500 font-bold mb-4">{error}</span>
-                  <button onClick={() => setUsePinFallback(true)} className="px-6 py-3 bg-slate-700 text-white rounded-xl font-bold">{t("Use PIN Instead")}</button>
+                  <span className="text-red-500 font-bold mb-4 text-sm">{error}</span>
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      onClick={() => { resetFaceModels(); setError(null); setIsModelsLoaded(false); setStatusMsg('Loading AI...'); initAI(); }}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center gap-2"
+                    >
+                      <RefreshCw size={14} /> {t("Retry")}
+                    </button>
+                    <button onClick={() => setUsePinFallback(true)} className="px-4 py-2 bg-slate-700 text-white rounded-xl font-bold text-sm">{t("Use PIN Instead")}</button>
+                  </div>
                 </div>
             }
 
@@ -265,7 +331,13 @@ const AIClockIn = ({ onBack }) => {const { t } = useLanguage();
             </div>
 
             <div className="mt-8 flex flex-col items-center">
-              <p className="text-slate-400 text-lg mb-4">{statusMsg}</p>
+              {recognitionError ? (
+                <div className="bg-red-500/20 border border-red-500/50 text-red-200 px-6 py-2 rounded-full text-base font-bold mb-4 animate-pulse">
+                  {t(recognitionError)}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-lg mb-4">{t(statusMsg)}</p>
+              )}
               {!error &&
             <button
               onClick={() => setUsePinFallback(true)}

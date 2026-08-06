@@ -2,11 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
-const TableDropdown = ({ floors, activeTable, onSelect, align = 'left' }) => {
+const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customButton, wrapperClass }) => {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
-  const [activeFloor, setActiveFloor] = useState(null);
-  const [activeCategory, setActiveCategory] = useState(null);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -14,8 +12,6 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left' }) => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
-        setActiveFloor(null);
-        setActiveCategory(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -25,16 +21,6 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left' }) => {
   const handleSelectTable = (tableName) => {
     onSelect(tableName);
     setIsOpen(false);
-    setActiveFloor(null);
-    setActiveCategory(null);
-  };
-
-  const getCategories = (floor) => {
-    const cats = [];
-    if (floor.tables?.length > 0) cats.push({ type: 'Table', items: floor.tables, name: t('table') || 'Table' });
-    if (floor.cabins?.length > 0) cats.push({ type: 'Cabin', items: floor.cabins, name: t('cabin') || 'Cabin' });
-    if (floor.sofas?.length > 0) cats.push({ type: 'Sofa', items: floor.sofas, name: t('sofa') || 'Sofa' });
-    return cats;
   };
 
   const renderCurrentTable = () => {
@@ -43,92 +29,112 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left' }) => {
   };
 
   return (
-    <div className="relative z-50 w-full h-full flex items-center justify-center" ref={dropdownRef}>
-      <button 
-        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className="flex items-center justify-center w-full h-full gap-2 bg-transparent font-bold focus:outline-none text-sm py-1 cursor-pointer"
-      >
-        <span>{renderCurrentTable()}</span>
-        <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
+    <div className={wrapperClass || "relative z-[90] w-full h-full flex items-center justify-center"} ref={dropdownRef}>
+      {customButton ? (
+        <div onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} className="w-full h-full cursor-pointer">
+          {customButton}
+        </div>
+      ) : (
+        <button 
+          onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+          className="flex items-center justify-center w-full h-full gap-2 bg-transparent font-bold focus:outline-none text-sm py-1 cursor-pointer"
+        >
+          <span>{renderCurrentTable()}</span>
+          <ChevronDown size={14} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+      )}
 
       {isOpen && (
-        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-visible z-50`}>
+        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-visible z-[1000000]`}>
           {floors.length === 0 ? (
             // Default 20 tables if no floors
-            <div className="max-h-60 overflow-y-auto">
+            <div className="max-h-60 overflow-y-auto custom-scrollbar">
               {[...Array(20)].map((_, i) => {
                 const num = String(i + 1).padStart(2, '0');
                 return (
                   <div
                     key={i}
-                    onClick={() => handleSelectTable(`TBL-${num}`)}
-                    className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectTable(`TBL-${num}`);
+                    }}
+                    className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer flex items-center justify-between group"
                   >
-                    {t('table')} {num}
+                    <span className="font-medium text-gray-700 group-hover:text-red-600">TBL-{num}</span>
+                    <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div className="flex flex-col">
-              {/* Floor List */}
-              <div className="w-full">
-                {floors.map((floor, idx) => {
-                  const categories = getCategories(floor);
-                  if (categories.length === 0) return null;
-                  const isHovered = activeFloor === floor.id;
+            <div className="flex flex-col max-h-[60vh] overflow-y-auto custom-scrollbar">
+              {floors.map((floor, idx) => {
+                const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0 || floor.spaces?.length > 0;
+                if (!hasItems) return null;
 
-                  return (
-                    <div
-                      key={floor.id || idx}
-                      onMouseEnter={() => { setActiveFloor(floor.id); setActiveCategory(null); }}
-                      className={`relative px-4 py-2 flex items-center justify-between cursor-pointer ${isHovered ? 'bg-red-50 text-red-600' : 'hover:bg-red-50 hover:text-red-600'}`}
-                    >
-                      <span>{floor.name}</span>
-                      <ChevronRight size={14} />
-
-                      {/* Category List (Sub Menu 1) */}
-                      {isHovered && (
-                        <div className={`absolute top-0 ${align === 'right' ? 'right-full' : 'left-full'} w-32 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-gray-700 min-h-full z-10`} style={{ marginTop: '-4px' }}>
-                          {categories.map((cat, catIdx) => {
-                            const isCatHovered = activeCategory === cat.type;
-                            return (
-                              <div
-                                key={catIdx}
-                                onMouseEnter={() => setActiveCategory(cat.type)}
-                                className={`relative px-4 py-2 flex items-center justify-between cursor-pointer ${isCatHovered ? 'bg-red-50 text-red-600' : 'hover:bg-red-50 hover:text-red-600'}`}
-                              >
-                                {align === 'right' && <ChevronRight size={14} className="rotate-180" />}
-                                <span>{cat.name}</span>
-                                {align !== 'right' && <ChevronRight size={14} />}
-
-                                {/* Table List (Sub Menu 2) */}
-                                {isCatHovered && (
-                                  <div className={`absolute top-0 ${align === 'right' ? 'right-full' : 'left-full'} w-40 bg-white border border-gray-200 rounded-lg shadow-xl py-1 text-gray-700 max-h-60 overflow-y-auto z-20`} style={{ marginTop: '-4px' }}>
-                                    {cat.items.map((item, itemIdx) => (
-                                      <div
-                                        key={itemIdx}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleSelectTable(item.name);
-                                        }}
-                                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer"
-                                      >
-                                        {item.name}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                return (
+                  <div key={floor.id || idx} className="flex flex-col">
+                    {/* Floor Header (Sticky like optgroup) */}
+                    <div className="sticky top-0 z-10 px-3 py-1.5 bg-gray-50 text-gray-500 font-bold text-xs uppercase tracking-wider border-b border-t border-gray-200 mt-1 first:mt-0">
+                      {floor.name}
                     </div>
-                  );
-                })}
-              </div>
+
+                    {/* All items for this floor */}
+                    {floor.tables?.map((item, itemIdx) => (
+                      <div
+                        key={`t-${itemIdx}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectTable(`${floor.name} - ${item.name}`);
+                        }}
+                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
+                      >
+                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
+                      </div>
+                    ))}
+                    {floor.cabins?.map((item, itemIdx) => (
+                      <div
+                        key={`c-${itemIdx}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectTable(`${floor.name} - ${item.name}`);
+                        }}
+                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
+                      >
+                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('cabin') || 'Cabin'})</span>
+                      </div>
+                    ))}
+                    {floor.sofas?.map((item, itemIdx) => (
+                      <div
+                        key={`s-${itemIdx}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectTable(`${floor.name} - ${item.name}`);
+                        }}
+                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
+                      >
+                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('sofa') || 'Sofa'})</span>
+                      </div>
+                    ))}
+                    {floor.spaces?.map((item, itemIdx) => (
+                      <div
+                        key={`sp-${itemIdx}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectTable(`${floor.name} - ${item.name}`);
+                        }}
+                        className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
+                      >
+                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t(item.type || 'space') || item.type || 'Space'})</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

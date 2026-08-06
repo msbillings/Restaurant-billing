@@ -201,6 +201,15 @@ app.get('/', (req, res) => {
   });
 });
 
+// APK connectivity test — used by LicenseScreen to verify server is reachable before saving IP
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'MS Billing Backend',
+    timestamp: new Date().toISOString()
+  });
+});
+
 import fs from 'fs';
 import path from 'path';
 

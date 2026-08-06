@@ -19,7 +19,9 @@ import {
   refundOrder,
   transferTable,
   mergeTableOrders,
-  getEditedBills
+  getEditedBills,
+  resolveItemCancel,
+  updateItemPrepTime
 } from '../controllers/billController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
@@ -44,7 +46,9 @@ router.post('/transfer/:id', transferTable);
 router.post('/merge', mergeTableOrders);
 router.post('/kot/:id', authenticateToken, generateKOT);
 router.post('/kot/item/status', authenticateToken, updateKOTItemStatus);
+router.post('/kot/item/prep-time', authenticateToken, updateItemPrepTime);
 router.post('/refund/:id', authenticateToken, refundOrder);
+router.post('/resolve-item-cancel', authenticateToken, resolveItemCancel);
 
 // DELETE - Requires password verification in controller
 router.delete('/:id', authenticateToken, deleteBill);

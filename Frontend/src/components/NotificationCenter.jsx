@@ -1,19 +1,23 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ArrowLeft, Bell, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send } from 'lucide-react';
+import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2 } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
 import BackButton from './common/BackButton';
+import ConfirmationModal from './ConfirmationModal';
 
 const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {const { t } = useLanguage();
   const [localNotifications, setLocalNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [readIds, setReadIds] = useState(new Set());
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [resolvedNotifs, setResolvedNotifs] = useState({});
 
   // Hook handles fetching broadcasts automatically
-  const { broadcasts, markAsRead: markBroadcastRead } = useBroadcasts(userRole);
+  const { broadcasts, markAsRead: markBroadcastRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, markAllAsRead: markRtAllRead, clearNotification } = useNotifications(userRole);
 
   useEffect(() => {
@@ -120,6 +124,26 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
     }
   };
 
+  const handleResolveCancel = async (notif, action) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
+        orderId: notif.data.orderId,
+        itemId: notif.data.itemId,
+        action
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setResolvedNotifs(prev => ({ ...prev, [notif.id]: action }));
+      setTimeout(() => {
+        clearNotification(notif.id);
+      }, 3000);
+    } catch (error) {
+      console.error(`Error ${action}ing cancellation:`, error);
+      alert(`Failed to ${action} cancellation`);
+    }
+  };
+
   // Combine and sort all notifications
   const formattedBroadcasts = broadcasts.map((b) => ({
     id: b._id,
@@ -145,23 +169,27 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   const SUPERADMIN_URL = getSuperadminApiUrl();
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 px-2.5 py-4 sm:p-6 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 sm:mb-8 shrink-0 gap-3">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Bell className="text-primary" />{t("Notification Center")}
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <Bell className="text-primary" size={20} />{t("Notification Center")}
             </h1>
-            <p className="text-sm text-gray-500">{t("System alerts, broadcasts, and updates")}</p>
+            <p className="text-xs sm:text-sm text-gray-500">{t("System alerts, broadcasts, and updates")}</p>
           </div>
         </div>
         
         {allNotifications.length > 0 &&
         <button
-          onClick={() => { clearAllLocal(); clearNotification('ALL'); }}
-          className="text-sm font-bold text-gray-500 hover:text-red-500 transition-colors">{t("Clear All")}
-        </button>
+          onClick={() => setShowClearModal(true)}
+          className="flex items-center justify-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-xl transition-all font-semibold text-xs sm:text-sm shadow-sm self-start sm:self-auto shrink-0">
+          
+            <Trash2 size={14} className="sm:hidden" />
+            <Trash2 size={16} className="hidden sm:block" />
+            {t("Clear All")}
+          </button>
         }
       </div>
 
@@ -169,10 +197,11 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
         {loading && broadcasts.length === 0 ?
         <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
         allNotifications.length === 0 ?
-        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <Bell size={64} className="mb-4 opacity-20" />
-            <h3 className="text-xl font-bold text-gray-500">{t("All caught up!")}</h3>
-            <p>{t("You have no new notifications.")}</p>
+        <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
+            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center">
+              <BellOff size={40} className="text-gray-300" />
+            </div>
+            <p className="text-lg font-medium">{t("No new notifications")}</p>
           </div> :
 
         allNotifications.map((notif) => {
@@ -180,21 +209,22 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
           const isBroadcast = notif.type === 'broadcast';
 
           return (
-            <div key={notif.id} className={`bg-white p-5 rounded-2xl shadow-sm border ${isBroadcast ? 'border-purple-200 shadow-purple-100/50' : 'border-gray-100'} flex gap-4 items-start transition-all hover:shadow-md`}>
-                <div className={`p-3 rounded-xl ${notif.bg} ${notif.color} shrink-0`}>
-                  <Icon size={24} />
+            <div key={notif.id} className={`bg-white p-3 sm:p-5 rounded-2xl shadow-sm border ${isBroadcast ? 'border-purple-200 shadow-purple-100/50' : 'border-gray-100'} flex gap-3 sm:gap-4 items-start transition-all hover:shadow-md`}>
+                <div className={`p-2 sm:p-3 rounded-xl ${notif.bg} ${notif.color} shrink-0`}>
+                  <Icon size={20} className="sm:hidden" />
+                  <Icon size={24} className="hidden sm:block" />
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-gray-800 text-lg">{t(notif.title)}</h3>
-                    <div className="flex items-center gap-1 text-xs text-gray-400 font-medium">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
+                    <h3 className="font-bold text-gray-800 text-base sm:text-lg truncate">{t(notif.title)}</h3>
+                    <div className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-400 font-medium shrink-0">
                       <Clock size={12} />
                       {formatTimeAgo(notif.timestamp || notif.time)}
                     </div>
                   </div>
                   
-                  <p className="text-gray-700 leading-relaxed mb-3 whitespace-pre-wrap">{t(notif.message)}</p>
+                  <p className="text-gray-700 leading-relaxed text-xs sm:text-sm mb-3 whitespace-pre-wrap">{t(notif.message)}</p>
                   
                   {isBroadcast && notif.imageUrl &&
                 <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">
@@ -208,9 +238,11 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
                     href={notif.fileUrl.startsWith('http') ? notif.fileUrl : `${SUPERADMIN_URL}${notif.fileUrl}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors text-sm">
+                    className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors text-xs sm:text-sm">
                     
-                        <Download size={16} />{t("Download")}{notif.fileType === 'apk' ? 'Update (APK)' : notif.fileType === 'ipa' ? 'Update (IPA)' : 'Attachment'}
+                        <Download size={14} className="sm:hidden" />
+                        <Download size={16} className="hidden sm:block" />
+                        {t("Download")}{notif.fileType === 'apk' ? 'Update (APK)' : notif.fileType === 'ipa' ? 'Update (IPA)' : 'Attachment'}
                       </a>
                     </div>
                 }
@@ -222,38 +254,82 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
 
                     value={replyText[notif.id] || ''}
                     onChange={(e) => handleReplyChange(notif.id, e.target.value)}
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                     onKeyDown={(e) => {if (e.key === 'Enter') handleSendReply(notif.id);}} />
                   
                       <button
                     onClick={() => handleSendReply(notif.id)}
                     disabled={isSubmittingReply || !replyText[notif.id]?.trim()}
-                    className="bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0">
+                    className="bg-purple-600 hover:bg-purple-700 text-white p-1.5 sm:p-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0">
                     
-                        <Send size={18} />
+                        <Send size={16} className="sm:hidden" />
+                        <Send size={18} className="hidden sm:block" />
                       </button>
                     </div>
                 }
+                
+                {notif.data?.type === 'cancel_item_request' && (
+                  <div className="mt-3 flex gap-2">
+                    {resolvedNotifs[notif.id] ? (
+                      <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
+                        {resolvedNotifs[notif.id] === 'accept' ? t("Accepted") : t("Rejected")}
+                      </span>
+                    ) : (
+                      <>
+                        <button 
+                          onClick={() => handleResolveCancel(notif, 'accept')}
+                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors"
+                        >
+                          {t("Accept")}
+                        </button>
+                        <button 
+                          onClick={() => handleResolveCancel(notif, 'reject')}
+                          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors"
+                        >
+                          {t("Reject")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
                 </div>
                 
                 <button
                 onClick={() => {
                   if (isBroadcast) {
                     markBroadcastRead(notif.id);
-                  } else {
-                    markLocalAsRead(notif.id);
-                    clearNotification(notif.id);
                   }
+                  setReadIds((prev) => {
+                    const newSet = new Set(prev);
+                    newSet.add(notif.id);
+                    return newSet;
+                  });
                 }}
-                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-xl transition-colors shrink-0" title={t("Mark as read / Dismiss")}>
+                className={`p-1.5 sm:p-2 rounded-xl transition-colors shrink-0 ${readIds.has(notif.id) ? 'text-green-500 bg-green-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`} title={t("Mark as read / Dismiss")}>
                 
-                  <CheckCircle size={20} />
+                  <CheckCircle size={18} className={readIds.has(notif.id) ? 'fill-green-100 sm:hidden' : 'sm:hidden'} />
+                  <CheckCircle size={20} className={readIds.has(notif.id) ? 'fill-green-100 hidden sm:block' : 'hidden sm:block'} />
                 </button>
               </div>);
 
         })
         }
       </div>
+
+      <ConfirmationModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={() => {
+          clearAllLocal();
+          clearNotification('ALL');
+          clearAllBroadcasts();
+        }}
+        title={t("Clear All Notifications")}
+        message={t("Are you sure you want to delete these notifications permanently?")}
+        confirmText={t("Clear")}
+        cancelText={t("Cancel")}
+        isDanger={true}
+      />
     </div>);
 
 };

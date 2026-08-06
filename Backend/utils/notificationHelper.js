@@ -2,7 +2,7 @@
  * Utility to broadcast real-time notifications to connected clients via Socket.io
  */
 
-export const emitNotification = (req, title, message, type = 'info', targetRoles = ['Admin']) => {
+export const emitNotification = (req, title, message, type = 'info', targetRoles = ['Admin'], data = {}) => {
   try {
     const io = req.app?.locals?.io;
     if (io) {
@@ -12,7 +12,8 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
         message,
         time: new Date().toISOString(),
         type, // 'info', 'success', 'warning', 'error'
-        targetRoles
+        targetRoles,
+        data
       };
 
       const tenantDb = req.models?.connection?.name || req.headers['x-tenant-db'];

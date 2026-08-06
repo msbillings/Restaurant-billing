@@ -127,178 +127,235 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   });
 
   return (
-    <div className="h-full flex flex-col bg-background p-6">
-      <div className="flex justify-between items-center mb-6 p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-slate-50 p-3 sm:p-6 overflow-y-auto custom-scrollbar w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6 p-4 bg-white rounded-2xl border border-slate-200 shadow-xs shrink-0">
+        <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-text-main">{t("Pickup Orders")}</h1>
-            <p className="text-text-muted">{t("View and manage pickup orders")}</p>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{t("Pickup Orders")}</h1>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium">{t("View and manage pickup orders")}</p>
           </div>
         </div>
         
-        <div className="flex gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
-              type="text" placeholder={t("Search Bill #...")}
-
+              type="text"
+              placeholder={t("Search Bill #...")}
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main w-64" />
-            
+              className="w-full sm:w-64 pl-9 pr-3.5 py-2.5 bg-slate-100 border-none rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-primary/20 transition-all" />
           </div>
 
           <div className="relative">
             <button
               onClick={() => setShowPlatformFilter(!showPlatformFilter)}
-              className="flex items-center gap-2 pl-3 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-text-main">
-              
-              <Filter size={18} className="text-text-muted" />
+              className="flex items-center gap-2 pl-3 pr-8 py-2.5 bg-slate-100 border-none rounded-xl text-xs sm:text-sm font-bold text-slate-700 touch-target">
+              <Filter size={16} className="text-slate-400" />
               <span>{t(platformFilter === 'all' ? 'All' : platformFilter)}</span>
-              <ChevronDown size={16} className={`absolute right-3 transition-transform ${showPlatformFilter ? 'rotate-180' : ''}`} />
+              <ChevronDown size={14} className={`absolute right-3 transition-transform ${showPlatformFilter ? 'rotate-180' : ''}`} />
             </button>
             
             {showPlatformFilter &&
-            <div className="absolute top-full right-0 mt-2 bg-surface border border-border rounded-xl shadow-lg p-2 z-20 min-w-[140px]">
+              <div className="absolute top-full right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-20 min-w-[140px]">
                 {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) =>
-              <button
-                key={platform}
-                onClick={() => {
-                  setPlatformFilter(platform);
-                  setCurrentPage(1);
-                  setShowPlatformFilter(false);
-                }}
-                className={`w-full text-left px-4 py-2 rounded-lg font-medium transition-all ${
-                platformFilter === platform ?
-                'bg-primary text-white' :
-                'text-text-muted hover:text-text-main hover:bg-surface-hover'}`
-                }>
-                
+                  <button
+                    key={platform}
+                    onClick={() => {
+                      setPlatformFilter(platform);
+                      setCurrentPage(1);
+                      setShowPlatformFilter(false);
+                    }}
+                    className={`w-full text-left px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                      platformFilter === platform ?
+                      'bg-primary text-white' :
+                      'text-slate-600 hover:bg-slate-100'
+                    }`}>
                     {t(platform === 'all' ? 'All' : platform)}
                   </button>
-              )}
+                )}
               </div>
             }
           </div>
 
           <button
             onClick={fetchPickupOrders}
-            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl hover:bg-surface-hover transition-all text-text-main">
-            
+            className="p-2.5 bg-slate-100 rounded-xl hover:bg-slate-200 transition-all text-slate-600 touch-target"
+            title={t("Refresh")}>
             <RefreshCw size={18} />
           </button>
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden flex-1 flex flex-col shadow-sm">
-        <div className="overflow-y-auto flex-1">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden flex-1 flex flex-col shadow-xs">
+        {/* Desktop Table View (Hidden on mobile <768px) */}
+        <div className="hidden md:block overflow-y-auto flex-1 custom-scrollbar">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-background sticky top-0 z-10">
+            <thead className="bg-slate-50 sticky top-0 z-10">
               <tr>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Bill #")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">
-                  <div className="flex items-center gap-2">{t("Date & Time")}
-
-                    <span className="text-xs text-primary font-normal">{t("(Latest First)")}</span>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider">{t("Bill #")}</th>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <span>{t("Date & Time")}</span>
+                    <span className="text-[10px] text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Platform")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border">{t("Payment")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-right">{t("Total")}</th>
-                <th className="p-4 font-semibold text-text-muted border-b border-border text-center">{t("Action")}</th>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider">{t("Platform")}</th>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider">{t("Payment")}</th>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider text-right">{t("Total")}</th>
+                <th className="p-4 font-bold text-slate-500 border-b border-slate-100 text-xs uppercase tracking-wider text-center">{t("Action")}</th>
               </tr>
             </thead>
             <tbody>
               {loading ?
-              [...Array(8)].map((_, i) =>
-              <tr key={i} className="border-b border-border animate-pulse">
-                    <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
+                [...Array(8)].map((_, i) =>
+                  <tr key={i} className="border-b border-slate-100 animate-pulse">
+                    <td className="p-4"><div className="w-12 h-4 bg-slate-100 rounded"></div></td>
                     <td className="p-4">
-                      <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
-                      <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
+                      <div className="w-20 h-4 bg-slate-100 rounded mb-1"></div>
+                      <div className="w-12 h-3 bg-slate-100 rounded"></div>
                     </td>
-                    <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="flex justify-end gap-2">
-                      <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                    </div></td>
+                    <td className="p-4"><div className="w-16 h-5 bg-slate-100 rounded"></div></td>
+                    <td className="p-4"><div className="w-20 h-4 bg-slate-100 rounded"></div></td>
+                    <td className="p-4"><div className="w-14 h-4 bg-slate-100 rounded ml-auto"></div></td>
+                    <td className="p-4"><div className="w-16 h-8 bg-slate-100 rounded mx-auto"></div></td>
                   </tr>
-              ) :
-              filteredOrders.length === 0 ?
-              <tr>
-                  <td colSpan="6" className="p-8 text-center text-text-muted">
-                    <div className="flex flex-col items-center gap-4">
-                      <ShoppingBag size={48} className="text-text-muted" />
+                ) :
+                filteredOrders.length === 0 ?
+                <tr>
+                  <td colSpan="6" className="p-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center gap-3">
+                      <ShoppingBag size={48} className="text-slate-300" />
                       <div>
-                        <h3 className="text-lg font-bold text-text-main mb-2">{t("No Pickup Orders")}</h3>
-                        <p className="text-text-muted">{t("No orders match your current filters")}</p>
+                        <h3 className="text-lg font-bold text-slate-800 mb-1">{t("No Pickup Orders")}</h3>
+                        <p className="text-xs text-slate-500">{t("No orders match your current filters")}</p>
                       </div>
                     </div>
                   </td>
                 </tr> :
 
-              filteredOrders.map((order) =>
-              <tr key={order._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
-                    <td className="p-4 font-medium text-text-main">#{order.billNumber}</td>
-                    <td className="p-4 text-text-muted">
+                filteredOrders.map((order) =>
+                  <tr key={order._id} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                    <td className="p-4 font-bold text-slate-800 font-mono text-sm">#{order.billNumber}</td>
+                    <td className="p-4 text-slate-500">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-text-main">{new Date(order.updatedAt || order.createdAt).toLocaleDateString()}</span>
-                        <span className="text-xs">{new Date(order.updatedAt || order.createdAt).toLocaleTimeString()}</span>
+                        <span className="text-xs font-bold text-slate-700">{new Date(order.updatedAt || order.createdAt).toLocaleDateString()}</span>
+                        <span className="text-[10px]">{new Date(order.updatedAt || order.createdAt).toLocaleTimeString()}</span>
                       </div>
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${getPlatformColor(order.orderSource || 'Other')}`}>
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getPlatformColor(order.orderSource || 'Other')}`}>
                         {t(order.orderSource || 'Other')}
                       </span>
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-2 text-text-main">
-                        <CreditCard size={16} className="text-text-muted" />
+                      <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium">
+                        <CreditCard size={14} className="text-slate-400" />
                         <span>{t(order.paymentMode)}</span>
                       </div>
                     </td>
-                    <td className="p-4 font-bold text-text-main text-right">₹{order.total?.toFixed(2) || '0.00'}</td>
+                    <td className="p-4 font-black text-slate-800 text-right text-sm">₹{order.total?.toFixed(2) || '0.00'}</td>
                     <td className="p-4 text-center">
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-1.5">
                         <button
-                      onClick={async () => {
-                        setLoadingBill(true);
-                        try {
-                          // Fetch full bill details with all items
-                          const fullBill = await getBillById(order._id);
-                          setSelectedBill(fullBill);
-                        } catch (error) {
-                          console.error('Error fetching bill details:', error);
-                          setToast({ message: 'Failed to load bill details', type: 'error' });
-                        } finally {
-                          setLoadingBill(false);
-                        }
-                      }}
-                      disabled={loadingBill}
-                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" title={t("View Invoice")}>
-
-                      
+                          onClick={async () => {
+                            setLoadingBill(true);
+                            try {
+                              const fullBill = await getBillById(order._id);
+                              setSelectedBill(fullBill);
+                            } catch (error) {
+                              console.error('Error fetching bill details:', error);
+                              setToast({ message: 'Failed to load bill details', type: 'error' });
+                            } finally {
+                              setLoadingBill(false);
+                            }
+                          }}
+                          disabled={loadingBill}
+                          className="p-2 hover:bg-slate-100 rounded-xl text-primary transition-colors touch-target" title={t("View Invoice")}>
                           <Eye size={18} />
                         </button>
                         <button
-                      onClick={() => handleDeleteClick(order._id)}
-                      className="p-2 hover:bg-danger/10 rounded-lg text-danger transition-colors inline-flex items-center gap-2" title={t("Delete Order")}>
-
-                      
+                          onClick={() => handleDeleteClick(order._id)}
+                          className="p-2 hover:bg-red-50 rounded-xl text-red-500 transition-colors touch-target" title={t("Delete Order")}>
                           <Trash2 size={18} />
                         </button>
                       </div>
                     </td>
                   </tr>
-              )
+                )
               }
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Responsive Stacked Card View (Visible on screens <768px) */}
+        <div className="md:hidden overflow-y-auto flex-1 p-3 space-y-3 custom-scrollbar">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="text-center py-12 p-4">
+              <ShoppingBag size={40} className="mx-auto text-slate-300 mb-2" />
+              <h3 className="text-base font-bold text-slate-800 mb-1">{t("No Pickup Orders")}</h3>
+              <p className="text-xs text-slate-500">{t("No orders match your current filters")}</p>
+            </div>
+          ) : (
+            filteredOrders.map((order) => (
+              <div key={order._id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="font-mono font-bold text-slate-800 text-base">#{order.billNumber}</span>
+                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                      {new Date(order.updatedAt || order.createdAt).toLocaleDateString()} • {new Date(order.updatedAt || order.createdAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getPlatformColor(order.orderSource || 'Other')}`}>
+                    {t(order.orderSource || 'Other')}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+                    <CreditCard size={14} className="text-slate-400" />
+                    <span>{t(order.paymentMode)}</span>
+                  </div>
+                  <span className="font-black text-slate-900 text-base">₹{order.total?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={async () => {
+                      setLoadingBill(true);
+                      try {
+                        const fullBill = await getBillById(order._id);
+                        setSelectedBill(fullBill);
+                      } catch (error) {
+                        console.error('Error fetching bill details:', error);
+                        setToast({ message: 'Failed to load bill details', type: 'error' });
+                      } finally {
+                        setLoadingBill(false);
+                      }
+                    }}
+                    disabled={loadingBill}
+                    className="flex-1 py-2.5 bg-primary/10 text-primary font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 touch-target">
+                    <Eye size={16} />
+                    <span>{t("Invoice")}</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(order._id)}
+                    className="p-2.5 bg-red-50 text-red-500 rounded-xl touch-target"
+                    title={t("Delete Order")}>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
         
         {/* Pagination Controls */}

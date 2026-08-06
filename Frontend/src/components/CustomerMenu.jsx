@@ -36,6 +36,29 @@ const CustomerMenu = () => {
 
   // Live Order Tracking State
   const [activeOrderData, setActiveOrderData] = useState(null);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getPrepCountdown = (item) => {
+    if (!item || !item.prepTimeMinutes) return null;
+    const startMs = item.prepStartTime ? new Date(item.prepStartTime).getTime() : now;
+    const totalMs = item.prepTimeMinutes * 60 * 1000;
+    const elapsedMs = now - startMs;
+    const remainingMs = totalMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      return { remainingMins: 0, remainingSecs: 0, isOverdue: true, percent: 100 };
+    }
+
+    const remainingMins = Math.floor(remainingMs / 60000);
+    const remainingSecs = Math.floor((remainingMs % 60000) / 1000);
+    const percent = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
+    return { remainingMins, remainingSecs, isOverdue: false, percent };
+  };
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +75,7 @@ const CustomerMenu = () => {
   const isDragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
   const didDrag = useRef(false);
+  const dragStartPos = useRef({ x: 0, y: 0 });
 
   // Order tracking modal
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -59,13 +83,20 @@ const CustomerMenu = () => {
   const handleBellPointerDown = useCallback((e) => {
     isDragging.current = true;
     didDrag.current = false;
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
     dragOffset.current = { x: e.clientX - bellPos.x, y: e.clientY - bellPos.y };
     e.currentTarget.setPointerCapture(e.pointerId);
   }, [bellPos]);
 
   const handleBellPointerMove = useCallback((e) => {
     if (!isDragging.current) return;
-    didDrag.current = true;
+    
+    const dx = e.clientX - dragStartPos.current.x;
+    const dy = e.clientY - dragStartPos.current.y;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      didDrag.current = true;
+    }
+
     const newX = Math.max(0, Math.min(window.innerWidth - 48, e.clientX - dragOffset.current.x));
     const newY = Math.max(0, Math.min(window.innerHeight - 48, e.clientY - dragOffset.current.y));
     setBellPos({ x: newX, y: newY });
@@ -78,6 +109,51 @@ const CustomerMenu = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const tenant = urlParams.get('tenant');
   const table = urlParams.get('table');
+
+  const handleRequestItemCancel = async (item) => {
+    const itemId = item._id;
+    let cancelQty = item.quantity;
+    
+    if (item.quantity > 1) {
+      const qtyStr = window.prompt(`Enter quantity to cancel (Max: ${item.quantity - (item.cancelledQuantity || 0)}):`, '1');
+      if (qtyStr === null) return; // User cancelled prompt
+      cancelQty = parseInt(qtyStr, 10);
+      
+      const maxCancellable = item.quantity - (item.cancelledQuantity || 0);
+      if (isNaN(cancelQty) || cancelQty <= 0 || cancelQty > maxCancellable) {
+        alert(`Invalid quantity. Please enter a number between 1 and ${maxCancellable}`);
+        return;
+      }
+    }
+
+    try {
+      const tenant = urlParams.get('tenant') || 'default';
+      const tableNo = urlParams.get('table');
+      await axios.post(`${API_BASE_URL}/public/request-item-cancel`, {
+        orderId: activeOrderData._id,
+        itemId,
+        tableNo,
+        cancelQty
+      }, {
+        headers: { 'X-Tenant-DB': tenant }
+      });
+      
+      // Update local state to show pending
+      setActiveOrderData(prev => {
+        if (!prev) return prev;
+        const newItems = prev.items.map(i => 
+          i._id === itemId ? { ...i, cancellationRequested: true, cancellationRequestedQty: cancelQty } : i
+        );
+        return { ...prev, items: newItems };
+      });
+      
+      setServiceMessage(`Cancellation requested for ${cancelQty} item(s)`);
+      setTimeout(() => setServiceMessage(''), 3000);
+    } catch (error) {
+      console.error('Error requesting cancellation:', error);
+      alert('Failed to request cancellation');
+    }
+  };
 
   useEffect(() => {
     if (!tenant || !table) {
@@ -135,6 +211,16 @@ const CustomerMenu = () => {
     socket.on('orderUpdated', checkOrderStatus);
     socket.on('newKOT', checkOrderStatus);
     socket.on('billSettled', checkOrderStatus);
+    socket.on('prepTimeUpdated', (data) => {
+      setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
+      setTimeout(() => setServiceMessage(''), 5000);
+      checkOrderStatus();
+    });
+    socket.on('cancellationResolved', (data) => {
+      setServiceMessage(`Item cancellation ${data.action}ed: ${data.itemName}`);
+      setTimeout(() => setServiceMessage(''), 3000);
+      checkOrderStatus();
+    });
     
     // Fast poll fallback every 3 seconds for instant response
     const interval = setInterval(checkOrderStatus, 3000);
@@ -551,6 +637,80 @@ const CustomerMenu = () => {
                       );
                     })}
                   </div>
+
+                  {/* Items List */}
+                  {activeOrderData.items && activeOrderData.items.length > 0 && (
+                    <div className="mt-4 bg-white/10 rounded-2xl p-4 max-h-[30vh] overflow-y-auto custom-scrollbar flex flex-col gap-3">
+                      <h3 className="font-bold text-sm border-b border-white/20 pb-2 mb-1">{t("Order Details")}</h3>
+                      {activeOrderData.items.map(item => (
+                        <div key={item._id} className={`flex items-center justify-between gap-2 ${item.isCancelled ? 'opacity-50' : ''}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-bold text-sm truncate ${item.isCancelled ? 'line-through' : ''}`}>
+                              {item.quantity - (item.cancelledQuantity || 0)}x {item.name}
+                              {item.cancelledQuantity > 0 && !item.isCancelled && <span className="text-[10px] ml-1 bg-red-500/20 px-1.5 py-0.5 rounded text-red-100">({item.cancelledQuantity} Cancelled)</span>}
+                            </p>
+                            {(() => {
+                              const cd = getPrepCountdown(item);
+                              if (!cd || item.isCancelled) return null;
+                              return (
+                                <div className="mt-1 bg-amber-500/20 border border-amber-500/40 rounded-xl p-2 text-amber-200 text-[11px] flex flex-col gap-1 w-full">
+                                  <div className="flex justify-between items-center font-bold">
+                                    <span>⏱️ Est. Prep: {item.prepTimeMinutes}m</span>
+                                    <span className={cd.isOverdue ? 'text-amber-300 font-extrabold animate-pulse' : 'text-amber-300 font-extrabold'}>
+                                      {cd.isOverdue ? '⚡ Ready Soon!' : `⏳ ${cd.remainingMins}m ${cd.remainingSecs}s left`}
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-slate-900/80 rounded-full h-1.5 overflow-hidden">
+                                    <div 
+                                      className="bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-1000" 
+                                      style={{ width: `${cd.percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                            {item.specialNote && <p className="text-[10px] text-white/70 truncate">Note: {item.specialNote}</p>}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`font-black text-sm ${item.isCancelled ? 'line-through' : ''}`}>
+                              ₹{item.price * (item.quantity - (item.cancelledQuantity || 0))}
+                            </span>
+                            {item.isCancelled ? (
+                              <span className="text-[10px] font-bold bg-red-500/50 px-2 py-1 rounded-full text-white/90">{t("Cancelled")}</span>
+                            ) : item.cancellationRejected ? (
+                              <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-1 rounded-full text-white/90">{t("Rejected")}</span>
+                            ) : item.cancellationRequested ? (
+                              <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">{item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}</span>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
+                                className="text-[10px] font-bold bg-red-500/80 hover:bg-red-500 px-2 py-1 rounded-full transition-colors"
+                              >
+                                {t("Cancel")}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      <div className="border-t border-white/20 pt-2 mt-1 space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span>{t("Subtotal")}</span>
+                          <span>₹{activeOrderData.subTotal}</span>
+                        </div>
+                        {activeOrderData.tax > 0 && (
+                          <div className="flex justify-between text-xs text-white/80">
+                            <span>{t("Taxes (CGST/SGST)")}</span>
+                            <span>₹{activeOrderData.tax}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-black text-sm pt-1">
+                          <span>{t("Total")}</span>
+                          <span>₹{activeOrderData.total}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Close button — only closes the modal, does NOT cancel the order */}
                   <button

@@ -81,7 +81,11 @@ const BackgroundSlideshow = ({ children, formPosition = 'right' }) => {
       <div className="relative z-10 w-full h-full min-h-screen flex flex-col md:flex-row">
         
         {/* Left Side */}
-        <div className={`flex-1 flex flex-col justify-center p-8 sm:p-12 lg:p-24 ${formPosition === 'left' ? 'order-2 md:order-1' : 'order-1 md:order-1'}`}>
+        <div className={`flex-col justify-center p-4 sm:p-12 lg:p-24 ${
+          formPosition === 'left' 
+            ? 'order-2 md:order-1 flex flex-1' 
+            : 'hidden md:flex md:flex-1 order-1 md:order-1'
+        }`}>
           {formPosition === 'right' ? (
             <AnimatePresence mode="wait">
               <motion.div
@@ -110,7 +114,11 @@ const BackgroundSlideshow = ({ children, formPosition = 'right' }) => {
         </div>
 
         {/* Right Side */}
-        <div className={`flex-1 flex flex-col justify-center p-8 sm:p-12 lg:p-24 ${formPosition === 'left' ? 'order-1 md:order-2' : 'order-2 md:order-2'}`}>
+        <div className={`flex-col justify-center p-4 sm:p-12 lg:p-24 ${
+          formPosition === 'left' 
+            ? 'hidden md:flex md:flex-1 order-1 md:order-2' 
+            : 'order-2 md:order-2 flex flex-1'
+        }`}>
           {formPosition === 'right' ? (
             <div className="w-full max-w-md mx-auto xl:ml-auto xl:mr-0">
               {children}

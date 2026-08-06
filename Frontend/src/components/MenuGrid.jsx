@@ -6,22 +6,23 @@ Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie } from
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
 
-const getCategoryIcon = (catName) => {
+const getCategoryIcon = (catName, isSelected = false) => {
   const name = catName.toLowerCase();
-  if (name === 'all') return <MenuIcon size={20} className="shrink-0 text-gray-500" />;
-  if (catName === '⭐ Favourites' || name.includes('favorite')) return <Star size={20} className="shrink-0 text-yellow-500" />;
+  const baseColor = isSelected ? 'text-white' : 'text-gray-500';
+  if (name === 'all') return <MenuIcon size={20} className={`shrink-0 ${baseColor}`} />;
+  if (catName === '⭐ Favourites' || name.includes('favorite')) return <Star size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-yellow-500'}`} />;
 
-  if (name.includes('kids')) return <Smile size={20} className="shrink-0 text-pink-500" />;
-  if (name.includes('pizza')) return <Pizza size={20} className="shrink-0 text-orange-500" />;
-  if (name.includes('burger')) return <Beef size={20} className="shrink-0 text-amber-700" />;
-  if (name.includes('sandwich')) return <Sandwich size={20} className="shrink-0 text-amber-500" />;
-  if (name.includes('wrap') || name.includes('shawarma') || name.includes('roll')) return <Scroll size={20} className="shrink-0 text-amber-600" />;
-  if (name.includes('rice') || name.includes('biryani') || name.includes('bowl')) return <Soup size={20} className="shrink-0 text-orange-600" />;
-  if (name.includes('fried') || name.includes('spicy')) return <Flame size={20} className="shrink-0 text-red-500" />;
-  if (name.includes('snack')) return <Popcorn size={20} className="shrink-0 text-yellow-500" />;
-  if (name.includes('buddy') || name.includes('family') || name.includes('combo')) return <Users size={20} className="shrink-0 text-blue-500" />;
-  if (name.includes('meal')) return <UtensilsCrossed size={20} className="shrink-0 text-blue-600" />;
-  if (name.includes('offer') || name.includes('weekly')) return <Gift size={20} className="shrink-0 text-purple-500" />;
+  if (name.includes('kids')) return <Smile size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-pink-500'}`} />;
+  if (name.includes('pizza')) return <Pizza size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-orange-500'}`} />;
+  if (name.includes('burger')) return <Beef size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-amber-700'}`} />;
+  if (name.includes('sandwich')) return <Sandwich size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-amber-500'}`} />;
+  if (name.includes('wrap') || name.includes('shawarma') || name.includes('roll')) return <Scroll size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-amber-600'}`} />;
+  if (name.includes('rice') || name.includes('biryani') || name.includes('bowl')) return <Soup size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-orange-600'}`} />;
+  if (name.includes('fried') || name.includes('spicy')) return <Flame size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-red-500'}`} />;
+  if (name.includes('snack')) return <Popcorn size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-yellow-500'}`} />;
+  if (name.includes('buddy') || name.includes('family') || name.includes('combo')) return <Users size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-blue-500'}`} />;
+  if (name.includes('meal')) return <UtensilsCrossed size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-blue-600'}`} />;
+  if (name.includes('offer') || name.includes('weekly')) return <Gift size={20} className={`shrink-0 ${isSelected ? 'text-white' : 'text-purple-500'}`} />;
 
   // Generate a deterministic random icon and color for unhandled categories
   const icons = [Utensils, Cookie, Star, Smile, Flame, Popcorn, Soup, Pizza, Sandwich, Scroll, Beef, Gift, UtensilsCrossed];
@@ -35,7 +36,7 @@ const getCategoryIcon = (catName) => {
   const IconComponent = icons[Math.abs(hash) % icons.length];
   const colorClass = colors[Math.abs(hash) % colors.length];
 
-  return <IconComponent size={20} className={`shrink-0 ${colorClass}`} />;
+  return <IconComponent size={20} className={`shrink-0 ${isSelected ? 'text-white' : colorClass}`} />;
 };
 
 const formatImageUrl = (url) => {
@@ -263,40 +264,57 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
 
 
   return (
-    <div className="flex flex-row h-full bg-white overflow-hidden">
-      {/* Left Sidebar: Categories */}
+    <div className="flex flex-col md:flex-row h-full bg-white overflow-hidden w-full">
+      {/* Mobile Top Category Scrollbar (Visible on small screens) */}
+      <div className="flex md:hidden overflow-x-auto category-scroll py-2 px-3 bg-gray-50 border-b border-gray-200 shrink-0 gap-2 w-full no-scrollbar">
+        {categoryOptions.map((cat) => {
+          const isSelected = category === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all shadow-xs ${
+                isSelected
+                  ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-sm'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+              }`}>
+              {getCategoryIcon(cat, isSelected)}
+              <span>{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Desktop Left Sidebar: Categories (Hidden on mobile) */}
       <div
         style={{ width: leftSidebarWidth }}
-        className="flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3">
-        
+        className="hidden md:flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3 border-r border-gray-200">
         <div className="flex flex-col w-full gap-1">
-          {categoryOptions.map((cat, idx) => {
+          {categoryOptions.map((cat) => {
             const isSelected = category === cat;
-            const bgClass = isSelected ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-md rounded-xl mx-2 font-bold' : 'bg-transparent text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-xl mx-2 font-bold';
+            const bgClass = isSelected ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-md rounded-xl mx-2 font-bold' : 'bg-transparent text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-xl mx-2 font-bold';
             return (
               <button
                 key={cat}
-                className={`w-full text-left px-4 py-3 text-[16px] transition-all flex items-center justify-between ${bgClass}`}
+                className={`w-full text-left px-4 py-3 text-[15px] transition-all flex items-center justify-between ${bgClass}`}
                 onClick={() => setCategory(cat)}>
-                
-                <div className="flex items-center gap-3 flex-1 min-w-0 pr-1">
-                  {getCategoryIcon(cat)}
-                  <span className="wrap-break-word leading-tight whitespace-pre-wrap font-medium">{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
+                <div className="flex items-center gap-3 flex-1 min-w-0 pr-1 truncate">
+                  {getCategoryIcon(cat, isSelected)}
+                  <span className="truncate font-medium">{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
                 </div>
                 {isSelected && <ChevronRight size={18} className="text-white shrink-0 ml-1" />}
-              </button>);
-
+              </button>
+            );
           })}
         </div>
       </div>
       
-      {/* Left Sidebar Drag Handle */}
-      {!isLayoutLocked &&
-      <div
-        onMouseDown={startResizingLeft}
-        className="w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative shadow-[-1px_0_0_0_#f3f4f6]" />
-
-      }
+      {/* Left Sidebar Drag Handle (Desktop only) */}
+      {!isLayoutLocked && (
+        <div
+          onMouseDown={startResizingLeft}
+          className="hidden md:block w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative" />
+      )}
       
       {/* Items Grid Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
