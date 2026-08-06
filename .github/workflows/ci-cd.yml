@@ -17,11 +17,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Backend Dependencies
         working-directory: ./Backend
-        run: npm ci || npm install
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci || npm install --no-audit
 
       - name: Verify Backend Syntax
         working-directory: ./Backend
@@ -29,7 +31,7 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm ci || npm install
+        run: npm ci || npm install --no-audit
 
       - name: Build Frontend
         working-directory: ./Frontend
