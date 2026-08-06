@@ -3,24 +3,24 @@ name: Build and Release MS Billing
 on:
   push:
     tags:
-      - "v*" # This triggers the workflow ONLY when you push a tag like v1.4.0
-  workflow_dispatch: # This adds the "Run workflow" button!
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
-  release:
-    name: Build & Publish for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+  # ─── Windows EXE ──────────────────────────────────────────────────────────
+  build-exe:
+    name: Build Windows .EXE
+    runs-on: windows-latest
     timeout-minutes: 60
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-
-    # This permission is required for the automatic GITHUB_TOKEN to upload releases
-    permissions:
-      contents: write
-
     steps:
-      - name: 📥 Check out Git repository
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
       - name: ⚙️ Setup Node.js
@@ -44,71 +44,75 @@ jobs:
         working-directory: ./Desktop
         run: npm install
 
-      - name: 🔄 Run Desktop Prebuild (Combines files)
+      - name: 🔄 Run Desktop Prebuild
         working-directory: ./Desktop
         run: npm run prebuild
 
-      - name: 🚀 Build and Publish App to GitHub Releases
+      - name: 🚀 Build and Publish EXE to GitHub Releases
         working-directory: ./Desktop
-        # Runs electron-builder on Mac to build .dmg, and on Windows to build .exe
-        # The -p always flag automatically uploads it to GitHub Releases
         run: npx electron-builder -p always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔐 Decode Android Keystore
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
-        working-directory: ./Frontend/android
-        run: |
-          $keystoreBytes = [System.Convert]::FromBase64String("${{ secrets.KEYSTORE_BASE64 }}")
-          [System.IO.File]::WriteAllBytes("keystore.jks", $keystoreBytes)
+  # ─── Android APK ──────────────────────────────────────────────────────────
+  build-apk:
+    name: Build Android .APK
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-      - name: 🔍 Verify Capacitor
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: ☕ Setup Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npx cap --version
+        run: npm install
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./Frontend
+        run: npm run build
 
       - name: 📱 Sync Capacitor Android
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend
         run: npx cap sync android
 
-      - name: ☕ Setup Java
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+      - name: 🔑 Generate Release Keystore
+        working-directory: ./Frontend/android
+        run: |
+          keytool -genkeypair -v -keystore keystore.jks -alias msbilling -keyalg RSA -keysize 2048 -validity 10000 `
+            -storepass "MsBilling@2026#Secure!" -keypass "MsBilling@2026#Secure!" `
+            -dname "CN=MS Billing, OU=Restaurant, O=MS Billings, L=City, ST=State, C=IN"
 
       - name: 🔨 Build Android APK
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
         working-directory: ./Frontend/android
         env:
-          CI: "true"
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: .\gradlew.bat assembleRelease
+          KEYSTORE_PASSWORD: "MsBilling@2026#Secure!"
+          KEY_ALIAS: "msbilling"
+          KEY_PASSWORD: "MsBilling@2026#Secure!"
+        run: .\gradlew.bat assembleRelease assembleDebug
 
-      - name: ✅ Verify APK Exists
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
-        shell: pwsh
-        run: |
-          if (!(Test-Path "Frontend/android/app/build/outputs/apk/release/*.apk")) {
-            Write-Error "APK not generated."
-            exit 1
-          }
-
-      - name: 🚀 Upload APK to GitHub Releases
-        if: false # matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+      - name: 📤 Upload APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          files: Frontend/android/app/build/outputs/apk/release/*.apk
+          tag_name: ${{ github.ref_name }}
+          files: |
+            Frontend/android/app/build/outputs/apk/release/*.apk
+            Frontend/android/app/build/outputs/apk/debug/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🧹 Cleanup Keystore
-        if: false # always() && matrix.os == 'windows-latest' (Disabled until Admin adds secrets)
+        if: always()
         working-directory: ./Frontend/android
         shell: pwsh
         run: Remove-Item keystore.jks -Force -ErrorAction SilentlyContinue
