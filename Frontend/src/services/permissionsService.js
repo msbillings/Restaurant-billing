@@ -105,22 +105,43 @@ export const checkCameraPermission = async () => {
 };
 
 export const requestMicPermissions = async () => {
-  try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { VoiceRecorder } = await import('capacitor-voice-recorder');
+      const canRecord = await VoiceRecorder.hasAudioRecordingPermission();
+      if (canRecord.value) {
+        setPermStorage('mic', 'granted');
+        return true;
+      }
+      const permission = await VoiceRecorder.requestAudioRecordingPermission();
+      if (permission.value) {
+        setPermStorage('mic', 'granted');
+        return true;
+      }
+      setPermStorage('mic', 'denied');
+      return false;
+    } catch (e) {
+      console.warn("Native mic permission failed:", e);
+      return false;
+    }
+  } else {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        setPermStorage('mic', 'granted');
+        return true;
+      }
       setPermStorage('mic', 'granted');
       return true;
+    } catch (error) {
+      if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        setPermStorage('mic', 'granted');
+        return true;
+      }
+      console.error("Mic permission denied", error);
+      return false;
     }
-    setPermStorage('mic', 'granted');
-    return true;
-  } catch (error) {
-    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-      setPermStorage('mic', 'granted');
-      return true;
-    }
-    console.error("Mic permission denied", error);
-    return false;
   }
 };
 
@@ -237,6 +258,12 @@ export const checkAllPermissions = async () => {
       const { LocalNotifications } = await import('@capacitor/local-notifications');
       const notif = await LocalNotifications.checkPermissions();
       if (notif.display) results.notifications = notif.display;
+    } catch {/* ignore */}
+
+    try {
+      const { VoiceRecorder } = await import('capacitor-voice-recorder');
+      const canRecord = await VoiceRecorder.hasAudioRecordingPermission();
+      if (canRecord.value) results.mic = 'granted';
     } catch {/* ignore */}
   } else {
     // Browser / Electron

@@ -9,18 +9,14 @@ let modelsLoaded = false;
  * - Browser (Web): /models resolves from the public folder
  */
 const getModelsUri = () => {
-  // Capacitor native platform — models are bundled in the APK assets
-  // Capacitor serves the web app from capacitor://localhost/ and /models maps to public/models
-  if (typeof window !== 'undefined' && window.location && window.location.protocol === 'capacitor:') {
-    return '/models';
+  if (typeof window !== 'undefined' && window.location) {
+    // Electron (file:// protocol)
+    if (window.location.protocol === 'file:') {
+      return './models';
+    }
+    // Capacitor / Web: Use absolute path with origin to prevent fetch failures
+    return window.location.origin + '/models';
   }
-
-  // Electron (file:// protocol)
-  if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
-    return './models';
-  }
-
-  // Default: browser or Vite dev server
   return '/models';
 };
 
@@ -61,7 +57,7 @@ export const loadFaceModels = async () => {
 
   // All paths failed
   modelsLoaded = false;
-  throw new Error('Failed to load AI models. Please ensure the app has internet access or re-install.');
+  throw new Error(`Failed to load AI models from ${primaryPath}. Please ensure the app has internet access or re-install.`);
 };
 
 /**
