@@ -386,10 +386,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
         setCustomerPhone(order.customerPhone || '');
         setCustomerName(order.customerName || '');
-        setDiscount({
-          type: order.discountType || 'percentage',
-          value: order.discountValue || ''
-        });
+        if (!isBackground || forceReset) {
+          setDiscount({
+            type: order.discountType || 'percentage',
+            value: order.discountValue || ''
+          });
+        }
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           let tot = 0;

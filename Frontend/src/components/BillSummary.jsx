@@ -352,10 +352,10 @@ const BillSummary = ({
         {/* Collapsible Charges Section */}
         <div className="bg-gray-50 flex flex-col relative w-full border-b border-gray-200">
           <button
-            className="w-full h-6 bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors border-t border-gray-200"
+            className="w-full h-7 bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors border-t border-gray-200"
             onClick={() => setShowCharges(!showCharges)}>
 
-            {showCharges ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {showCharges ? <ChevronUp size={18} className="text-primary stroke-[2.5]" /> : <ChevronDown size={18} className="text-primary stroke-[2.5]" />}
           </button>
 
           {showCharges &&

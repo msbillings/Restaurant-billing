@@ -2,7 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
@@ -542,7 +542,7 @@ const CustomerMenu = () => {
             className="fixed bottom-6 left-0 right-0 px-4 z-30"
           >
             <button
-              onClick={() => setShowOrderModal(true)}
+              onClick={() => setShowOrderModal(prev => !prev)}
               className={`w-full text-white rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
                 activeOrderData.kitchenStatus === 'Ready'
                   ? 'bg-emerald-600 border-2 border-emerald-400'
@@ -559,7 +559,16 @@ const CustomerMenu = () => {
                   ? t("Order in Kitchen")
                   : t("Order Received")}
               </span>
-              <span className="font-black text-base shrink-0">₹{activeOrderData.total}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-black text-base">₹{activeOrderData.total}</span>
+                {/* Toggle arrow — points UP when modal open, DOWN when closed */}
+                <ChevronUp
+                  size={22}
+                  color="#ffffff"
+                  strokeWidth={2.5}
+                  style={{ transform: showOrderModal ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }}
+                />
+              </div>
             </button>
           </motion.div>
 
@@ -681,6 +690,8 @@ const CustomerMenu = () => {
                               <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-1 rounded-full text-white/90">{t("Rejected")}</span>
                             ) : item.cancellationRequested ? (
                               <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">{item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}</span>
+                            ) : (item.kdsStatus === 'Preparing' || item.kdsStatus === 'Ready') ? (
+                              <span className="text-[10px] font-bold bg-amber-500/40 px-2 py-1 rounded-full text-white/90">👨‍🍳 {t("Preparing...")}</span>
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
