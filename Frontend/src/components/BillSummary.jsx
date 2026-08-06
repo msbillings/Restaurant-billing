@@ -15,6 +15,7 @@ const BillSummary = ({
   orderStatus,
   activeTable,
   onSaveOrder,
+  onHoldOrder,
   onGenerateBill,
   onSettleBill,
   onPrintKOT,
@@ -164,27 +165,21 @@ const BillSummary = ({
     <div className="flex flex-col h-full bg-white overflow-hidden border-l border-gray-300">
 
       {/* Top Tabs */}
-      <div className="flex w-[calc(100%-24px)] mx-3 mt-3 mb-1 bg-gray-100 h-10 shrink-0 p-1 gap-1 rounded-xl shadow-inner">
+      <div className="flex w-[calc(100%-12px)] mx-1.5 mt-1.5 mb-0.5 bg-gray-100 h-7 shrink-0 p-0.5 gap-0.5 rounded-lg shadow-inner">
         <button
           onClick={() => !isLocked && setBillType('Dine-In')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Dine-In' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[10px] flex items-center justify-center transition-all rounded-md ${billType === 'Dine-In' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Dine In")}
-
-
         </button>
         <button
           onClick={() => !isLocked && setBillType('Delivery')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Delivery' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[10px] flex items-center justify-center transition-all rounded-md ${billType === 'Delivery' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Delivery")}
-
-
         </button>
         <button
           onClick={() => !isLocked && setBillType('Takeaway')}
-          className={`flex-1 font-bold text-[13px] flex items-center justify-center transition-all rounded-lg ${billType === 'Takeaway' ? 'bg-white text-gray-900 shadow-[0_2px_8px_rgba(0,0,0,0.08)]' : 'text-gray-500 hover:text-gray-700'}`
+          className={`flex-1 font-bold text-[10px] flex items-center justify-center transition-all rounded-md ${billType === 'Takeaway' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`
           }>{t("Pick Up")}
-
-
         </button>
       </div>
 
@@ -224,46 +219,46 @@ const BillSummary = ({
       )}
 
       {/* Info Bar */}
-      <div className="flex items-center gap-2 p-3 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-1.5">
-          <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-12 h-12 bg-red-50 border border-red-100 rounded-xl text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
-            <span className="text-[9px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
-            <span className="text-[13px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
+      <div className="flex items-center gap-1 px-3 py-1 border-b border-gray-100 bg-white">
+        <div className="flex items-center gap-0.5">
+          <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-8 h-8 bg-red-50 border border-red-100 rounded-lg text-red-600 overflow-hidden px-0.5 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
+            <span className="text-[6px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
+            <span className="text-[10px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
               {activeTable ? (() => {
                 const p = activeTable.includes('-') ? activeTable.split('-').pop().trim() : activeTable;
                 const m = p.match(/^([a-zA-Z]+).*?(\d+)$/);
-                return m ? `${m[1][0].toUpperCase()} ${m[2]}` : p.substring(0, 4);
+                return m ? `${m[1][0].toUpperCase()}${m[2]}` : p.substring(0, 3);
               })() : '--'}
             </span>
           </div>
-          <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-12 h-12 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <Users size={16} className="mb-0.5 opacity-80" />
-            <span className="text-[10px] font-bold leading-none">{pax}</span>
+          <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
+            <Users size={11} className="mb-0.5 opacity-80" />
+            <span className="text-[8px] font-bold leading-none">{pax}</span>
           </div>
-          <div onClick={handleWaiterClick} className="flex items-center justify-center w-12 h-12 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <UserCheck size={18} className="opacity-80" />
+          <div onClick={handleWaiterClick} className="flex items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
+            <UserCheck size={12} className="opacity-80" />
           </div>
-          <div onClick={handleNoteClick} className="flex items-center justify-center w-12 h-12 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <Clipboard size={18} className="opacity-80" />
+          <div onClick={handleNoteClick} className="flex items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
+            <Clipboard size={12} className="opacity-80" />
           </div>
         </div>
 
-        <div className="flex-1 flex justify-end">
+        <div className="flex-1 flex justify-end min-w-0">
           {activeTable ?
-            <div className="flex flex-col items-end mr-2">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{t("Current Table")}</span>
-              <span className="text-[13px] font-black text-gray-700 truncate max-w-[180px]" title={activeTable}>{activeTable}</span>
+            <div className="flex flex-col items-end">
+              <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{t("Current Table")}</span>
+              <span className="text-[10px] font-black text-gray-700 truncate max-w-[100px]" title={activeTable}>{activeTable}</span>
             </div> :
-            <div className="relative h-10 w-full min-w-[140px]">
+            <div className="relative h-7 w-full min-w-[100px] max-w-[140px]">
               <TableDropdown
                 floors={floors}
                 activeTable={null}
                 align="right"
                 onSelect={(val) => onSelectTable && onSelectTable(val)}
                 customButton={
-                  <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all shadow-md flex items-center justify-center px-4 animate-pulse gap-1.5">
+                  <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-md flex items-center justify-center px-1.5 animate-pulse gap-0.5">
                     {t("Select Table")}
-                    <ChevronDown size={16} />
+                    <ChevronDown size={11} />
                   </button>
                 }
               />
@@ -273,52 +268,51 @@ const BillSummary = ({
       </div>
 
       {/* Table Headers */}
-      <div className="flex items-center px-3 py-2 bg-gray-100 border-b border-gray-200 text-gray-500 text-[10px] font-bold uppercase tracking-wider shrink-0">
-        <div className="w-[45%]">{t("Items")}</div>
-        <div className="w-[20%] text-center">{t("Check Items")}</div>
-        <div className="w-[20%] text-center">{t("Qty.")}</div>
-        <div className="w-[15%] text-right pr-2">{t("Price")}</div>
+      <div className="flex items-center px-3 py-0.5 bg-gray-100 border-b border-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wider shrink-0">
+        <div className="w-[42%]">{t("Items")}</div>
+        <div className="w-[16%] text-center hidden sm:block">{t("Check")}</div>
+        <div className="w-[26%] text-center">{t("Qty.")}</div>
+        <div className="w-[16%] text-right pr-1">{t("Price")}</div>
       </div>
 
       {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto bg-white p-1">
+      <div className="flex-1 overflow-y-auto bg-white p-0.5">
         {cart.length === 0 ?
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <span className="text-sm">{t("No items added")}</span>
+            <span className="text-xs">{t("No items added")}</span>
           </div> :
 
           cart.map((item, index) =>
-            <div key={index} className={`flex items-start py-2 px-2 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
+            <div key={index} className={`flex items-start py-1.5 px-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
               {/* Delete Icon */}
               <button
                 onClick={() => updateQuantity(item._id || item.name, -item.quantity)}
                 disabled={isLocked || item.isCancelled}
-                className="w-6 h-6 rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center shrink-0 mt-0 mr-1 transition-all disabled:opacity-50">
-
-                <X size={14} strokeWidth={3} />
+                className="w-5 h-5 rounded-full text-gray-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center shrink-0 mt-0.5 mr-1 transition-all disabled:opacity-50">
+                <X size={12} strokeWidth={3} />
               </button>
 
               {/* Item Name */}
-              <div className="flex-1 pr-2">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[13px] text-gray-700 font-medium leading-tight ${item.isCancelled ? 'line-through' : ''}`}>{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
-                  {item.isCancelled ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold">{t("Cancelled")}</span>
-                  : item.cancellationRejected ? <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-bold">{t("Rejected")}</span>
-                  : item.cancellationRequested ? <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-bold">{t("Pending Cancel")}</span>
-                  : item.cancelledQuantity > 0 ? <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold whitespace-nowrap">({item.cancelledQuantity} {t("Cancelled")})</span> : null}
+              <div className="flex-1 min-w-0 pr-1">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <span className={`text-[11px] text-gray-700 font-medium leading-tight ${item.isCancelled ? 'line-through' : ''}`}>{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
+                  {item.isCancelled ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>
+                  : item.cancellationRejected ? <span className="text-[9px] bg-gray-200 text-gray-700 px-1 py-0.5 rounded font-bold">{t("Rejected")}</span>
+                  : item.cancellationRequested ? <span className="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-bold">{t("Pending")}</span>
+                  : item.cancelledQuantity > 0 ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span> : null}
                   <button
                     onClick={() => handleItemNoteClick(item)}
                     disabled={isLocked || item.isCancelled}
                     className="text-gray-400 hover:text-orange-500 transition-colors p-0.5"
                     title={t("Add special note for this item")}
                   >
-                    <Clipboard size={12} />
+                    <Clipboard size={10} />
                   </button>
                 </div>
                 {item.specialNote ? (
                   <div
                     onClick={() => handleItemNoteClick(item)}
-                    className="text-[11px] text-amber-600 font-bold cursor-pointer hover:underline mt-0.5 flex items-center gap-1"
+                    className="text-[9px] text-amber-600 font-bold cursor-pointer hover:underline mt-0.5 flex items-center gap-0.5 truncate"
                   >
                     <span>📝 {item.specialNote}</span>
                   </div>
@@ -326,27 +320,25 @@ const BillSummary = ({
               </div>
 
               {/* Quantity Controls */}
-              <div className="flex items-center gap-2 w-[85px] shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+              <div className="flex items-center gap-0 w-[72px] shrink-0 bg-gray-100 rounded-md overflow-hidden border border-gray-200">
                 <button
                   onClick={() => updateQuantity(item._id || item.name, -1)}
                   disabled={isLocked || item.isCancelled}
-                  className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
-
-                  <Minus size={14} />
+                  className="flex-1 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
+                  <Minus size={11} />
                 </button>
-                <span className={`font-bold text-sm text-gray-800 shrink-0 w-4 text-center ${item.isCancelled ? 'line-through' : ''}`}>{item.quantity - (item.cancelledQuantity || 0)}</span>
+                <span className={`font-bold text-[11px] text-gray-800 shrink-0 w-5 text-center ${item.isCancelled ? 'line-through' : ''}`}>{item.quantity - (item.cancelledQuantity || 0)}</span>
                 <button
                   onClick={() => updateQuantity(item._id || item.name, 1)}
                   disabled={isLocked || item.isCancelled}
-                  className="flex-1 h-7 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
-
-                  <Plus size={14} />
+                  className="flex-1 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
+                  <Plus size={11} />
                 </button>
               </div>
 
               {/* Price */}
-              <div className="w-[60px] shrink-0 text-right flex flex-col justify-center h-7 pr-2">
-                <div className={`text-[13px] font-bold text-gray-700 ${item.isCancelled ? 'line-through text-gray-400' : ''}`}>{(item.price * (item.quantity - (item.cancelledQuantity || 0))).toFixed(2)}</div>
+              <div className="w-[50px] shrink-0 text-right flex flex-col justify-center h-6 pr-1">
+                <div className={`text-[11px] font-bold text-gray-700 ${item.isCancelled ? 'line-through text-gray-400' : ''}`}>{(item.price * (item.quantity - (item.cancelledQuantity || 0))).toFixed(0)}</div>
               </div>
             </div>
           )
@@ -422,100 +414,85 @@ const BillSummary = ({
           }
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
+        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100">
+          <div className="flex items-center gap-1">
+            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
             <button
               onClick={() => {
                 setSplitWays(pax > 1 ? pax : 2);
                 setShowSplitCalcModal(true);
               }}
-              className="bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
-
-
+              className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-500 text-sm font-bold uppercase tracking-wider">{t("Total")}</span>
-            <span className="text-primary text-2xl font-black">{currencySymbol}{total.toFixed(0)}</span>
+          <div className="flex items-center gap-0.5">
+            <span className="text-gray-500 text-[9px] font-bold uppercase tracking-wider">{t("Total")}</span>
+            <span className="text-primary text-base font-black">{currencySymbol}{total.toFixed(0)}</span>
           </div>
         </div>
 
         {/* Row 3: Settlement */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <span className="text-gray-600 text-[13px] font-bold uppercase tracking-wider">{t("Settlement Amount")}</span>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100">
+          <span className="text-gray-600 text-[9px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
+          <div className="flex items-center gap-1 ml-1">
             <input
               type="number"
               value={settlementAmount}
               onChange={(e) => setSettlementAmount(e.target.value)}
-              className="w-[100px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-[14px]" />
-
+              className="w-[70px] h-6 bg-white border border-gray-200 text-gray-800 text-right px-1 rounded outline-none focus:border-primary font-bold text-[11px]" />
             <button
               onClick={(e) => {
                 e.preventDefault();
                 setIsPaid(true);
                 if (onSettleBill) onSettleBill();
               }}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md transition-all">{t("Settle")}
-
-
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap">{t("Settle")}
             </button>
           </div>
         </div>
 
         {/* Row 4: Checkboxes */}
-        <div className="flex items-center justify-center gap-12 py-2.5 bg-gray-50/30">
-          <label className="flex items-center gap-2 text-gray-600 text-[13px] font-bold cursor-pointer">
-            <div className={`w-4 h-4 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
-              {isPaid && <CheckCircle size={12} className="text-white shrink-0" strokeWidth={3} />}
+        <div className="flex items-center justify-center gap-6 py-1 bg-gray-50/30">
+          <label className="flex items-center gap-1 text-gray-600 text-[10px] font-bold cursor-pointer">
+            <div className={`w-3 h-3 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+              {isPaid && <CheckCircle size={8} className="text-white shrink-0" strokeWidth={3} />}
             </div>
             <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />{t("It's Paid")}
-
           </label>
         </div>
 
         {/* Row 5: Action Buttons */}
-        <div className="grid grid-cols-3 gap-2.5 p-3.5 bg-white border-t border-gray-100">
+        <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-white border-t border-gray-100">
           <button
             onClick={onSaveOrder}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-[14px] font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
-
-
+            className="col-span-1 bg-red-50 text-red-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
           </button>
           <button
-            onClick={onSaveOrder}
+            onClick={onHoldOrder}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-orange-50 text-orange-600 py-3.5 rounded-xl text-[14px] font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
-
-
+            className="col-span-1 bg-orange-50 text-orange-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
           </button>
           <button
             onClick={onGenerateBill}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-[12px] sm:text-[14px] font-black tracking-wide hover:shadow-lg transition-all shadow-md hover:-translate-y-0.5 disabled:opacity-50">{t("SAVE & PRINT")}
-
-
+            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-1.5 rounded-lg text-[9px] font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50">{t("SAVE & PRINT")}
           </button>
-
           <button
             onClick={onPrintKOT}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-[13px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
+            className="col-span-1 bg-gray-100 text-gray-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
             {t("KOT")}
           </button>
           <button
             onClick={onReopenOrder}
             disabled={loading || !isLocked}
-            className="col-span-1 bg-blue-50 text-blue-600 py-3 rounded-xl text-[12px] sm:text-[13px] font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
+            className="col-span-1 bg-blue-50 text-blue-600 py-1.5 rounded-lg text-[11px] font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
             {t("EDIT")}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
-            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-3 rounded-xl text-[13px] font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm">{t("CANCEL")}
-
-
+            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm">{t("CANCEL")}
           </button>
         </div>
       </div>

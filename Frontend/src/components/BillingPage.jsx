@@ -290,12 +290,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const data = e.detail;
       if (data) {
         if (!data.tableNo || data.tableNo === activeTable) {
-          fetchActiveOrder(activeTable);
+          fetchActiveOrder(activeTable, false, true);
         } else {
           const clean1 = (data.tableNo || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
           const clean2 = (activeTable || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
           if (clean1 && clean2 && (clean1 === clean2 || clean1.endsWith(clean2) || clean2.endsWith(clean1))) {
-            fetchActiveOrder(activeTable);
+            fetchActiveOrder(activeTable, false, true);
           }
         }
       }
@@ -305,7 +305,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // 3-Second polling timer to guarantee real-time bill summary section UI updates without manual refresh
     const pollInterval = setInterval(() => {
       if (activeTable) {
-        fetchActiveOrder(activeTable);
+        fetchActiveOrder(activeTable, false, true);
       }
       fetchOpenOrdersList();
     }, 3000);
@@ -351,9 +351,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   }, [customerPhone]);
 
-  async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false) {
+  async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false, isBackground = false) {
     if (!tableToFetch) return;
-    setLoading(true);
+    if (!isBackground) setLoading(true);
     try {
       const order = await getActiveOrder(tableToFetch);
       if (order) {
@@ -432,7 +432,33 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     } catch (error) {
       console.error('Error fetching active order:', error);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
+    }
+  };
+
+  const autoSaveOrder = async (cartToSave, tableNo) => {
+    if (!tableNo || cartToSave.length === 0) return;
+    try {
+      const orderData = {
+        tableNo: tableNo,
+        items: cartToSave,
+        billType,
+        customerName,
+        customerPhone,
+        discountType: discount.type,
+        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        tax: taxVal,
+        ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
+        ...(billType === 'Delivery' && { orderSource })
+      };
+      const savedOrder = await saveOrder(orderData);
+      if (savedOrder && savedOrder._id) {
+        setOrderId(savedOrder._id);
+      }
+      fetchOpenOrdersList();
+      if (onOrderUpdate) onOrderUpdate();
+    } catch (error) {
+      console.error('Auto-save order error:', error);
     }
   };
 
@@ -475,15 +501,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(t('orderLocked'), 'error');
       return;
     }
-    setCart((prev) => {
-      const existing = prev.find((i) => i.name === item.name);
-      if (existing) {
-        showToast(`${t('increasedQty')} ${item.name}`, 'success');
-        return prev.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1 } : i);
-      }
+    const existing = cart.find((i) => i.name === item.name);
+    let newCart;
+    if (existing) {
+      showToast(`${t('increasedQty')} ${item.name}`, 'success');
+      newCart = cart.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1 } : i);
+    } else {
       showToast(`${t('addedToOrder')} ${item.name}`, 'success');
-      return [...prev, { ...item, quantity: 1 }];
-    });
+      newCart = [...cart, { ...item, quantity: 1 }];
+    }
+    setCart(newCart);
+    autoSaveOrder(newCart, currentTable);
   };
 
   const updateQuantity = (id, delta) => {
@@ -502,14 +530,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(t('orderLocked'), 'error');
       return;
     }
-    setCart((prev) => prev.map((i) => {
+    const newCart = cart.map((i) => {
       if (i._id === id || i.name === id) {
         const newQty = Math.max(0, i.quantity + delta);
         if (newQty === 0) showToast(`${i.name} ${t('removedFromOrder')}`, 'info');
         return { ...i, quantity: newQty };
       }
       return i;
-    }).filter((i) => i.quantity > 0));
+    }).filter((i) => i.quantity > 0);
+    setCart(newCart);
+    autoSaveOrder(newCart, currentTable);
   };
   const calculateSubtotal = () => cart.reduce((sum, item) => {
     if (item.isCancelled) return sum;
@@ -575,6 +605,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
         tax: taxVal,
+        ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
         ...(billType === 'Delivery' && {
           orderSource
         })
@@ -593,6 +624,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setLoading(false);
     }
   };
+
+
+  // HOLD = SAVE: backend always stores with status 'Open' and marks table Occupied.
+  // The "Hold Bills" counter in the header reflects all saved-but-unpaid Open orders.
+  const handleHoldOrder = () => handleSaveOrder();
+
 
   const handleGenerateBill = async () => {
     if (!orderId || orderId.startsWith('offline_')) {
@@ -817,10 +854,26 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const handlePrintKOT = async () => {
+    if (!activeTable) {
+      if (billType === 'Delivery' || billType === 'Takeaway') {
+        const generatedOrderNo = generateSequentialOrderNo(billType);
+        newlyGeneratedTables.current.add(generatedOrderNo);
+        setActiveTable(generatedOrderNo);
+        setTimeout(() => handlePrintKOTWithTable(generatedOrderNo), 100);
+        return;
+      } else {
+        showToast(t('pleaseSelectTable'), 'error');
+        return;
+      }
+    }
+    handlePrintKOTWithTable(activeTable);
+  };
+
+  const handlePrintKOTWithTable = async (tableNo) => {
     try {
       setLoading(true);
       const orderData = {
-        tableNo: activeTable,
+        tableNo: tableNo,
         items: cart,
         subtotal,
         tax: taxVal,
@@ -1164,6 +1217,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 orderStatus={orderStatus}
                 activeTable={activeTable}
                 onSaveOrder={handleSaveOrder}
+                onHoldOrder={handleHoldOrder}
                 onGenerateBill={handleGenerateBill}
                 onSettleBill={() => setShowPayment(true)}
                 onPrintKOT={handlePrintKOT}
