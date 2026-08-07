@@ -7,6 +7,7 @@ import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, Chevron
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
+import BulkImportModal, { generateExcelWithStyling } from './BulkImportModal';
 
 const formatImageUrl = (url) => {
   if (!url) return '';
@@ -62,6 +63,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [customCategoryName, setCustomCategoryName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState('latest');
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -297,12 +299,34 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
 
   const fileInputRef = React.useRef(null);
 
+  const handleExportExcel = async () => {
+    try {
+      const exportItems = items.map((item) => ({
+        name: item.name,
+        category: item.category?.name || item.category,
+        price: item.price,
+        type: item.type === 'veg' ? 'Veg' : item.type === 'non-veg' ? 'Non-Veg' : 'Egg',
+        description: item.description || '',
+        isAvailable: item.isAvailable ? 'TRUE' : 'FALSE',
+        taxRate: item.taxRate || 0,
+        image: item.image || ''
+      }));
+
+      await generateExcelWithStyling(exportItems, 'MS_Billings_Menu_Export.xlsx');
+      setToast({ message: 'Menu exported to Excel successfully!', type: 'success' });
+    } catch (err) {
+      console.error('Export error:', err);
+      // Fallback to CSV export
+      handleExportCSV();
+    }
+  };
+
   const handleExportCSV = () => {
     const csvData = items.map((item) => ({
       Name: item.name,
       Category: item.category?.name || item.category,
       Price: item.price,
-      Type: item.type === 'veg' ? 'Veg' : 'Non-Veg',
+      Type: item.type === 'veg' ? 'Veg' : item.type === 'non-veg' ? 'Non-Veg' : 'Egg',
       Description: item.description || '',
       'Is Available': item.isAvailable ? 'Yes' : 'No',
       'Tax Rate': item.taxRate || 0,
@@ -316,11 +340,44 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', 'menu_export.csv');
+    link.setAttribute('download', 'MS_Billings_Menu_Export.csv');
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleBulkImportItems = async (validItems) => {
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const row of validItems) {
+      try {
+        const itemData = {
+          name: row.name,
+          price: row.price,
+          category: row.category,
+          type: row.type,
+          description: row.description || '',
+          isAvailable: row.isAvailable !== false,
+          taxRate: row.taxRate || 0,
+          image: row.image || ''
+        };
+
+        await addMenuItem(itemData);
+        successCount++;
+      } catch (err) {
+        console.error("Failed to import row:", row, err);
+        errorCount++;
+      }
+    }
+
+    setToast({ 
+      message: `Bulk Import Complete: ${successCount} items added successfully.${errorCount ? ` ${errorCount} failed.` : ''}`, 
+      type: successCount > 0 ? 'success' : 'error' 
+    });
+    fetchItems();
+    fetchCategories();
   };
 
   const handleImportCSV = (event) => {
@@ -559,15 +616,15 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
           {user?.role === 'Admin' && activeTab === 'items' &&
           <>
               <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Import CSV")}>
+              onClick={() => setIsBulkImportModalOpen(true)}
+              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm font-medium shadow-xs" title={t("Bulk Import (.xlsx, .csv)")}>
               
                 <Download size={16} />
                 <span>{t("Import")}</span>
               </button>
               <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm" title={t("Export CSV")}>
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 bg-surface text-text-muted px-2.5 py-1.5 rounded-lg hover:bg-surface-hover transition-colors border border-border text-xs sm:text-sm font-medium shadow-xs" title={t("Export Excel / CSV")}>
               
                 <Upload size={16} />
                 <span>{t("Export")}</span>
@@ -1313,6 +1370,11 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         message={deleteModal.deleteAll ? "Are you sure you want to delete ALL menu items? This action cannot be undone and will empty your entire menu." : `Are you sure you want to delete this ${deleteModal.itemId ? 'menu item' : 'category'}? This action cannot be undone.`}
         confirmText="Delete"
         isDanger={true} />
+
+      <BulkImportModal
+        isOpen={isBulkImportModalOpen}
+        onClose={() => setIsBulkImportModalOpen(false)}
+        onImportSuccess={handleBulkImportItems} />
       
 
       {toast &&
