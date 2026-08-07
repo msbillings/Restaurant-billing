@@ -28,19 +28,20 @@ const GlobalHeader = ({
   return (
     <div className="h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 bg-white border-b border-border shrink-0 z-20 shadow-xs w-full">
       {/* Left section: Hamburger & Logo */}
-      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+      <div className="flex items-center gap-0 shrink-0">
         {onToggleMenu && (
           <button
             onClick={onToggleMenu}
-            className="p-1.5 rounded-lg text-text-main hover:bg-surface-hover shadow-xs touch-target flex items-center justify-center">
-            <Menu size={22} />
+            className="p-1 rounded-lg text-text-main hover:bg-surface-hover flex items-center justify-center shrink-0">
+            <Menu size={22} className="sm:w-6 sm:h-6" />
           </button>
         )}
-        <div className="flex items-center cursor-pointer" onClick={() => onNavigate('dashboard')}>
+        <div className="flex items-center cursor-pointer -ml-3 sm:-ml-6 md:-ml-7" onClick={() => onNavigate('floor')}>
           <img
             src={logoImg}
             alt="msbillings"
-            style={{ height: '38px', width: 'auto', objectFit: 'contain', display: 'block' }}
+            className="h-13 sm:h-18 md:h-20 w-auto object-contain block transform scale-165 sm:scale-200 origin-left"
+            style={{ objectFit: 'contain' }}
           />
         </div>
       </div>

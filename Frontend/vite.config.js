@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['icon.png', 'favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
         name: 'msbillings - Restaurant POS',
         short_name: 'msbillings',

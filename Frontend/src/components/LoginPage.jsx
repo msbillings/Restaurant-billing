@@ -83,7 +83,7 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
                 </label>
                 <div className="relative group">
                   <div className={`relative flex items-center transition-all ${focusedField === 'password' ? 'scale-[1.01]' : ''}`}>
-                    <Lock size={18} className={`absolute left-3.5 transition-colors ${focusedField === 'password' ? 'text-white' : 'text-gray-400'}`} />
+                    <Lock size={18} className={`absolute left-3.5 transition-colors pointer-events-none ${focusedField === 'password' ? 'text-white' : 'text-gray-400'}`} />
                     <input
                       type={showPassword ? "text" : "password"}
                       id="password" placeholder={t("Enter your password")}
@@ -92,12 +92,12 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
                       onFocus={() => setFocusedField('password')}
                       onBlur={() => setFocusedField(null)}
                       required
-                      className="w-full py-3 sm:py-4 px-4 pl-11 sm:pl-12 pr-10 border border-white/20 bg-white/5 text-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
+                      className="w-full py-3 sm:py-4 px-4 pl-11 sm:pl-12 pr-12 border border-white/20 bg-white/5 text-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
                       style={{ borderRadius: '12px' }} />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 text-gray-400 hover:text-white transition-colors p-1">
+                      className="absolute right-3.5 inset-y-0 flex items-center justify-center text-gray-400 hover:text-white transition-colors focus:outline-none">
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
