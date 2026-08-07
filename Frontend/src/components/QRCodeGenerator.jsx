@@ -18,7 +18,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   // Initial IP setup from stored resto_server_ip or hostname
   const storedIp = localStorage.getItem('resto_server_ip');
   const [localIP, setLocalIP] = useState(storedIp || (isElectron ? '127.0.0.1' : window.location.hostname));
-  const [localPort, setLocalPort] = useState(isElectron ? '5173' : (window.location.port || '5173'));
+  const [localPort, setLocalPort] = useState(isElectron ? '5002' : (window.location.port && window.location.port !== '5173' ? window.location.port : '5002'));
   const [customIpInput, setCustomIpInput] = useState(storedIp || '');
   const [ipSavedToast, setIpSavedToast] = useState(false);
 
@@ -60,7 +60,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     } catch (err) {
       if (!isElectron && window.location.hostname !== 'localhost') {
         setLocalIP(window.location.hostname);
-        setLocalPort(window.location.port || '5173');
+        setLocalPort(window.location.port && window.location.port !== '5173' ? window.location.port : '5002');
       }
       console.warn('Could not fetch system IP, using hostname fallback:', err);
     }

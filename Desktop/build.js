@@ -62,6 +62,16 @@ if (fs.existsSync(assetsDir)) {
 console.log('Copying Backend...');
 copySync(backendSrc, desktopBackend, ['node_modules', '.git']);
 
+// Copy AI Face Detection Models to Backend public folder for local server serving
+console.log('Copying AI models to Backend...');
+const modelsSrc = path.join(__dirname, '../Frontend/public/models');
+const backendModelsDest = path.join(desktopBackend, 'public/models');
+const rootBackendModelsDest = path.join(__dirname, '../Backend/public/models');
+if (fs.existsSync(modelsSrc)) {
+  copySync(modelsSrc, backendModelsDest);
+  copySync(modelsSrc, rootBackendModelsDest);
+}
+
 const backendLock = path.join(desktopBackend, 'package-lock.json');
 if (fs.existsSync(backendLock)) {
   fs.rmSync(backendLock);

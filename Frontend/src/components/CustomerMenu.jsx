@@ -7,8 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
 let API_BASE_URL = getApiUrl();
-if (API_BASE_URL.includes('localhost') && window.location.hostname !== 'localhost') {
-  API_BASE_URL = API_BASE_URL.replace('localhost', window.location.hostname);
+if ((API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1')) && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  API_BASE_URL = API_BASE_URL.replace(/localhost|127\.0\.0\.1/, window.location.hostname);
 }
 
 const CustomerMenu = () => {

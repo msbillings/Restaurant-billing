@@ -363,6 +363,50 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/cameras', cameraRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 
+// Serve AI Face Detection models statically over HTTP with CORS
+const possibleModelPaths = [
+  path.join(process.cwd(), '../Frontend/public/models'),
+  path.join(process.cwd(), '../frontend/models'),
+  path.join(process.cwd(), 'frontend/models'),
+  path.join(process.cwd(), 'public/models'),
+  path.join(process.cwd(), 'dist/models'),
+  path.join(__dirname, '../Frontend/public/models'),
+  path.join(__dirname, 'public/models')
+];
+const staticModelsDir = possibleModelPaths.find(p => p && fs.existsSync(path.join(p, 'tiny_face_detector_model-weights_manifest.json')));
+if (staticModelsDir) {
+  console.log(`[Static Models] Serving AI face models from: ${staticModelsDir}`);
+  app.use('/models', express.static(staticModelsDir));
+}
+
+// Serve static Frontend dist files for QR code customer ordering (mobile menu)
+const possibleFrontendPaths = [
+  path.join(process.cwd(), '../frontend'),
+  path.join(process.cwd(), '../Frontend/dist'),
+  path.join(process.cwd(), 'frontend'),
+  path.join(process.cwd(), 'dist')
+];
+
+const staticFrontendDir = possibleFrontendPaths.find(p => p && fs.existsSync(path.join(p, 'index.html')));
+
+if (staticFrontendDir) {
+  console.log(`[Static Frontend] Serving customer ordering web pages from: ${staticFrontendDir}`);
+  app.use(express.static(staticFrontendDir));
+  
+  // SPA Fallback for /order and other customer pages
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    const indexPath = path.join(staticFrontendDir, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      next();
+    }
+  });
+}
+
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 
 if (!isServerless) {

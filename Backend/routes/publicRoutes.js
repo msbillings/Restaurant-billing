@@ -1,4 +1,5 @@
 import express from 'express';
+import os from 'os';
 const router = express.Router();
 import MenuDefault from '../models/Menu.js';
 import CategoryDefault from '../models/Category.js';
@@ -278,8 +279,6 @@ router.post('/request-service', async (req, res) => {
   }
 });
 
-import os from 'os';
-
 // Public endpoint to get order status for a table
 router.get('/order-status', async (req, res) => {
   try {
@@ -482,7 +481,8 @@ router.get('/system-ip', (req, res) => {
     localIP = candidateIPs[0];
   }
 
-  res.status(200).json({ ip: localIP, port: process.env.VITE_PORT || 5173 });
+  const serverPort = process.env.PORT || 5002;
+  res.status(200).json({ ip: localIP, port: serverPort });
 });
 
 export default router;

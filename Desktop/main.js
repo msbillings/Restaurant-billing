@@ -1,4 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
+app.commandLine.appendSwitch('enable-speech-dispatcher');
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 const path = require('path');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -434,19 +436,15 @@ app.on('ready', () => {
   startBackend();
 
   // ✅ Auto-grant camera/mic/media permissions inside Electron
-  // Without this, Chromium blocks getUserMedia silently in the WebView.
   const { session } = require('electron');
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
-    const allowedPermissions = ['media', 'camera', 'microphone', 'geolocation', 'notifications'];
-    const isAllowed = allowedPermissions.includes(permission);
-    console.log(`[Permissions] Request for '${permission}': ${isAllowed ? 'GRANTED' : 'DENIED'}`);
-    callback(isAllowed);
+    console.log(`[Permissions] Auto-granting permission request for '${permission}'`);
+    callback(true);
   });
 
   // Also handle permission checks (for navigator.permissions.query)
   session.defaultSession.setPermissionCheckHandler((_, permission) => {
-    const allowedPermissions = ['media', 'camera', 'microphone', 'geolocation', 'notifications'];
-    return allowedPermissions.includes(permission);
+    return true;
   });
 
   // Wait a little bit for the backend to initialize

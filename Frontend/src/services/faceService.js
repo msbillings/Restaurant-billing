@@ -1,63 +1,60 @@
 import * as faceapi from 'face-api.js';
+import { getApiUrl } from '../config.js';
 
 let modelsLoaded = false;
-
-/**
- * Detect the correct models base URL depending on the platform:
- * - Electron (Desktop EXE): served from file:// so /models resolves via Electron's local server
- * - Capacitor (Android APK): assets are served from capacitor://localhost/ — /models maps correctly
- * - Browser (Web): /models resolves from the public folder
- */
-const getModelsUri = () => {
-  if (typeof window !== 'undefined' && window.location) {
-    // Electron (file:// protocol)
-    if (window.location.protocol === 'file:') {
-      return './models';
-    }
-    // Capacitor / Web: Use absolute path with origin to prevent fetch failures
-    return window.location.origin + '/models';
-  }
-  return '/models';
-};
 
 export const loadFaceModels = async () => {
   if (modelsLoaded) return;
 
-  const primaryPath = getModelsUri();
+  const candidatePaths = [];
 
+  // 1. POS Backend Server models URL over HTTP (e.g. http://127.0.0.1:5002/models or http://192.168.x.x:5002/models)
   try {
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(primaryPath),
-      faceapi.nets.faceLandmark68Net.loadFromUri(primaryPath),
-      faceapi.nets.faceRecognitionNet.loadFromUri(primaryPath)
-    ]);
-    modelsLoaded = true;
-    console.log('[FaceService] AI models loaded successfully from:', primaryPath);
-    return;
-  } catch (primaryErr) {
-    console.warn('[FaceService] Primary path failed, trying fallback paths...', primaryErr);
+    const backendApi = getApiUrl();
+    if (backendApi) {
+      const backendBase = backendApi.replace(/\/api\/?$/, '');
+      candidatePaths.push(`${backendBase}/models`);
+    }
+  } catch (e) {
+    console.warn('[FaceService] Could not resolve backend URL for models:', e);
   }
 
-  // Fallback 1: try relative path
-  const fallbackPath = './models';
-  if (fallbackPath !== primaryPath) {
+  // 2. Current origin / relative location
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.protocol !== 'file:') {
+      candidatePaths.push(window.location.origin + '/models');
+    }
+    const cleanHref = window.location.href.split('?')[0].split('#')[0];
+    const baseDir = cleanHref.substring(0, cleanHref.lastIndexOf('/'));
+    candidatePaths.push(baseDir + '/models');
+  }
+  candidatePaths.push('./models');
+  candidatePaths.push('/models');
+
+  // 3. High-availability CDN Fallbacks
+  candidatePaths.push('https://cdn.jsdelivr.net/gh/cshly/face-api.js-models@master/models');
+  candidatePaths.push('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights');
+
+  const uniquePaths = [...new Set(candidatePaths.filter(Boolean))];
+
+  for (const pathUri of uniquePaths) {
     try {
+      console.log('[FaceService] Attempting to load AI models from:', pathUri);
       await Promise.all([
-        faceapi.nets.tinyFaceDetector.loadFromUri(fallbackPath),
-        faceapi.nets.faceLandmark68Net.loadFromUri(fallbackPath),
-        faceapi.nets.faceRecognitionNet.loadFromUri(fallbackPath)
+        faceapi.nets.tinyFaceDetector.loadFromUri(pathUri),
+        faceapi.nets.faceLandmark68Net.loadFromUri(pathUri),
+        faceapi.nets.faceRecognitionNet.loadFromUri(pathUri)
       ]);
       modelsLoaded = true;
-      console.log('[FaceService] AI models loaded from fallback path:', fallbackPath);
+      console.log('[FaceService] AI models loaded successfully from:', pathUri);
       return;
-    } catch (fallbackErr) {
-      console.warn('[FaceService] Fallback path also failed.', fallbackErr);
+    } catch (err) {
+      console.warn(`[FaceService] Failed to load AI models from ${pathUri}, trying next candidate...`, err?.message || err);
     }
   }
 
-  // All paths failed
   modelsLoaded = false;
-  throw new Error(`Failed to load AI models from ${primaryPath}. Please ensure the app has internet access or re-install.`);
+  throw new Error(`Failed to load AI models from ${uniquePaths[0] || './models'}. Please ensure the app has internet access or local server is running.`);
 };
 
 /**

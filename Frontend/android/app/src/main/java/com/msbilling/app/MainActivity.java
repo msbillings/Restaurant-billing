@@ -6,6 +6,7 @@ import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
 
@@ -15,6 +16,15 @@ public class MainActivity extends BridgeActivity {
         super.onStart();
         WebView webView = this.bridge.getWebView();
         if (webView != null) {
+            webView.setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(this.bridge) {
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    runOnUiThread(() -> {
+                        request.grant(request.getResources());
+                    });
+                }
+            });
+
             webView.addJavascriptInterface(new Object() {
                 @JavascriptInterface
                 public void print() {

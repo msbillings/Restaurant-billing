@@ -292,6 +292,13 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
       setIsListening(false);
+      let errMsg = "Voice input error. You can type commands like '500 + 1000 - 5%'";
+      if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+        errMsg = "Microphone permission required. Please allow microphone access.";
+      } else if (event.error === 'no-speech') {
+        errMsg = "No speech detected. Please speak clearly into the microphone.";
+      }
+      setAiResult(errMsg);
     };
 
     recognition.onend = () => {
@@ -302,7 +309,13 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       }, 300);
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setIsListening(false);
+      setAiResult("Voice recognition unavailable. Type calculations above.");
+    }
   };
 
   // Keyboard Support
