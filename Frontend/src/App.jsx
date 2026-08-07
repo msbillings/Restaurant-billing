@@ -715,9 +715,7 @@ function App() {
     window.history.pushState(null, '', '/' + (previousView || 'floor'));
   };
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-background text-text-muted">{t("Loading...")}</div>;
-
-  // BYPASS LICENSE/AUTH FOR DIGITAL MENU!
+  // BYPASS LICENSE/AUTH FOR DIGITAL MENU — must be BEFORE any loading/auth guard!
   const isCustomerOrderRoute = window.location.pathname === '/order';
 
   if (isCustomerOrderRoute) {
@@ -733,8 +731,13 @@ function App() {
           <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
         </Suspense>
       </>);
-
   }
+
+  if (loading) return <div className="flex items-center justify-center h-screen bg-background text-text-muted">{t("Loading...")}</div>;
+
+  // BYPASS LICENSE/AUTH FOR DIGITAL MENU! (old location — kept as fallback)
+  // const isCustomerOrderRoute = window.location.pathname === '/order';
+  // if (isCustomerOrderRoute) { ... }
 
   if (isClockingIn) {
     return (
@@ -879,7 +882,7 @@ function App() {
             className="p-1 rounded-lg text-text-main hover:bg-surface-hover transition-colors shrink-0 flex items-center justify-center">
             <Menu size={22} className="sm:w-6 sm:h-6" />
           </button>
-          <div className="flex items-center cursor-pointer relative shrink-0 -ml-3 sm:-ml-6 md:-ml-7" onClick={() => handleViewChange('floor')}>
+          <div className="flex items-center cursor-pointer relative shrink-0" onClick={() => handleViewChange('floor')}>
             <img
               src={logoImg}
               alt="msbillings"

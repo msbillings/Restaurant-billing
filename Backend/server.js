@@ -17,6 +17,13 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
+
+// __dirname is not available in ES modules — polyfill it
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -54,7 +61,32 @@ import xss from 'xss-clean';
 import hpp from 'hpp';
 
 // 1. Set Security HTTP Headers
-app.use(helmet());
+// CSP is relaxed to allow the static React SPA (served from this same server) to load correctly.
+// API routes are still protected by rate limiting and auth middleware.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",    // Required for Vite-built React (inline bootstrap script)
+        "'unsafe-eval'",      // Required for some React/Vite chunks
+        "cdn.jsdelivr.net",   // jsmpeg CDN used for camera feed
+        "blob:"
+      ],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
+      fontSrc: ["'self'", "fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"], // Allow WS + API calls to any host
+      mediaSrc: ["'self'", "blob:", "data:"],
+      workerSrc: ["'self'", "blob:"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Required for SharedArrayBuffer / camera features
+}));
 
 // 2. Limit requests from same API (Rate Limiting)
 const limiter = rateLimit({
@@ -210,8 +242,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-import fs from 'fs';
-import path from 'path';
+
 
 // Database Connection
 // SECURITY: Do not default to a production database. Use an isolated temp DB.
@@ -379,23 +410,38 @@ if (staticModelsDir) {
   app.use('/models', express.static(staticModelsDir));
 }
 
-// Serve static Frontend dist files for QR code customer ordering (mobile menu)
-const possibleFrontendPaths = [
-  path.join(process.cwd(), '../frontend'),
-  path.join(process.cwd(), '../Frontend/dist'),
-  path.join(process.cwd(), 'frontend'),
-  path.join(process.cwd(), 'dist')
+// ─── Serve Static Frontend for Customer QR Ordering ─────────────────────────
+// Priority order: dev build → Electron Desktop copy → fallback
+const frontendCandidates = [
+  path.join(__dirname, '../Frontend/dist'),        // Dev: sibling Frontend/dist
+  path.join(__dirname, '../frontend'),             // Electron packaged copy
+  path.join(process.cwd(), '../Frontend/dist'),    // Alt dev layout
+  path.join(process.cwd(), 'frontend'),            // Electron: Desktop/frontend
 ];
 
-const staticFrontendDir = possibleFrontendPaths.find(p => p && fs.existsSync(path.join(p, 'index.html')));
+const staticFrontendDir = frontendCandidates.find(p => {
+  const indexPath = path.join(p, 'index.html');
+  const exists = fs.existsSync(indexPath);
+  console.log(`[Static Frontend] Checking: ${p} → ${exists ? '✓ FOUND' : '✗ not found'}`);
+  return exists;
+});
 
 if (staticFrontendDir) {
-  console.log(`[Static Frontend] Serving customer ordering web pages from: ${staticFrontendDir}`);
-  app.use(express.static(staticFrontendDir));
-  
-  // SPA Fallback for /order and other customer pages
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+  console.log(`[Static Frontend] ✅ Serving from: ${staticFrontendDir}`);
+
+  // Serve all static assets (JS, CSS, images, icons, etc.)
+  app.use(express.static(staticFrontendDir, { index: false }));
+
+  // Explicit /order route — ALWAYS serve the customer ordering page
+  app.get('/order', (req, res) => {
+    const indexPath = path.join(staticFrontendDir, 'index.html');
+    res.setHeader('Cache-Control', 'no-store'); // Prevent stale cache on mobile
+    res.sendFile(indexPath);
+  });
+
+  // SPA Fallback for other non-API routes (floor, billing, etc.)
+  app.get('/{*splat}', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/models')) {
       return next();
     }
     const indexPath = path.join(staticFrontendDir, 'index.html');
@@ -405,7 +451,14 @@ if (staticFrontendDir) {
       next();
     }
   });
+} else {
+  console.warn('[Static Frontend] ⚠️  No built frontend found. QR customer ordering unavailable.');
+  // Still serve /order with a helpful message instead of hanging
+  app.get('/order', (req, res) => {
+    res.status(503).send('<h2>Customer Menu Not Available</h2><p>The frontend has not been built yet. Please run <code>npm run build</code> in the Frontend folder.</p>');
+  });
 }
+
 
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 

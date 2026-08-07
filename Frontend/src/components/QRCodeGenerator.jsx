@@ -1,4 +1,4 @@
-import { getApiUrl } from "../config.js";
+import { getApiUrl, isCapacitorApp } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -134,10 +134,45 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   };
 
   const getQRUrl = (table) => {
-    const activeHost = localIP || '127.0.0.1';
-    const portStr = localPort ? `:${localPort}` : '';
-    const baseUrl = activeHost.includes(':') ? `http://${activeHost}` : `http://${activeHost}${portStr}`;
     const dbName = localStorage.getItem('resto_db_name') || 'default';
+    
+    // 1. If running inside native mobile app (Capacitor APK)
+    if (isCapacitorApp()) {
+      const apiUrl = getApiUrl(); // e.g. http://192.168.1.15:5002/api or https://domain/api
+      const baseApiUrl = apiUrl.replace(/\/api$/, '');
+      return `${baseApiUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+    }
+
+    // 2. If in development mode (Vite dev server)
+    // Check if we are running in Vite dev server (either import.meta.env.DEV is true or current port is not the backend port)
+    const isDev = import.meta.env.DEV || (window.location.port && window.location.port !== localPort && window.location.port !== '5002');
+    
+    // Determine host
+    let host = localStorage.getItem('resto_server_ip') || localIP;
+    if (!host || host === 'localhost' || host === '127.0.0.1') {
+      host = window.location.hostname;
+    }
+
+    // Determine port
+    let port = '';
+    if (isDev) {
+      // In development, the client order page must point to Vite's port (e.g. 5173) so the dev server can serve it
+      port = window.location.port || '5173';
+    } else {
+      // In production built web / .exe, point to backend port (default 5002)
+      port = localPort || '5002';
+    }
+
+    // Build base URL
+    let baseUrl = '';
+    if (host.includes('://')) {
+      baseUrl = host;
+    } else {
+      const protocol = window.location.protocol && window.location.protocol !== 'file:' ? window.location.protocol : 'http:';
+      const portStr = port ? `:${port}` : '';
+      baseUrl = `${protocol}//${host}${portStr}`;
+    }
+
     return `${baseUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
   };
 
