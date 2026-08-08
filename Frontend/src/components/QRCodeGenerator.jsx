@@ -143,34 +143,34 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       return `${baseApiUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
-    // 2. If in development mode (Vite dev server)
-    // Check if we are running in Vite dev server (either import.meta.env.DEV is true or current port is not the backend port)
-    const isDev = import.meta.env.DEV || (window.location.port && window.location.port !== localPort && window.location.port !== '5002');
-    
-    // Determine host
+    // 2. If hosted on a public cloud domain (Vercel, Render, custom domain)
+    const isLocalNetwork = (h) => h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(h);
+    if (!isElectron && window.location.hostname && !isLocalNetwork(window.location.hostname)) {
+      return `${window.location.origin}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+    }
+
+    // 3. Desktop App (.exe/.dmg) or Local Development
     let host = localStorage.getItem('resto_server_ip') || localIP;
     if (!host || host === 'localhost' || host === '127.0.0.1') {
-      host = window.location.hostname;
+      host = isElectron ? '127.0.0.1' : (window.location.hostname || '127.0.0.1');
     }
 
-    // Determine port
+    const isDev = import.meta.env.DEV || window.location.port === '5173' || window.location.port === '5174' || window.location.port === '5175';
     let port = '';
+    
     if (isDev) {
-      // In development, the client order page must point to Vite's port (e.g. 5173) so the dev server can serve it
       port = window.location.port || '5173';
     } else {
-      // In production built web / .exe, point to backend port (default 5002)
-      port = localPort || '5002';
+      // In production built .exe/.dmg, the backend ALWAYS runs on 5002
+      port = '5002';
     }
 
-    // Build base URL
     let baseUrl = '';
     if (host.includes('://')) {
       baseUrl = host;
     } else {
-      const protocol = window.location.protocol && window.location.protocol !== 'file:' ? window.location.protocol : 'http:';
-      const portStr = port ? `:${port}` : '';
-      baseUrl = `${protocol}//${host}${portStr}`;
+      const protocol = (window.location.protocol === 'https:') ? 'https:' : 'http:';
+      baseUrl = `${protocol}//${host}:${port}`;
     }
 
     return `${baseUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
