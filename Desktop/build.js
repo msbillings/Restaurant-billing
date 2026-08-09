@@ -39,6 +39,8 @@ execSync(`${npmCmd} run build`, { cwd: path.join(__dirname, '../Frontend'), stdi
 // Copy Frontend
 console.log('Copying Frontend...');
 copySync(frontendDist, desktopFrontend);
+// Also copy to backend so the Express server can serve it to mobile phones without asar restrictions
+copySync(frontendDist, path.join(desktopBackend, 'frontend'));
 
 // Fix for Desktop app: Ensure it connects to localhost instead of the hardcoded IP from Vite build
 console.log('Patching API URLs for Desktop (localhost)...');

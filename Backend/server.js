@@ -414,6 +414,7 @@ if (staticModelsDir) {
 // Priority order: dev build → Electron Desktop copy → fallback
 const frontendCandidates = [
   path.join(__dirname, '../Frontend/dist'),        // Dev: sibling Frontend/dist
+  path.join(__dirname, 'frontend'),                // Packaged: inside backend folder (resources/backend/frontend)
   path.join(__dirname, '../frontend'),             // Electron packaged copy
   path.join(process.cwd(), '../Frontend/dist'),    // Alt dev layout
   path.join(process.cwd(), 'frontend'),            // Electron: Desktop/frontend
