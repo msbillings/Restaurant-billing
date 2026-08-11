@@ -728,7 +728,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
   }
@@ -749,7 +749,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
 
@@ -765,7 +765,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
 
@@ -781,7 +781,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} />
+          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
           <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
         </Suspense>
       </>);
@@ -1828,9 +1828,13 @@ function App() {
         </div>
       }
 
-      {/* Tools Modals */}
+      {/* Tools & Dialog Modals */}
       <Suspense fallback={null}>
         <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
+        <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
+        <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
+        <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
+        <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
       </Suspense>
 
       {/* Logout Confirmation Toast Modal */}

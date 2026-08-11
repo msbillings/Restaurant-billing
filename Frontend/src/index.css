@@ -164,6 +164,11 @@ input[type="week"]::-webkit-calendar-picker-indicator {
 
 /* Print Styles for Dynamic Printers */
 @media print {
+  @page {
+    size: portrait;
+    margin: 0 !important;
+  }
+
   html, body {
     margin: 0 !important;
     padding: 0 !important;
@@ -183,7 +188,6 @@ input[type="week"]::-webkit-calendar-picker-indicator {
 
   .receipt-print {
     visibility: visible;
-    width: 100% !important;
     margin: 0 auto !important;
     padding: 2mm !important;
     box-shadow: none !important;

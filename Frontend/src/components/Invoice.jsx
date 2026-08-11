@@ -35,11 +35,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
       if (!parsed.upiId || parsed.upiId === 'msbillings@upi') parsed.upiId = 'maheshsiva864@oksbi';
       setSettings((prev) => ({ ...prev, ...parsed }));
     }
-
-    const timer = setTimeout(() => {
-      handlePrint();
-    }, 300);
-    return () => clearTimeout(timer);
   }, []);
 
   const handlePrint = () => {
@@ -63,10 +58,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
   const getFormatClasses = () => {
     switch (settings.printFormat) {
-      case 'A4':return 'w-full max-w-3xl print:w-full print:max-w-full';
-      case '58mm':return 'w-[200px] print:w-[185px] mx-auto print:m-0';
+      case 'A4': return 'w-full max-w-3xl print:w-full print:max-w-full';
+      case '58mm': return 'w-[200px] print:w-[58mm] print:max-w-[58mm] mx-auto print:m-0';
       case '80mm':
-      default:return 'w-[280px] print:w-[255px] mx-auto print:m-0';
+      default: return 'w-[280px] print:w-[80mm] print:max-w-[80mm] mx-auto print:m-0';
     }
   };
 
@@ -76,12 +71,24 @@ const Invoice = ({ bill, onClose, onSave }) => {
         {`
           @media print {
             @page {
+              size: ${settings.printFormat === 'A4' ? 'A4 portrait' : settings.printFormat === '58mm' ? '58mm auto' : '80mm auto'};
               margin: 0 !important;
             }
-            body {
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #ffffff !important;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
-              margin: 0;
+            }
+            .invoice-container {
+              background: #ffffff !important;
+              padding: 0 !important;
+            }
+            .receipt-print {
+              margin: 0 auto !important;
+              box-shadow: none !important;
+              border: none !important;
             }
           }
         `}

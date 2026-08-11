@@ -403,19 +403,31 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  try {
+    autoUpdater.logger = console;
+  } catch (e) {}
 
-  autoUpdater.on('update-available', () => {
-    console.log('Update available.');
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[AutoUpdater] Checking for updates...');
   });
 
-  autoUpdater.on('update-downloaded', () => {
-    if (mainWindow) {
+  autoUpdater.on('update-available', (info) => {
+    console.log('[AutoUpdater] Update available:', info ? info.version : 'new version');
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('[AutoUpdater] Application is up to date.');
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[AutoUpdater] Update downloaded:', info ? info.version : 'ready');
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-ready');
     } else {
       dialog.showMessageBox({
         type: 'info',
         title: 'Update Ready',
-        message: 'A new version of MS Billing has been downloaded. The application will now restart to apply the updates.',
+        message: 'A new version of MS Billing has been downloaded. The application will now restart to apply updates.',
         buttons: ['Restart Now']
       }).then(() => {
         autoUpdater.quitAndInstall(false, true);
@@ -424,11 +436,19 @@ function setupAutoUpdater() {
   });
 
   ipcMain.on('install-update', () => {
+    console.log('[AutoUpdater] User requested install update.');
     autoUpdater.quitAndInstall(false, true);
   });
 
+  ipcMain.on('check-for-updates', () => {
+    console.log('[AutoUpdater] Manual check triggered.');
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[AutoUpdater] Check error:', err);
+    });
+  });
+
   autoUpdater.on('error', (err) => {
-    console.error('Auto updater error:', err);
+    console.error('[AutoUpdater] Error:', err);
   });
 }
 
@@ -452,7 +472,19 @@ app.on('ready', () => {
     createMenu();
     createWindow();
     setupAutoUpdater();
-    autoUpdater.checkForUpdatesAndNotify();
+    
+    // Initial check for updates
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error('[AutoUpdater] Initial check error:', err);
+    });
+
+    // Check for updates every 3 minutes (180,000 ms) so new GitHub releases show up immediately
+    setInterval(() => {
+      console.log('[AutoUpdater] Scheduled update check running...');
+      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        console.error('[AutoUpdater] Periodic check error:', err);
+      });
+    }, 3 * 60 * 1000);
   }, 2000);
 });
 

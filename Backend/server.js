@@ -429,6 +429,13 @@ const staticFrontendDir = frontendCandidates.find(p => {
 if (staticFrontendDir) {
   console.log(`[Static Frontend] ✅ Serving from: ${staticFrontendDir}`);
 
+  // Serve static assets for root /assets AND sub-route /order/assets
+  const assetsDir = path.join(staticFrontendDir, 'assets');
+  if (fs.existsSync(assetsDir)) {
+    app.use('/assets', express.static(assetsDir));
+    app.use('/order/assets', express.static(assetsDir));
+  }
+
   // Serve all static assets (JS, CSS, images, icons, etc.)
   app.use(express.static(staticFrontendDir, { index: false }));
 
