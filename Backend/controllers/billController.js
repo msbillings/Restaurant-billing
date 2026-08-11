@@ -13,13 +13,11 @@ const emitSocketEvent = (req, eventName, data) => {
   try {
     const io = req.app?.locals?.io;
     if (io) {
-      const tenantDb = req.models?.connection?.name || req.headers['x-tenant-db'];
+      const tenantDb = req.tenantDb || req.headers['x-tenant-db'] || req.user?.db;
       if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
         io.to(tenantDb).emit(eventName, data);
-        console.log(`[Socket] Broadcasted event ${eventName} securely to tenant room: ${tenantDb}`);
-      } else {
-        io.emit(eventName, data);
       }
+      io.emit(eventName, data);
     }
   } catch (err) {
     console.error('Socket emit error:', err);
@@ -29,9 +27,18 @@ const emitSocketEvent = (req, eventName, data) => {
 // Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
-  const cleanName = tblStr.includes(' - ') ? tblStr.split(' - ').slice(1).join(' - ').trim() : tblStr.trim();
-  const escaped = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return { $regex: new RegExp(`^.*${escaped}$`, 'i') };
+  const trimmed = tblStr.trim();
+  if (trimmed.includes(' - ')) {
+    const parts = trimmed.split(' - ');
+    const floorPart = parts[0].trim();
+    const tablePart = parts.slice(1).join(' - ').trim();
+    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match "Ground Floor - Table 3" OR "Table 3" (backwards compatible with existing active orders)
+    return { $regex: new RegExp(`^(${escapedFloor}\\s*-\\s*)?${escapedTable}$`, 'i') };
+  }
+  const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { $regex: new RegExp(`^(.*\\s*-\\s*)?${escapedClean}$`, 'i') };
 };
 
 // Helper to dynamically get active tax rate from restaurantSettings in DB
@@ -44,9 +51,15 @@ const getDynamicTaxRate = async (req) => {
       s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
     }
     let tot = 0;
-    if (s.enableCgst) tot += Number(s.cgstRate || 0);
-    if (s.enableSgst) tot += Number(s.sgstRate || 0);
-    if (s.enableGst) tot += Number(s.gstRate || 0);
+    if (s.enableCgst) {
+      tot += Number(s.cgstRate || 0);
+    }
+    if (s.enableSgst) {
+      tot += Number(s.sgstRate || 0);
+    }
+    if (s.enableGst) {
+      tot += Number(s.gstRate || 0);
+    }
     return tot;
   } catch (e) {
     console.error("Error reading dynamic tax rate:", e);
@@ -64,14 +77,38 @@ export const getActiveOrder = async (req, res) => {
       status: { $in: ['Open', 'Billed'] } 
     }).lean();
 
-    if (order && order.status === 'Open') {
-      const dynamicTaxRate = await getDynamicTaxRate(req);
-      const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
-      const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
-      const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
-      order.tax = taxRate;
-      order.subtotal = subtotal;
-      order.total = Math.round(subtotal + taxAmount);
+    if (order) {
+      if (order.kots && Array.isArray(order.kots)) {
+        const kotStatusMap = {};
+        order.kots.forEach(kot => {
+          (kot.items || []).forEach(kItem => {
+            if (kItem.name) {
+              kotStatusMap[kItem.name] = kItem.status;
+              if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+            }
+          });
+        });
+
+        if (order.items && Array.isArray(order.items)) {
+          order.items = order.items.map(item => {
+            const matchedStatus = kotStatusMap[item._id?.toString()] || kotStatusMap[item.name] || item.status;
+            return {
+              ...item,
+              status: matchedStatus || item.status || 'Pending'
+            };
+          });
+        }
+      }
+
+      if (order.status === 'Open') {
+        const dynamicTaxRate = await getDynamicTaxRate(req);
+        const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+        const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+        order.tax = taxRate;
+        order.subtotal = subtotal;
+        order.total = Math.round(subtotal + taxAmount);
+      }
     }
 
     res.json(order || null);
@@ -118,6 +155,7 @@ export const saveOrder = async (req, res) => {
         quantity: Number(item.quantity || 0),
         total: Number(item.price || 0) * activeQty,
         specialNote: item.specialNote || '',
+        status: item.status || 'Pending',
         isCancelled: isCancelled,
         cancelledQuantity: cancelledQty,
         cancellationRequested: item.cancellationRequested || false,
@@ -148,6 +186,7 @@ export const saveOrder = async (req, res) => {
             ...newItem, 
             printedQuantity: existingItem.printedQuantity !== undefined ? existingItem.printedQuantity : newItem.printedQuantity,
             specialNote: newItem.specialNote || existingItem.specialNote || '',
+            status: newItem.status || existingItem.status || 'Pending',
             isCancelled,
             cancelledQuantity: cancelledQty,
             total: Number(newItem.price || 0) * activeQty,
@@ -258,8 +297,52 @@ export const saveOrder = async (req, res) => {
         igst: 0
       };
       order.total = calculatedTotal;
-      
-      await order.save();
+      order.status = 'Open';
+      try {
+        await order.save();
+      } catch (saveErr) {
+        if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
+          console.warn('[saveOrder] VersionError caught, fetching fresh document from DB...');
+          const freshOrder = await Bill.findById(order._id);
+          if (freshOrder) {
+            freshOrder.items = updatedItems;
+            freshOrder.customerName = customerName;
+            freshOrder.customerPhone = customerPhone;
+            freshOrder.kitchenNotes = kitchenNotes;
+            freshOrder.billType = billType || freshOrder.billType;
+            freshOrder.discountType = dType;
+            freshOrder.discountValue = dValue;
+            freshOrder.discount = calculatedDiscount;
+            freshOrder.subtotal = subtotal;
+            freshOrder.tax = tRate;
+            freshOrder.taxBreakdown = order.taxBreakdown;
+            freshOrder.total = calculatedTotal;
+            freshOrder.status = 'Open';
+            await freshOrder.save();
+            order = freshOrder;
+          } else {
+            const newOrderData = {
+              tableNo,
+              items: updatedItems,
+              customerName,
+              customerPhone,
+              kitchenNotes,
+              billType: billType || 'Dine-In',
+              discountType: dType,
+              discountValue: dValue,
+              discount: calculatedDiscount,
+              subtotal,
+              tax: tRate,
+              taxBreakdown: order.taxBreakdown,
+              total: calculatedTotal,
+              status: 'Open'
+            };
+            order = await Bill.create(newOrderData);
+          }
+        } else {
+          throw saveErr;
+        }
+      }
     } else {
       // Create new order
       const subtotal = sanitizedItems.reduce((sum, item) => {
@@ -343,7 +426,8 @@ export const generateBill = async (req, res) => {
     const { id } = req.params;
     const { discount, discountType, discountValue, tax, taxBreakdown } = req.body;
 
-    const order = await Bill.findById(id);
+    // Always fetch a fresh document directly from DB to avoid stale __v VersionError
+    let order = await Bill.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status !== 'Open') return res.status(400).json({ message: 'Order already billed or paid' });
 
@@ -377,7 +461,27 @@ export const generateBill = async (req, res) => {
     const taxAmount = (taxableAmount * order.tax) / 100;
     order.total = Math.round(taxableAmount + taxAmount);
 
-    await order.save();
+    try {
+      await order.save();
+    } catch (saveErr) {
+      if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
+        console.warn('[generateBill] VersionError caught, re-fetching fresh document...');
+        const freshOrder = await Bill.findById(id);
+        if (!freshOrder) return res.status(404).json({ message: 'Order not found after retry' });
+        freshOrder.status = 'Billed';
+        freshOrder.billNumber = billNumber;
+        freshOrder.discount = order.discount;
+        freshOrder.discountType = order.discountType;
+        freshOrder.discountValue = order.discountValue;
+        freshOrder.tax = order.tax;
+        if (taxBreakdown) freshOrder.taxBreakdown = taxBreakdown;
+        freshOrder.total = order.total;
+        await freshOrder.save();
+        order = freshOrder;
+      } else {
+        throw saveErr;
+      }
+    }
     
     // Clear cache when bill is generated
     cache.clear('dailyStats');
@@ -1253,7 +1357,23 @@ export const getTodayKOTs = async (req, res) => {
 
     let targetDate = new Date();
     if (date) {
-      targetDate = new Date(date);
+      if (typeof date === 'string' && date.includes('-')) {
+        const parts = date.split('-');
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          targetDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        } else if (parts[2].length === 4) {
+          // DD-MM-YYYY
+          targetDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        } else {
+          targetDate = new Date(date);
+        }
+      } else {
+        targetDate = new Date(date);
+      }
+    }
+    if (isNaN(targetDate.getTime())) {
+      targetDate = new Date();
     }
     
     targetDate.setHours(0, 0, 0, 0);
@@ -1262,7 +1382,11 @@ export const getTodayKOTs = async (req, res) => {
 
     // Find all bills from target date that have KOTs
     const bills = await Bill.find({
-      updatedAt: { $gte: targetDate, $lt: nextDay },
+      $or: [
+        { createdAt: { $gte: targetDate, $lt: nextDay } },
+        { updatedAt: { $gte: targetDate, $lt: nextDay } },
+        { 'kots.createdAt': { $gte: targetDate, $lt: nextDay } }
+      ],
       'kots.0': { $exists: true }
     })
     .select('tableNo billType kots status items')
@@ -1490,9 +1614,9 @@ export const getActiveKOTs = async (req, res) => {
           };
         });
 
-        // Include KOTs that have pending, preparing or cancelled items
-        const hasUnfinishedItems = processedItems.some(item => item.status === 'Pending' || item.status === 'Preparing' || item.status === 'Cancelled' || item.isCancelled);
-        if (hasUnfinishedItems) {
+        // Include KOTs that have active items needing kitchen preparation (Pending or Preparing)
+        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing') && !item.isCancelled);
+        if (hasActiveKitchenItems) {
           allKots.push({
             orderId: order._id,
             tableNo: order.tableNo,
@@ -1522,16 +1646,49 @@ export const updateKOTItemStatus = async (req, res) => {
     const order = await Bill.findById(orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
-    const kot = order.kots.id(kotId);
+    let kot = order.kots.id(kotId);
+    if (!kot) {
+      kot = order.kots.find(k => k._id?.toString() === kotId?.toString() || k.kotNumber === kotId);
+    }
+    if (!kot && order.kots.length > 0) {
+      kot = order.kots.find(k => k.items && k.items.some(i => i._id?.toString() === itemId?.toString() || i.name === itemId)) || order.kots[0];
+    }
     if (!kot) return res.status(404).json({ message: 'KOT not found' });
 
-    const item = kot.items.id(itemId);
+    let item = kot.items.id(itemId);
+    if (!item) {
+      item = kot.items.find(i => i._id?.toString() === itemId?.toString() || i.name === itemId);
+    }
+    if (!item) {
+      for (const k of order.kots) {
+        item = k.items.find(i => i._id?.toString() === itemId?.toString() || i.name === itemId);
+        if (item) break;
+      }
+    }
     if (!item) return res.status(404).json({ message: 'Item not found in KOT' });
 
     item.status = status;
+
+    // Sync status to bill.items
+    if (order.items && Array.isArray(order.items)) {
+      const orderItem = order.items.find(i => i._id?.toString() === itemId?.toString() || i.name === item.name);
+      if (orderItem) {
+        orderItem.status = status;
+        order.markModified('items');
+      }
+    }
+
+    order.markModified('kots');
     await order.save();
 
-    emitSocketEvent(req, 'kotUpdated', { orderId, kotId, itemId, status });
+    emitSocketEvent(req, 'kotUpdated', { 
+      orderId, 
+      kotId, 
+      itemId, 
+      status, 
+      tableNo: order.tableNo, 
+      itemName: item.name 
+    });
     
     if (status === 'Preparing') {
       const cleanTable = order.tableNo.replace('Table ', '');
@@ -1607,8 +1764,10 @@ export const getEditedBills = async (req, res) => {
     
     // Find all bills that have been edited, sorted by the most recently updated
     const editedBills = await TenantBill.find({
-      isEdited: true,
-      $expr: { $gt: [{ $size: { $ifNull: ["$editHistory", []] } }, 0] }
+      $or: [
+        { isEdited: true },
+        { 'editHistory.0': { $exists: true } }
+      ]
     })
     .sort({ updatedAt: -1 })
     .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited');

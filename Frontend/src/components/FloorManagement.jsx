@@ -1,6 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
+import { getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
 import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -44,7 +45,7 @@ const formatImageUrl = (url) => {
 
 const normalizeTable = (tbl) => {
   if (!tbl) return '';
-  return tbl.replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+  return tbl.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
 };
 
 const FloorManagement = ({ onNavigate, onGoBack }) => {
@@ -137,6 +138,21 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   }, [floors]);
 
   useEffect(() => {
+    // 1. Instant Cache Load (0ms delay)
+    getCachedOpenOrders().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setOrders(cached);
+        setLoading(false);
+      }
+    }).catch(() => {});
+
+    getCachedFloors().then((cachedFloors) => {
+      if (cachedFloors && Array.isArray(cachedFloors) && cachedFloors.length > 0) {
+        setFloors(cachedFloors);
+      }
+    }).catch(() => {});
+
+    // 2. Background Revalidation
     fetchOrders();
     syncSpaces();
     fetchMenuItemsMap();
@@ -392,10 +408,20 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     onNavigate('billing', spaceName);
   };
 
-  const getSpaceOrder = (spaceName) => {
+  const getSpaceOrder = (spaceName, rawItemName) => {
     if (!spaceName) return null;
     const targetClean = normalizeTable(spaceName);
-    return orders.find((o) => normalizeTable(o.tableNo) === targetClean);
+    let order = orders.find((o) => normalizeTable(o.tableNo) === targetClean);
+    if (order) return order;
+
+    if (rawItemName) {
+      const rawClean = normalizeTable(rawItemName);
+      order = orders.find((o) => {
+        if (o.tableNo && o.tableNo.includes(' - ')) return false;
+        return normalizeTable(o.tableNo) === rawClean;
+      });
+    }
+    return order;
   };
 
   const getActiveSpacesForMerge = () => {
@@ -405,7 +431,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         if (floor[type]) {
           floor[type].forEach((item) => {
             const uniqueSpaceName = `${floor.name} - ${item.name}`;
-            const activeOrder = getSpaceOrder(uniqueSpaceName) || getSpaceOrder(item.name);
+            const activeOrder = getSpaceOrder(uniqueSpaceName, item.name);
             if (activeOrder) {
               activeSpaces.push({
                 id: `${uniqueSpaceName}`,
@@ -422,6 +448,32 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       });
     });
     return activeSpaces;
+  };
+
+  const getCalculatedOrderTotalWithTax = (activeOrder) => {
+    if (!activeOrder) return 0;
+    const subtotal = activeOrder.subtotal !== undefined ? activeOrder.subtotal : activeOrder.items?.reduce((sum, item) => {
+      if (item.isCancelled || item.status === 'Cancelled') return sum;
+      const activeQty = Math.max(0, (item.quantity || 0) - (item.cancelledQuantity || 0));
+      return sum + (Number(item.price || 0) * activeQty);
+    }, 0) || 0;
+
+    let totRate = 0;
+    try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      if (s.enableCgst) totRate += Number(s.cgstRate || 0);
+      if (s.enableSgst) totRate += Number(s.sgstRate || 0);
+      if (s.enableGst) totRate += Number(s.gstRate || 0);
+    } catch(e) {}
+
+    const disc = Number(activeOrder.discount || activeOrder.discountValue || 0);
+    const taxable = Math.max(0, subtotal - disc);
+    const taxAmt = taxable * (totRate / 100);
+
+    if (activeOrder.total && activeOrder.total > subtotal) {
+      return Math.round(activeOrder.total);
+    }
+    return Math.round(taxable + taxAmt);
   };
 
   const handleConfirmMerge = async () => {
@@ -451,7 +503,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     const uniqueSpaceName = currentFloor ? `${currentFloor.name} - ${item.name}` : item.name;
 
     // Dynamically calculate status from real-time orders instead of static item status
-    const activeOrder = getSpaceOrder(uniqueSpaceName) || getSpaceOrder(item.name);
+    const activeOrder = getSpaceOrder(uniqueSpaceName, item.name);
     const isOccupied = !!activeOrder;
 
     let statusColorClass = 'text-emerald-600';
@@ -550,7 +602,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           ) : (
               <div className="flex items-center gap-1 mt-1 w-full justify-center mb-0.5">
                 <div className="px-1.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white shadow-xs text-gray-900 flex-1 text-center truncate">
-                  {currencySymbol}{(activeOrder.total !== undefined && activeOrder.total !== null ? Math.round(activeOrder.total) : 0).toLocaleString()}
+                  {currencySymbol}{getCalculatedOrderTotalWithTax(activeOrder).toLocaleString()}
                 </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button

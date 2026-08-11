@@ -16,13 +16,12 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
         data
       };
 
-      const tenantDb = req.models?.connection?.name || req.headers['x-tenant-db'];
+      const tenantDb = req.tenantDb || req.headers['x-tenant-db'] || req.user?.db;
       if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
         io.to(tenantDb).emit('new_notification', notification);
-        console.log(`[Notification] Broadcasted to tenant ${tenantDb}: ${title}`);
-      } else {
-        io.emit('new_notification', notification);
       }
+      io.emit('new_notification', notification);
+      console.log(`[Notification] Broadcasted real-time event (${title}) to tenant ${tenantDb} & global clients`);
     }
   } catch (err) {
     console.error('Notification emit error:', err);

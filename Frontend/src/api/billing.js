@@ -1,25 +1,31 @@
 import api from './axios';
-import { addToSyncQueue } from '../db/offlineDb';
-import { isOnline } from '../utils/syncEngine';
+import { addToSyncQueue, cacheOpenOrders, getCachedOpenOrders } from '../db/offlineDb';
 
 export const getActiveOrder = async (tableNo) => {
-  const response = await api.get(`/bills/active/${tableNo}`);
+  const encoded = encodeURIComponent(tableNo);
+  const response = await api.get(`/bills/active/${encoded}`);
   return response.data;
 };
+
+// Helper: returns true ONLY if the browser is genuinely offline (no network)
+// navigator.onLine is the only reliable signal — err.code and !err.response
+// can fire for cancelled requests, CORS errors, or transient issues even
+// when the backend is running perfectly fine.
+const isTrulyOffline = () => !navigator.onLine;
 
 export const saveOrder = async (orderData) => {
   try {
     const response = await api.post('/bills/save', orderData);
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+    if (isTrulyOffline()) {
       // CRITICAL: Queue the order for sync when back online
       await addToSyncQueue('/bills/save', 'post', orderData);
-      
-      console.warn('[Billing API] Backend unreachable! Caching order locally.');
-      alert('WARNING: Backend API is unreachable (Offline Mode). Your order is saved locally but will not appear in Active Orders until backend is connected.');
-      
-      // Return a fake order so the UI doesn't break
+      console.warn('[Billing API] Truly offline! Caching order locally for sync.');
+      // Dispatch a non-blocking event so the UI can show a toast
+      window.dispatchEvent(new CustomEvent('offlineOrderSaved', {
+        detail: { message: 'No internet connection. Order saved locally and will sync when reconnected.' }
+      }));
       const offlineOrder = {
         _id: 'offline_' + Date.now(),
         ...orderData,
@@ -27,7 +33,6 @@ export const saveOrder = async (orderData) => {
         _offline: true,
         createdAt: new Date().toISOString()
       };
-      console.log('[Billing API] Order saved offline:', offlineOrder._id);
       return offlineOrder;
     }
     throw err;
@@ -39,10 +44,8 @@ export const generateBill = async (id, billData) => {
     const response = await api.post(`/bills/generate/${id}`, billData);
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
-      // For offline bill generation, skip if the order itself was offline
+    if (isTrulyOffline()) {
       if (id.startsWith('offline_')) {
-        console.warn('[Billing API] Cannot generate bill for offline order. Will sync when online.');
         return { _id: id, ...billData, status: 'Billed', _offline: true };
       }
       await addToSyncQueue(`/bills/generate/${id}`, 'post', billData);
@@ -57,9 +60,8 @@ export const settleBill = async (id, paymentData) => {
     const response = await api.post(`/bills/settle/${id}`, paymentData);
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+    if (isTrulyOffline()) {
       if (id.startsWith('offline_')) {
-        console.warn('[Billing API] Cannot settle offline order. Will sync when online.');
         return { _id: id, ...paymentData, status: 'Paid', _offline: true };
       }
       await addToSyncQueue(`/bills/settle/${id}`, 'post', paymentData);
@@ -68,6 +70,7 @@ export const settleBill = async (id, paymentData) => {
     throw err;
   }
 };
+
 
 export const apiReopenOrder = async (id) => {
   const response = await api.post(`/bills/reopen/${id}`);
@@ -79,7 +82,7 @@ export const apiCancelOrder = async (id, cancelReason) => {
     const response = await api.post(`/bills/cancel/${id}`, { cancelReason });
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+    if (isTrulyOffline()) {
       await addToSyncQueue(`/bills/cancel/${id}`, 'post', { cancelReason });
       return { _id: id, status: 'Cancelled', _offline: true };
     }
@@ -92,7 +95,7 @@ export const apiRefundOrder = async (id, refundReason) => {
     const response = await api.post(`/bills/refund/${id}`, { refundReason });
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+    if (isTrulyOffline()) {
       await addToSyncQueue(`/bills/refund/${id}`, 'post', { refundReason });
       return { _id: id, status: 'Refunded', _offline: true };
     }
@@ -108,11 +111,15 @@ export const apiTransferTable = async (id, newTableNo) => {
 export const getOpenOrders = async () => {
   try {
     const response = await api.get('/bills/open');
+    if (response.data && Array.isArray(response.data)) {
+      cacheOpenOrders(response.data).catch(() => {});
+    }
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
-      console.log('[Billing API] Offline - returning empty orders (cached on floor)');
-      return [];
+    if (isTrulyOffline()) {
+      console.log('[Billing API] Offline - retrieving cached open orders');
+      const cached = await getCachedOpenOrders();
+      return cached || [];
     }
     throw err;
   }
@@ -154,7 +161,7 @@ export const apiGenerateKOT = async (id, cartItems) => {
     const response = await api.post(`/bills/kot/${id}`, { items: cartItems });
     return response.data;
   } catch (err) {
-    if (!isOnline() || err.code === 'ERR_NETWORK' || !err.response) {
+    if (isTrulyOffline()) {
       await addToSyncQueue(`/bills/kot/${id}`, 'post', { items: cartItems });
       return { _offline: true, message: 'KOT queued for sync' };
     }

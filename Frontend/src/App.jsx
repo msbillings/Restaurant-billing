@@ -209,7 +209,7 @@ function App() {
       const isRealTime = rtUnreadCount > prevUnreadCountRef.current;
       if (isRealTime && realTimeNotifs.length > 0) {
         const latest = realTimeNotifs[0];
-        setToastNotifInfo({ title: latest.title, message: latest.message, type: latest.type || 'success' });
+        setToastNotifInfo({ title: latest.title, message: latest.message, type: latest.type || 'warning' });
       } else {
         setToastMessage("You have a new Notification!");
       }
@@ -874,22 +874,25 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className="h-16 sm:h-20 flex items-center justify-between px-3 sm:px-6 border-b border-border/40 bg-surface shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative">
+      <header className="min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b border-border/40 bg-surface shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative">
         {/* Left: Hamburger & Logo */}
-        <div className="flex items-center min-w-0 shrink-0">
+        <div className="flex items-center min-w-0 shrink-0 gap-1">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-1 rounded-lg text-text-main hover:bg-surface-hover transition-colors shrink-0 flex items-center justify-center">
             <Menu size={22} className="sm:w-6 sm:h-6" />
           </button>
-          <div className="flex items-center cursor-pointer relative shrink-0" onClick={() => handleViewChange('floor')}>
+          <button
+            onClick={() => handleViewChange('floor')}
+            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-1 px-1 min-w-[150px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity overflow-visible"
+            title={t("Go to Table View / Floor Management")}>
             <img
               src={logoImg}
               alt="msbillings"
-              className="h-13 sm:h-18 md:h-20 w-auto object-contain block pointer-events-none transform scale-165 sm:scale-200 origin-left"
+              className="h-10 sm:h-13 md:h-15 w-auto object-contain block transform scale-140 sm:scale-170 md:scale-190 origin-left"
               style={{ objectFit: 'contain' }}
             />
-          </div>
+          </button>
         </div>
 
         {/* Desktop Search & Actions */}

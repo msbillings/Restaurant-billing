@@ -56,6 +56,21 @@
   }
 }
 
+/* Fix Native Date Input Calendar Picker Indicator Overlap & Misalignment */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+  margin-left: auto;
+  padding: 0 2px;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+input[type="date"] {
+  min-width: 120px;
+}
+
 /* Touch Target Minimum Sizing & Helper Classes */
 .touch-target {
   min-height: 44px;

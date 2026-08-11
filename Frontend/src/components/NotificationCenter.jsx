@@ -12,7 +12,15 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-  const [readIds, setReadIds] = useState(new Set());
+  const [readIds, setReadIds] = useState(() => {
+    try {
+      const savedRealtime = JSON.parse(localStorage.getItem('realtime_read_ids') || '[]');
+      const savedBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+      return new Set([...savedRealtime, ...savedBroadcasts]);
+    } catch (e) {
+      return new Set();
+    }
+  });
   const [showClearModal, setShowClearModal] = useState(false);
   const [resolvedNotifs, setResolvedNotifs] = useState({});
 
@@ -207,24 +215,34 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
         allNotifications.map((notif) => {
           const Icon = notif.icon || Bell;
           const isBroadcast = notif.type === 'broadcast';
+          const isRead = readIds.has(notif.id) || notif.isRead || notif.read;
+
+          const cardClass = isRead 
+            ? 'bg-emerald-50/90 border-emerald-300 shadow-2xs' 
+            : isBroadcast 
+              ? 'bg-white border-purple-200 shadow-purple-100/50' 
+              : 'bg-white border-gray-200 shadow-xs';
 
           return (
-            <div key={notif.id} className={`bg-white p-3 sm:p-5 rounded-2xl shadow-sm border ${isBroadcast ? 'border-purple-200 shadow-purple-100/50' : 'border-gray-100'} flex gap-3 sm:gap-4 items-start transition-all hover:shadow-md`}>
-                <div className={`p-2 sm:p-3 rounded-xl ${notif.bg} ${notif.color} shrink-0`}>
+            <div key={notif.id} className={`${cardClass} p-3 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start transition-all hover:shadow-md`}>
+                <div className={`p-2 sm:p-3 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
                   <Icon size={20} className="sm:hidden" />
                   <Icon size={24} className="hidden sm:block" />
                 </div>
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
-                    <h3 className="font-bold text-gray-800 text-base sm:text-lg truncate">{t(notif.title)}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-bold text-base sm:text-lg truncate ${isRead ? 'text-emerald-900' : 'text-gray-800'}`}>{t(notif.title)}</h3>
+                      {isRead && <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">{t("Read")}</span>}
+                    </div>
                     <div className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-400 font-medium shrink-0">
                       <Clock size={12} />
                       {formatTimeAgo(notif.timestamp || notif.time)}
                     </div>
                   </div>
                   
-                  <p className="text-gray-700 leading-relaxed text-xs sm:text-sm mb-3 whitespace-pre-wrap">{t(notif.message)}</p>
+                  <p className={`leading-relaxed text-xs sm:text-sm mb-3 whitespace-pre-wrap ${isRead ? 'text-emerald-800/90 font-medium' : 'text-gray-700'}`}>{t(notif.message)}</p>
                   
                   {isBroadcast && notif.imageUrl &&
                 <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">
@@ -301,14 +319,19 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
                   }
                   setReadIds((prev) => {
                     const newSet = new Set(prev);
-                    newSet.add(notif.id);
+                    if (newSet.has(notif.id)) {
+                      newSet.delete(notif.id);
+                    } else {
+                      newSet.add(notif.id);
+                    }
+                    localStorage.setItem('realtime_read_ids', JSON.stringify([...newSet]));
                     return newSet;
                   });
                 }}
-                className={`p-1.5 sm:p-2 rounded-xl transition-colors shrink-0 ${readIds.has(notif.id) ? 'text-green-500 bg-green-50' : 'text-gray-400 hover:text-green-600 hover:bg-green-50'}`} title={t("Mark as read / Dismiss")}>
+                className={`p-1.5 sm:p-2 rounded-xl transition-colors shrink-0 ${isRead ? 'text-emerald-600 bg-emerald-100' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'}`} title={t("Mark as read")}>
                 
-                  <CheckCircle size={18} className={readIds.has(notif.id) ? 'fill-green-100 sm:hidden' : 'sm:hidden'} />
-                  <CheckCircle size={20} className={readIds.has(notif.id) ? 'fill-green-100 hidden sm:block' : 'hidden sm:block'} />
+                  <CheckCircle size={18} className={isRead ? 'fill-emerald-200 sm:hidden' : 'sm:hidden'} />
+                  <CheckCircle size={20} className={isRead ? 'fill-emerald-200 hidden sm:block' : 'hidden sm:block'} />
                 </button>
               </div>);
 

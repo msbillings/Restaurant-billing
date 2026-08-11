@@ -1,10 +1,11 @@
-import { getApiUrl, getSuperadminApiUrl } from "../config.js";
+import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChefHat, CheckCircle, Clock, Timer, Ban } from 'lucide-react';
-import { io } from 'socket.io-client';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
+import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
+import { getNotificationSocket } from '../hooks/useNotifications';
 
 const KDS = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -12,6 +13,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [customPrepInputs, setCustomPrepInputs] = useState({});
   const [now, setNow] = useState(Date.now());
+  const fetchingRef = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -36,42 +38,129 @@ const KDS = ({ onNavigate, onGoBack }) => {
     return { remainingMins, remainingSecs, overdueMins: 0, isOverdue: false, percent };
   };
 
-  const fetchKOTs = async () => {
+  const fetchKOTs = useCallback(async () => {
+    if (fetchingRef.current) return; // Prevent concurrent fetches
+    fetchingRef.current = true;
     try {
       const response = await api.get('/bills/kots/active');
-      setKots(response.data || []);
+      const data = response.data || [];
+      setKots(data);
+      // Cache for instant load next time
+      cacheKotHistory(data).catch(() => {});
     } catch (error) {
       console.error('Error fetching KDS KOTs:', error);
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // 1. INSTANT 0ms cache load
+    getCachedKotHistory().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        const activeCached = cached.filter(kot =>
+          (kot.items || []).some(i => (i.status === 'Pending' || i.status === 'Preparing') && !i.isCancelled)
+        );
+        if (activeCached.length > 0) {
+          setKots(activeCached);
+        }
+      }
+      setLoading(false);
+    }).catch(() => { setLoading(false); });
+
+    // 2. Background network fetch to confirm freshness
     fetchKOTs();
 
-    const API_BASE_URL = getApiUrl();
-    const socketUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketUrl);
+    // 3. Use SHARED socket (already connected, already joined tenant)
+    //    so there is zero socket-connect delay for this page
+    const socket = getNotificationSocket();
+    if (!socket) return;
 
-    socket.on('connect', () => {
-      const tenantDb = localStorage.getItem('resto_db_name');
-      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      if (tenantDb) {
-        socket.emit('joinTenant', { tenantDb, token });
+    // Optimistic 0ms update: when newKOT event arrives with payload,
+    // immediately append/merge the new KOT into state WITHOUT waiting for API
+    const handleNewKOT = (data) => {
+      if (data && data.kot) {
+        // Instantly add the new KOT to state from socket payload
+        setKots(prev => {
+          const exists = prev.some(k =>
+            k.kotId?.toString() === data.kot._id?.toString() ||
+            k.kotId?.toString() === data.kot.kotId?.toString()
+          );
+          if (exists) return prev;
+          const newEntry = {
+            kotId: data.kot._id || data.kot.kotId,
+            kotNumber: data.kot.kotNumber,
+            tableNo: data.tableNo || data.kot.tableNo,
+            billType: data.billType || data.kot.billType || 'Dine-In',
+            orderId: data.orderId || data.kot.orderId,
+            createdAt: data.kot.createdAt || new Date().toISOString(),
+            items: (data.kot.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))
+          };
+          return [...prev, newEntry];
+        });
       }
-    });
+      // Background confirm from server (won't show delay since UI already updated)
+      fetchKOTs();
+    };
 
-    socket.on('newKOT', fetchKOTs);
-    socket.on('kotUpdated', fetchKOTs);
+    // kotUpdated: optimistically update item status in existing KOT
+    const handleKotUpdated = (data) => {
+      if (data && (data.itemId || data.itemName) && data.status) {
+        setKots(prev => prev.map(kot => {
+          if (
+            (data.kotId && kot.kotId?.toString() === data.kotId?.toString()) ||
+            (data.orderId && kot.orderId?.toString() === data.orderId?.toString()) ||
+            (data.tableNo && kot.tableNo === data.tableNo)
+          ) {
+            return {
+              ...kot,
+              items: (kot.items || []).map(item => {
+                if (
+                  (data.itemId && item._id?.toString() === data.itemId?.toString()) ||
+                  (data.itemName && item.name === data.itemName)
+                ) {
+                  return { ...item, status: data.status };
+                }
+                return item;
+              })
+            };
+          }
+          return kot;
+        }));
+      }
+      // Confirm from server in background
+      fetchKOTs();
+    };
+
+    socket.on('newKOT', handleNewKOT);
+    socket.on('kotUpdated', handleKotUpdated);
     socket.on('orderUpdated', fetchKOTs);
 
     return () => {
-      socket.disconnect();
+      socket.off('newKOT', handleNewKOT);
+      socket.off('kotUpdated', handleKotUpdated);
+      socket.off('orderUpdated', fetchKOTs);
     };
-  }, []);
+  }, [fetchKOTs]);
 
   const updateItemStatus = async (orderId, kotId, itemId, newStatus) => {
+    // 1. Instant 0ms Local State Update
+    setKots((prevKots) =>
+      prevKots.map((kot) => {
+        if (kot.kotId?.toString() === kotId?.toString() || kot.orderId?.toString() === orderId?.toString()) {
+          const updatedItems = (kot.items || []).map((item) => {
+            if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
+              return { ...item, status: newStatus };
+            }
+            return item;
+          });
+          return { ...kot, items: updatedItems };
+        }
+        return kot;
+      })
+    );
+
     try {
       await api.post('/bills/kot/item/status', {
         orderId,
@@ -79,9 +168,11 @@ const KDS = ({ onNavigate, onGoBack }) => {
         itemId,
         status: newStatus
       });
+      // Background refresh to confirm server state
       fetchKOTs();
     } catch (error) {
       console.error('Error updating status:', error);
+      fetchKOTs();
     }
   };
 
@@ -112,7 +203,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
           items: []
         };
       }
-      
+
       if (new Date(kot.createdAt) < new Date(groups[groupId].createdAt)) {
         groups[groupId].createdAt = kot.createdAt;
       }
@@ -140,7 +231,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
       });
     });
 
-    return Object.values(groups).filter(g => g.items.length > 0);
+    // Only render table cards with active items needing kitchen preparation
+    return Object.values(groups).filter(g =>
+      g.items.some(item => (item.status === 'Pending' || item.status === 'Preparing') && !item.isCancelled)
+    );
   }, [kots]);
 
   if (loading) return (
@@ -196,15 +290,15 @@ const KDS = ({ onNavigate, onGoBack }) => {
                       const itemMinutesOld = Math.floor((new Date() - new Date(item.itemCreatedAt)) / 60000);
                       const isCancelled = item.isCancelled || item.status === 'Cancelled';
                       const prepKey = `${item.kotId}-${item._id}`;
-                      
+
                       return (
-                        <div 
-                          key={prepKey} 
+                        <div
+                          key={prepKey}
                           className={`p-3.5 rounded-xl border transition-all flex flex-col gap-2 ${
-                            isCancelled 
-                              ? 'bg-red-950/30 border-red-800/50 text-red-300 opacity-75' 
-                              : item.status === 'Preparing' 
-                              ? 'bg-amber-950/30 border-amber-500/60 text-amber-100 shadow-md' 
+                            isCancelled
+                              ? 'bg-red-950/30 border-red-800/50 text-red-300 opacity-75'
+                              : item.status === 'Preparing'
+                              ? 'bg-amber-950/30 border-amber-500/60 text-amber-100 shadow-md'
                               : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-200'
                           }`}
                         >
@@ -224,8 +318,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                   </span>
                                 ) : (
                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                                    item.status === 'Preparing' 
-                                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40' 
+                                    item.status === 'Preparing'
+                                      ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                                       : item.status === 'Ready'
                                       ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
                                       : 'bg-slate-800 text-slate-400 border-slate-700'
@@ -240,8 +334,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
                               <button
                                 onClick={() => updateItemStatus(item.originalOrderId, item.kotId, item._id, item.status === 'Pending' ? 'Preparing' : 'Ready')}
                                 className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target ${
-                                  item.status === 'Pending' 
-                                    ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700' 
+                                  item.status === 'Pending'
+                                    ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700'
                                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40'
                                 }`}
                                 title={t(item.status === 'Pending' ? 'Start Preparing' : 'Mark Ready')}
@@ -251,7 +345,6 @@ const KDS = ({ onNavigate, onGoBack }) => {
                             )}
                           </div>
 
-                          {/* Dynamic Prep Time Selector & Live Ticking Timer Bar */}
                           {!isCancelled && (
                             <div className="pt-2 border-t border-slate-800/80 mt-1 flex flex-col gap-1.5">
                               {(() => {
@@ -264,8 +357,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                       </span>
                                       {cd ? (
                                         <span className={`font-bold text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${
-                                          cd.isOverdue 
-                                            ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse' 
+                                          cd.isOverdue
+                                            ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse'
                                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                                         }`}>
                                           ⏱️ {item.prepTimeMinutes}m • {cd.isOverdue ? `Overdue ${cd.overdueMins}m` : `${cd.remainingMins}m ${cd.remainingSecs}s left`}
@@ -277,8 +370,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
                                     {cd && (
                                       <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                                        <div 
-                                          className={`h-full transition-all duration-1000 ${cd.isOverdue ? 'bg-red-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`} 
+                                        <div
+                                          className={`h-full transition-all duration-1000 ${cd.isOverdue ? 'bg-red-500' : 'bg-gradient-to-r from-amber-500 to-orange-500'}`}
                                           style={{ width: `${cd.percent}%` }}
                                         />
                                       </div>
@@ -315,8 +408,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                           value={customPrepInputs[prepKey] || ''}
                                           onChange={(e) => setCustomPrepInputs({ ...customPrepInputs, [prepKey]: e.target.value })}
                                           className={`w-12 px-1.5 py-1 text-[11px] border rounded-lg font-mono text-center focus:outline-none ${
-                                            isCustomSelected 
-                                              ? 'bg-amber-500/20 text-amber-300 border-amber-400 font-black ring-2 ring-amber-400' 
+                                            isCustomSelected
+                                              ? 'bg-amber-500/20 text-amber-300 border-amber-400 font-black ring-2 ring-amber-400'
                                               : 'bg-slate-950 text-amber-300 border-slate-700 focus:border-amber-500'
                                           }`}
                                         />
@@ -329,8 +422,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                             }
                                           }}
                                           className={`px-2.5 py-1 text-[11px] font-black rounded-lg transition-all touch-target ${
-                                            isCustomSelected 
-                                              ? 'bg-amber-500 text-slate-950 font-black shadow-lg ring-2 ring-amber-400' 
+                                            isCustomSelected
+                                              ? 'bg-amber-500 text-slate-950 font-black shadow-lg ring-2 ring-amber-400'
                                               : 'bg-amber-600 hover:bg-amber-500 text-slate-950'
                                           }`}
                                         >

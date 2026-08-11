@@ -7,7 +7,15 @@ const SOCKET_URL = getSocketUrl();
 
 // Create a singleton socket for notifications so we don't open multiple connections
 let notificationSocket = null;
-let lastAudioPlayTime = 0; // Global variable to debounce audio plays across multiple hook instances
+let lastAudioPlayTime = 0;
+// Pre-load notification audio object once globally so audio plays instantly without network fetch lag
+let notificationAudio = null;
+try {
+  notificationAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+  notificationAudio.preload = 'auto';
+} catch (e) {
+  console.warn('Audio pre-load error:', e);
+}
 
 export const getNotificationSocket = () => {
   if (!notificationSocket) {
@@ -96,13 +104,15 @@ const useNotifications = (userRole = 'Admin') => {
       
       setUnreadCount((prev) => prev + 1);
 
-      // Play sound (Debounced globally to prevent multiple components from playing it simultaneously)
+      // Play sound instantly using pre-loaded audio instance (0ms latency)
       const now = Date.now();
-      if (now - lastAudioPlayTime > 2000) {
+      if (now - lastAudioPlayTime > 3000) {
         lastAudioPlayTime = now;
         try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-          audio.play().catch((e) => console.log('Audio play error (user interaction required):', e));
+          if (notificationAudio) {
+            notificationAudio.currentTime = 0;
+            notificationAudio.play().catch((e) => console.log('Audio play error (user interaction required):', e));
+          }
         } catch (err) {
           console.error('Failed to play notification sound', err);
         }
@@ -119,6 +129,14 @@ const useNotifications = (userRole = 'Admin') => {
 
   const markAllAsRead = () => {
     setUnreadCount(0);
+    try {
+      const existingRead = JSON.parse(localStorage.getItem('realtime_read_ids') || '[]');
+      const allNotifIds = notifications.map(n => n.id);
+      const combined = Array.from(new Set([...existingRead, ...allNotifIds]));
+      localStorage.setItem('realtime_read_ids', JSON.stringify(combined));
+    } catch (e) {
+      console.error('Error marking all as read:', e);
+    }
   };
 
   const clearNotification = (id) => {

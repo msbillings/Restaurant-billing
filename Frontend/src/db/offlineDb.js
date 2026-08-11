@@ -19,6 +19,21 @@ db.version(1).stores({
   // Categories cached from server
   categories: '_id, name, displayOrder, isActive',
   
+  // Active/open orders cached for instant rendering
+  openOrders: '_id, tableNo, status, billType, createdAt',
+
+  // Bills history cached for instant rendering
+  billHistory: '_id, billNumber, tableNo, status, total, createdAt',
+
+  // KOT history cached for instant rendering
+  kotHistory: '_id, kotNo, tableNo, status, createdAt',
+
+  // Inventory items cached for instant rendering
+  inventory: '_id, name, category, stockQuantity',
+
+  // Edited bills cached for instant rendering
+  editedBills: '_id, billNumber, tableNo, status, total, updatedAt',
+
   // Orders created while offline - queued for sync
   offlineOrders: '++localId, tableNo, status, billType, createdAt, synced',
   
@@ -108,6 +123,54 @@ export const getCachedFloors = async () => {
     return floors.length > 0 ? floors : null;
   } catch (err) {
     console.error('[OfflineDB] Failed to read cached floors:', err);
+    return null;
+  }
+};
+
+// ==================== OPEN ORDERS CACHE ====================
+
+export const cacheOpenOrders = async (orders) => {
+  try {
+    await db.openOrders.clear();
+    if (orders && orders.length > 0) {
+      await db.openOrders.bulkPut(orders);
+    }
+    await db.meta.put({ key: 'lastOpenOrdersSync', value: Date.now() });
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache open orders:', err);
+  }
+};
+
+export const getCachedOpenOrders = async () => {
+  try {
+    const orders = await db.openOrders.toArray();
+    return orders.length > 0 ? orders : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached open orders:', err);
+    return null;
+  }
+};
+
+// ==================== BILL HISTORY CACHE ====================
+
+export const cacheBillHistory = async (bills) => {
+  try {
+    await db.billHistory.clear();
+    if (bills && bills.length > 0) {
+      await db.billHistory.bulkPut(bills);
+    }
+    await db.meta.put({ key: 'lastBillHistorySync', value: Date.now() });
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache bill history:', err);
+  }
+};
+
+export const getCachedBillHistory = async () => {
+  try {
+    const bills = await db.billHistory.toArray();
+    return bills.length > 0 ? bills : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached bill history:', err);
     return null;
   }
 };
@@ -217,6 +280,75 @@ export const setMeta = async (key, value) => {
     await db.meta.put({ key, value });
   } catch (err) {
     console.error('[OfflineDB] Failed to set meta:', err);
+  }
+};
+
+// ==================== KOT HISTORY CACHE ====================
+
+export const cacheKotHistory = async (kots) => {
+  try {
+    await db.kotHistory.clear();
+    if (kots && kots.length > 0) {
+      await db.kotHistory.bulkPut(kots);
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache KOT history:', err);
+  }
+};
+
+export const getCachedKotHistory = async () => {
+  try {
+    const kots = await db.kotHistory.toArray();
+    return kots.length > 0 ? kots : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached KOT history:', err);
+    return null;
+  }
+};
+
+// ==================== INVENTORY CACHE ====================
+
+export const cacheInventory = async (items) => {
+  try {
+    await db.inventory.clear();
+    if (items && items.length > 0) {
+      await db.inventory.bulkPut(items);
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache inventory:', err);
+  }
+};
+
+export const getCachedInventory = async () => {
+  try {
+    const items = await db.inventory.toArray();
+    return items.length > 0 ? items : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached inventory:', err);
+    return null;
+  }
+};
+
+// ==================== EDITED BILLS CACHE ====================
+
+export const cacheEditedBills = async (bills) => {
+  try {
+    await db.editedBills.clear();
+    if (bills && bills.length > 0) {
+      await db.editedBills.bulkPut(bills);
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache edited bills:', err);
+  }
+};
+
+export const getCachedEditedBills = async () => {
+  try {
+    const bills = await db.editedBills.toArray();
+    return bills.length > 0 ? bills : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached edited bills:', err);
+    return null;
   }
 };
 

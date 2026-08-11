@@ -79,6 +79,7 @@ const CustomerMenu = () => {
 
   // Order tracking modal
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
 
   const handleBellPointerDown = useCallback((e) => {
     isDragging.current = true;
@@ -183,7 +184,7 @@ const CustomerMenu = () => {
     const checkOrderStatus = async () => {
       if (!table || !tenant) return;
       try {
-        const res = await axios.get(`${API_BASE_URL}/public/order-status?tableNo=${table}`, {
+        const res = await axios.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}`, {
           headers: { 'X-Tenant-DB': tenant }
         });
         setActiveOrderData(res.data);
@@ -480,6 +481,113 @@ const CustomerMenu = () => {
         </div>
       </div>
 
+      {/* ── YOUR CURRENT ORDER SECTION ── shown when table has an active bill */}
+      {activeOrderData && activeOrderData.items && activeOrderData.items.filter(i => !i.isCancelled).length > 0 && (
+        <div className="px-4 pt-4 pb-2 max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-md border border-orange-100 overflow-hidden">
+            {/* Section header */}
+            <div className="bg-orange-500 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white">
+                <ChefHat size={18} />
+                <span className="font-black text-sm">{t("Your Current Order")}</span>
+                <span className="bg-white/20 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  {activeOrderData.items.filter(i => !i.isCancelled).length} {t("items")}
+                </span>
+              </div>
+              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black ${
+                activeOrderData.kitchenStatus === 'Ready'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : activeOrderData.kitchenStatus === 'Preparing'
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-blue-100 text-blue-700'
+              }`}>
+                <span className={`w-2 h-2 rounded-full animate-pulse inline-block ${
+                  activeOrderData.kitchenStatus === 'Ready' ? 'bg-emerald-500' :
+                  activeOrderData.kitchenStatus === 'Preparing' ? 'bg-amber-500' : 'bg-blue-500'
+                }`}></span>
+                {activeOrderData.kitchenStatus === 'Ready' ? t('Ready') :
+                 activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') : t('Received')}
+              </div>
+            </div>
+
+            {/* Items list */}
+            <div className="divide-y divide-slate-100">
+              {activeOrderData.items.filter(i => !i.isCancelled).map((item, idx) => {
+                const effectiveQty = item.quantity - (item.cancelledQuantity || 0);
+                const itemTotal = item.price * effectiveQty;
+                return (
+                  <div key={item._id || idx} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-orange-50 text-orange-600 text-xs font-black flex items-center justify-center shrink-0">
+                        {effectiveQty}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{item.name}</p>
+                        {item.specialNote && (
+                          <p className="text-[10px] text-slate-400 truncate">📝 {item.specialNote}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.cancellationRequested && (
+                        <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                      )}
+                      <span className="text-xs font-black text-orange-600">₹{itemTotal}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Inline Expanded Bill Breakdown */}
+            {isDetailsExpanded && (
+              <div className="bg-orange-50/50 p-4 border-t border-slate-100 space-y-2 animate-in fade-in duration-200">
+                <div className="text-xs font-bold text-slate-700 border-b border-orange-100 pb-1 mb-2">
+                  {t("Order Breakdown")}
+                </div>
+                <div className="flex justify-between text-xs text-slate-600">
+                  <span>{t("Subtotal")}</span>
+                  <span>₹{activeOrderData.subTotal || activeOrderData.total}</span>
+                </div>
+                {activeOrderData.tax > 0 && (
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>{t("Taxes (GST)")}</span>
+                    <span>₹{activeOrderData.tax}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs font-black text-slate-800 pt-1 border-t border-orange-100">
+                  <span>{t("Grand Total")}</span>
+                  <span>₹{activeOrderData.total}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Order total footer */}
+            <div className="bg-slate-50 px-4 py-3 flex items-center justify-between border-t border-slate-100">
+              <div className="text-xs text-slate-500 font-bold">{t("Table")} {table}</div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase">{t("Total")}</div>
+                  <div className="text-sm font-black text-slate-800">₹{activeOrderData.total}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDetailsExpanded(!isDetailsExpanded);
+                    setShowOrderModal(true);
+                  }}
+                  className="bg-orange-500 text-white text-[11px] font-black px-3 py-1.5 rounded-xl hover:bg-orange-600 active:scale-95 transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                >
+                  {t("Details")} {isDetailsExpanded ? '▲' : '→'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Menu Categories & Items */}
       <main className="p-4 space-y-8 mt-2 max-w-2xl mx-auto">
         {visibleCategoriesData.map((category) => {
@@ -535,43 +643,45 @@ const CustomerMenu = () => {
       </main>
 
       {/* Live Order Tracking — Mini tappable bar + Full Modal */}
-      {activeOrderData && cart.length === 0 && orderStatus === 'menu' && activeOrderData.kitchenStatus !== 'Completed' && (
+      {activeOrderData && (
         <>
           {/* Mini bar at bottom — tap to open modal */}
-          <motion.div
-            initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-            className="fixed bottom-6 left-0 right-0 px-4 z-30"
-          >
-            <button
-              onClick={() => setShowOrderModal(prev => !prev)}
-              className={`w-full text-white rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
-                activeOrderData.kitchenStatus === 'Ready'
-                  ? 'bg-emerald-600 border-2 border-emerald-400'
-                  : activeOrderData.kitchenStatus === 'Preparing'
-                  ? 'bg-amber-600'
-                  : 'bg-blue-600'
-              }`}
+          {orderStatus === 'menu' && activeOrderData.kitchenStatus !== 'Completed' && (
+            <motion.div
+              initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
+              className="fixed bottom-6 left-0 right-0 px-4 z-30"
             >
-              <span className="font-bold flex items-center gap-2 text-sm">
-                {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
-                {activeOrderData.kitchenStatus === 'Ready'
-                  ? t("Order Ready & Served!")
-                  : activeOrderData.kitchenStatus === 'Preparing'
-                  ? t("Order in Kitchen")
-                  : t("Order Received")}
-              </span>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="font-black text-base">₹{activeOrderData.total}</span>
-                {/* Toggle arrow — points UP when modal open, DOWN when closed */}
-                <ChevronUp
-                  size={22}
-                  color="#ffffff"
-                  strokeWidth={2.5}
-                  style={{ transform: showOrderModal ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }}
-                />
-              </div>
-            </button>
-          </motion.div>
+              <button
+                onClick={() => setShowOrderModal(prev => !prev)}
+                className={`w-full text-white rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
+                  activeOrderData.kitchenStatus === 'Ready'
+                    ? 'bg-emerald-600 border-2 border-emerald-400'
+                    : activeOrderData.kitchenStatus === 'Preparing'
+                    ? 'bg-amber-600'
+                    : 'bg-blue-600'
+                }`}
+              >
+                <span className="font-bold flex items-center gap-2 text-sm">
+                  {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
+                  {activeOrderData.kitchenStatus === 'Ready'
+                    ? t("Order Ready & Served!")
+                    : activeOrderData.kitchenStatus === 'Preparing'
+                    ? t("Order in Kitchen")
+                    : t("Order Received")}
+                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-black text-base">₹{activeOrderData.total}</span>
+                  {/* Toggle arrow — points UP when modal open, DOWN when closed */}
+                  <ChevronUp
+                    size={22}
+                    color="#ffffff"
+                    strokeWidth={2.5}
+                    style={{ transform: showOrderModal ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }}
+                  />
+                </div>
+              </button>
+            </motion.div>
+          )}
 
           {/* Full tracking modal */}
           <AnimatePresence>
@@ -621,7 +731,7 @@ const CustomerMenu = () => {
                   {/* Status Text */}
                   <p className="text-sm text-white/90 font-medium">
                     {t("Status")}:{' '}
-                    <span className="font-black underline decoration-2">
+                    <span className="font-black">
                       {activeOrderData.kitchenStatus === 'Ready'
                         ? t("Food is Ready! Hot & Fresh 🍲")
                         : activeOrderData.kitchenStatus === 'Preparing'
@@ -708,7 +818,7 @@ const CustomerMenu = () => {
                       <div className="border-t border-white/20 pt-2 mt-1 space-y-1">
                         <div className="flex justify-between text-xs">
                           <span>{t("Subtotal")}</span>
-                          <span>₹{activeOrderData.subTotal}</span>
+                          <span>₹{activeOrderData.subTotal || activeOrderData.total}</span>
                         </div>
                         {activeOrderData.tax > 0 && (
                           <div className="flex justify-between text-xs text-white/80">
