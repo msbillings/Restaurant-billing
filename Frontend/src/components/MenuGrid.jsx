@@ -5,6 +5,7 @@ Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus } from
 'lucide-react';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
+import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 
 const getCategoryIcon = (catName, isSelected = false) => {
   const name = catName.toLowerCase();
@@ -186,6 +187,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
   };
 
 
+
   const fetchCategories = async () => {
     try {
       const data = await getCategories();
@@ -195,20 +197,40 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (isBackground = false) => {
+    if (!isBackground && items.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await getMenuItems();
       setItems(data);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching menu:', error);
+    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // 1. Instant Cache Load (0ms delay) on mount
+    getCachedMenuItems().then((cachedItems) => {
+      if (cachedItems && Array.isArray(cachedItems) && cachedItems.length > 0) {
+        setItems(cachedItems);
+      }
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+
+    getCachedCategories().then((cachedCats) => {
+      if (cachedCats && Array.isArray(cachedCats) && cachedCats.length > 0) {
+        setCategories(cachedCats);
+      }
+    }).catch(() => {});
+
+    // 2. Background Revalidation
     fetchCategories();
-    fetchItems();
+    fetchItems(true);
   }, []);
 
   const validCategories = categories.filter((cat) => {

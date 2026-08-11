@@ -35,6 +35,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
       if (!parsed.upiId || parsed.upiId === 'msbillings@upi') parsed.upiId = 'maheshsiva864@oksbi';
       setSettings((prev) => ({ ...prev, ...parsed }));
     }
+
+    const timer = setTimeout(() => {
+      handlePrint();
+    }, 300);
+    return () => clearTimeout(timer);
   }, []);
 
   const handlePrint = () => {

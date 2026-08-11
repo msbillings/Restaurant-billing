@@ -2,6 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import { getOpenOrders } from '../api/billing';
+import { getCachedOpenOrders } from '../db/offlineDb';
 import { UtensilsCrossed, Clock, ChevronRight, ArrowLeft, FileText, CheckCircle } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -11,7 +12,18 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {const { t } =
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Online'
 
   useEffect(() => {
-    fetchOrders();
+    // 1. Instant Cache Load (0ms delay)
+    getCachedOpenOrders().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setOrders(cached);
+      }
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+
+    // 2. Background Server Revalidation
+    fetchOrders(false);
 
     // Set up Real-Time WebSocket connection
     const API_BASE_URL = getApiUrl();
@@ -27,17 +39,20 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {const { t } =
     });
 
     // Listen for real-time events that affect active orders
-    socket.on('orderUpdated', fetchOrders);
-    socket.on('billSettled', fetchOrders);
-    socket.on('tableStatusChanged', fetchOrders);
-    socket.on('newKOT', fetchOrders);
+    socket.on('orderUpdated', () => fetchOrders(true));
+    socket.on('billSettled', () => fetchOrders(true));
+    socket.on('tableStatusChanged', () => fetchOrders(true));
+    socket.on('newKOT', () => fetchOrders(true));
 
     return () => {
       socket.disconnect();
     };
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (isBackground = false) => {
+    if (!isBackground && orders.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await getOpenOrders();
       setOrders(data || []);

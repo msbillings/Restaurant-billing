@@ -1,6 +1,7 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { getMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, deleteAllMenuItems } from '../api/menu';
 import { getAllCategories, createCategory, updateCategory, deleteCategory } from '../api/category';
+import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 import { getInventory } from '../api/inventory';
 import Papa from 'papaparse';
 import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft } from 'lucide-react';
@@ -49,6 +50,27 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [categories, setCategories] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. Instant Cache Load (0ms delay)
+    getCachedMenuItems().then((cachedItems) => {
+      if (cachedItems && Array.isArray(cachedItems) && cachedItems.length > 0) {
+        setItems(cachedItems);
+        setLoading(false);
+      }
+    }).catch(() => {});
+
+    getCachedCategories().then((cachedCats) => {
+      if (cachedCats && Array.isArray(cachedCats) && cachedCats.length > 0) {
+        setCategories(cachedCats);
+      }
+    }).catch(() => {});
+
+    // 2. Background Revalidation
+    fetchItems(true);
+    fetchCategories();
+    fetchInventory();
+  }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
@@ -107,13 +129,16 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     }
   };
 
-  const fetchItems = async () => {
+  const fetchItems = async (isBackground = false) => {
+    if (!isBackground && items.length === 0) {
+      setLoading(true);
+    }
     try {
       const data = await getMenuItems();
       setItems(data);
-      setLoading(false);
     } catch (error) {
       console.error('Error fetching menu:', error);
+    } finally {
       setLoading(false);
     }
   };

@@ -26,9 +26,9 @@ const GlobalHeader = ({
   };
 
   return (
-    <div className="h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 bg-white border-b border-border shrink-0 z-20 shadow-xs w-full">
+    <div className="min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 bg-white border-b border-border shrink-0 z-20 shadow-xs w-full">
       {/* Left section: Hamburger & Logo */}
-      <div className="flex items-center gap-0 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
         {onToggleMenu && (
           <button
             onClick={onToggleMenu}
@@ -36,14 +36,17 @@ const GlobalHeader = ({
             <Menu size={22} className="sm:w-6 sm:h-6" />
           </button>
         )}
-        <div className="flex items-center cursor-pointer -ml-3 sm:-ml-6 md:-ml-7" onClick={() => onNavigate('floor')}>
+        <button
+          onClick={() => onNavigate && onNavigate('floor')}
+          className="flex items-center cursor-pointer select-none py-1 px-1 min-w-[150px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity focus:outline-none shrink-0 overflow-visible"
+          title={t("Go to Table View / Floor Management")}>
           <img
             src={logoImg}
             alt="msbillings"
-            className="h-13 sm:h-18 md:h-20 w-auto object-contain block transform scale-165 sm:scale-200 origin-left"
+            className="h-10 sm:h-13 md:h-15 w-auto object-contain block transform scale-140 sm:scale-170 md:scale-190 origin-left"
             style={{ objectFit: 'contain' }}
           />
-        </div>
+        </button>
       </div>
 
       {/* Middle section: New Order & Search */}

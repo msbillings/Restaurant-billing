@@ -1,20 +1,22 @@
 import { getApiUrl, isCapacitorApp } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle } from 'lucide-react';
+import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle, Layers } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
 
 const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
-  const [tables, setTables] = useState([]);
+
+  // floors = [{ floorName: string, tables: string[] }]
+  const [floors, setFloors] = useState([]);
   const [selectedTable, setSelectedTable] = useState('ALL');
   const [restaurantName, setRestaurantName] = useState('MSBillings');
 
   // Detect Electron (file: protocol)
   const isElectron = window.location.protocol === 'file:';
-  
+
   // Initial IP setup from stored resto_server_ip or hostname
   const storedIp = localStorage.getItem('resto_server_ip');
   const [localIP, setLocalIP] = useState(storedIp || (isElectron ? '127.0.0.1' : window.location.hostname));
@@ -22,23 +24,30 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const [customIpInput, setCustomIpInput] = useState(storedIp || '');
   const [ipSavedToast, setIpSavedToast] = useState(false);
 
-  const extractAllSpaces = (floorsList) => {
-    const tableNames = new Set();
-    if (Array.isArray(floorsList)) {
-      floorsList.forEach((floor) => {
-        if (!floor) return;
-        Object.keys(floor).forEach((key) => {
-          if (Array.isArray(floor[key])) {
-            floor[key].forEach((item) => {
-              if (item && item.name) {
-                tableNames.add(item.name);
-              }
-            });
-          }
-        });
+  /**
+   * Returns [{ floorName: string, tables: string[] }]
+   * Each entry represents one floor with its table/cabin/sofa/space names.
+   */
+  const extractFloorSpaces = (floorsList) => {
+    if (!Array.isArray(floorsList)) return [];
+    const result = [];
+    floorsList.forEach((floor) => {
+      if (!floor) return;
+      const floorName = floor.name || 'Floor';
+      const tableNames = [];
+      // Collect from all space-type arrays: tables, cabins, sofas, spaces
+      ['tables', 'cabins', 'sofas', 'spaces'].forEach((key) => {
+        if (Array.isArray(floor[key])) {
+          floor[key].forEach((item) => {
+            if (item && item.name) tableNames.push(item.name);
+          });
+        }
       });
-    }
-    return Array.from(tableNames);
+      if (tableNames.length > 0) {
+        result.push({ floorName, tables: tableNames });
+      }
+    });
+    return result;
   };
 
   const fetchIP = async () => {
@@ -73,7 +82,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       try {
         const response = await api.get('/floors');
         if (response.data && Array.isArray(response.data)) {
-          extracted = extractAllSpaces(response.data);
+          extracted = extractFloorSpaces(response.data);
           localStorage.setItem('msbillings_spaces', JSON.stringify(response.data));
         }
       } catch (err) {
@@ -85,14 +94,15 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           const savedSpaces = localStorage.getItem('msbillings_spaces');
           if (savedSpaces) {
             const parsed = JSON.parse(savedSpaces);
-            extracted = extractAllSpaces(parsed);
+            extracted = extractFloorSpaces(parsed);
           }
         } catch (e) {
           console.error('Error parsing local spaces:', e);
         }
       }
 
-      setTables(extracted.length > 0 ? extracted : ['Table 1', 'Table 2', 'Table 3']);
+      // Fallback: single floor with demo tables
+      setFloors(extracted.length > 0 ? extracted : [{ floorName: 'Floor 1', tables: ['Table 1', 'Table 2', 'Table 3'] }]);
 
       try {
         const settings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -106,8 +116,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
     const handleSpacesUpdated = (event) => {
       if (event.detail && Array.isArray(event.detail)) {
-        const updated = extractAllSpaces(event.detail);
-        if (updated.length > 0) setTables(updated);
+        const updated = extractFloorSpaces(event.detail);
+        if (updated.length > 0) setFloors(updated);
       }
     };
     window.addEventListener('spacesUpdated', handleSpacesUpdated);
@@ -135,7 +145,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
   const getQRUrl = (table) => {
     const dbName = localStorage.getItem('resto_db_name') || 'default';
-    
+
     // 1. If running inside native mobile app (Capacitor APK)
     if (isCapacitorApp()) {
       const apiUrl = getApiUrl(); // e.g. http://192.168.1.15:5002/api or https://domain/api
@@ -157,11 +167,11 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
     const isDev = import.meta.env.DEV || window.location.port === '5173' || window.location.port === '5174' || window.location.port === '5175';
     let port = '';
-    
+
     if (isDev) {
       port = window.location.port || '5173';
     } else {
-      // In production built .exe/.dmg, the backend ALWAYS runs on 5002
+      // In production built .exe/.dmg, the backend ALWAYS runs on 5002 and serves the frontend
       port = '5002';
     }
 
@@ -181,7 +191,34 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   };
 
   const isLoopback = localIP === '127.0.0.1' || localIP === 'localhost';
-  const tablesToRender = selectedTable === 'ALL' ? tables : [selectedTable];
+
+  /**
+   * Returns floors filtered/scoped to selectedTable.
+   * - 'ALL'       → all floors with all tables
+   * - specific    → single-floor, single-table entry (for the matching table)
+   */
+  const getFloorsToRender = () => {
+    if (selectedTable === 'ALL') return floors;
+    // Find the floor + table matching the selection
+    for (const floor of floors) {
+      if (floor.tables.includes(selectedTable)) {
+        return [{ floorName: floor.floorName, tables: [selectedTable] }];
+      }
+    }
+    return [];
+  };
+
+  const floorsToRender = getFloorsToRender();
+
+  // Floor badge colours (cycling)
+  const floorColors = [
+    { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30', dot: 'bg-primary' },
+    { bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/30', dot: 'bg-emerald-500' },
+    { bg: 'bg-violet-500/10', text: 'text-violet-600 dark:text-violet-400', border: 'border-violet-500/30', dot: 'bg-violet-500' },
+    { bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/30', dot: 'bg-amber-500' },
+    { bg: 'bg-rose-500/10', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/30', dot: 'bg-rose-500' },
+    { bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', border: 'border-cyan-500/30', dot: 'bg-cyan-500' },
+  ];
 
   return (
     <div className="h-full flex flex-col bg-background px-2.5 py-4 sm:p-6 overflow-hidden">
@@ -194,13 +231,18 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           </h1>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+          {/* Floor-grouped dropdown */}
           <select
             value={selectedTable}
             onChange={(e) => setSelectedTable(e.target.value)}
-            className="w-full sm:w-48 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main">
-            <option value="ALL">{t("All Tables")}</option>
-            {tables.map((tbl, index) => (
-              <option key={`${tbl}-${index}`} value={tbl}>{tbl}</option>
+            className="w-full sm:w-56 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main">
+            <option value="ALL">{t("All Tables")} ({floors.reduce((s, f) => s + f.tables.length, 0)})</option>
+            {floors.map((floor, fi) => (
+              <optgroup key={`floor-group-${fi}`} label={`📍 ${floor.floorName}`}>
+                {floor.tables.map((tbl, ti) => (
+                  <option key={`${tbl}-${fi}-${ti}`} value={tbl}>{tbl}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <button
@@ -270,40 +312,76 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       )}
 
-      {/* QR Codes Grid */}
+      {/* QR Codes Grid — grouped by floor */}
       <div className="flex-1 overflow-y-auto print:overflow-visible">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 print:grid-cols-3 print:gap-4">
-          {tablesToRender.map((table, index) => (
-            <div key={`${table}-${index}`} className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm">
-              <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
-              <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
-                <QRCodeSVG
-                  value={getQRUrl(table)}
-                  size={100}
-                  level="H"
-                  includeMargin={true}
-                  className="sm:hidden"
-                />
-                <QRCodeSVG
-                  value={getQRUrl(table)}
-                  size={140}
-                  level="H"
-                  includeMargin={true}
-                  className="hidden sm:block"
-                />
-              </div>
-              <div className="w-full">
-                <p className="text-[9px] sm:text-xs text-text-muted font-bold tracking-widest uppercase mb-0.5">{t("Scan to Order")}</p>
-                <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
-                <div className="mt-1.5 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg break-all border border-border/50 max-w-full truncate print:hidden">
-                  {getQRUrl(table)}
+        {floorsToRender.map((floor, floorIdx) => {
+          const color = floorColors[floorIdx % floorColors.length];
+          return (
+            <div key={`floor-section-${floorIdx}`} className="mb-8 print:mb-6">
+              {/* Floor Section Header */}
+              <div className={`flex items-center gap-2.5 mb-3 pb-2 border-b border-border print:hidden`}>
+                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${color.bg} ${color.border}`}>
+                  <div className={`w-2 h-2 rounded-full ${color.dot}`}></div>
+                  <Layers size={13} className={color.text} />
+                  <span className={`text-xs font-black uppercase tracking-wider ${color.text}`}>
+                    {floor.floorName}
+                  </span>
+                  <span className={`text-[10px] font-bold opacity-70 ${color.text}`}>
+                    · {floor.tables.length} {floor.tables.length === 1 ? t('table') : t('tables')}
+                  </span>
                 </div>
               </div>
+
+              {/* Floor header for print */}
+              <div className="hidden print:block text-center font-black text-base uppercase tracking-widest mb-2 border-b border-black pb-1">
+                {floor.floorName}
+              </div>
+
+              {/* Cards Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 print:grid-cols-3 print:gap-4">
+                {floor.tables.map((table, tableIdx) => (
+                  <div
+                    key={`${floor.floorName}-${table}-${tableIdx}`}
+                    className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+                  >
+                    <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
+
+                    {/* Floor badge on card */}
+                    <div className={`text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border print:hidden ${color.bg} ${color.text} ${color.border}`}>
+                      {floor.floorName}
+                    </div>
+
+                    <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
+                      <QRCodeSVG
+                        value={getQRUrl(table)}
+                        size={100}
+                        level="H"
+                        includeMargin={true}
+                        className="sm:hidden"
+                      />
+                      <QRCodeSVG
+                        value={getQRUrl(table)}
+                        size={140}
+                        level="H"
+                        includeMargin={true}
+                        className="hidden sm:block"
+                      />
+                    </div>
+                    <div className="w-full">
+                      <p className="text-[9px] sm:text-xs text-text-muted font-bold tracking-widest uppercase mb-0.5">{t("Scan to Order")}</p>
+                      <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
+                      <div className="mt-1.5 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg break-all border border-border/50 max-w-full truncate print:hidden">
+                        {getQRUrl(table)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
-      
+
       {/* Print Styles */}
       <style>{`
         @media print {

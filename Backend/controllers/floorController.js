@@ -88,21 +88,25 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
     let targetFloorId = null;
     let targetTableId = null;
 
-    // We only have the table name string like "Ground Floor - Table 1" OR just "Table 1"
+    const tableIdentifierLower = tableIdentifier.trim().toLowerCase();
+    const hasFloorPrefix = tableIdentifier.includes(' - ');
+
     for (let floor of floors) {
       const arraysToCheck = ['tables', 'cabins', 'sofas', 'spaces'];
       for (let arrayName of arraysToCheck) {
         if (floor[arrayName]) {
           for (let item of floor[arrayName]) {
-            const uniqueSpaceName = `${floor.name} - ${item.name}`;
-            const cleanIdentifier = tableIdentifier.includes(' - ') ? tableIdentifier.split(' - ').slice(1).join(' - ').trim() : tableIdentifier.trim();
-            const cleanItemName = item.name.trim();
-            // Match exactly or uniquely case-insensitively
-            if (
-              cleanItemName.toLowerCase() === cleanIdentifier.toLowerCase() ||
-              uniqueSpaceName.toLowerCase() === tableIdentifier.toLowerCase() ||
-              item.id === tableIdentifier
-            ) {
+            const uniqueSpaceName = `${floor.name} - ${item.name}`.trim().toLowerCase();
+            const itemNameLower = item.name.trim().toLowerCase();
+
+            let matches = false;
+            if (hasFloorPrefix) {
+              matches = (uniqueSpaceName === tableIdentifierLower || item.id === tableIdentifier);
+            } else {
+              matches = (itemNameLower === tableIdentifierLower || uniqueSpaceName === tableIdentifierLower || item.id === tableIdentifier);
+            }
+
+            if (matches) {
               item.status = status;
               item.currentOrderId = currentOrderId;
               tableFound = true;

@@ -43,7 +43,8 @@ const BillSummary = ({
   deliveryCharge,
   setDeliveryCharge,
   containerCharge,
-  setContainerCharge
+  setContainerCharge,
+  hasUnprintedItems = true
 }) => {
   const { t, language } = useLanguage();
   const isLocked = orderStatus !== 'Open';
@@ -299,7 +300,11 @@ const BillSummary = ({
                   {item.isCancelled ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>
                   : item.cancellationRejected ? <span className="text-[9px] bg-gray-200 text-gray-700 px-1 py-0.5 rounded font-bold">{t("Rejected")}</span>
                   : item.cancellationRequested ? <span className="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-bold">{t("Pending")}</span>
-                  : item.cancelledQuantity > 0 ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span> : null}
+                  : item.cancelledQuantity > 0 ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span>
+                  : item.status === 'Preparing' ? <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-200 shadow-2xs flex items-center gap-1">👨‍🍳 {t("Preparing")}</span>
+                  : item.status === 'Ready' || item.status === 'Prepared' ? <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs flex items-center gap-1">✅ {t("Prepared")}</span>
+                  : item.status === 'Pending' || ((item.printedQuantity || 0) > 0 && !item.status) ? <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100 flex items-center gap-1">⏳ {t("Pending")}</span>
+                  : null}
                   <button
                     onClick={() => handleItemNoteClick(item)}
                     disabled={isLocked || item.isCancelled}
@@ -465,34 +470,36 @@ const BillSummary = ({
         <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-white border-t border-gray-100 w-full overflow-x-auto no-scrollbar">
           <button
             onClick={onSaveOrder}
-            disabled={loading || cart.length === 0}
+            disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
             className="col-span-1 bg-red-50 text-red-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
           </button>
           <button
             onClick={onHoldOrder}
-            disabled={loading || cart.length === 0}
+            disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
             className="col-span-1 bg-orange-50 text-orange-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
           </button>
           <button
             onClick={onGenerateBill}
-            disabled={loading || cart.length === 0}
+            disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
             className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-1.5 rounded-lg text-[9px] font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50">{t("SAVE & PRINT")}
           </button>
           <button
             onClick={onPrintKOT}
-            disabled={loading || cart.length === 0}
+            disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Billed' || orderStatus === 'Paid'}
+            title={!hasUnprintedItems && cart.length > 0 ? t("KOT already fired for these items. Status: Preparing") : t("KOT")}
             className="col-span-1 bg-gray-100 text-gray-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
             {t("KOT")}
           </button>
           <button
             onClick={onReopenOrder}
-            disabled={loading || !isLocked}
+            disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}
             className="col-span-1 bg-blue-50 text-blue-600 py-1.5 rounded-lg text-[11px] font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
             {t("EDIT")}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
-            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm">{t("CANCEL")}
+            disabled={loading || cart.length === 0}
+            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm disabled:opacity-50">{t("CANCEL")}
           </button>
         </div>
       </div>

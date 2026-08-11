@@ -1,5 +1,6 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { getCachedInventory, cacheInventory } from '../db/offlineDb';
 import {
   Package, Plus, Search, AlertTriangle, ArrowUpRight, ArrowDownRight,
   Trash2, Edit3, CheckCircle, RefreshCw, Layers, DollarSign, Clock,
@@ -26,6 +27,48 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
   const [predictionsLoading, setPredictionsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    // 1. Instant Cache Load (0ms delay) on mount
+    getCachedInventory().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setItems(cached);
+      }
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+
+    fetchInventoryData(true);
+  }, []);
+
+  const fetchInventoryData = async (isBackground = false) => {
+    if (!isBackground && items.length === 0) {
+      setLoading(true);
+    }
+    try {
+      const [itemsRes, recipesRes, menuRes, logsRes] = await Promise.all([
+      fetch(`${API_BASE_URL}/inventory`, { headers: getHeaders() }),
+      fetch(`${API_BASE_URL}/inventory/recipes`, { headers: getHeaders() }),
+      fetch(`${API_BASE_URL}/menu`, { headers: getHeaders() }),
+      fetch(`${API_BASE_URL}/inventory/logs`, { headers: getHeaders() })]
+      );
+
+      if (itemsRes.ok) {
+        const fetchedItems = await itemsRes.json();
+        setItems(fetchedItems);
+        cacheInventory(fetchedItems).catch(() => {});
+      }
+      if (recipesRes.ok) setRecipes(await recipesRes.json());
+      if (menuRes.ok) setMenuItems(await menuRes.json());
+      if (logsRes.ok) setLogs(await logsRes.json());
+    } catch (err) {
+      console.error('Error fetching inventory data:', err);
+      setToast({ message: 'Failed to load inventory data', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,32 +110,6 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
 
 
   const units = ['kg', 'g', 'L', 'ml', 'pcs', 'packs'];
-
-  useEffect(() => {
-    fetchInventoryData();
-  }, []);
-
-  const fetchInventoryData = async () => {
-    setLoading(true);
-    try {
-      const [itemsRes, recipesRes, menuRes, logsRes] = await Promise.all([
-      fetch(`${API_BASE_URL}/inventory`, { headers: getHeaders() }),
-      fetch(`${API_BASE_URL}/inventory/recipes`, { headers: getHeaders() }),
-      fetch(`${API_BASE_URL}/menu`, { headers: getHeaders() }),
-      fetch(`${API_BASE_URL}/inventory/logs`, { headers: getHeaders() })]
-      );
-
-      if (itemsRes.ok) setItems(await itemsRes.json());
-      if (recipesRes.ok) setRecipes(await recipesRes.json());
-      if (menuRes.ok) setMenuItems(await menuRes.json());
-      if (logsRes.ok) setLogs(await logsRes.json());
-    } catch (err) {
-      console.error('Error fetching inventory data:', err);
-      setToast({ message: 'Failed to load inventory data', type: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchPredictions = async () => {
     setPredictionsLoading(true);

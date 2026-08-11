@@ -11,6 +11,22 @@ import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 
+// Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
+const getTableMatchCondition = (tblStr) => {
+  if (!tblStr) return tblStr;
+  const trimmed = tblStr.trim();
+  if (trimmed.includes(' - ')) {
+    const parts = trimmed.split(' - ');
+    const floorPart = parts[0].trim();
+    const tablePart = parts.slice(1).join(' - ').trim();
+    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^(${escapedFloor}\\s*-\\s*)?${escapedTable}$`, 'i');
+  }
+  const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^(.*\\s*-\\s*)?${escapedClean}$`, 'i');
+};
+
 // Public endpoint to fetch categories and active menu items
 router.get('/menu', async (req, res) => {
   try {
@@ -94,7 +110,7 @@ router.post('/order', async (req, res) => {
     const itemsSubtotal = sanitizedItems.reduce((acc, i) => acc + i.total, 0);
 
     // Case-insensitive table matching for open order
-    const tableRegex = new RegExp('^' + tableNo.trim() + '$', 'i');
+    const tableRegex = getTableMatchCondition(tableNo);
     let bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed'] } });
 
     const kotNumber = `KOT-${(bill && bill.kots ? bill.kots.length : 0) + 1}`;
@@ -237,8 +253,18 @@ router.post('/request-service', async (req, res) => {
       return res.status(400).json({ message: 'tableNumber and requestType are required' });
     }
     
-    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
+    const displayTable = tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`;
     
+    // ⚡ INSTANT WEBSOCKET BROADCAST (0ms latency to POS UI)
+    emitNotification(
+      req,
+      `${displayTable} Service`,
+      `${requestType}`,
+      'warning',
+      ['Admin', 'Manager', 'Captain']
+    );
+
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     const newRequest = new ServiceRequest({
       tableNumber,
       requestType,
@@ -246,31 +272,6 @@ router.post('/request-service', async (req, res) => {
     });
     
     await newRequest.save();
-    
-    // Emit persistent notification for Navbar Panel
-    // Get actual restaurant name
-    const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
-    let shopName = 'Unknown Shop';
-    if (settingsDoc?.value) {
-      if (typeof settingsDoc.value === 'string') {
-        try {
-          const parsed = JSON.parse(settingsDoc.value);
-          shopName = parsed.restaurantName || 'Unknown Shop';
-        } catch (e) {}
-      } else {
-        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
-      }
-    }
-    
-    const cleanTable = tableNumber.replace('Table ', '');
-    emitNotification(
-      req,
-      `${shopName} | Table ${cleanTable} Service`,
-      `${requestType}`,
-      'warning',
-      ['Admin', 'Manager', 'Captain']
-    );
 
     res.status(201).json({ message: 'Request sent successfully', request: newRequest });
   } catch (error) {
@@ -290,7 +291,7 @@ router.get('/order-status', async (req, res) => {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     
     // Find the most recent active order for this table
-    const tableRegex = new RegExp('^' + tableNo.trim() + '$', 'i');
+    const tableRegex = getTableMatchCondition(tableNo);
     const bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed'] } }).sort({ createdAt: -1 });
     
     if (!bill) {

@@ -481,8 +481,16 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
                 <label className="block text-sm text-gray-400 mb-1">{t("Start Date")}</label>
                 <input 
                   type="date" 
+                  max={customDateRange.end || undefined}
                   value={customDateRange.start}
-                  onChange={(e) => setCustomDateRange({...customDateRange, start: e.target.value})}
+                  onChange={(e) => {
+                    const startVal = e.target.value;
+                    let endVal = customDateRange.end;
+                    if (endVal && startVal && startVal > endVal) {
+                      endVal = startVal;
+                    }
+                    setCustomDateRange({ start: startVal, end: endVal });
+                  }}
                   className="w-full bg-[#09090b] border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
@@ -490,8 +498,15 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
                 <label className="block text-sm text-gray-400 mb-1">{t("End Date")}</label>
                 <input 
                   type="date" 
+                  min={customDateRange.start || undefined}
                   value={customDateRange.end}
-                  onChange={(e) => setCustomDateRange({...customDateRange, end: e.target.value})}
+                  onChange={(e) => {
+                    let endVal = e.target.value;
+                    if (customDateRange.start && endVal && endVal < customDateRange.start) {
+                      endVal = customDateRange.start;
+                    }
+                    setCustomDateRange({ ...customDateRange, end: endVal });
+                  }}
                   className="w-full bg-[#09090b] border border-white/10 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
@@ -505,14 +520,18 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
               </button>
               <button 
                 onClick={() => {
-                  if(customDateRange.start && customDateRange.end) {
-                    setDateFilter('Custom');
-                    setShowCustomDateModal(false);
-                  } else {
-                    setToast({ message: 'Please select both start and end dates', type: 'error' });
+                  if (!customDateRange.start || !customDateRange.end) {
+                    setToast({ message: t("Please select both start and end dates"), type: 'error' });
+                    return;
                   }
+                  if (customDateRange.start > customDateRange.end) {
+                    setToast({ message: t("End date must be greater than or equal to start date"), type: 'error' });
+                    return;
+                  }
+                  setDateFilter('Custom');
+                  setShowCustomDateModal(false);
                 }}
-                className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors font-bold"
               >
                 {t("Apply Filter")}
               </button>

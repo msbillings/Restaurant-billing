@@ -1,10 +1,12 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, useMemo } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
+import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
 import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
 import BackButton from './common/BackButton';
+import { getNotificationSocket } from '../hooks/useNotifications';
 
 const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [kots, setKots] = useState([]);
@@ -12,6 +14,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [selectedKOT, setSelectedKOT] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const fetchingRef = useRef(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,22 +25,114 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
+  // 1. Instant Cache Load (0ms delay) on mount
   useEffect(() => {
-    fetchKOTs();
-  }, [debouncedSearchTerm, selectedDate]);
+    getCachedKotHistory().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setKots(cached);
+      }
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+  }, []);
 
-  const fetchKOTs = async () => {
+  const fetchKOTs = useCallback(async (isBackground = false) => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     try {
-      setLoading(true);
+      if (!isBackground && kots.length === 0) {
+        setLoading(true);
+      }
       const data = await apiGetTodayKOTs(selectedDate, debouncedSearchTerm);
       setKots(data || []);
+      if (data && Array.isArray(data)) {
+        cacheKotHistory(data).catch(() => {});
+      }
     } catch (error) {
       console.error('Error fetching KOTs:', error);
       setToast({ message: 'Failed to load KOT history', type: 'error' });
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, debouncedSearchTerm]);
+
+  useEffect(() => {
+    fetchKOTs(true);
+
+    // Use SHARED socket — already connected & joined tenant room = 0ms delay
+    const socket = getNotificationSocket();
+    if (!socket) return;
+
+    // Optimistic instant update: add new KOT from socket payload immediately
+    const handleNewKOT = (data) => {
+      if (data && data.kot) {
+        setKots(prev => {
+          const exists = prev.some(k =>
+            k._id?.toString() === data.kot._id?.toString() ||
+            k.kotId?.toString() === data.kot._id?.toString()
+          );
+          if (exists) {
+            // KOT already in list, just background-refresh for accuracy
+            fetchKOTs(true);
+            return prev;
+          }
+          // Build a KOT history entry from socket payload (0ms)
+          const newKot = {
+            _id: data.kot._id,
+            kotId: data.kot._id,
+            kotNumber: data.kot.kotNumber,
+            tableNo: data.tableNo || data.kot.tableNo,
+            billType: data.billType || data.kot.billType || 'Dine-In',
+            billId: data.orderId || data.kot.orderId,
+            createdAt: data.kot.createdAt || new Date().toISOString(),
+            items: (data.kot.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))
+          };
+          return [newKot, ...prev];
+        });
+      }
+      fetchKOTs(true);
+    };
+
+    const handleKotUpdated = (data) => {
+      if (data && (data.itemId || data.itemName) && data.status) {
+        setKots(prev => prev.map(kot => {
+          if (
+            (data.kotId && (kot._id?.toString() === data.kotId?.toString() || kot.kotId?.toString() === data.kotId?.toString())) ||
+            (data.tableNo && kot.tableNo === data.tableNo)
+          ) {
+            return {
+              ...kot,
+              items: (kot.items || []).map(item => {
+                if (
+                  (data.itemId && item._id?.toString() === data.itemId?.toString()) ||
+                  (data.itemName && item.name === data.itemName)
+                ) {
+                  return { ...item, status: data.status };
+                }
+                return item;
+              })
+            };
+          }
+          return kot;
+        }));
+      }
+      fetchKOTs(true);
+    };
+
+    socket.on('newKOT', handleNewKOT);
+    socket.on('kotUpdated', handleKotUpdated);
+    socket.on('orderUpdated', () => fetchKOTs(true));
+
+    return () => {
+      socket.off('newKOT', handleNewKOT);
+      socket.off('kotUpdated', handleKotUpdated);
+      socket.off('orderUpdated', () => fetchKOTs(true));
+    };
+  }, [fetchKOTs]);
+
 
   const handleReprint = (kot) => {
     setSelectedKOT(kot);
@@ -116,13 +211,15 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
 
           {/* Date Picker */}
-          <div className="relative w-full sm:w-auto">
+          <div className="flex items-center gap-1.5 bg-background px-3 py-2 rounded-xl border border-border text-xs shrink-0 shadow-2xs">
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full sm:w-auto pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-xs sm:text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 font-medium appearance-none" />
-            <Calendar size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-500 pointer-events-none" />
+              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[128px] sm:w-[138px] border-none"
+              style={{ colorScheme: 'light' }}
+              title={t("Select Date")}
+            />
           </div>
         </div>
       </div>

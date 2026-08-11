@@ -7,6 +7,8 @@ import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
+import api from '../api/axios';
+import { getCachedOpenOrders } from '../db/offlineDb';
 import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
@@ -14,6 +16,7 @@ import CancelOrderModal from './CancelOrderModal';
 import TransferTableModal from './TransferTableModal';
 import { io } from 'socket.io-client';
 import { useLanguage } from '../context/LanguageContext';
+import { getNotificationSocket } from '../hooks/useNotifications';
 
 const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRole = 'Admin' }) => {
   const { t } = useLanguage();
@@ -57,6 +60,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, [resize, stopResizing]);
 
   useEffect(() => {
+    // Instant cache load (0ms delay)
+    getCachedOpenOrders().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setOpenOrdersList(cached);
+      }
+    }).catch(() => {});
+
     fetchOpenOrdersList();
 
     // Set up Real-Time WebSocket connection
@@ -91,8 +101,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     socket.on('tableStatusChanged', fetchOpenOrdersList);
     socket.on('newKOT', handleRealtimeUpdate);
 
+    const handleOfflineSave = (e) => {
+      showToast(`⚠️ ${e.detail?.message || 'Order saved offline. Will sync when backend reconnects.'}`, 'error');
+    };
+    window.addEventListener('offlineOrderSaved', handleOfflineSave);
+
     return () => {
       socket.disconnect();
+      window.removeEventListener('offlineOrderSaved', handleOfflineSave);
     };
   }, []);
 
@@ -164,8 +180,34 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [orderStatus, setOrderStatus] = useState('Open'); // Open, Billed, Paid
   const [billNumber, setBillNumber] = useState(null);
 
+  const getDynamicTaxRateFromSettings = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      let tot = 0;
+      if (s.enableCgst) tot += Number(s.cgstRate || 0);
+      if (s.enableSgst) tot += Number(s.sgstRate || 0);
+      if (s.enableGst) tot += Number(s.gstRate || 0);
+      return tot;
+    } catch (e) {
+      return 0;
+    }
+  };
+
   const [billType, setBillType] = useState(initialTable ? initialTable.startsWith('DEL-') ? 'Delivery' : initialTable.startsWith('TAK-') ? 'Takeaway' : 'Dine-In' : 'Dine-In');
-  const [taxRate, setTaxRate] = useState('');
+  const [taxRate, setTaxRate] = useState(() => {
+    const tot = getDynamicTaxRateFromSettings();
+    return tot > 0 ? tot : '';
+  });
+
+  useEffect(() => {
+    const handleSettingsUpdate = () => {
+      const tot = getDynamicTaxRateFromSettings();
+      setTaxRate(tot > 0 ? tot : '');
+    };
+    window.addEventListener('settingsUpdated', handleSettingsUpdate);
+    return () => window.removeEventListener('settingsUpdated', handleSettingsUpdate);
+  }, []);
+
   const [discount, setDiscount] = useState({ type: 'percentage', value: '' });
 
   // Delivery / CRM fields
@@ -197,6 +239,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const [loading, setLoading] = useState(false);
   const newlyGeneratedTables = useRef(new Set());
+  // Tracks the last time user manually edited the cart (add/remove/qty change)
+  // Background fetches are suppressed for 8s after any local edit to prevent
+  // the 3s poll or socket orderUpdated from reverting local-first cart state.
+  const lastLocalEditTime = useRef(0);
+  const LOCAL_EDIT_LOCK_MS = 8000; // 8 seconds of protection after any cart edit
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -266,10 +313,30 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       } else {
         const generatedOrderNo = generateSequentialOrderNo(billType);
         newlyGeneratedTables.current.add(generatedOrderNo);
+        setCart([]);
+        setOrderId(null);
+        setOrderStatus('Open');
+        setBillNumber(null);
+        setCompletedBill(null);
+        setCustomerPhone('');
+        setCustomerName('');
+        setDiscount({ type: 'percentage', value: '' });
+        setDeliveryCharge('');
+        setContainerCharge('');
         setActiveTable(generatedOrderNo);
       }
     } else if (billType === 'Dine-In' && activeTable && (activeTable.startsWith('DEL-') || activeTable.startsWith('TAK-'))) {
       setActiveTable('');
+      setCart([]);
+      setOrderId(null);
+      setOrderStatus('Open');
+      setBillNumber(null);
+      setCompletedBill(null);
+      setCustomerPhone('');
+      setCustomerName('');
+      setDiscount({ type: 'percentage', value: '' });
+      setDeliveryCharge('');
+      setContainerCharge('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billType, openOrdersList]);
@@ -290,25 +357,37 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const data = e.detail;
       if (data) {
         if (!data.tableNo || data.tableNo === activeTable) {
-          fetchActiveOrder(activeTable, false, true);
-        } else {
-          const clean1 = (data.tableNo || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
-          const clean2 = (activeTable || '').replace(/^.*-\s*/, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
-          if (clean1 && clean2 && (clean1 === clean2 || clean1.endsWith(clean2) || clean2.endsWith(clean1))) {
+          // Suppress socket-triggered fetch if user just edited the cart
+          const msSinceEdit = Date.now() - lastLocalEditTime.current;
+          if (msSinceEdit > LOCAL_EDIT_LOCK_MS) {
             fetchActiveOrder(activeTable, false, true);
+          }
+        } else {
+          const norm1 = (data.tableNo || '').trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+          const norm2 = (activeTable || '').trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+          if (norm1 && norm2 && norm1 === norm2) {
+            const msSinceEdit = Date.now() - lastLocalEditTime.current;
+            if (msSinceEdit > LOCAL_EDIT_LOCK_MS) {
+              fetchActiveOrder(activeTable, false, true);
+            }
           }
         }
       }
     };
     window.addEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
 
-    // 3-Second polling timer to guarantee real-time bill summary section UI updates without manual refresh
+    // 5-Second polling to guarantee real-time bill summary UI updates
+    // Reduced from 3s to 5s to give local edits more breathing room
     const pollInterval = setInterval(() => {
       if (activeTable) {
-        fetchActiveOrder(activeTable, false, true);
+        // Only background-fetch if user hasn't edited cart in the last LOCAL_EDIT_LOCK_MS
+        const msSinceEdit = Date.now() - lastLocalEditTime.current;
+        if (msSinceEdit > LOCAL_EDIT_LOCK_MS) {
+          fetchActiveOrder(activeTable, false, true);
+        }
       }
       fetchOpenOrdersList();
-    }, 3000);
+    }, 5000);
 
     return () => {
       window.removeEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
@@ -316,6 +395,35 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTable]);
+
+  useEffect(() => {
+    const socket = getNotificationSocket();
+    if (!socket) return;
+
+    const handleKotUpdatedSocket = (data) => {
+      if (data && (data.tableNo === activeTable || data.orderId === orderId)) {
+        if (data.itemId || data.itemName) {
+          setCart((prevCart) =>
+            prevCart.map((i) => {
+              if (
+                (data.itemId && i._id?.toString() === data.itemId?.toString()) ||
+                (data.itemName && i.name === data.itemName)
+              ) {
+                return { ...i, status: data.status };
+              }
+              return i;
+            })
+          );
+        }
+        fetchActiveOrder(activeTable, false, true);
+      }
+    };
+
+    socket.on('kotUpdated', handleKotUpdatedSocket);
+    return () => {
+      socket.off('kotUpdated', handleKotUpdatedSocket);
+    };
+  }, [activeTable, orderId]);
 
   useEffect(() => {
     fetchDailyStats();
@@ -353,28 +461,126 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false, isBackground = false) {
     if (!tableToFetch) return;
-    if (!isBackground) setLoading(true);
+
+    // Helper to check orders array and apply order immediately (0ms delay)
+    const checkAndApplyCache = (ordersArr) => {
+      if (!ordersArr || !Array.isArray(ordersArr) || ordersArr.length === 0) return false;
+      const tSearch = tableToFetch.trim().toLowerCase();
+      const shortSearch = tSearch.includes(' - ') ? tSearch.split(' - ').slice(1).join(' - ').trim() : tSearch;
+
+      const cached = ordersArr.find(o => {
+        if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
+        const oTable = o.tableNo.trim().toLowerCase();
+        return oTable === tSearch || oTable === shortSearch;
+      });
+
+      if (cached && cached.items && cached.items.length > 0) {
+        const kotStatusMap = {};
+        if (cached.kots && Array.isArray(cached.kots)) {
+          cached.kots.forEach(kot => {
+            (kot.items || []).forEach(kItem => {
+              if (kItem.name) {
+                kotStatusMap[kItem.name] = kItem.status;
+                if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+              }
+            });
+          });
+        }
+
+        const validItems = cached.items.filter(i => i.quantity > 0 || i.isCancelled).map(i => ({
+          ...i,
+          status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status
+        }));
+
+        if (validItems.length > 0) {
+          setCart(validItems);
+          setOrderId(cached._id);
+          setOrderStatus(cached.status);
+          setBillNumber(cached.billNumber);
+          setBillType(cached.billType || 'Dine-In');
+          setCustomerPhone(cached.customerPhone || '');
+          setCustomerName(cached.customerName || '');
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 1. INSTANT 0ms CACHE READ (Memory + IndexedDB)
+    let hasInstantCache = checkAndApplyCache(openOrdersList);
+    if (!hasInstantCache) {
+      try {
+        const idbOrders = await getCachedOpenOrders();
+        hasInstantCache = checkAndApplyCache(idbOrders);
+      } catch (e) {}
+    }
+
+    if (!hasInstantCache && !isBackground) {
+      setLoading(true);
+    }
+
     try {
-      const order = await getActiveOrder(tableToFetch);
+      let order = await getActiveOrder(tableToFetch);
+      if (!order && openOrdersList && openOrdersList.length > 0) {
+        const tSearch = tableToFetch.trim().toLowerCase();
+        const shortSearch = tSearch.includes(' - ') ? tSearch.split(' - ').slice(1).join(' - ').trim() : tSearch;
+        order = openOrdersList.find(o => {
+          if (!o.tableNo) return false;
+          const oTable = o.tableNo.trim().toLowerCase();
+          return oTable === tSearch || oTable === shortSearch;
+        });
+      }
+
       if (order) {
+        const kotStatusMap = {};
+        if (order.kots && Array.isArray(order.kots)) {
+          order.kots.forEach(kot => {
+            (kot.items || []).forEach(kItem => {
+              if (kItem.name) {
+                kotStatusMap[kItem.name] = kItem.status;
+                if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+              }
+            });
+          });
+        }
+
         setCart((prevCart) => {
-          const backendItems = order.items.filter(i => i.quantity > 0 || i.isCancelled);
+          const backendItems = (order.items || []).filter(i => i.quantity > 0 || i.isCancelled).map(i => ({
+            ...i,
+            status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status
+          }));
+
           if (forceReset || !prevCart || prevCart.length === 0) return backendItems;
 
-          // Preserve local unsaved draft items (items added locally by shop owner that are not yet saved in backend)
+          // If user edited the cart recently, protect local state:
+          // never reduce quantities below what the user set, and keep local-only items
+          const msSinceEdit = Date.now() - lastLocalEditTime.current;
+          const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
+
+          // Preserve local unsaved draft items (items in local cart but not yet in backend)
           const localDrafts = prevCart.filter(localItem =>
             !backendItems.some(bItem => bItem.name === localItem.name || (localItem._id && bItem._id?.toString() === localItem._id?.toString()))
           );
 
-          // Merge backend items with local draft quantities
           const merged = backendItems.map(bItem => {
             const localMatch = prevCart.find(localItem => localItem.name === bItem.name || (localItem._id && bItem._id?.toString() === localItem._id?.toString()));
-            if (localMatch && localMatch.quantity > bItem.quantity) {
-              return { ...bItem, quantity: localMatch.quantity };
+            if (localMatch) {
+              if (isEditLocked) {
+                // Within edit lock window: always trust local quantity & keep local state
+                return { ...bItem, quantity: localMatch.quantity, printedQuantity: localMatch.printedQuantity };
+              }
+              // Outside lock window: take the higher qty (backend won, but preserve local if higher)
+              if (localMatch.quantity > bItem.quantity) {
+                return { ...bItem, quantity: localMatch.quantity };
+              }
             }
             return bItem;
           });
 
+          // If edit-locked, also keep any local items that backend didn't return yet
+          if (isEditLocked) {
+            return [...merged, ...localDrafts];
+          }
           return [...merged, ...localDrafts];
         });
         setOrderId(order._id);
@@ -404,31 +610,30 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setTaxRate('');
         }
       } else {
-        // Only reset cart and order state if forceReset is explicitly true (e.g. on table switch)
-        // This prevents the 3-second polling interval from wiping unsaved draft items on new tables
-        if (forceReset) {
-          setCart([]);
-          setOrderId(null);
-          setOrderStatus('Open');
-          setBillNumber(null);
-          if (billType !== 'Delivery') {
-            setOrderSource('Direct');
-          }
-          setCustomerPhone('');
-          setCustomerName('');
-          setCustomerInfo(null);
-          setDiscount({ type: 'percentage', value: '' });
-          try {
-            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-            let tot = 0;
-            if (s.enableCgst) tot += Number(s.cgstRate || 0);
-            if (s.enableSgst) tot += Number(s.sgstRate || 0);
-            if (s.enableGst) tot += Number(s.gstRate || 0);
-            setTaxRate(tot > 0 ? tot : '');
-          } catch (error) {
-            console.error('Error fetching settings:', error);
-            setTaxRate('');
-          }
+        setCart([]);
+        setOrderId(null);
+        setOrderStatus('Open');
+        setBillNumber(null);
+        setCompletedBill(null);
+        if (billType !== 'Delivery') {
+          setOrderSource('Direct');
+        }
+        setCustomerPhone('');
+        setCustomerName('');
+        setCustomerInfo(null);
+        setDiscount({ type: 'percentage', value: '' });
+        setDeliveryCharge('');
+        setContainerCharge('');
+        try {
+          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          let tot = 0;
+          if (s.enableCgst) tot += Number(s.cgstRate || 0);
+          if (s.enableSgst) tot += Number(s.sgstRate || 0);
+          if (s.enableGst) tot += Number(s.gstRate || 0);
+          setTaxRate(tot > 0 ? tot : '');
+        } catch (error) {
+          console.error('Error fetching settings:', error);
+          setTaxRate('');
         }
       }
     } catch (error) {
@@ -457,7 +662,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       if (savedOrder && savedOrder._id) {
         setOrderId(savedOrder._id);
       }
-      fetchOpenOrdersList();
+      // Don't call fetchOpenOrdersList() here — the socket 'orderUpdated' event
+      // will refresh the open orders list, avoiding a double-fetch that could
+      // cause a stale backend response to overwrite local cart state.
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Auto-save order error:', error);
@@ -506,13 +713,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const existing = cart.find((i) => i.name === item.name);
     let newCart;
     if (existing) {
-      showToast(`${t('increasedQty')} ${item.name}`, 'success');
+      showToast(`${t('increasedQty', { defaultValue: 'Increased quantity of' })} ${item.name}`, 'success');
       newCart = cart.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1 } : i);
     } else {
-      showToast(`${t('addedToOrder')} ${item.name}`, 'success');
+      showToast(`${t('addedToOrder', { defaultValue: 'Added to order' })} ${item.name}`, 'success');
       newCart = [...cart, { ...item, quantity: 1 }];
     }
     setCart(newCart);
+    lastLocalEditTime.current = Date.now(); // Mark local edit time - locks out background fetch for 8s
     autoSaveOrder(newCart, currentTable);
   };
 
@@ -541,6 +749,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return i;
     }).filter((i) => i.quantity > 0);
     setCart(newCart);
+    lastLocalEditTime.current = Date.now(); // Mark local edit time
     autoSaveOrder(newCart, currentTable);
   };
   const calculateSubtotal = () => cart.reduce((sum, item) => {
@@ -548,6 +757,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const activeQty = item.quantity - (item.cancelledQuantity || 0);
     return sum + (item.price * activeQty);
   }, 0);
+
+  const hasUnprintedItems = cart.some((item) => {
+    if (item.isCancelled) return false;
+    const qty = item.quantity || 0;
+    const printed = item.printedQuantity || 0;
+    return qty > printed;
+  });
 
   const calculateDiscount = (subtotal) => {
     const val = discount.value === '' ? 0 : parseFloat(discount.value) || 0;
@@ -597,6 +813,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const handleSaveOrderWithTable = async (tableNo) => {
     if (cart.length === 0) return;
     setLoading(true);
+    lastLocalEditTime.current = Date.now(); // Lock out background fetches during save
     try {
       const orderData = {
         tableNo: tableNo,
@@ -615,8 +832,26 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const savedOrder = await saveOrder(orderData);
       setOrderId(savedOrder._id);
       setActiveTable(tableNo);
+      // Apply the backend-confirmed items directly (instant 0ms update)
+      // This ensures removals are reflected immediately without a refetch race
+      if (savedOrder.items && savedOrder.items.length > 0) {
+        const kotStatusMap = {};
+        if (savedOrder.kots && Array.isArray(savedOrder.kots)) {
+          savedOrder.kots.forEach(kot => {
+            (kot.items || []).forEach(kItem => {
+              if (kItem.name) kotStatusMap[kItem.name] = kItem.status;
+              if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+            });
+          });
+        }
+        const confirmedItems = savedOrder.items
+          .filter(i => i.quantity > 0 || i.isCancelled)
+          .map(i => ({ ...i, status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status }));
+        setCart(confirmedItems);
+      }
       showToast(t('orderSaved'), 'success');
-      fetchActiveOrder();
+      // Extend edit lock after save completes so poll doesn't overwrite confirmed state
+      lastLocalEditTime.current = Date.now();
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error saving order:', error);
@@ -626,6 +861,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setLoading(false);
     }
   };
+
 
 
   // HOLD = SAVE: backend always stores with status 'Open' and marks table Occupied.
@@ -673,6 +909,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
       return;
     }
+    setLoading(true);
     await generateBillAfterSave(orderId);
   };
 
@@ -710,22 +947,32 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       showToast(t('billGenerated'), 'success');
       if (onOrderUpdate) onOrderUpdate();
+      // Always open Invoice/print modal immediately
       setShowInvoice(true);
     } catch (error) {
       console.error('Error generating bill:', error);
 
       if (error.response?.status === 400 && error.response?.data?.message?.includes('already billed')) {
         try {
-          const order = await getActiveOrder(activeTable);
+          // Order already billed - fetch existing bill and show invoice
+          const ordToFetch = orderIdToUse || orderId;
+          let order = null;
+          if (ordToFetch && !ordToFetch.startsWith('offline_')) {
+            try {
+              const resp = await api.get(`/bills/${ordToFetch}`);
+              order = resp.data;
+            } catch (e) {
+              if (activeTable) order = await getActiveOrder(activeTable);
+            }
+          } else if (activeTable) {
+            order = await getActiveOrder(activeTable);
+          }
           if (order && (order.status === 'Billed' || order.status === 'Paid')) {
             setOrderStatus(order.status);
             setBillNumber(order.billNumber);
             setCompletedBill(order);
-            if (order.status === 'Billed') {
-              setShowPayment(true);
-            } else {
-              setShowInvoice(true);
-            }
+            // Always show Invoice (print modal) for both Billed and Paid orders
+            setShowInvoice(true);
             showToast(t('recoveredExistingBill'), 'info');
             return;
           }
@@ -856,6 +1103,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const handlePrintKOT = async () => {
+    if (!hasUnprintedItems) {
+      showToast(t('KOT already fired for current order items. Status: Preparing'), 'info');
+      return;
+    }
     if (!activeTable) {
       if (billType === 'Delivery' || billType === 'Takeaway') {
         const generatedOrderNo = generateSequentialOrderNo(billType);
@@ -959,6 +1210,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const handleReopenOrder = async () => {
+    if (orderStatus === 'Open') {
+      showToast(t('Order is open for editing. Select or update items in your cart.'), 'info');
+      return;
+    }
+    if (!orderId) {
+      showToast(t('No saved bill selected to edit'), 'warning');
+      return;
+    }
     try {
       setLoading(true);
       await apiReopenOrder(orderId);
@@ -1208,6 +1467,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               <BillSummary
                 orderId={orderId}
                 cart={cart}
+                hasUnprintedItems={hasUnprintedItems}
                 updateQuantity={updateQuantity}
                 updateItemNote={updateItemNote}
                 subtotal={subtotal}

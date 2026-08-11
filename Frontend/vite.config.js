@@ -34,6 +34,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         // Cache all JS, CSS, HTML, and font files — exclude large animation frames from precache
         globPatterns: ['**/*.{js,css,html,ico,svg,woff,woff2}', 'assets/*.png'],
         globIgnores: ['assets/frame-*.png'],
@@ -41,6 +43,14 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Runtime caching for API calls
         runtimeCaching: [
+          {
+            // NEVER cache bill mutation endpoints (generate, save, settle)
+            urlPattern: /\/api\/bills\/(generate|save|settle|reopen|cancel|transfer)/,
+            handler: 'NetworkOnly',
+            options: {
+              cacheName: 'bills-mutations-nocache'
+            }
+          },
           {
             // Cache GET requests to the API (menu, categories, etc.)
             urlPattern: /\/api\/(menu|categories|floors|config)/,

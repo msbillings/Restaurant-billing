@@ -2,6 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import Invoice from './Invoice';
 import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
+import { getCachedBillHistory, cacheBillHistory } from '../db/offlineDb';
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
@@ -14,6 +15,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [loadingBill, setLoadingBill] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
   const [refundModal, setRefundModal] = useState({ isOpen: false, billId: null, reason: '' });
   const [toast, setToast] = useState(null);
@@ -30,14 +33,26 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   // Refresh bills when component mounts to show latest bills first
   useEffect(() => {
+    // 1. Instant Cache Load (0ms delay)
+    getCachedBillHistory().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setBills(cached);
+      }
+      setLoading(false);
+    }).catch(() => {
+      setLoading(false);
+    });
+
     // Reset to page 1 and fetch latest bills when component mounts
     setCurrentPage(1);
-    fetchBills();
+    fetchBills(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchBills = async () => {
-    setLoading(true);
+  const fetchBills = async (isBackground = false) => {
+    if (!isBackground && bills.length === 0) {
+      setLoading(true);
+    }
     try {
       const searchForBackend = debouncedSearchTerm.trim().replace(/^#/, '');
       const data = await getBills(currentPage, itemsPerPage, searchForBackend);
@@ -53,6 +68,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           setToast({ message: 'This bill is missing or deleted', type: 'error' });
         }
       }
+
+      cacheBillHistory(billsData).catch(() => {});
 
       // Filter out delivery orders - only show dine-in and takeaway
       // Only filter by billType, not orderSource
@@ -121,35 +138,54 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     }
   };
 
-  // Client-side filtering for bill type and payment mode (server handles search)
-  // Bills are already sorted by newest first from backend (updatedAt: -1)
-  // This ensures recently paid bills appear at the top
-  // We maintain this order - no re-sorting needed
+  const handleStartDateChange = (val) => {
+    setStartDate(val);
+    if (endDate && val && val > endDate) setEndDate(val);
+  };
+
+  const handleEndDateChange = (val) => {
+    if (startDate && val && val < startDate) setEndDate(startDate);
+    else setEndDate(val);
+  };
+
+  // Client-side filtering for bill type, payment mode and date range
   const filteredBills = bills.filter((bill) => {
-    if (filterType === 'All') {
-      return true;
-    } else if (filterType === 'Dine-In' || filterType === 'Takeaway') {
-      return bill.billType === filterType;
-    } else if (filterType === 'Cash' || filterType === 'UPI' || filterType === 'Card') {
-      return bill.paymentMode === filterType;
+    if (filterType !== 'All') {
+      if (filterType === 'Dine-In' || filterType === 'Takeaway') {
+        if (bill.billType !== filterType) return false;
+      } else if (filterType === 'Cash' || filterType === 'UPI' || filterType === 'Card') {
+        if (bill.paymentMode !== filterType) return false;
+      }
     }
+
+    const dateStr = bill.createdAt || bill.updatedAt;
+    if (dateStr) {
+      const bDate = new Date(dateStr);
+      if (startDate) {
+        const sDate = new Date(startDate);
+        sDate.setHours(0,0,0,0);
+        if (bDate < sDate) return false;
+      }
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(23,59,59,999);
+        if (bDate > eDate) return false;
+      }
+    }
+
     return true;
   });
-
-  // Ensure bills remain sorted by newest first (backend already does this, but double-check)
-  // filteredBills are already in correct order from backend, no need to sort again
 
   // Reset to first page when filter/search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, filterType]);
+  }, [debouncedSearchTerm, filterType, startDate, endDate]);
 
   // Listen for global searches from the Top Nav Bar
   useEffect(() => {
     const handleBillSearch = (e) => {
       if (e.detail) {
         let formattedSearch = e.detail.trim();
-        // Format if it's just a number
         if (/^\d+$/.test(formattedSearch)) {
           formattedSearch = `MS${formattedSearch.padStart(4, '0')}`;
         } else if (/^#?MS\d+$/i.test(formattedSearch)) {
@@ -178,23 +214,55 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-4 w-full md:w-auto">
-          <div className="relative w-full sm:w-64">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+          {/* Date Range Picker */}
+          <div className="flex items-center gap-1 bg-background px-2.5 py-1.5 rounded-xl border border-border text-xs shrink-0 shadow-2xs">
+            <input
+              type="date"
+              max={endDate || undefined}
+              value={startDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[122px] sm:w-[132px] px-0.5 border-none"
+              style={{ colorScheme: 'light' }}
+              title={t("Start Date")}
+            />
+            <span className="text-text-muted font-bold text-xs">-</span>
+            <input
+              type="date"
+              min={startDate || undefined}
+              value={endDate}
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[122px] sm:w-[132px] px-0.5 border-none"
+              style={{ colorScheme: 'light' }}
+              title={t("End Date")}
+            />
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="text-[10px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1.5 py-0.5 rounded-md transition-colors ml-0.5"
+                title={t("Reset Dates")}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="relative flex-1 sm:w-48">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <input
               type="text" 
               placeholder={t("Search Bill #...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main w-full font-medium" />
+              className="pl-10 pr-4 py-2 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main w-full font-medium" />
           </div>
 
-          <div className="relative w-full sm:w-auto">
+          <div className="relative w-auto">
             <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full sm:w-auto pl-10 pr-8 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main appearance-none cursor-pointer font-medium">
+              className="w-auto pl-10 pr-8 py-2 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main appearance-none cursor-pointer font-medium">
               <option value="All">{t("All")}</option>
               <option value="Dine-In">{t("Dine-In")}</option>
               <option value="Takeaway">{t("Takeaway")}</option>
