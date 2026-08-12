@@ -389,17 +389,18 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     onNavigate('billing', spaceName);
   };
 
-  const getSpaceOrder = (spaceName, rawItemName) => {
+  const getSpaceOrder = (spaceName, rawItemName, isFirstFloor = false) => {
     if (!spaceName) return null;
     const targetClean = normalizeTable(spaceName);
     let order = orders.find((o) => normalizeTable(o.tableNo) === targetClean);
     if (order) return order;
 
-    if (rawItemName) {
+    // Legacy fallback ONLY for Ground Floor tables without floor prefix
+    if (isFirstFloor && rawItemName) {
       const rawClean = normalizeTable(rawItemName);
       order = orders.find((o) => {
-        if (o.tableNo && o.tableNo.includes(' - ')) return false;
-        return normalizeTable(o.tableNo) === rawClean;
+        const oTbl = o.tableNo || '';
+        return !oTbl.includes(' - ') && normalizeTable(oTbl) === rawClean;
       });
     }
     return order;
@@ -407,12 +408,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   const getActiveSpacesForMerge = () => {
     const activeSpaces = [];
-    floors.forEach((floor) => {
+    floors.forEach((floor, fIdx) => {
       ['tables', 'cabins', 'sofas', 'spaces'].forEach((type) => {
         if (floor[type]) {
           floor[type].forEach((item) => {
             const uniqueSpaceName = `${floor.name} - ${item.name}`;
-            const activeOrder = getSpaceOrder(uniqueSpaceName, item.name);
+            const activeOrder = getSpaceOrder(uniqueSpaceName, item.name, fIdx === 0);
             if (activeOrder) {
               activeSpaces.push({
                 id: `${uniqueSpaceName}`,
@@ -482,9 +483,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const renderSpaceCard = (item, type, IconComponent, index = 0) => {
     const currentFloor = floors.find((f) => f.id === activeFloorId);
     const uniqueSpaceName = currentFloor ? `${currentFloor.name} - ${item.name}` : item.name;
+    const isFirstFloor = floors.length > 0 && floors[0].id === activeFloorId;
 
     // Dynamically calculate status from real-time orders instead of static item status
-    const activeOrder = getSpaceOrder(uniqueSpaceName, item.name);
+    const activeOrder = getSpaceOrder(uniqueSpaceName, item.name, isFirstFloor);
     const isOccupied = !!activeOrder;
 
     let statusColorClass = 'text-emerald-600';
