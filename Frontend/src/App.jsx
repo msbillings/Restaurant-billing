@@ -716,7 +716,7 @@ function App() {
   };
 
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU — must be BEFORE any loading/auth guard!
-  const isCustomerOrderRoute = window.location.pathname === '/order';
+  const isCustomerOrderRoute = window.location.pathname === '/order' || window.location.pathname.startsWith('/order');
 
   if (isCustomerOrderRoute) {
     return (

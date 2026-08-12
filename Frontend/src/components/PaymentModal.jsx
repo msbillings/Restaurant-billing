@@ -1,5 +1,6 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
 import { X, CheckCircle, Wallet, CreditCard, Banknote, PieChart } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComplete }) => {const { t } = useLanguage();
   const [mode, setMode] = useState('Cash');
@@ -115,24 +116,25 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
               </div>
                   
                   <div className="bg-white p-3 rounded-2xl shadow-md border border-border/40 mt-5 mb-2 flex flex-col items-center">
-                    <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent((() => {
-                    let pa = 'maheshsiva864@oksbi';
-                    let pn = 'MS Billings';
-                    try {
-                      const s = JSON.parse(localStorage.getItem('restaurantSettings'));
-                      if (s?.upiId && s.upiId !== 'msbillings@upi') pa = s.upiId.trim();
-                      if (s?.restaurantName) pn = s.restaurantName.trim();
-                    } catch (e) {}
-                    const am = Number(total || 0).toFixed(2);
-                    const noteText = billNumber ? `Bill #${billNumber} - Rs ${am}` : tableNo ? `Table ${tableNo} - Rs ${am}` : `Payment Rs ${am}`;
-                    const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
-                    const tr = `PAY${Date.now()}`;
-                    return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
-                  })())}`}
-                  alt="UPI QR Code"
-                  className="w-40 h-40 object-contain" />
-                
+                    <QRCodeSVG
+                      value={(() => {
+                        let pa = 'maheshsiva864@oksbi';
+                        let pn = 'MS Billings';
+                        try {
+                          const s = JSON.parse(localStorage.getItem('restaurantSettings'));
+                          if (s?.upiId && s.upiId !== 'msbillings@upi') pa = s.upiId.trim();
+                          if (s?.restaurantName) pn = s.restaurantName.trim();
+                        } catch (e) {}
+                        const am = Number(total || 0).toFixed(2);
+                        const noteText = billNumber ? `Bill #${billNumber} - Rs ${am}` : tableNo ? `Table ${tableNo} - Rs ${am}` : `Payment Rs ${am}`;
+                        const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
+                        const tr = `PAY${Date.now()}`;
+                        return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+                      })()}
+                      size={160}
+                      level="M"
+                      includeMargin={false}
+                    />
                   </div>
                   
                   <div className="mt-4 text-center">{t("Amount Due:")}

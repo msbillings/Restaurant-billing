@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 const Invoice = ({ bill, onClose, onSave }) => {
   const { t } = useLanguage();
@@ -44,10 +45,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
       const isSilent = settings.silentPrinting !== false;
       if (isSilent && settings.billingPrinter) {
         window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, true);
-      } else if (window.electronAPI.printPreview) {
-        window.electronAPI.printPreview(htmlContent, settings.billingPrinter);
       } else {
-        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, false);
+        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter || '', false);
       }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
@@ -71,7 +70,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
         {`
           @media print {
             @page {
-              size: ${settings.printFormat === 'A4' ? 'A4 portrait' : settings.printFormat === '58mm' ? '58mm auto' : '80mm auto'};
+              size: ${settings.printFormat === 'A4' ? 'A4 portrait' : settings.printFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
               margin: 0 !important;
             }
             html, body {
@@ -383,17 +382,21 @@ const Invoice = ({ bill, onClose, onSave }) => {
               <div className="uppercase mb-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("SCAN TO PAY VIA UPI")}
 
             </div>
-              <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent((() => {
-                const pa = (settings.upiId || 'maheshsiva864@oksbi').trim();
-                const pn = (settings.restaurantName || 'MSBILLINGS').trim();
-                const am = (bill.total || 0).toFixed(2);
-                const tn = `Bill ${bill.billNumber || 'Pay'}`.replace(/[^a-zA-Z0-9 ]/g, '');
-                const tr = `INV${Date.now()}`;
-                return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
-              })())}`}
-              alt="UPI QR"
-              className="w-24 h-24 mx-auto p-0.5 bg-white object-contain" />
+              <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1">
+                <QRCodeSVG
+                  value={(() => {
+                    const pa = (settings.upiId || 'maheshsiva864@oksbi').trim();
+                    const pn = (settings.restaurantName || 'MSBILLINGS').trim();
+                    const am = (bill.total || 0).toFixed(2);
+                    const tn = `Bill ${bill.billNumber || 'Pay'}`.replace(/[^a-zA-Z0-9 ]/g, '');
+                    const tr = `INV${Date.now()}`;
+                    return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+                  })()}
+                  size={100}
+                  level="M"
+                  includeMargin={false}
+                />
+              </div>
             
               <div className="mt-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("UPI ID:")}
               {settings.upiId || 'maheshsiva864@oksbi'}

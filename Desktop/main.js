@@ -242,6 +242,8 @@ ipcMain.handle('get-printers', async (event) => {
 const fs = require('fs');
 
 ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) => {
+  console.log('[Print] silent-print received, silent:', silent, 'printer:', printerName || '(default)');
+  
   let printWindow = new BrowserWindow({ 
     show: !silent, // Must be visible for OS print dialog to work correctly on Windows
     width: 400,
@@ -263,7 +265,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
       }
     }
   } catch (err) {
-    console.error('Could not load CSS for printing:', err);
+    console.error('[Print] Could not load CSS for printing:', err);
   }
 
   const fullHtml = `
@@ -271,7 +273,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
       <head>
         <style>${cssContent}</style>
         <style>
-          @page { margin: 0; size: 80mm auto; }
+          @page { margin: 0; size: 80mm auto portrait; }
           @media print {
             html, body {
               width: 80mm !important;
@@ -302,22 +304,47 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
     </html>
   `;
 
-  printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`);
+  // Write HTML to a temp file to avoid data: URL size limits
+  const tempPath = path.join(app.getPath('temp'), 'msbilling-print.html');
+  try {
+    fs.writeFileSync(tempPath, fullHtml, 'utf8');
+    printWindow.loadFile(tempPath);
+  } catch (err) {
+    console.error('[Print] Failed to write temp file, falling back to data URL:', err);
+    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`);
+  }
   
   printWindow.webContents.once('did-finish-load', () => {
+    console.log('[Print] Print window loaded, sending to printer...');
     // Slight delay to ensure CSS is fully painted before sending to printer spooler
     setTimeout(() => {
-      printWindow.webContents.print({
+      const printOptions = {
         silent: silent,
-        deviceName: printerName,
         margins: { marginType: 'none' },
+        landscape: false,
         printBackground: true,
         color: false
-      }, (success, failureReason) => {
-        if (!success) console.log('Print failed:', failureReason);
-        printWindow.close();
+      };
+      if (printerName && typeof printerName === 'string' && printerName.trim()) {
+        printOptions.deviceName = printerName.trim();
+      }
+      console.log('[Print] Print options:', JSON.stringify(printOptions));
+      printWindow.webContents.print(printOptions, (success, failureReason) => {
+        if (!success) {
+          console.log('[Print] Print failed:', failureReason);
+        } else {
+          console.log('[Print] Print succeeded');
+        }
+        if (!printWindow.isDestroyed()) printWindow.close();
+        // Clean up temp file
+        try { fs.unlinkSync(tempPath); } catch (e) {}
       });
     }, 500);
+  });
+
+  printWindow.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[Print] Window failed to load:', errorCode, errorDescription);
+    if (!printWindow.isDestroyed()) printWindow.close();
   });
 });
 
@@ -452,11 +479,23 @@ function setupAutoUpdater() {
   });
 }
 
-app.on('ready', () => {
+app.on('ready', async () => {
   startBackend();
 
-  // ✅ Auto-grant camera/mic/media permissions inside Electron
+  // ✅ Clear ALL caches on startup to prevent stale chunk references
   const { session } = require('electron');
+  try {
+    await session.defaultSession.clearCache();
+    await session.defaultSession.clearStorageData({
+      storages: ['serviceworkers', 'cachestorage']
+    });
+    await session.defaultSession.clearCodeCaches({});
+    console.log('[Cache] Cleared Electron cache, service workers, and code caches on startup');
+  } catch (err) {
+    console.error('[Cache] Error clearing cache:', err);
+  }
+
+  // ✅ Auto-grant camera/mic/media permissions inside Electron
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
     console.log(`[Permissions] Auto-granting permission request for '${permission}'`);
     callback(true);

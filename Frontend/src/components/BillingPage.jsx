@@ -299,6 +299,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         } else {
           setBillType('Dine-In');
         }
+        fetchActiveOrder(initialTable, true);
       }
     }
   }, [initialTable]);
@@ -465,13 +466,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // Helper to check orders array and apply order immediately (0ms delay)
     const checkAndApplyCache = (ordersArr) => {
       if (!ordersArr || !Array.isArray(ordersArr) || ordersArr.length === 0) return false;
-      const tSearch = tableToFetch.trim().toLowerCase();
-      const shortSearch = tSearch.includes(' - ') ? tSearch.split(' - ').slice(1).join(' - ').trim() : tSearch;
+      const cleanTarget = tableToFetch.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const targetTablePart = tableToFetch.includes(' - ') ? tableToFetch.split(' - ').slice(1).join(' - ').trim().replace(/[^a-z0-9]/gi, '').toLowerCase() : cleanTarget;
 
       const cached = ordersArr.find(o => {
         if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
-        const oTable = o.tableNo.trim().toLowerCase();
-        return oTable === tSearch || oTable === shortSearch;
+        const oClean = o.tableNo.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const oTablePart = o.tableNo.includes(' - ') ? o.tableNo.split(' - ').slice(1).join(' - ').trim().replace(/[^a-z0-9]/gi, '').toLowerCase() : oClean;
+        return oClean === cleanTarget || oClean === targetTablePart || oTablePart === cleanTarget || oTablePart === targetTablePart;
       });
 
       if (cached && cached.items && cached.items.length > 0) {
@@ -522,12 +524,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       let order = await getActiveOrder(tableToFetch);
       if (!order && openOrdersList && openOrdersList.length > 0) {
-        const tSearch = tableToFetch.trim().toLowerCase();
-        const shortSearch = tSearch.includes(' - ') ? tSearch.split(' - ').slice(1).join(' - ').trim() : tSearch;
+        const cleanTarget = tableToFetch.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const targetTablePart = tableToFetch.includes(' - ') ? tableToFetch.split(' - ').slice(1).join(' - ').trim().replace(/[^a-z0-9]/gi, '').toLowerCase() : cleanTarget;
+
         order = openOrdersList.find(o => {
-          if (!o.tableNo) return false;
-          const oTable = o.tableNo.trim().toLowerCase();
-          return oTable === tSearch || oTable === shortSearch;
+          if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
+          const oClean = o.tableNo.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
+          const oTablePart = o.tableNo.includes(' - ') ? o.tableNo.split(' - ').slice(1).join(' - ').trim().replace(/[^a-z0-9]/gi, '').toLowerCase() : oClean;
+          return oClean === cleanTarget || oClean === targetTablePart || oTablePart === cleanTarget || oTablePart === targetTablePart;
         });
       }
 

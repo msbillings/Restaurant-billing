@@ -22,10 +22,8 @@ const KOT = ({ order, onClose }) => {
       const isSilent = settings.silentPrinting !== false;
       if (isSilent && settings.kotPrinter) {
         window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, true);
-      } else if (window.electronAPI.printPreview) {
-        window.electronAPI.printPreview(htmlContent, settings.kotPrinter);
       } else {
-        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, false);
+        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter || '', false);
       }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
@@ -49,6 +47,7 @@ const KOT = ({ order, onClose }) => {
         {`
           @media print {
             @page {
+              size: portrait;
               margin: 0 !important;
             }
             body {
