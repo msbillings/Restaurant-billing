@@ -156,7 +156,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
           
           <div style={{ fontSize: '18px', textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
-            {bill.discount === 100 || bill.total === 0 ? 'Complimentary Bill' : 'Tax Invoice'}
+            {bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
           </div>
 
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>

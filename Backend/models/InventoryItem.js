@@ -8,7 +8,6 @@ const inventoryItemSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['Meat & Poultry', 'Grains & Pulses', 'Dairy & Beverages', 'Spices & Condiments', 'Vegetables & Fruits', 'Packaging & Supplies', 'Other'],
     default: 'Other'
   },
   unit: {

@@ -1,5 +1,7 @@
 // Fix for Electron missing crypto in old Node versions, but safe for Node 20+
 import _crypto from 'crypto';
+import dns from 'dns';
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 if (!globalThis.crypto) {
   try {
     Object.defineProperty(globalThis, 'crypto', { value: _crypto });

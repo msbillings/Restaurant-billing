@@ -378,20 +378,22 @@ const BillSummary = ({
               {showDiscountInput &&
                 <div className="flex items-center justify-between bg-gray-200/50 p-2 rounded-lg gap-2 border border-gray-200">
                   <select
-                    className="w-1/2 bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1"
+                    className={`${discount?.type === 'complimentary' ? 'w-full' : 'w-1/2'} bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1`}
                     value={discount?.type || 'percentage'}
                     onChange={(e) => setDiscount({ ...(discount || {}), type: e.target.value })}>
 
                     <option value="percentage">{t("% Percent")}</option>
                     <option value="flat">{currencySymbol}{t("Flat")}</option>
+                    <option value="complimentary">{t("Complimentary")}</option>
                   </select>
-                  <input
-                    type="number"
-                    className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
-                    placeholder={t('Value')}
-                    value={discount?.value || ''}
-                    onChange={(e) => setDiscount({ ...(discount || {}), value: e.target.value })} />
-
+                  {discount?.type !== 'complimentary' && (
+                    <input
+                      type="number"
+                      className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
+                      placeholder={t('Value')}
+                      value={discount?.value || ''}
+                      onChange={(e) => setDiscount({ ...(discount || {}), value: e.target.value })} />
+                  )}
                 </div>
               }
               <div className="flex items-center justify-between font-bold">
@@ -419,87 +421,98 @@ const BillSummary = ({
           }
         </div>
 
-        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
-          <div className="flex items-center gap-1 shrink-0">
-            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
             <button
               onClick={() => {
                 setSplitWays(pax > 1 ? pax : 2);
                 setShowSplitCalcModal(true);
               }}
-              className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
+              className="bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
+            </button>
+            <button
+              onClick={() => {
+                if (discount?.type === 'complimentary') {
+                  setDiscount({ type: 'flat', value: '' });
+                } else {
+                  setDiscount({ type: 'complimentary', value: '' });
+                }
+              }}
+              className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2.5 py-1 rounded-md text-xs font-bold border transition-colors whitespace-nowrap`}>
+              {t("Complimentary")}
             </button>
           </div>
-          <div className="flex items-center gap-0.5 shrink-0">
-            <span className="text-gray-500 text-[9px] font-bold uppercase tracking-wider">{t("Total")}</span>
-            <span className="text-primary text-base font-black">{currencySymbol}{total.toFixed(0)}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider">{t("Total")}</span>
+            <span className="text-primary text-xl font-black">{currencySymbol}{total.toFixed(0)}</span>
           </div>
         </div>
 
         {/* Row 3: Settlement */}
-        <div className="flex items-center justify-between px-3 py-1 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
-          <span className="text-gray-600 text-[9px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
-          <div className="flex items-center gap-1 ml-1 shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
+          <span className="text-gray-600 text-[11px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
+          <div className="flex items-center gap-2 ml-1 shrink-0">
             <input
               type="number"
               value={settlementAmount}
               onChange={(e) => setSettlementAmount(e.target.value)}
-              className="w-[70px] h-6 bg-white border border-gray-200 text-gray-800 text-right px-1 rounded outline-none focus:border-primary font-bold text-[11px]" />
+              className="w-[90px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-sm" />
             <button
               onClick={(e) => {
                 e.preventDefault();
                 setIsPaid(true);
                 if (onSettleBill) onSettleBill();
               }}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2 py-0.5 rounded text-[10px] font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap">{t("Settle")}
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap">{t("Settle")}
             </button>
           </div>
         </div>
 
         {/* Row 4: Checkboxes */}
-        <div className="flex items-center justify-center gap-6 py-1 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
-          <label className="flex items-center gap-1 text-gray-600 text-[10px] font-bold cursor-pointer">
-            <div className={`w-3 h-3 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
-              {isPaid && <CheckCircle size={8} className="text-white shrink-0" strokeWidth={3} />}
+        <div className="flex items-center justify-center gap-6 py-2 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
+          <label className="flex items-center gap-1.5 text-gray-600 text-xs font-bold cursor-pointer">
+            <div className={`w-4 h-4 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+              {isPaid && <CheckCircle size={10} className="text-white shrink-0" strokeWidth={3} />}
             </div>
             <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />{t("It's Paid")}
           </label>
         </div>
 
         {/* Row 5: Action Buttons */}
-        <div className="grid grid-cols-3 gap-1 px-3 py-1.5 bg-white border-t border-gray-100 w-full overflow-x-auto no-scrollbar">
+        <div className="grid grid-cols-3 gap-3 px-3 py-4 bg-white border-t border-gray-100 w-full overflow-x-auto no-scrollbar">
           <button
             onClick={onSaveOrder}
             disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            className="col-span-1 bg-red-50 text-red-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
+            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
           </button>
           <button
             onClick={onHoldOrder}
             disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            className="col-span-1 bg-orange-50 text-orange-600 py-1.5 rounded-lg text-[11px] font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
+            className="col-span-1 bg-orange-50 text-orange-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
           </button>
           <button
             onClick={onGenerateBill}
             disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-1.5 rounded-lg text-[9px] font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50">{t("SAVE & PRINT")}
+            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center">{t("SAVE & PRINT")}
           </button>
           <button
             onClick={onPrintKOT}
             disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Billed' || orderStatus === 'Paid'}
             title={!hasUnprintedItems && cart.length > 0 ? t("KOT already fired for these items. Status: Preparing") : t("KOT")}
-            className="col-span-1 bg-gray-100 text-gray-700 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
+            className="col-span-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
             {t("KOT")}
           </button>
           <button
             onClick={onReopenOrder}
             disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}
-            className="col-span-1 bg-blue-50 text-blue-600 py-1.5 rounded-lg text-[11px] font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
+            className="col-span-1 bg-blue-50 text-blue-600 py-3.5 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
             {t("EDIT")}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-1.5 rounded-lg text-[11px] font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm disabled:opacity-50">{t("CANCEL")}
+            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-3.5 rounded-xl text-sm font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm disabled:opacity-50">{t("CANCEL")}
           </button>
         </div>
       </div>

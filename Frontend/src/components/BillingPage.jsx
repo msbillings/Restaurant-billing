@@ -747,11 +747,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const newCart = cart.map((i) => {
       if (i._id === id || i.name === id) {
         const newQty = Math.max(0, i.quantity + delta);
-        if (newQty === 0) showToast(`${i.name} ${t('removedFromOrder')}`, 'info');
+        if (newQty === 0) {
+          if ((i.printedQuantity || 0) > 0) {
+            showToast(`${i.name} marked for cancellation (Print KOT)`, 'info');
+          } else {
+            showToast(`${i.name} ${t('removedFromOrder')}`, 'info');
+          }
+        }
         return { ...i, quantity: newQty };
       }
       return i;
-    }).filter((i) => i.quantity > 0);
+    }).filter((i) => i.quantity > 0 || (i.printedQuantity || 0) > 0);
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
     autoSaveOrder(newCart, currentTable);
@@ -770,6 +776,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   });
 
   const calculateDiscount = (subtotal) => {
+    if (discount.type === 'complimentary') return subtotal;
     const val = discount.value === '' ? 0 : parseFloat(discount.value) || 0;
     if (discount.type === 'percentage') {
       return subtotal * val / 100;

@@ -99,14 +99,17 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
     minStockAlert: '5',
     unitCost: ''
   });
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
 
   // Recipe Mapping State
   const [selectedMenuId, setSelectedMenuId] = useState('');
   const [recipeIngredients, setRecipeIngredients] = useState([]);
 
-  const categories = [
+  const defaultCategories = [
   'All', 'Meat & Poultry', 'Grains & Pulses', 'Dairy & Beverages',
   'Spices & Condiments', 'Vegetables & Fruits', 'Packaging & Supplies', 'Other'];
+  
+  const categories = [...new Set([...defaultCategories, ...items.map(i => i.category).filter(Boolean)])];
 
 
   const units = ['kg', 'g', 'L', 'ml', 'pcs', 'packs'];
@@ -253,6 +256,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
       minStockAlert: '5',
       unitCost: ''
     });
+    setIsCustomCategory(false);
   };
 
   // Recipe Selection Handler
@@ -455,7 +459,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
             
             </div>
             <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
-              {categories.slice(0, 6).map((cat) =>
+              {categories.map((cat) =>
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
@@ -914,15 +918,43 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Category")}</label>
-                  <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer">
-                  
-                    {categories.filter((c) => c !== 'All').map((c) =>
-                  <option key={c} value={c}>{c}</option>
+                  {isCustomCategory ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder={t("Enter custom category")}
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setIsCustomCategory(false); setFormData({ ...formData, category: 'Other' }); }}
+                        className="p-3.5 text-gray-400 hover:text-red-500 bg-gray-50 border border-gray-200 rounded-xl transition flex items-center justify-center"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.category}
+                      onChange={(e) => {
+                        if (e.target.value === 'custom_add_new') {
+                          setIsCustomCategory(true);
+                          setFormData({ ...formData, category: '' });
+                        } else {
+                          setFormData({ ...formData, category: e.target.value });
+                        }
+                      }}
+                      className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
+                    >
+                      {categories.filter((c) => c !== 'All').map((c) =>
+                        <option key={c} value={c}>{c}</option>
+                      )}
+                      <option value="custom_add_new">+ {t("Add Custom Category...")}</option>
+                    </select>
                   )}
-                  </select>
                 </div>
                 <div>
                   <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Unit")}</label>

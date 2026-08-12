@@ -51,7 +51,7 @@ const billSchema = new mongoose.Schema({
   },
   discountType: {
     type: String,
-    enum: ['percentage', 'flat'],
+    enum: ['percentage', 'flat', 'complimentary'],
     default: 'flat'
   },
   discountValue: {

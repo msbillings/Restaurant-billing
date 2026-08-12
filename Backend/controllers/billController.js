@@ -239,6 +239,8 @@ export const saveOrder = async (req, res) => {
       let calculatedDiscount = 0;
       if (dType === 'percentage') {
         calculatedDiscount = (subtotal * dValue) / 100;
+      } else if (dType === 'complimentary') {
+        calculatedDiscount = subtotal;
       } else {
         calculatedDiscount = dValue;
       }
@@ -356,6 +358,8 @@ export const saveOrder = async (req, res) => {
       let calculatedDiscount = 0;
       if (dType === 'percentage') {
         calculatedDiscount = (subtotal * dValue) / 100;
+      } else if (dType === 'complimentary') {
+        calculatedDiscount = subtotal;
       } else {
         calculatedDiscount = dValue;
       }
