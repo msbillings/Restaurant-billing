@@ -13,6 +13,14 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.error("Uncaught React Error:", error, errorInfo);
     this.setState({ errorInfo });
+    // Auto-reload on dynamic import error caused by updated JS asset hashes
+    if (error && error.toString().includes('Failed to fetch dynamically imported module')) {
+      const hasReloaded = sessionStorage.getItem('dyn_import_reloaded');
+      if (!hasReloaded) {
+        sessionStorage.setItem('dyn_import_reloaded', 'true');
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = () => {

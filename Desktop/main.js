@@ -159,6 +159,11 @@ function createWindow() {
     show: false // Wait until ready to show
   });
 
+  // Clear cache on launch to prevent stale asset hash imports
+  const { session } = require('electron');
+  session.defaultSession.clearCache().catch(() => {});
+  session.defaultSession.clearCodeCaches({}).catch(() => {});
+
   // Load the built static files
   mainWindow.loadFile(path.join(__dirname, 'frontend/index.html'));
 
@@ -232,15 +237,6 @@ function startBackend() {
   });
 }
 
-ipcMain.handle('get-printers', async (event) => {
-  if (mainWindow) {
-    return await mainWindow.webContents.getPrintersAsync();
-  }
-  return [];
-});
-
-const fs = require('fs');
-
 ipcMain.handle('get-printers', async () => {
   if (mainWindow && mainWindow.webContents) {
     try {
@@ -267,16 +263,14 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
   if (!silent) {
     printWindow.setMenuBarVisibility(false);
   }
-  // Find the compiled CSS file
+  // Find all compiled CSS files
   let cssContent = '';
   try {
     const assetsPath = path.join(__dirname, 'frontend/assets');
     if (fs.existsSync(assetsPath)) {
       const files = fs.readdirSync(assetsPath);
-      const cssFile = files.find(f => f.endsWith('.css'));
-      if (cssFile) {
-        cssContent = fs.readFileSync(path.join(assetsPath, cssFile), 'utf8');
-      }
+      const cssFiles = files.filter(f => f.endsWith('.css'));
+      cssContent = cssFiles.map(f => fs.readFileSync(path.join(assetsPath, f), 'utf8')).join('\n');
     }
   } catch (err) {
     console.error('[Print] Could not load CSS for printing:', err);
@@ -365,7 +359,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
   });
 });
 
-ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
+ipcMain.on('print-preview', async (event, { htmlContent, printerName, billNumber }) => {
   let pdfRenderWindow = new BrowserWindow({
     show: false,
     width: 800,
@@ -378,8 +372,8 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
     const assetsPath = path.join(__dirname, 'frontend/assets');
     if (fs.existsSync(assetsPath)) {
       const files = fs.readdirSync(assetsPath);
-      const cssFile = files.find(f => f.endsWith('.css'));
-      if (cssFile) cssContent = fs.readFileSync(path.join(assetsPath, cssFile), 'utf8');
+      const cssFiles = files.filter(f => f.endsWith('.css'));
+      cssContent = cssFiles.map(f => fs.readFileSync(path.join(assetsPath, f), 'utf8')).join('\n');
     }
   } catch (err) {
     console.error('Could not load CSS for print preview:', err);
@@ -390,30 +384,69 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
     <html>
       <head>
         <meta charset="UTF-8">
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>${cssContent}</style>
         <style>
-          @page { margin: 5mm; }
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
           html, body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            padding: 10px !important;
-            margin: 0 auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            text-align: center !important;
           }
-          .receipt-print, #invoice-print-area, body > div {
+          .flex { display: flex !important; }
+          .flex-col { display: flex !important; flex-direction: column !important; }
+          .flex-1 { flex: 1 1 0% !important; }
+          .items-start { align-items: flex-start !important; }
+          .items-center { align-items: center !important; }
+          .justify-between { justify-content: space-between !important; }
+          .text-right { text-align: right !important; }
+          .text-left { text-align: left !important; }
+          .text-center { text-align: center !important; }
+          .w-full { width: 100% !important; }
+          .w-8 { width: 32px !important; }
+          .w-14 { width: 56px !important; }
+          .w-16 { width: 64px !important; }
+          .w-24 { width: 96px !important; }
+
+          .receipt-print, #invoice-print-area {
+            width: 320px !important;
+            max-width: 320px !important;
+            min-width: 320px !important;
             margin: 0 auto !important;
-            align-self: center !important;
+            padding: 12px !important;
+            box-sizing: border-box !important;
+            background: #ffffff !important;
+          }
+          .receipt-print *, #invoice-print-area * {
+            box-sizing: border-box !important;
+          }
+          .receipt-print img, #invoice-print-area img, img {
+            max-width: 90px !important;
+            max-height: 60px !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain !important;
+            margin: 0 auto !important;
+            display: block !important;
           }
           .print\\:hidden { display: none !important; }
         </style>
       </head>
       <body>
-        ${htmlContent}
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="width: 100%; margin: 0 auto; border-collapse: collapse;">
+          <tr>
+            <td align="center" valign="top" style="text-align: center; padding-top: 15px;">
+              <div style="width: 320px; max-width: 320px; margin: 0 auto; text-align: left; display: inline-block;">
+                ${htmlContent}
+              </div>
+            </td>
+          </tr>
+        </table>
       </body>
     </html>
   `;
@@ -425,33 +458,25 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
       setTimeout(async () => {
         const pdfBuffer = await pdfRenderWindow.webContents.printToPDF({
           printBackground: true,
-          marginsType: 0
+          marginsType: 0,
+          pageSize: 'A4'
         });
         pdfRenderWindow.close();
 
-        const tempPath = path.join(app.getPath('temp'), `resto_bill_preview_${Date.now()}.pdf`);
-        fs.writeFileSync(tempPath, pdfBuffer);
-
-        let previewWindow = new BrowserWindow({
-          width: 600,
-          height: 800,
-          title: "Print Preview - MS Billing",
-          autoHideMenuBar: true,
-          webPreferences: {
-            plugins: true
-          }
+        const defaultFileName = billNumber ? `Bill_${billNumber}.pdf` : `Bill_${Date.now()}.pdf`;
+        const { filePath } = await dialog.showSaveDialog(mainWindow, {
+          title: 'Download Bill PDF',
+          defaultPath: path.join(app.getPath('downloads'), defaultFileName),
+          filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
         });
 
-        previewWindow.loadURL(`file://${tempPath}`);
-
-        previewWindow.on('closed', () => {
-          try {
-            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          } catch (e) {}
-        });
+        if (filePath) {
+          fs.writeFileSync(filePath, pdfBuffer);
+          console.log('[PDF] Bill successfully saved to:', filePath);
+        }
       }, 400);
     } catch (error) {
-      console.error('Failed to generate PDF for print preview:', error);
+      console.error('Failed to generate PDF:', error);
       if (!pdfRenderWindow.isDestroyed()) pdfRenderWindow.close();
     }
   });

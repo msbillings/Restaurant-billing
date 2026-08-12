@@ -150,7 +150,7 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
               <button
                 type="button"
                 onClick={async () => {
-                  if (window.confirm('Are you sure you want to reset your license? You will need to re-enter your license key.')) {
+                  if (window.confirm('Are you sure you want to reset your license and switch account? You will need to re-enter your license key.')) {
                     try {
                       const API_BASE_URL = getApiUrl();
                       await fetch(`${API_BASE_URL}/config/reset`, {
@@ -160,18 +160,11 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
                           'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
                         }
                       });
-                      localStorage.removeItem('resto_license');
-                      localStorage.removeItem('resto_license_expiry');
-                      localStorage.removeItem('user');
-                      localStorage.removeItem('resto_db_name');
-                      localStorage.removeItem('restaurantSettings');
-                      localStorage.removeItem('msbillings_spaces');
-
-                      alert('License reset successfully. Please restart the application.');
-                      window.dispatchEvent(new Event('forceLogout'));
-                    } catch (err) {
-                      alert('Failed to reset license.');
-                    }
+                    } catch (err) {}
+                    
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    window.dispatchEvent(new Event('forceLogout'));
                   }
                 }}
                 className="text-gray-400 hover:text-white text-xs sm:text-sm font-medium transition-colors flex items-center gap-2 mt-1 sm:mt-2">

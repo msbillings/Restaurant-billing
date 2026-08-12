@@ -111,18 +111,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <Printer size={18} />
           <span>{t("Print")}</span>
         </button>
-        {window.electronAPI?.printPreview && (
-          <button
-            onClick={() => {
-              const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
-              const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-              window.electronAPI.printPreview(htmlContent, settings.billingPrinter || '');
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-lg">
-            <Download size={18} />
-            <span>{t("Download PDF")}</span>
-          </button>
-        )}
         <button
           onClick={onClose}
           className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors backdrop-blur-md">
@@ -146,22 +134,22 @@ const Invoice = ({ bill, onClose, onSave }) => {
         <div className="p-3 print:pl-4 print:pr-2 print:py-0 print:pb-2">
           
           {/* Header */}
-          <div className="text-center mb-2">
+          <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
             {settings.logo &&
-            <div className="flex justify-center mb-1">
-                <img src={settings.logo} alt="Restaurant Logo" className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
+            <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
+                <img src={settings.logo} alt="Restaurant Logo" style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }} className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
               </div>
             }
-            <div style={{ fontSize: '20px', lineHeight: '1.1', marginBottom: '4px', fontWeight: 'bold' }}>
-              {settings.restaurantName.toUpperCase()}
+            <div align="center" style={{ fontSize: '20px', lineHeight: '1.1', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
+              {(settings.restaurantName || 'MSBILLINGS').toUpperCase()}
             </div>
-            <div style={{ fontSize: '14px', lineHeight: '1.2', fontWeight: 'normal' }}>
-              {settings.address.split('\n').map((line, i) =>
-              <div key={i}>{line}</div>
+            <div align="center" style={{ fontSize: '14px', lineHeight: '1.2', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
+              {(settings.address || '').split('\n').map((line, i) =>
+              <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
               )}
-              {settings.gstin && <div>{t("GSTIN :")}{settings.gstin}</div>}
-              <div>{t("PH :")}{settings.phone}</div>
-              {settings.fssai && <div>{t("FSSAI :")}{settings.fssai}</div>}
+              {settings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{settings.gstin}</div>}
+              {settings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{settings.phone}</div>}
+              {settings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{settings.fssai}</div>}
             </div>
           </div>
 
@@ -183,14 +171,14 @@ const Invoice = ({ bill, onClose, onSave }) => {
           }
 
           {/* Bill Info Grid */}
-          <div className="flex justify-between mb-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
-            <div className="flex flex-col gap-0.5">
+          <div className="flex justify-between mb-1" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'normal', marginBottom: '4px' }}>
+            <div className="flex flex-col gap-0.5" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
               <div>{t("Date:")}{new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
               <div>{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
               <div>{t("Cashier:")}{bill.cashierName || 'admin'}</div>
               {bill.tokenNumber && <div style={{ fontWeight: 'bold' }}>{t("Token No.:")}{bill.tokenNumber}</div>}
             </div>
-            <div className="flex flex-col text-right gap-0.5">
+            <div className="flex flex-col text-right gap-0.5" style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
               <div style={{ fontWeight: 'bold' }}>{bill.tableNo ? `Dine-In: ${bill.tableNo}` : bill.billType || 'Dine-In'}</div>
               <div style={{ fontWeight: 'bold' }}>{t("Bill No.:")}{bill.billNumber || 'PREVIEW'}</div>
               {bill.captainName && <div>{t("Assign to:")}{bill.captainName}</div>}
@@ -200,11 +188,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
 
           {/* Items Header */}
-          <div className="flex pb-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>
-            <div className="flex-1">{t('Item')}</div>
-            <div className="w-8 text-right">{t("Qty.")}</div>
-            <div className="w-14 text-right">{t("Price")}</div>
-            <div className="w-16 text-right">{t('Amount')}</div>
+          <div className="flex pb-0.5" style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: '14px', fontWeight: 'normal' }}>
+            <div className="flex-1" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t('Item')}</div>
+            <div className="w-8 text-right" style={{ width: '32px', textAlign: 'right', flexShrink: 0 }}>{t("Qty.")}</div>
+            <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{t("Price")}</div>
+            <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t('Amount')}</div>
           </div>
 
           <div style={{ borderTop: '1px solid black', margin: '2px 0 4px 0' }}></div>
@@ -216,37 +204,37 @@ const Invoice = ({ bill, onClose, onSave }) => {
               const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
               if (activeQty <= 0) return null;
               return (
-                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontSize: '14px', fontWeight: 'normal' }}>
-                  <div className="flex-1 pr-1 break-words">
+                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', fontSize: '14px', fontWeight: 'normal' }}>
+                  <div className="flex-1 pr-1 break-words" style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px' }}>
                     {item.name || 'Unknown Item'}
                     {item.hsnCode ? <span style={{ fontSize: '12px' }}>{t("(HSN:")}{item.hsnCode})</span> : ''}
                   </div>
-                  <div className="w-8 text-right">{activeQty}</div>
-                  <div className="w-14 text-right">{(item.price || 0).toFixed(2)}</div>
-                  <div className="w-16 text-right">{(item.price * activeQty).toFixed(2)}</div>
+                  <div className="w-8 text-right" style={{ width: '32px', textAlign: 'right', flexShrink: 0 }}>{activeQty}</div>
+                  <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{(item.price || 0).toFixed(2)}</div>
+                  <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{(item.price * activeQty).toFixed(2)}</div>
                 </div>
               );
             }) :
 
-            <div className="text-center py-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("No items")}</div>
+            <div className="text-center py-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal' }}>{t("No items")}</div>
             }
           </div>
 
           {/* Tax / Discount / Items summary */}
-          <div className="flex flex-col gap-0.5 mt-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>
-            <div className="flex justify-between w-full">
-              <span className="text-left w-24">{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
-              <div className="flex-1 flex justify-between pl-2">
-                <span className="text-left">{t("Sub Total")}</span>
-                <span className="w-16 text-right">{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
+          <div className="flex flex-col gap-0.5 mt-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px', fontWeight: 'normal' }}>
+            <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="text-left w-24" style={{ width: '96px', textAlign: 'left', flexShrink: 0 }}>{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
+              <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                <span className="text-left" style={{ textAlign: 'left' }}>{t("Sub Total")}</span>
+                <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
               </div>
             </div>
             {bill.discount > 0 &&
-            <div className="flex justify-between w-full">
-                <span className="w-24"></span>
-                <div className="flex-1 flex justify-between pl-2">
-                  <span className="text-left">{t('Discount')}</span>
-                  <span className="w-16 text-right">-{(bill.discount || 0).toFixed(2)}</span>
+            <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                  <span className="text-left" style={{ textAlign: 'left' }}>{t('Discount')}</span>
+                  <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>-{(bill.discount || 0).toFixed(2)}</span>
                 </div>
               </div>
             }
@@ -290,29 +278,29 @@ const Invoice = ({ bill, onClose, onSave }) => {
               return (
                 <>
                   {cRate > 0 &&
-                  <div className="flex justify-between w-full">
-                      <span className="w-24"></span>
-                      <div className="flex-1 flex justify-between pl-2">
-                        <span className="text-left">{t("CGST@")}{cEff.toFixed(1)}%</span>
-                        <span className="w-16 text-right">{cAmt.toFixed(2)}</span>
+                  <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                      <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                        <span className="text-left" style={{ textAlign: 'left' }}>{t("CGST@")}{cEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{cAmt.toFixed(2)}</span>
                       </div>
                     </div>
                   }
                   {sRate > 0 &&
-                  <div className="flex justify-between w-full">
-                      <span className="w-24"></span>
-                      <div className="flex-1 flex justify-between pl-2">
-                        <span className="text-left">{t("SGST@")}{sEff.toFixed(1)}%</span>
-                        <span className="w-16 text-right">{sAmt.toFixed(2)}</span>
+                  <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                      <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                        <span className="text-left" style={{ textAlign: 'left' }}>{t("SGST@")}{sEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{sAmt.toFixed(2)}</span>
                       </div>
                     </div>
                   }
                   {gRate > 0 &&
-                  <div className="flex justify-between w-full">
-                      <span className="w-24"></span>
-                      <div className="flex-1 flex justify-between pl-2">
-                        <span className="text-left">{t("GST@")}{gEff.toFixed(1)}%</span>
-                        <span className="w-16 text-right">{gAmt.toFixed(2)}</span>
+                  <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                      <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                        <span className="text-left" style={{ textAlign: 'left' }}>{t("GST@")}{gEff.toFixed(1)}%</span>
+                        <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{gAmt.toFixed(2)}</span>
                       </div>
                     </div>
                   }
@@ -324,7 +312,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
 
           {/* Total & Round off */}
-          <div className="flex flex-col pb-1" style={{ fontSize: '14px' }}>
+          <div className="flex flex-col pb-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px' }}>
             {(() => {
               const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
               const disc = Number(bill.discount || 0);
@@ -346,16 +334,16 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
               return (
                 <>
-                  <div className="flex justify-between w-full">
-                    <span className="w-24"></span>
-                    <div className="flex-1 flex justify-between pl-2" style={{ fontWeight: 'normal' }}>
-                      <span className="text-left">{t("Round off")}</span>
-                      <span className="w-16 text-right">{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                    <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px', fontWeight: 'normal' }}>
+                      <span className="text-left" style={{ textAlign: 'left' }}>{t("Round off")}</span>
+                      <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center w-full mt-2" style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                    <span>{t('Grand Total')}</span>
-                    <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
+                  <div className="flex justify-between items-center w-full mt-2" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: '24px', fontWeight: 'bold' }}>
+                    <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
+                    <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                   </div>
                 </>);
 
@@ -366,12 +354,12 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* Secondary Currencies */}
           {enabledCurrencies.length > 0 &&
-          <div className="text-center mt-2 pb-1" style={{ fontSize: '14px', fontWeight: 'bold' }}>
+          <div className="text-center mt-2 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
               <div className="mb-1">{t("Amount in Foreign Currencies:")}</div>
               {enabledCurrencies.map((c) => {
               const foreignAmt = Math.round(bill.total) * (c.rate / baseRate);
               return (
-                <div key={c.code} className="flex justify-between px-6" style={{ fontWeight: 'normal' }}>
+                <div key={c.code} className="flex justify-between px-6" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', paddingLeft: '24px', paddingRight: '24px', fontWeight: 'normal' }}>
                     <span>{c.code}</span>
                     <span>{foreignAmt.toFixed(2)}</span>
                   </div>);
@@ -383,18 +371,16 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* Payment Mode */}
           {bill.paymentMode &&
-          <div className="text-center mt-1 pb-1" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("Paid via")}
+          <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal' }}>{t("Paid via")}
             {bill.paymentMode} {bill.paymentMethod ? `[${bill.paymentMethod}]` : ''}
             </div>
           }
 
           {/* UPI Scan to Pay QR Code on Invoice */}
           {settings.enableQrPayment !== false &&
-          <div className="my-2 text-center flex flex-col items-center justify-center">
-              <div className="uppercase mb-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("SCAN TO PAY VIA UPI")}
-
-            </div>
-              <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1">
+          <div className="my-2 text-center flex flex-col items-center justify-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
+              <div className="uppercase mb-0.5" style={{ fontSize: '14px', fontWeight: 'normal', textAlign: 'center' }}>{t("SCAN TO PAY VIA UPI")}</div>
+              <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1" style={{ display: 'inline-block', margin: '4px auto', textAlign: 'center' }}>
                 <QRCodeSVG
                   value={(() => {
                     const pa = (settings.upiId || 'maheshsiva864@oksbi').trim();
@@ -410,14 +396,14 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 />
               </div>
             
-              <div className="mt-0.5" style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("UPI ID:")}
+              <div className="mt-0.5" style={{ fontSize: '14px', fontWeight: 'normal', textAlign: 'center' }}>{t("UPI ID:")}
               {settings.upiId || 'maheshsiva864@oksbi'}
               </div>
             </div>
           }
 
           {/* Footer */}
-          <div className="mt-2 mb-2 text-center" style={{ fontSize: '14px', fontWeight: 'bold' }}>
+          <div className="mt-2 mb-2 text-center" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
             <p>{t("Thank You | Please visit Again")}</p>
           </div>
           

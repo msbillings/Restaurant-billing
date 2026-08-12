@@ -46,6 +46,7 @@ if (fs.existsSync(path.join(__dirname, 'backend'))) {
     html = html.replace(/href="\/icon\.png"/g, 'href="./icon.png"');
     html = html.replace(/href="\/manifest\.webmanifest"/g, 'href="./manifest.webmanifest"');
     html = html.replace(/src="\/registerSW\.js"/g, 'src="./registerSW.js"');
+    html = html.replace(/ crossorigin/g, '');
     fs.writeFileSync(indexHtml, html);
   }
 });

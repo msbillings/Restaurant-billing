@@ -498,7 +498,24 @@ function App() {
       }
     };
 
+    const fetchLatestSettings = async () => {
+      try {
+        const res = await api.get('/config');
+        if (res.data) {
+          localStorage.setItem('restaurantSettings', JSON.stringify(res.data));
+          setRestaurantName(res.data.restaurantName || 'msbillings');
+          document.title = `${res.data.restaurantName || 'msbillings'} - Restaurant Management`;
+          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: res.data }));
+        }
+      } catch (e) {
+        console.warn('Could not fetch latest settings from backend, using cached:', e);
+      }
+    };
+
     loadSettings();
+    if (user) {
+      fetchLatestSettings();
+    }
 
     // Listen for settings updates
     const handleSettingsUpdate = (event) => {
