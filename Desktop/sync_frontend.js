@@ -36,15 +36,19 @@ if (fs.existsSync(path.join(__dirname, 'backend'))) {
   cleanAndCopy(frontendDist, desktopBackendFrontend);
 }
 
-// Convert absolute paths to relative paths in Desktop/frontend/index.html for Electron file:// protocol
-const electronIndexHtml = path.join(desktopFrontend, 'index.html');
-if (fs.existsSync(electronIndexHtml)) {
-  let html = fs.readFileSync(electronIndexHtml, 'utf8');
-  html = html.replace(/src="\/assets\//g, 'src="./assets/');
-  html = html.replace(/href="\/assets\//g, 'href="./assets/');
-  html = html.replace(/href="\/icon\.png"/g, 'href="./icon.png"');
-  fs.writeFileSync(electronIndexHtml, html);
-}
+// Convert all root absolute paths to relative paths in index.html for Electron file:// protocol
+[desktopFrontend, desktopBackendFrontend].forEach(dir => {
+  const indexHtml = path.join(dir, 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    let html = fs.readFileSync(indexHtml, 'utf8');
+    html = html.replace(/src="\/assets\//g, 'src="./assets/');
+    html = html.replace(/href="\/assets\//g, 'href="./assets/');
+    html = html.replace(/href="\/icon\.png"/g, 'href="./icon.png"');
+    html = html.replace(/href="\/manifest\.webmanifest"/g, 'href="./manifest.webmanifest"');
+    html = html.replace(/src="\/registerSW\.js"/g, 'src="./registerSW.js"');
+    fs.writeFileSync(indexHtml, html);
+  }
+});
 
 // Disable PWA service worker in Electron & LAN clients to prevent stale chunk cache issues
 const swDisableScript = `// Unregister stale service workers to prevent cache errors on mobile & desktop

@@ -410,10 +410,10 @@ if (staticModelsDir) {
 }
 
 // ─── Serve Static Frontend for Customer QR Ordering ─────────────────────────
-// Priority order: dev build → Electron Desktop copy → fallback
+// Priority order: Desktop packaged folder → dev build → fallback
 const frontendCandidates = [
-  path.join(__dirname, '../Frontend/dist'),        // Dev: sibling Frontend/dist
   path.join(__dirname, 'frontend'),                // Packaged: inside backend folder (resources/backend/frontend)
+  path.join(__dirname, '../Frontend/dist'),        // Dev: sibling Frontend/dist
   path.join(__dirname, '../frontend'),             // Electron packaged copy
   path.join(process.cwd(), '../Frontend/dist'),    // Alt dev layout
   path.join(process.cwd(), 'frontend'),            // Electron: Desktop/frontend
@@ -432,15 +432,15 @@ if (staticFrontendDir) {
   // Serve static assets for root /assets AND sub-route /order/assets
   const assetsDir = path.join(staticFrontendDir, 'assets');
   if (fs.existsSync(assetsDir)) {
-    app.use('/assets', express.static(assetsDir));
-    app.use('/order/assets', express.static(assetsDir));
+    app.use('/assets', express.static(assetsDir, { fallthrough: false }));
+    app.use('/order/assets', express.static(assetsDir, { fallthrough: false }));
   }
 
   // Serve all static assets (JS, CSS, images, icons, etc.)
   app.use(express.static(staticFrontendDir, { index: false }));
 
   // Explicit /order route — ALWAYS serve the customer ordering page
-  app.get('/order', (req, res) => {
+  app.get(['/order', '/order/'], (_req, res) => {
     const indexPath = path.join(staticFrontendDir, 'index.html');
     res.setHeader('Cache-Control', 'no-store'); // Prevent stale cache on mobile
     res.sendFile(indexPath);
@@ -448,7 +448,7 @@ if (staticFrontendDir) {
 
   // SPA Fallback for other non-API routes (floor, billing, etc.)
   app.get('/{*splat}', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/models')) {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path.startsWith('/models') || req.path.startsWith('/assets') || req.path.includes('.')) {
       return next();
     }
     const indexPath = path.join(staticFrontendDir, 'index.html');
