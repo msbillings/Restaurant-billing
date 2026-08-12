@@ -284,6 +284,16 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <style>${cssContent}</style>
         <style>
+          html, body {
+            margin: 0;
+            padding: 10px;
+            background-color: #ffffff;
+            font-family: Arial, Helvetica, sans-serif;
+          }
+          .receipt-print {
+            margin: 0 auto !important;
+            max-width: 280px !important;
+          }
           @page { margin: 0; size: 80mm auto portrait; }
           @media print {
             html, body {

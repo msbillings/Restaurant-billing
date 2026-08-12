@@ -86,59 +86,57 @@ const KOT = ({ order, onClose }) => {
           lineHeight: '1.3'
         }}>
         
-        <div className="p-3 print:pl-4 print:pr-2 print:py-0 print:pb-2">
+        <div style={{ padding: '12px' }}>
           
-          {/* Header */}
-          <div className="text-center mb-1 flex flex-col gap-0.5" style={{ fontWeight: 'normal' }}>
+          {/* Header - Centered */}
+          <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
             </div>
-            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
-            <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{order.billType || order.orderType || 'Dine In'}</div>
-            {order.tableNo && <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No:")}{order.tableNo}</div>}
+            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
+            <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{order.billType || order.orderType || 'Dine In'}</div>
+            {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No:")}{order.tableNo}</div>}
           </div>
 
-          <div style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
+          <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
 
-          {/* Info */}
-          <div className="mb-1 flex flex-col" style={{ fontWeight: 'normal' }}>
+          {/* Info - Left aligned */}
+          <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left' }}>
             {order.captainName && <div>{t("Assign to:")}{order.captainName}</div>}
             {order.captainName && <div>{t("Captain:")}{order.captainName}</div>}
             {!order.captainName && <div>{t("Biller:")}{order.cashierName || 'admin'}</div>}
           </div>
           
-          <div style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
+          <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
 
-          {/* Items Header */}
-          <div className="flex mb-1" style={{ fontWeight: 'normal' }}>
-            <div className="flex-1">{t("Item")}</div>
-            <div className="w-16 text-center">{t("Special")}
-              <br />{t("Note")}
-            </div>
-            <div className="w-8 text-center mt-auto">{t("Qty.")}</div>
+          {/* Items Header - Row layout */}
+          <div className="flex w-full mb-1" style={{ display: 'flex', width: '100%', marginBottom: '4px' }}>
+            <div className="flex-1 text-left" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t("Item")}</div>
+            <div className="w-16 text-center shrink-0" style={{ width: '64px', textAlign: 'center', flexShrink: 0 }}>{t("Special")}<br />{t("Note")}</div>
+            <div className="w-8 text-center shrink-0 self-end" style={{ width: '32px', textAlign: 'center', flexShrink: 0, alignSelf: 'flex-end' }}>{t("Qty.")}</div>
           </div>
 
           {/* Items List */}
-          <div className="mb-1">
+          <div className="mb-1" style={{ marginBottom: '4px' }}>
             {order.items && order.items.length > 0 ?
             order.items.map((item, idx) => {
               const isCancelled = item.status === 'Cancelled' || item.isCancelled;
               return (
-                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ fontWeight: 'normal' }}>
-                  <div className={`flex-1 pr-1 break-words ${isCancelled ? 'line-through' : ''}`}>
+                <div key={idx} className="flex w-full items-start mb-1" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', marginBottom: '4px' }}>
+                  <div className={`flex-1 text-left pr-1 break-words ${isCancelled ? 'line-through' : ''}`} style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none' }}>
                     {item.name || 'Unknown Item'} {isCancelled ? '(CANCELLED)' : ''}
                   </div>
-                  <div className="w-16 text-center text-gray-700 leading-tight">
+                  <div className="w-16 text-center text-gray-700 shrink-0" style={{ width: '64px', textAlign: 'center', color: '#374151', flexShrink: 0 }}>
                     {item.specialNote ? item.specialNote : '--'}
                   </div>
-                  <div className={`w-8 text-center ${isCancelled ? 'line-through' : ''}`}>
+                  <div className={`w-8 text-center shrink-0 ${isCancelled ? 'line-through' : ''}`} style={{ width: '32px', textAlign: 'center', flexShrink: 0, textDecoration: isCancelled ? 'line-through' : 'none' }}>
                     {isCancelled ? 0 : (item.quantity || 0)}
                   </div>
                 </div>
               );
             }) :
 
-            <div className="text-center py-1" style={{ fontWeight: 'normal' }}>{t("No items")}</div>
+            <div className="text-center py-1" style={{ textAlign: 'center', padding: '4px 0' }}>{t("No items")}</div>
             }
           </div>
           

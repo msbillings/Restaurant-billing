@@ -114,7 +114,7 @@ api.interceptors.response.use(
 
     // Check if we are on the public customer QR menu page.
     // This page is public and requires NO authentication — never force-logout from here.
-    const isPublicOrderPage = window.location.pathname === '/order';
+    const isPublicOrderPage = window.location.pathname === '/order' || window.location.pathname.startsWith('/order/');
 
     // Handle 401 (Unauthorized) - Session invalid/expired -> Logout immediately
     if (error.response?.status === 401) {

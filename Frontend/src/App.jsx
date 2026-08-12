@@ -733,7 +733,7 @@ function App() {
   };
 
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU — must be BEFORE any loading/auth guard!
-  const isCustomerOrderRoute = window.location.pathname === '/order' || window.location.pathname.startsWith('/order');
+  const isCustomerOrderRoute = window.location.pathname === '/order' || window.location.pathname.startsWith('/order/');
 
   if (isCustomerOrderRoute) {
     return (
@@ -1512,7 +1512,10 @@ function App() {
 
           <div className="p-6">
             <button
-              onClick={() => setShowLogoutConfirm(true)}
+              onClick={() => {
+                setShowLogoutConfirm(true);
+                setMobileMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-600 transition-all font-medium hover:shadow-md">
 
               <LogOut size={20} />
@@ -1856,7 +1859,7 @@ function App() {
 
       {/* Logout Confirmation Toast Modal */}
       {showLogoutConfirm &&
-        <div className="fixed inset-0 z-100 flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
             <div className="flex flex-col items-center text-center">
               <p className="text-text-main font-medium text-base mb-6">{t("Are you sure you want to logout")}
