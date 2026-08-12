@@ -1,7 +1,8 @@
+import api from '../api/axios';
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
-import { getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
+import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
 import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
@@ -118,18 +119,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const saveSpacesToCloud = async (newFloors) => {
     localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
     try {
-      const API_BASE_URL = getApiUrl();
-      await fetch(`${API_BASE_URL}/floors`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-        },
-        body: JSON.stringify({ spaces: newFloors })
-      });
+      await cacheFloors(newFloors);
+      await api.post('/floors', { spaces: newFloors });
     } catch (e) {
-      console.error('Failed to save floors to cloud', e);
+      console.error('Failed to save floors to cloud database', e);
     }
   };
 
@@ -190,10 +183,6 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       fetchOrders();
       syncSpaces();
     });
-    socket.on('orderUpdated', () => {
-      fetchOrders();
-      syncSpaces();
-    });
     socket.on('tableStatusChanged', () => {
       fetchOrders();
       syncSpaces(); // Update the UI instantly when DB changes
@@ -212,22 +201,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   async function syncSpaces() {
     try {
-      const API_BASE_URL = getApiUrl();
-      const res = await fetch(`${API_BASE_URL}/floors`, {
-        headers: {
-          'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          localStorage.setItem('msbillings_spaces', JSON.stringify(data));
-          setFloors(data);
-        }
+      const res = await api.get('/floors');
+      if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+        localStorage.setItem('msbillings_spaces', JSON.stringify(res.data));
+        await cacheFloors(res.data);
+        setFloors(res.data);
       }
     } catch (e) {
-      console.error('Failed to sync spaces from cloud', e);
+      console.error('Failed to sync spaces from cloud database', e);
     }
   };
 

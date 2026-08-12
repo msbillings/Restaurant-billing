@@ -6,7 +6,7 @@ let API_BASE_URL = getApiUrl();
 
 // CRITICAL FIX: If running inside the Desktop Electron App, force localhost
 if (navigator.userAgent.toLowerCase().indexOf('electron') > -1) {
-  API_BASE_URL = 'http://localhost:5002/api';
+  API_BASE_URL = 'http://127.0.0.1:5002/api';
 }
 
 const api = axios.create({

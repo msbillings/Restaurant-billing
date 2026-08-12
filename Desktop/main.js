@@ -241,6 +241,20 @@ ipcMain.handle('get-printers', async (event) => {
 
 const fs = require('fs');
 
+ipcMain.handle('get-printers', async () => {
+  if (mainWindow && mainWindow.webContents) {
+    try {
+      const printers = await mainWindow.webContents.getPrintersAsync();
+      console.log('[Print] Found OS printers:', printers.map(p => p.name));
+      return printers;
+    } catch (err) {
+      console.error('[Print] Failed to fetch OS printers:', err);
+      return [];
+    }
+  }
+  return [];
+});
+
 ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) => {
   console.log('[Print] silent-print received, silent:', silent, 'printer:', printerName || '(default)');
   
@@ -269,22 +283,25 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
   }
 
   const fullHtml = `
+    <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <style>${cssContent}</style>
         <style>
           @page { margin: 0; size: 80mm auto portrait; }
           @media print {
             html, body {
               width: 80mm !important;
-              margin: 0 !important;
+              margin: 0 auto !important;
               padding: 0 !important;
               height: auto !important;
               overflow: visible !important;
             }
             body > * {
-              margin: 0 !important;
-              position: absolute !important;
+              margin: 0 auto !important;
+              position: relative !important;
               top: 0 !important;
               left: 0 !important;
               transform: none !important;
@@ -369,15 +386,28 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName }) => {
   }
 
   const fullHtml = `
+    <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <style>${cssContent}</style>
         <style>
           @page { margin: 5mm; }
-          body {
+          html, body {
             background-color: #ffffff !important;
             color: #000000 !important;
             padding: 10px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            text-align: center !important;
+          }
+          .receipt-print, #invoice-print-area, body > div {
+            margin: 0 auto !important;
+            align-self: center !important;
           }
           .print\\:hidden { display: none !important; }
         </style>

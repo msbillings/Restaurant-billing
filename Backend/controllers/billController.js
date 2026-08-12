@@ -34,11 +34,11 @@ const getTableMatchCondition = (tblStr) => {
     const tablePart = parts.slice(1).join(' - ').trim();
     const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match "Ground Floor - Table 3" OR "Table 3" (backwards compatible with existing active orders)
-    return { $regex: new RegExp(`^(${escapedFloor}\\s*-\\s*)?${escapedTable}$`, 'i') };
+    // Match exact "First Floor - Table 4" so tables on different floors never mix orders
+    return { $regex: new RegExp(`^${escapedFloor}\\s*-\\s*${escapedTable}$`, 'i') };
   }
   const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return { $regex: new RegExp(`^(.*\\s*-\\s*)?${escapedClean}$`, 'i') };
+  return { $regex: new RegExp(`^${escapedClean}$`, 'i') };
 };
 
 // Helper to dynamically get active tax rate from restaurantSettings in DB

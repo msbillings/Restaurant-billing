@@ -21,10 +21,10 @@ const getTableMatchCondition = (tblStr) => {
     const tablePart = parts.slice(1).join(' - ').trim();
     const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^(${escapedFloor}\\s*-\\s*)?${escapedTable}$`, 'i');
+    return new RegExp(`^${escapedFloor}\\s*-\\s*${escapedTable}$`, 'i');
   }
   const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^(.*\\s*-\\s*)?${escapedClean}$`, 'i');
+  return new RegExp(`^${escapedClean}$`, 'i');
 };
 
 // Public endpoint to fetch categories and active menu items

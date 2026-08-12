@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Printer, ArrowLeft, Save } from 'lucide-react';
+import { Printer, ArrowLeft, Save, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 const Invoice = ({ bill, onClose, onSave }) => {
@@ -111,6 +111,18 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <Printer size={18} />
           <span>{t("Print")}</span>
         </button>
+        {window.electronAPI?.printPreview && (
+          <button
+            onClick={() => {
+              const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
+              const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
+              window.electronAPI.printPreview(htmlContent, settings.billingPrinter || '');
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors shadow-lg">
+            <Download size={18} />
+            <span>{t("Download PDF")}</span>
+          </button>
+        )}
         <button
           onClick={onClose}
           className="flex items-center gap-2 px-4 py-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition-colors backdrop-blur-md">
