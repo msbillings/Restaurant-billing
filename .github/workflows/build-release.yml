@@ -85,6 +85,8 @@ jobs:
         working-directory: ./Desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_MIRROR: "https://npmmirror.com/mirrors/electron/"
+          ELECTRON_BUILDER_BINARIES_MIRROR: "https://npmmirror.com/mirrors/electron-builder-binaries/"
         run: |
           npm run prebuild
           for ($i=1; $i -le 3; $i++) {
