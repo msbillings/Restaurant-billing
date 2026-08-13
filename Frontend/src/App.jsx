@@ -59,6 +59,7 @@ const UserManualModal = React.lazy(() => import('./components/UserManualModal'))
 const AboutModal = React.lazy(() => import('./components/AboutModal'));
 const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
+const LandingPage = React.lazy(() => import('./landing/LandingPage'));
 import GlobalHeader from './components/GlobalHeader';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
@@ -786,6 +787,14 @@ function App() {
         </Suspense>
       </>);
 
+  }
+
+  if (view === 'landing') {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen">{t("Loading...")}</div>}>
+        <LandingPage />
+      </Suspense>
+    );
   }
 
   if (!user) {
