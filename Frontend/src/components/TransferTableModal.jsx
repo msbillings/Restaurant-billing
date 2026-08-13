@@ -64,30 +64,35 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
                 const hasItems = floor.tables?.length > 0 || floor.cabins?.length > 0 || floor.sofas?.length > 0 || floor.spaces?.length > 0;
                 if (!hasItems) return null;
 
+                const isOccupied = (spaceName) => {
+                  const full = `${floor.name} - ${spaceName}`;
+                  return activeTableNumbers.includes(full) || activeTableNumbers.includes(spaceName);
+                };
+
                 // Check if any table in this floor is available
-                const availableTables = floor.tables?.filter(t => !activeTableNumbers.includes(t.name)) || [];
-                const availableCabins = floor.cabins?.filter(c => !activeTableNumbers.includes(c.name)) || [];
-                const availableSofas = floor.sofas?.filter(s => !activeTableNumbers.includes(s.name)) || [];
-                const availableSpaces = floor.spaces?.filter(sp => !activeTableNumbers.includes(sp.name)) || [];
+                const availableTables = floor.tables?.filter(t => !isOccupied(t.name)) || [];
+                const availableCabins = floor.cabins?.filter(c => !isOccupied(c.name)) || [];
+                const availableSofas = floor.sofas?.filter(s => !isOccupied(s.name)) || [];
+                const availableSpaces = floor.spaces?.filter(sp => !isOccupied(sp.name)) || [];
 
                 if (availableTables.length === 0 && availableCabins.length === 0 && availableSofas.length === 0 && availableSpaces.length === 0) return null;
 
                 return (
                   <optgroup key={floor.id} label={floor.name}>
                     {availableTables.map((tableObj) => {
-                      const val = tableObj.name;
+                      const val = `${floor.name} - ${tableObj.name}`;
                       return <option key={`t-${tableObj.id}`} value={val} disabled={val === currentTable}>{tableObj.name} {t("(Table)")}</option>;
                     })}
                     {availableCabins.map((c) => {
-                      const val = c.name;
+                      const val = `${floor.name} - ${c.name}`;
                       return <option key={`c-${c.id}`} value={val} disabled={val === currentTable}>{c.name} {t("(Cabin)")}</option>;
                     })}
                     {availableSofas.map((s) => {
-                      const val = s.name;
+                      const val = `${floor.name} - ${s.name}`;
                       return <option key={`s-${s.id}`} value={val} disabled={val === currentTable}>{s.name} {t("(Sofa)")}</option>;
                     })}
                     {availableSpaces.map((sp) => {
-                      const val = sp.name;
+                      const val = `${floor.name} - ${sp.name}`;
                       return <option key={`sp-${sp.id}`} value={val} disabled={val === currentTable}>{sp.name} {t(`(${sp.type || 'Space'})`)}</option>;
                     })}
                   </optgroup>
