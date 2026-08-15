@@ -596,10 +596,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (!activeOrder?.items || activeOrder.items.length === 0) return;
                     setSelectedBillForPrint(activeOrder);
                   }}
-                  className="bg-white rounded-full p-1 sm:p-1.5 hover:text-blue-600 hover:bg-blue-50 transition-colors shadow-xs text-gray-500" 
-                  title={t("Print KOT & Bill directly")}>
+                  disabled={!activeOrder?.items || activeOrder.items.length === 0}
+                  className={`bg-white rounded-full p-1 sm:p-1.5 transition-colors shadow-xs ${!activeOrder?.items || activeOrder.items.length === 0 ? 'opacity-50 cursor-not-allowed text-gray-300' : 'hover:text-blue-600 hover:bg-blue-50 text-gray-500'}`} 
+                  title={!activeOrder?.items || activeOrder.items.length === 0 ? t("No items to print") : t("Print KOT & Bill directly")}>
                   <Printer size={13} strokeWidth={2.5} />
                 </button>
               </div>
