@@ -1209,6 +1209,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     setOrderStatus('Open');
     setBillNumber(null);
     setCompletedBill(null);
+    
+    // Reset order-specific states to prevent carry-over to next order
+    setDiscount({ type: 'percentage', value: '' });
+    setCustomerPhone('');
+    setCustomerName('');
+    setCustomerInfo(null);
+    setDeliveryCharge('0');
+    setContainerCharge('0');
+    setOrderSource('Direct');
+    
     fetchActiveOrder();
 
     fetchDailyStats();
