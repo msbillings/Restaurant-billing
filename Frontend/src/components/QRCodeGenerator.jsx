@@ -153,14 +153,26 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       return `${baseApiUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
-    // 2. If hosted on a public cloud domain (Vercel, Render, custom domain)
-    const isLocalNetwork = (h) => h === 'localhost' || h === '127.0.0.1' || h.startsWith('192.168.') || h.startsWith('10.') || /^172\.(1[6-9]|2\d|3[0-1])\./.test(h);
+    const storedIp = localStorage.getItem('resto_server_ip') || localIP;
+    const isIpAddress = (h) => /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(h);
+    const isLocalNetwork = (h) => h === 'localhost' || h === '127.0.0.1' || isIpAddress(h);
+
+    // If we have an explicit stored IP (from the UI), we MUST use it!
+    // This allows an Admin on Vercel to generate QR codes pointing to their Local POS IP.
+    if (storedIp && storedIp !== 'localhost' && storedIp !== '127.0.0.1') {
+      const port = isElectron ? '5002' : '10000'; // The backend server port that serves frontend
+      // Force HTTP for local IP addresses to prevent SSL/Mixed Content issues
+      const protocol = isIpAddress(storedIp) ? 'http:' : window.location.protocol;
+      return `${protocol}//${storedIp}:${port}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+    }
+
+    // 2. If hosted on a public cloud domain (Vercel, Render, custom domain) without a stored IP
     if (!isElectron && window.location.hostname && !isLocalNetwork(window.location.hostname)) {
       return `${window.location.origin}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
     // 3. Desktop App (.exe/.dmg) or Local Development
-    let host = localStorage.getItem('resto_server_ip') || localIP;
+    let host = storedIp;
     if (!host || host === 'localhost' || host === '127.0.0.1') {
       host = isElectron ? '127.0.0.1' : (window.location.hostname || '127.0.0.1');
     }
@@ -171,15 +183,16 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (isDev) {
       port = window.location.port || '5173';
     } else {
-      // In production built .exe/.dmg, the backend ALWAYS runs on 5002 and serves the frontend
-      port = '5002';
+      // In production built .exe/.dmg, the backend ALWAYS runs on 5002/10000 and serves the frontend
+      port = isElectron ? '5002' : '10000';
     }
 
     let baseUrl = '';
     if (host.includes('://')) {
       baseUrl = host;
     } else {
-      const protocol = (window.location.protocol === 'https:') ? 'https:' : 'http:';
+      // Force HTTP for IP addresses to prevent SSL errors
+      const protocol = isIpAddress(host) ? 'http:' : window.location.protocol;
       baseUrl = `${protocol}//${host}:${port}`;
     }
 
