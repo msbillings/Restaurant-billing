@@ -457,14 +457,16 @@ const BillSummary = ({
               type="number"
               value={settlementAmount}
               onChange={(e) => setSettlementAmount(e.target.value)}
-              className="w-[90px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-sm" />
+              disabled={isLocked || cart.length === 0}
+              className="w-[90px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-sm disabled:opacity-50" />
             <button
               onClick={(e) => {
                 e.preventDefault();
                 setIsPaid(true);
                 if (onSettleBill) onSettleBill();
               }}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap">{t("Settle")}
+              disabled={cart.length === 0 || orderStatus === 'Paid'}
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap disabled:opacity-50">{t("Settle")}
             </button>
           </div>
         </div>

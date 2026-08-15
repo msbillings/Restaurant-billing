@@ -355,6 +355,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
 
     const handleRemoteOrderUpdate = (e) => {
+      // Pause updates if the user is currently viewing the invoice or payment modal
+      if (showInvoice || showPayment) return;
+      
       const data = e.detail;
       if (data) {
         if (!data.tableNo || data.tableNo === activeTable) {
@@ -380,6 +383,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // 5-Second polling to guarantee real-time bill summary UI updates
     // Reduced from 3s to 5s to give local edits more breathing room
     const pollInterval = setInterval(() => {
+      // Pause polling if the user is currently viewing the invoice or payment modal
+      // This prevents the polling from receiving a 404 (since the order is now Paid)
+      // and wiping the completedBill state out from under the Invoice modal!
+      if (showInvoice || showPayment) return;
+
       if (activeTable) {
         // Only background-fetch if user hasn't edited cart in the last LOCAL_EDIT_LOCK_MS
         const msSinceEdit = Date.now() - lastLocalEditTime.current;
@@ -395,13 +403,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       clearInterval(pollInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTable]);
+  }, [activeTable, showInvoice, showPayment]);
 
   useEffect(() => {
     const socket = getNotificationSocket();
     if (!socket) return;
 
     const handleKotUpdatedSocket = (data) => {
+      if (showInvoice || showPayment) return;
+
       if (data && (data.tableNo === activeTable || data.orderId === orderId)) {
         if (data.itemId || data.itemName) {
           setCart((prevCart) =>
@@ -424,7 +434,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     return () => {
       socket.off('kotUpdated', handleKotUpdatedSocket);
     };
-  }, [activeTable, orderId]);
+  }, [activeTable, orderId, showInvoice, showPayment]);
 
   useEffect(() => {
     fetchDailyStats();
