@@ -624,6 +624,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setTaxRate('');
         }
       } else {
+        const msSinceEdit = Date.now() - lastLocalEditTime.current;
+        const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
+        
+        if (isEditLocked) {
+          // If the user just edited the cart, the backend might not have saved it yet.
+          // DO NOT clear the cart, otherwise the UI will blink empty!
+          return;
+        }
+
         setCart([]);
         setOrderId(null);
         setOrderStatus('Open');

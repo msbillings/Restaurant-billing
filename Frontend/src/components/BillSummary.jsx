@@ -284,7 +284,7 @@ const BillSummary = ({
           </div> :
 
           cart.map((item, index) =>
-            <div key={index} className={`flex items-start py-1.5 px-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
+            <div key={item._id || item.name || index} className={`flex items-start py-1.5 px-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
               {/* Delete Icon */}
               <button
                 onClick={() => updateQuantity(item._id || item.name, -item.quantity)}
