@@ -395,8 +395,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     let order = orders.find((o) => normalizeTable(o.tableNo) === targetClean);
     if (order) return order;
 
-    // Legacy fallback ONLY for Ground Floor tables without floor prefix
-    if (isFirstFloor && rawItemName) {
+    // Fallback for ANY floor (in case table was saved without floor prefix)
+    if (!order && rawItemName) {
       const rawClean = normalizeTable(rawItemName);
       order = orders.find((o) => {
         const oTbl = o.tableNo || '';
