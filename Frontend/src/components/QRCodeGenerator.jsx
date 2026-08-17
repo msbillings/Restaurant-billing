@@ -51,6 +51,11 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   };
 
   const fetchIP = async () => {
+    // If we are hosted on a public cloud domain, don't auto-fetch the backend's internal Docker IP
+    if (!isElectron && window.location.hostname && !window.location.hostname.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/) && window.location.hostname !== 'localhost') {
+       return;
+    }
+
     try {
       const API_BASE_URL = getApiUrl();
       const response = await fetch(`${API_BASE_URL}/public/system-ip`);
@@ -137,7 +142,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       setCustomIpInput(cleanIp);
     } else {
       localStorage.removeItem('resto_server_ip');
-      fetchIP();
+      setLocalIP(window.location.hostname);
+      setCustomIpInput('');
     }
     setIpSavedToast(true);
     setTimeout(() => setIpSavedToast(false), 2500);
@@ -160,10 +166,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     // If we have an explicit stored IP (from the UI), we MUST use it!
     // This allows an Admin on Vercel to generate QR codes pointing to their Local POS IP.
     if (storedIp && storedIp !== 'localhost' && storedIp !== '127.0.0.1') {
-      const port = isElectron ? '5002' : '10000'; // The backend server port that serves frontend
-      // Force HTTP for local IP addresses to prevent SSL/Mixed Content issues
-      const protocol = isIpAddress(storedIp) ? 'http:' : window.location.protocol;
-      return `${protocol}//${storedIp}:${port}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+      const port = isElectron ? '5002' : (isIpAddress(storedIp) ? '10000' : ''); 
+      const portStr = port ? `:${port}` : '';
+      const protocol = isIpAddress(storedIp) ? 'http:' : 'https:';
+      return `${protocol}//${storedIp}${portStr}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
     // 2. If hosted on a public cloud domain (Vercel, Render, custom domain) without a stored IP
