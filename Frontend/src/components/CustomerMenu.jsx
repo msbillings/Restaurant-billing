@@ -2,7 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
@@ -19,6 +19,8 @@ const CustomerMenu = () => {
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [geoError, setGeoError] = useState(null);
+  const [verifyingLocation, setVerifyingLocation] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderStatus, setOrderStatus] = useState('menu'); // menu, placing, success
 
@@ -164,20 +166,76 @@ const CustomerMenu = () => {
     }
 
     const fetchMenu = async () => {
+      let menuRes = null;
       try {
-        const res = await axios.get(`${API_BASE_URL}/public/menu`, {
+        menuRes = await axios.get(`${API_BASE_URL}/public/menu`, {
           headers: {
             'X-Tenant-DB': tenant
           }
         });
-        setCategories(res.data.categories);
-        setItems(res.data.items);
-        if (res.data.googleReviewLink) setGoogleReviewLink(res.data.googleReviewLink);
+        setCategories(menuRes.data.categories);
+        setItems(menuRes.data.items);
+        if (menuRes.data.googleReviewLink) setGoogleReviewLink(menuRes.data.googleReviewLink);
+
+        // Geo-Fencing Check
+        if (menuRes.data.restaurantSettings && menuRes.data.restaurantSettings.enableGeoFencing) {
+          const { latitude, longitude, geoFencingRadius = 100 } = menuRes.data.restaurantSettings;
+          if (latitude && longitude) {
+            setVerifyingLocation(true);
+            
+            if (!navigator.geolocation) {
+              setGeoError("Geolocation is not supported by your browser. Please order via a waiter.");
+              setVerifyingLocation(false);
+              setLoading(false);
+              return;
+            }
+
+            // Haversine distance between two coordinates in meters
+            const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
+              const R = 6371e3;
+              const rad = (deg) => deg * Math.PI / 180;
+              const dLat = rad(lat2 - lat1);
+              const dLon = rad(lon2 - lon1);
+              const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) *
+                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              return R * c;
+            };
+
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const dist = getDistanceInMeters(
+                  position.coords.latitude,
+                  position.coords.longitude,
+                  latitude,
+                  longitude
+                );
+                if (dist > geoFencingRadius) {
+                  setGeoError("It looks like you aren't at the restaurant! You must be at the restaurant to place an order.");
+                }
+                setVerifyingLocation(false);
+                setLoading(false);
+              },
+              (err) => {
+                console.error("GeoError:", err);
+                setGeoError("Please allow location access to view the menu and place orders.");
+                setVerifyingLocation(false);
+                setLoading(false);
+              },
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+            return; // Exit here, state will be set by the async callback
+          }
+        }
       } catch (err) {
         console.error("Failed to load menu", err);
         setError("Could not load the menu. Please ask a staff member for assistance.");
       } finally {
-        setLoading(false);
+        // If we are verifying location, the callback handles setLoading
+        if (!menuRes?.data?.restaurantSettings?.enableGeoFencing) {
+          setLoading(false);
+        }
       }
     };
 
@@ -337,6 +395,24 @@ const CustomerMenu = () => {
         <h2 className="text-xl font-bold text-slate-700">{t("Loading your menu...")}</h2>
       </div>);
 
+  }
+
+  if (verifyingLocation) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
+        <MapPin className="w-12 h-12 text-orange-500 animate-bounce mb-4" />
+        <h2 className="text-xl font-bold text-slate-700">{t("Verifying your location...")}</h2>
+        <p className="text-sm text-slate-500 mt-2 text-center max-w-xs">{t("Please allow location access when prompted to view the menu.")}</p>
+      </div>);
+  }
+
+  if (geoError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
+        <MapPin className="w-16 h-16 text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">{t("Access Denied")}</h2>
+        <p className="text-slate-600 font-medium">{geoError}</p>
+      </div>);
   }
 
   if (error) {

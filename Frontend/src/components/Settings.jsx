@@ -29,7 +29,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
     enableGst: false,
     gstRate: 5,
     logo: '',
-    printFormat: '80mm'
+    printFormat: '80mm',
+    enableGeoFencing: false,
+    geoFencingRadius: 100,
+    latitude: '',
+    longitude: ''
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -105,6 +109,30 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
       ...prev,
       [field]: value
     }));
+  };
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      setToast({ message: t("Geolocation is not supported by your browser"), type: 'error' });
+      return;
+    }
+    setLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setSettings((prev) => ({
+          ...prev,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }));
+        setLoading(false);
+        setToast({ message: t("Location captured successfully!"), type: 'success' });
+      },
+      (err) => {
+        setLoading(false);
+        setToast({ message: t("Failed to get location. Please allow location permissions."), type: 'error' });
+        console.error(err);
+      }
+    );
   };
 
   const handleLogoUpload = (e) => {
@@ -582,6 +610,81 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
                     className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter footer message for receipts")} />
 
                   
+              </div>
+
+              {/* Geo-Fencing Security */}
+              <div className="space-y-4 md:col-span-2 mt-4 pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                      <MapPin size={14} />{t("Geo-Fencing (QR Code Location Security)")}
+                    </label>
+                    <span className="text-xs text-text-muted mt-1">{t("Block customers from ordering if they are not physically at the restaurant.")}</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={settings.enableGeoFencing || false}
+                        onChange={(e) => handleInputChange('enableGeoFencing', e.target.checked)} />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                  </label>
+                </div>
+
+                {settings.enableGeoFencing && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-hover p-4 rounded-xl border border-border">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-text-main">{t("Allowed Radius")}</label>
+                      <select
+                        value={[20, 50, 100, 500, 1000].includes(settings.geoFencingRadius) ? settings.geoFencingRadius : 'custom'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'custom') {
+                            handleInputChange('geoFencingRadius', 150); // initial custom value
+                          } else {
+                            handleInputChange('geoFencingRadius', Number(val));
+                          }
+                        }}
+                        className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-sm">
+                        <option value={20}>{t("20 Meters (Very Strict)")}</option>
+                        <option value={50}>{t("50 Meters (Strict)")}</option>
+                        <option value={100}>{t("100 Meters (Recommended)")}</option>
+                        <option value={500}>{t("500 Meters (Lenient)")}</option>
+                        <option value={1000}>{t("1 KM")}</option>
+                        <option value="custom">{t("Custom (Enter value)")}</option>
+                      </select>
+                      
+                      {![20, 50, 100, 500, 1000].includes(settings.geoFencingRadius) && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={settings.geoFencingRadius || ''}
+                            onChange={(e) => handleInputChange('geoFencingRadius', Number(e.target.value))}
+                            placeholder={t("Radius in meters")}
+                            className="w-full px-4 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-sm"
+                          />
+                          <span className="text-sm font-semibold text-text-muted">m</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-text-main">{t("Restaurant Coordinates")}</label>
+                      <div className="flex flex-col gap-2">
+                        <div className="text-xs font-mono bg-background px-3 py-2 rounded-lg border border-border text-text-muted break-all">
+                          Lat: {settings.latitude || t("Not Set")}<br/>
+                          Lng: {settings.longitude || t("Not Set")}
+                        </div>
+                        <button
+                          onClick={(e) => { e.preventDefault(); handleGetLocation(); }}
+                          className="w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100 flex items-center justify-center gap-1">
+                          <MapPin size={12} /> {t("Set to Current Location")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

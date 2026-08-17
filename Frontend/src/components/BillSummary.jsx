@@ -486,7 +486,7 @@ const BillSummary = ({
           <button
             onClick={onSaveOrder}
             disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
+            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{orderId ? t("UPDATE") : t("SAVE")}
           </button>
           <button
             onClick={onHoldOrder}
@@ -496,7 +496,7 @@ const BillSummary = ({
           <button
             onClick={onGenerateBill}
             disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center">{t("SAVE & PRINT")}
+            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center">{orderId ? t("UPDATE & PRINT") : t("SAVE & PRINT")}
           </button>
           <button
             onClick={onPrintKOT}

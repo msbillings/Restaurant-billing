@@ -38,14 +38,20 @@ router.get('/menu', async (req, res) => {
     const items = await Menu.find({ isAvailable: true }).populate('category', 'name');
     
     let googleReviewLink = null;
+    let restaurantSettings = {};
     try {
       const setting = await Setting.findOne({ key: 'googleReviewLink' });
       if (setting && setting.value) googleReviewLink = setting.value;
+      
+      const rSettings = await Setting.findOne({ key: 'restaurantSettings' });
+      if (rSettings && rSettings.value) {
+        restaurantSettings = rSettings.value;
+      }
     } catch (e) {
-      console.log("Could not fetch google review link", e);
+      console.log("Could not fetch settings", e);
     }
 
-    res.status(200).json({ categories, items, googleReviewLink });
+    res.status(200).json({ categories, items, googleReviewLink, restaurantSettings });
   } catch (error) {
     console.error("Error fetching public menu:", error);
     res.status(500).json({ message: error.message });
