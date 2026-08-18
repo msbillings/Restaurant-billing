@@ -114,7 +114,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     floorsRef.current = floors;
   }, [floors]);
 
-  const [activeFloorId, setActiveFloorId] = useState(() => floors[0]?.id || null);
+  const [activeFloorId, setActiveFloorId] = useState(() => {
+    const saved = localStorage.getItem('activeFloorId');
+    if (saved) return saved;
+    return floors[0]?.id || null;
+  });
+
+  useEffect(() => {
+    if (activeFloorId) {
+      localStorage.setItem('activeFloorId', activeFloorId);
+    }
+  }, [activeFloorId]);
 
   const saveSpacesToCloud = async (newFloors) => {
     localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
