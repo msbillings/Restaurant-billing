@@ -31,6 +31,7 @@ const MenuToggle = React.lazy(() => import('./components/MenuToggle'));
 const NotificationCenter = React.lazy(() => import('./components/NotificationCenter'));
 const CustomStatus = React.lazy(() => import('./components/CustomStatus'));
 const LanguageProfile = React.lazy(() => import('./components/LanguageProfile'));
+const SecuritySettings = React.lazy(() => import('./components/SecuritySettings'));
 const CurrencyConversion = React.lazy(() => import('./components/CurrencyConversion'));
 const BillingScreenSettings = React.lazy(() => import('./components/BillingScreenSettings'));
 const LiveView = React.lazy(() => import('./components/LiveView'));
@@ -91,9 +92,9 @@ function App() {
   const [selectedTable, setSelectedTable] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
-
-  // Tools state
+  const [settingsUpdateTicker, setSettingsUpdateTicker] = useState(0);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -647,6 +648,10 @@ function App() {
       socket.on('billSettled', fetchActiveOrdersCount);
       socket.on('tableStatusChanged', fetchActiveOrdersCount);
       socket.on('newKOT', fetchActiveOrdersCount);
+      socket.on('settingsUpdated', (newSettings) => {
+        localStorage.setItem('restaurantSettings', JSON.stringify(newSettings));
+        setSettingsUpdateTicker(prev => prev + 1); // Trigger re-render to enforce locks instantly
+      });
 
       return () => {
         socket.disconnect();
@@ -1556,7 +1561,16 @@ function App() {
                 </div>
               </div>
             }>
-              {['dashboard', 'analytics', 'daybook'].includes(view) && !ownerUnlocked ?
+              {(() => {
+                // Dependency to trigger re-render on socket update
+                const ticker = settingsUpdateTicker;
+                const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+                let isProtected = false;
+                if (view === 'security') isProtected = s.requireMasterPin !== false;
+                else if (s.customLocks && s.customLocks[view]) isProtected = s.customLocks[view].enabled;
+                
+                return isProtected && !ownerUnlocked;
+              })() ?
                 <div className="h-full flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
                   <div className="bg-surface p-8 rounded-3xl border border-border shadow-2xl max-w-md w-full text-center space-y-6">
                     <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto shadow-inner">
@@ -1572,11 +1586,19 @@ function App() {
                     <form onSubmit={(e) => {
                       e.preventDefault();
                       let currentPin = '1234';
+                      let masterPin = '1234';
                       try {
+                        const ticker = settingsUpdateTicker; // React dependency
                         const s = JSON.parse(localStorage.getItem('restaurantSettings'));
-                        if (s?.ownerPin) currentPin = s.ownerPin;
+                        if (s?.ownerPin) masterPin = s.ownerPin;
+                        
+                        if (s?.customLocks && s.customLocks[view] && s.customLocks[view].pin) {
+                          currentPin = s.customLocks[view].pin;
+                        } else {
+                          currentPin = masterPin;
+                        }
                       } catch {/* ignore */ }
-                      if (pinInput === currentPin || pinInput === '1234' || pinInput === '0000' || pinInput === '999999') {
+                      if (pinInput === currentPin || pinInput === masterPin || pinInput === '1234' || pinInput === '0000' || pinInput === '999999') {
                         setOwnerUnlocked(true);
                         setPinError(false);
                         setPinInput('');
@@ -1643,6 +1665,7 @@ function App() {
                   {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'sync' && <ManualSync onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                  {view === 'security' && <SecuritySettings onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'menu' && <MenuManagement user={user} onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'delivery' && <DeliveryOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'pickup' && <PickupOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}

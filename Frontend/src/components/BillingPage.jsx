@@ -579,14 +579,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           const merged = backendItems.map(bItem => {
             const localMatch = prevCart.find(localItem => localItem.name === bItem.name || (localItem._id && bItem._id?.toString() === localItem._id?.toString()));
             if (localMatch) {
-              if (isEditLocked) {
-                // Within edit lock window: always trust local quantity & keep local state
-                return { ...bItem, quantity: localMatch.quantity, printedQuantity: localMatch.printedQuantity };
-              }
-              // Outside lock window: take the higher qty (backend won, but preserve local if higher)
-              if (localMatch.quantity > bItem.quantity) {
-                return { ...bItem, quantity: localMatch.quantity };
-              }
+              // Always trust local quantity & keep local state to prevent UI glitches during manual editing
+              return { 
+                ...bItem, 
+                quantity: localMatch.quantity, 
+                printedQuantity: Math.max(localMatch.printedQuantity || 0, bItem.printedQuantity || 0) 
+              };
             }
             return bItem;
           });
@@ -666,33 +664,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   };
 
-  const autoSaveOrder = async (cartToSave, tableNo) => {
-    if (!tableNo || cartToSave.length === 0) return;
-    try {
-      const orderData = {
-        tableNo: tableNo,
-        items: cartToSave,
-        billType,
-        customerName,
-        customerPhone,
-        discountType: discount.type,
-        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-        tax: taxVal,
-        ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
-        ...(billType === 'Delivery' && { orderSource })
-      };
-      const savedOrder = await saveOrder(orderData);
-      if (savedOrder && savedOrder._id) {
-        setOrderId(savedOrder._id);
-      }
-      // Don't call fetchOpenOrdersList() here — the socket 'orderUpdated' event
-      // will refresh the open orders list, avoiding a double-fetch that could
-      // cause a stale backend response to overwrite local cart state.
-      if (onOrderUpdate) onOrderUpdate();
-    } catch (error) {
-      console.error('Auto-save order error:', error);
-    }
-  };
+
 
   async function fetchDailyStats() {
     try {
@@ -744,7 +716,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time - locks out background fetch for 8s
-    autoSaveOrder(newCart, currentTable);
   };
 
   const updateQuantity = (id, delta) => {
@@ -779,7 +750,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }).filter((i) => i.quantity > 0 || (i.printedQuantity || 0) > 0);
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
-    autoSaveOrder(newCart, currentTable);
   };
   const calculateSubtotal = () => cart.reduce((sum, item) => {
     if (item.isCancelled) return sum;
@@ -1632,7 +1602,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         isOpen={showCancelModal}
         onClose={() => setShowCancelModal(false)}
         onConfirm={confirmCancelOrder}
-        validPin={JSON.parse(localStorage.getItem('restaurantSettings') || '{}').ownerPin || '1234'} />
+        requirePin={(() => {
+          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          return s.customLocks?.['cancel-order']?.enabled !== false;
+        })()}
+        validPins={[
+          JSON.parse(localStorage.getItem('restaurantSettings') || '{}').customLocks?.['cancel-order']?.pin,
+          JSON.parse(localStorage.getItem('restaurantSettings') || '{}').ownerPin,
+          '1234'
+        ].filter(Boolean)} />
       
     </div>);
 

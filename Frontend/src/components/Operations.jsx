@@ -50,12 +50,13 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
   { id: 'online-config', name: t('Online Order Configuration'), icon: Globe },
   { id: 'menu-toggle', name: t('Menu Item On Off'), icon: ToggleLeft },
   { id: 'renewal', name: t('Service Renewal'), icon: Clock },
-  { id: 'custom-status', name: t('Custom Order Status'), icon: ListChecks }];
+  { id: 'custom-status', name: t('Custom Order Status'), icon: ListChecks },
+  { id: 'security', name: t('Security & PINs'), icon: Shield }];
 
 
   const handleFeatureClick = (id) => {
     // Navigate to actual pages if they exist, otherwise just ignore or show coming soon
-    const implementedRoutes = ['billing', 'kothistory', 'crm', 'daybook', 'expenses', 'inventory', 'floor', 'staff', 'delivery', 'kds', 'menu', 'settings', 'tax', 'discount', 'withdrawal', 'cash-topup', 'due-payment', 'reservation', 'feedback', 'push-orders', 'bill-print', 'online-config', 'online-orders', 'sync', 'admin', 'notification', 'help', 'live-view', 'language', 'currency', 'billing-screen', 'menu-toggle', 'renewal', 'custom-status', 'loyalty', 'forecasting'];
+    const implementedRoutes = ['billing', 'kothistory', 'crm', 'daybook', 'expenses', 'inventory', 'floor', 'staff', 'delivery', 'kds', 'menu', 'settings', 'tax', 'discount', 'withdrawal', 'cash-topup', 'due-payment', 'reservation', 'feedback', 'push-orders', 'bill-print', 'online-config', 'online-orders', 'sync', 'admin', 'notification', 'help', 'live-view', 'language', 'currency', 'billing-screen', 'menu-toggle', 'renewal', 'custom-status', 'loyalty', 'forecasting', 'security'];
     if (implementedRoutes.includes(id)) {
       onNavigate(id);
     } else {

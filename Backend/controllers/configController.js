@@ -6,6 +6,7 @@ import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import { getTenantModels } from '../utils/tenantManager.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import { emitSocketEvent } from '../utils/socket.js';
 
 export let isSettingUpDB = false;
 
@@ -161,6 +162,7 @@ export const updateRestaurantInfo = async (req, res) => {
     }
     if (restaurantSettings) {
       await Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: restaurantSettings }, { upsert: true });
+      emitSocketEvent(req, 'settingsUpdated', restaurantSettings);
     }
     if (spaces) {
       await Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true });
