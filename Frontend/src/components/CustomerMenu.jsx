@@ -361,10 +361,16 @@ const CustomerMenu = () => {
       }
     };
 
-    const checkOrderStatus = async () => {
+    let hasLoadedInitialOrder = false;
+
+    const checkOrderStatus = async (isInitial = false) => {
       if (!table || !tenant) {
         setIsCheckingOrder(false);
         return;
+      }
+
+      if (isInitial && !hasLoadedInitialOrder) {
+        setIsCheckingOrder(true);
       }
 
       const candidateTableNames = [table];
@@ -384,7 +390,7 @@ const CustomerMenu = () => {
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
                 'Pragma': 'no-cache'
               },
-              timeout: 10000
+              timeout: 12000
             })
           )
         );
@@ -400,17 +406,54 @@ const CustomerMenu = () => {
           }
         }
 
-        setActiveOrderData(foundOrder);
+        if (foundOrder) {
+          hasLoadedInitialOrder = true;
+          setActiveOrderData(foundOrder);
+          setIsCheckingOrder(false);
+        } else {
+          // If initial check returned empty, do a fast 1.2s retry to ensure network certainty
+          if (isInitial && !hasLoadedInitialOrder) {
+            setTimeout(async () => {
+              try {
+                const retryResults = await Promise.allSettled(
+                  candidateTableNames.map(candidate =>
+                    apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
+                      headers: { 'X-Tenant-DB': tenant, 'Cache-Control': 'no-cache' },
+                      timeout: 8000
+                    })
+                  )
+                );
+                let retryOrder = null;
+                for (const r of retryResults) {
+                  if (r.status === 'fulfilled' && r.value?.data?.items && Array.isArray(r.value.data.items)) {
+                    if (r.value.data.items.filter(i => !i.isCancelled).length > 0) {
+                      retryOrder = r.value.data;
+                      break;
+                    }
+                  }
+                }
+                hasLoadedInitialOrder = true;
+                setActiveOrderData(retryOrder);
+              } catch (e) {
+                setActiveOrderData(null);
+              } finally {
+                setIsCheckingOrder(false);
+              }
+            }, 1200);
+          } else {
+            setActiveOrderData(null);
+            setIsCheckingOrder(false);
+          }
+        }
       } catch (err) {
         console.warn("Error checking table order status:", err);
         setActiveOrderData(null);
-      } finally {
         setIsCheckingOrder(false);
       }
     };
 
     fetchMenu();
-    checkOrderStatus();
+    checkOrderStatus(true);
 
     // WebSocket real-time updates for instant KDS sync
     let socket = null;
