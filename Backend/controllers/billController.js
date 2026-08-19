@@ -354,17 +354,6 @@ export const saveOrder = async (req, res) => {
         return sum + (Number(item.price || 0) * activeQty);
       }, 0);
 
-      // Update existing order
-      const previousState = {
-        items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
-        subtotal: order.subtotal,
-        totalDiscount: order.discount || 0,
-        totalTax: order.tax || 0,
-        total: order.total,
-        discountType: order.discountType || 'flat',
-        discountValue: order.discountValue || 0
-      };
-
       const dType = discountType || order.discountType || 'flat';
       const dValue = discountValue !== undefined ? discountValue : (order.discountValue || 0);
       let calculatedDiscount = 0;
@@ -383,18 +372,42 @@ export const saveOrder = async (req, res) => {
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
-      const newState = {
-        items: updatedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
-        subtotal: subtotal,
-        totalDiscount: calculatedDiscount,
-        totalTax: calculatedTax,
-        total: calculatedTotal,
-        discountType: dType,
-        discountValue: dValue
-      };
+      // Check if actual items, quantities, or prices changed compared to the previous state
+      const cleanOldItems = (order.items || [])
+        .filter(i => !i.isCancelled && Number(i.quantity || 0) > 0)
+        .map(i => ({ name: (i.name || '').trim(), quantity: Number(i.quantity || 0), price: Number(i.price || 0) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      const hasChanged = JSON.stringify(previousState) !== JSON.stringify(newState);
-      if (hasChanged) {
+      const cleanNewItems = (updatedItems || [])
+        .filter(i => !i.isCancelled && Number(i.quantity || 0) > 0)
+        .map(i => ({ name: (i.name || '').trim(), quantity: Number(i.quantity || 0), price: Number(i.price || 0) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const itemsActuallyChanged = JSON.stringify(cleanOldItems) !== JSON.stringify(cleanNewItems);
+      const isAlreadyBilled = !!(order.billNumber || order.status === 'Billed' || order.status === 'Paid');
+
+      // An order is ONLY recorded in editHistory if it was ALREADY BILLED (locked) AND items were added/removed/changed!
+      if (isAlreadyBilled && itemsActuallyChanged) {
+        const previousState = {
+          items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+          subtotal: order.subtotal,
+          totalDiscount: order.discount || 0,
+          totalTax: ((order.subtotal - (order.discount || 0)) * (order.tax || 0)) / 100,
+          total: order.total,
+          discountType: order.discountType || 'flat',
+          discountValue: order.discountValue || 0
+        };
+
+        const newState = {
+          items: updatedItems.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+          subtotal: subtotal,
+          totalDiscount: calculatedDiscount,
+          totalTax: calculatedTax,
+          total: calculatedTotal,
+          discountType: dType,
+          discountValue: dValue
+        };
+
         order.editHistory = order.editHistory || [];
         order.editHistory.push({
           editedAt: new Date(),
@@ -1954,8 +1967,18 @@ export const getEditedBills = async (req, res) => {
     .sort({ updatedAt: -1, createdAt: -1 })
     .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited')
     .lean();
+
+    // Filter out any false-positive historical entries where items were identical before and after
+    const genuinelyEdited = (editedBills || []).filter(b => {
+      if (!b.editHistory || b.editHistory.length === 0) return false;
+      return b.editHistory.some(e => {
+        const prevItems = (e.previousState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
+        const newItems = (e.newState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
+        return prevItems !== newItems || Math.abs((e.previousState?.total || 0) - (e.newState?.total || 0)) > 0.01;
+      });
+    });
     
-    res.json(editedBills || []);
+    res.json(genuinelyEdited);
   } catch (error) {
     console.error('Error fetching edited bills:', error);
     res.status(500).json({ message: 'Server error while fetching edited bills' });

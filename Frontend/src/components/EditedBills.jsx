@@ -19,12 +19,22 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedBill, setSelectedBill] = useState(null);
 
+  const filterGenuineEdits = (billList) => {
+    return (billList || []).filter(b => {
+      if (!b.editHistory || b.editHistory.length === 0) return false;
+      return b.editHistory.some(e => {
+        const prevItems = (e.previousState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
+        const newItems = (e.newState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
+        return prevItems !== newItems || Math.abs((e.previousState?.total || 0) - (e.newState?.total || 0)) > 0.01;
+      });
+    });
+  };
+
   useEffect(() => {
     // 1. Instant Cache Load (0ms delay) on mount
     getCachedEditedBills().then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
-        const onlyEdited = cached.filter(b => b.isEdited || (b.editHistory && b.editHistory.length > 0));
-        setBills(onlyEdited);
+        setBills(filterGenuineEdits(cached));
       }
       setLoading(false);
     }).catch(() => {
@@ -41,7 +51,7 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
     }
     try {
       const data = await getEditedBills();
-      const onlyEdited = (data || []).filter(b => b.isEdited || (b.editHistory && b.editHistory.length > 0));
+      const onlyEdited = filterGenuineEdits(data);
       setBills(onlyEdited);
       cacheEditedBills(onlyEdited);
     } catch (error) {
