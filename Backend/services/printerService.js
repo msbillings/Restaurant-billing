@@ -36,7 +36,7 @@ export const sendRawToNetworkPrinter = (ipAddress, port = 9100, buffer) => {
     const socket = new net.Socket();
     let isHandled = false;
 
-    socket.setTimeout(4000); // 4 second connection timeout
+    socket.setTimeout(2000); // 2 second connection timeout
 
     socket.connect(port, ipAddress, () => {
       isHandled = true;
@@ -183,6 +183,14 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems) => {
     const printPromises = kotPrinters.map(async (printer) => {
       if (printer.connectionType !== 'network' || !printer.ipAddress) {
         console.log(`[PrinterService] Printer '${printer.name}' is ${printer.connectionType} (Browser/OS driver mode).`);
+        return;
+      }
+
+      // If running on cloud serverless (Vercel) and printer IP is a private LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.0.0.1):
+      // The cloud server cannot reach the local LAN printer directly via TCP. Local POS Desktop app handles printing.
+      const isPrivateLanIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(printer.ipAddress);
+      if (process.env.VERCEL && isPrivateLanIp) {
+        console.log(`[PrinterService] Cloud environment (Vercel) cannot reach private LAN printer '${printer.name}' (${printer.ipAddress}). Skipping cloud TCP.`);
         return;
       }
 

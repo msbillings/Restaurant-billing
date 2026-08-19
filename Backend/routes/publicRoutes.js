@@ -259,66 +259,70 @@ router.post('/order', async (req, res) => {
       await bill.save();
     }
 
-    // Update table occupied status on Floor Management
-    try {
-      await updateTableStatusHelper(req, tableNo, 'Open', bill._id);
-    } catch (e) {
-      console.warn("Could not update floor status for table", tableNo, e.message);
-    }
-
-    // Emit socket events to notify POS, Floor, KDS, and Kitchen Screens
-    try {
-      const io = req.app?.locals?.io;
-      const tenantDb = req.headers['x-tenant-db'];
-      if (io && tenantDb) {
-        io.to(tenantDb).emit('orderUpdated', { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}` });
-        io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
-        io.to(tenantDb).emit('newKOT', { tableNo, kotNumber, items: sanitizedItems });
-        io.to(tenantDb).emit('kotUpdated', { tableNo, kotNumber });
-      }
-    } catch (sockErr) {
-      console.warn("Socket broadcast warning on public order:", sockErr.message);
-    }
-
-    // Trigger physical network thermal printing for new digital QR menu order
-    try {
-      printKOTToPrinters(req, bill, kotNumber, sanitizedItems).catch(err => {
-        console.error('[QR KOT Print Error]:', err.message);
-      });
-    } catch (printErr) {
-      console.warn('[QR KOT Print Trigger Failed]:', printErr.message);
-    }
-
-    // Emit persistent notification for Navbar Panel (including items)
-    try {
-      const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-      const Setting = getTenantModel(req, 'Setting', SettingDefault);
-      const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).catch(() => null);
-      let shopName = 'Unknown Shop';
-      if (settingsDoc?.value) {
-        if (typeof settingsDoc.value === 'string') {
-          try {
-            const parsed = JSON.parse(settingsDoc.value);
-            shopName = parsed.restaurantName || 'Unknown Shop';
-          } catch (e) {}
-        } else {
-          shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
-        }
-      }
-      
-      const cleanTable = tableNo.replace(/^Table\s*/i, '');
-      emitNotification(
-        req, 
-        `${shopName} | Table ${cleanTable} Order`, 
-        `${itemNames}`, 
-        'success', 
-        ['Admin', 'Manager', 'Captain', 'Chef']
-      );
-    } catch (notifErr) {
-      console.warn("Notification error on public order:", notifErr.message);
-    }
-
+    // ⚡ INSTANT RESPONSE: Return success to customer immediately
     res.status(201).json(bill);
+
+    // Asynchronous background processing (Floor status, WebSockets, Printing, Notifications)
+    setImmediate(async () => {
+      // Update table occupied status on Floor Management
+      try {
+        await updateTableStatusHelper(req, tableNo, 'Open', bill._id);
+      } catch (e) {
+        console.warn("Could not update floor status for table", tableNo, e.message);
+      }
+
+      // Emit socket events to notify POS, Floor, KDS, and Kitchen Screens
+      try {
+        const io = req.app?.locals?.io;
+        const tenantDb = req.headers['x-tenant-db'];
+        if (io && tenantDb) {
+          io.to(tenantDb).emit('orderUpdated', { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}` });
+          io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
+          io.to(tenantDb).emit('newKOT', { tableNo, kotNumber, items: sanitizedItems });
+          io.to(tenantDb).emit('kotUpdated', { tableNo, kotNumber });
+        }
+      } catch (sockErr) {
+        console.warn("Socket broadcast warning on public order:", sockErr.message);
+      }
+
+      // Trigger physical network thermal printing for new digital QR menu order
+      try {
+        printKOTToPrinters(req, bill, kotNumber, sanitizedItems).catch(err => {
+          console.error('[QR KOT Print Error]:', err.message);
+        });
+      } catch (printErr) {
+        console.warn('[QR KOT Print Trigger Failed]:', printErr.message);
+      }
+
+      // Emit persistent notification for Navbar Panel (including items)
+      try {
+        const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+        const Setting = getTenantModel(req, 'Setting', SettingDefault);
+        const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).catch(() => null);
+        let shopName = 'Unknown Shop';
+        if (settingsDoc?.value) {
+          if (typeof settingsDoc.value === 'string') {
+            try {
+              const parsed = JSON.parse(settingsDoc.value);
+              shopName = parsed.restaurantName || 'Unknown Shop';
+            } catch (e) {}
+          } else {
+            shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+          }
+        }
+        
+        const cleanTable = tableNo.replace(/^Table\s*/i, '');
+        emitNotification(
+          req, 
+          `${shopName} | Table ${cleanTable} Order`, 
+          `${itemNames}`, 
+          'success', 
+          ['Admin', 'Manager', 'Captain', 'Chef']
+        );
+      } catch (notifErr) {
+        console.warn("Notification error on public order:", notifErr.message);
+      }
+    });
   } catch (error) {
     console.error("Error submitting public order:", error);
     res.status(500).json({ message: error.message || 'Failed to place order' });
