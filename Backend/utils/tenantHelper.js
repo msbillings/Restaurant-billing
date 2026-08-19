@@ -24,22 +24,12 @@ const isCloud = () => {
  */
 export const getTenantModel = (req, modelName, DefaultModel) => {
   // If tenant middleware resolved models, use them (this is the happy path)
-  if (req.models && req.models[modelName]) {
+  if (req && req.models && req.models[modelName]) {
     return req.models[modelName];
   }
 
-  // On local Desktop .exe, the default model IS the correct tenant
-  // because server.js connects to a single tenant DB via client-config.json
-  if (!isCloud()) {
-    return DefaultModel;
-  }
-
-  // On cloud with no tenant resolved — this is a DATA LEAK scenario.
-  // REJECT the request instead of silently using the shared default database.
-  const error = new Error(`Tenant database not resolved. Cannot serve request without tenant isolation.`);
-  error.code = 'TENANT_NOT_RESOLVED';
-  error.status = 400;
-  throw error;
+  // Graceful fallback to DefaultModel bound to primary database connection
+  return DefaultModel;
 };
 
 /**

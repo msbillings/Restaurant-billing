@@ -18,12 +18,24 @@ import StaffDefault from '../models/Staff.js';
 import CustomerDefault from '../models/Customer.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
 import CameraDefault from '../models/Camera.js';
+import TaxDefault from '../models/Tax.js';
+import DiscountDefault from '../models/Discount.js';
+import CashLogDefault from '../models/CashLog.js';
+import CreditAccountDefault from '../models/CreditAccount.js';
+import ReservationDefault from '../models/Reservation.js';
+import FeedbackDefault from '../models/Feedback.js';
+import PushOrderDefault from '../models/PushOrder.js';
+import PrinterConfigDefault from '../models/PrinterConfig.js';
+import OnlineConfigDefault from '../models/OnlineConfig.js';
+import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
 
 const tenantModelsCache = new Map();
 
 export const getTenantModels = async (databaseName) => {
-  if (!databaseName || databaseName === 'undefined' || databaseName === 'null') {
-    return null; // Fallback to default global models
+  // If databaseName is empty or 'default', route to the primary connected database (e.g. mscurechain)
+  if (!databaseName || databaseName === 'undefined' || databaseName === 'null' || databaseName === 'default') {
+    const primaryDb = mongoose.connection.db?.databaseName || 'mscurechain';
+    databaseName = primaryDb;
   }
 
   // Ensure default connection is established
@@ -59,6 +71,16 @@ export const getTenantModels = async (databaseName) => {
   const Customer = conn.models.Customer || conn.model('Customer', CustomerDefault.schema);
   const ServiceRequest = conn.models.ServiceRequest || conn.model('ServiceRequest', ServiceRequestDefault.schema);
   const Camera = conn.models.Camera || conn.model('Camera', CameraDefault.schema);
+  const Tax = conn.models.Tax || conn.model('Tax', TaxDefault.schema);
+  const Discount = conn.models.Discount || conn.model('Discount', DiscountDefault.schema);
+  const CashLog = conn.models.CashLog || conn.model('CashLog', CashLogDefault.schema);
+  const CreditAccount = conn.models.CreditAccount || conn.model('CreditAccount', CreditAccountDefault.schema);
+  const Reservation = conn.models.Reservation || conn.model('Reservation', ReservationDefault.schema);
+  const Feedback = conn.models.Feedback || conn.model('Feedback', FeedbackDefault.schema);
+  const PushOrder = conn.models.PushOrder || conn.model('PushOrder', PushOrderDefault.schema);
+  const PrinterConfig = conn.models.PrinterConfig || conn.model('PrinterConfig', PrinterConfigDefault.schema);
+  const OnlineConfig = conn.models.OnlineConfig || conn.model('OnlineConfig', OnlineConfigDefault.schema);
+  const LoyaltyConfig = conn.models.LoyaltyConfig || conn.model('LoyaltyConfig', LoyaltyConfigDefault.schema);
 
   const models = {
     Menu,
@@ -75,6 +97,16 @@ export const getTenantModels = async (databaseName) => {
     Customer,
     ServiceRequest,
     Camera,
+    Tax,
+    Discount,
+    CashLog,
+    CreditAccount,
+    Reservation,
+    Feedback,
+    PushOrder,
+    PrinterConfig,
+    OnlineConfig,
+    LoyaltyConfig,
     connection: conn
   };
 

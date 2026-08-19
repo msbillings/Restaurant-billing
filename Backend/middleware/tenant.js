@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 export const tenantMiddleware = async (req, res, next) => {
   try {
-    let tenantDbName = req.headers['x-tenant-db'];
+    let tenantDbName = req.headers['x-tenant-db'] || req.query?.tenant || req.body?.tenant;
 
     // CRITICAL SECURITY ENFORCEMENT: If an Authorization token is present, 
     // decode it to extract the secure db name. This overrides the client-side header 

@@ -281,7 +281,7 @@ const CustomerMenu = () => {
 
     const fetchMenu = async () => {
       try {
-        const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu`, {
+        const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
           headers: {
             'X-Tenant-DB': tenant
           }
@@ -318,7 +318,7 @@ const CustomerMenu = () => {
     const checkOrderStatus = async () => {
       if (!table || !tenant) return;
       try {
-        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}`, {
+        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}`, {
           headers: { 'X-Tenant-DB': tenant }
         });
         setActiveOrderData(res.data);
@@ -430,7 +430,8 @@ const CustomerMenu = () => {
         items: cart,
         subTotal: total,
         taxes: 0,
-        total: total
+        total: total,
+        tenant: tenant
       }, {
         headers: {
           'X-Tenant-DB': tenant
@@ -443,7 +444,7 @@ const CustomerMenu = () => {
       
       // Instantly trigger an order status check to show the tracking banner
       try {
-        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${table}`, {
+        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}`, {
           headers: { 'X-Tenant-DB': tenant }
         });
         setActiveOrderData(res.data);
@@ -462,7 +463,8 @@ const CustomerMenu = () => {
     try {
       await apiClient.post(`${API_BASE_URL}/public/request-service`, {
         tableNumber: table,
-        requestType: type
+        requestType: type,
+        tenant: tenant
       }, {
         headers: { 'X-Tenant-DB': tenant }
       });
@@ -527,7 +529,18 @@ const CustomerMenu = () => {
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
         <Info className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold text-slate-800 mb-2">{t("Oops!")}</h2>
-        <p className="text-slate-600">{error}</p>
+        <p className="text-slate-600 max-w-sm mb-6">{error}</p>
+        <button
+          onClick={() => {
+            setError(null);
+            setLoading(true);
+            window.location.reload();
+          }}
+          className="py-3 px-6 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+        >
+          <RefreshCw size={18} />
+          <span>{t("Retry Loading Menu")}</span>
+        </button>
       </div>);
   }
 
