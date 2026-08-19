@@ -2,7 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
@@ -158,6 +158,110 @@ const CustomerMenu = () => {
     }
   };
 
+  // 1. Instant cache load from sessionStorage / localStorage for 0ms render
+  useEffect(() => {
+    if (!tenant) return;
+    try {
+      const cached = sessionStorage.getItem(`customer_menu_${tenant}`) || localStorage.getItem(`customer_menu_${tenant}`);
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data && Array.isArray(data.categories) && data.categories.length > 0) {
+          setCategories(data.categories);
+          setItems(data.items || []);
+          if (data.googleReviewLink) setGoogleReviewLink(data.googleReviewLink);
+          setLoading(false); // Instant render without waiting for network!
+        }
+      }
+    } catch (e) {
+      console.warn("Cache read error:", e);
+    }
+  }, [tenant]);
+
+  // Geolocation verification with mobile/iOS indoor tolerance (min 500m buffer)
+  const verifyLocation = useCallback((settings) => {
+    if (!settings || !settings.enableGeoFencing) {
+      setGeoError(null);
+      setVerifyingLocation(false);
+      return;
+    }
+
+    const { latitude, longitude, geoFencingRadius = 100 } = settings;
+    if (!latitude || !longitude) {
+      setGeoError(null);
+      setVerifyingLocation(false);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      console.warn("Geolocation not supported by browser");
+      setVerifyingLocation(false);
+      return;
+    }
+
+    setVerifyingLocation(true);
+
+    const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
+      const R = 6371e3;
+      const rad = (deg) => deg * Math.PI / 180;
+      const dLat = rad(lat2 - lat1);
+      const dLon = rad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(rad(lat1)) * Math.cos(rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    };
+
+    // Ensure at least 500m buffer for indoor mobile/iOS GPS drift
+    const allowedRadius = Math.max(Number(geoFencingRadius) || 100, 500);
+
+    const checkPosition = (position) => {
+      try {
+        const rawDist = getDistanceInMeters(
+          position.coords.latitude,
+          position.coords.longitude,
+          Number(latitude),
+          Number(longitude)
+        );
+        const accuracy = position.coords.accuracy || 0;
+        const effectiveDistance = Math.max(0, rawDist - Math.min(accuracy, 250));
+
+        if (effectiveDistance > allowedRadius) {
+          setGeoError(t("You appear to be away from the restaurant. Please verify your location to place an order."));
+        } else {
+          setGeoError(null); // Location verified!
+        }
+      } catch (err) {
+        console.warn("Distance check error:", err);
+      } finally {
+        setVerifyingLocation(false);
+      }
+    };
+
+    const handleGeoError = (err) => {
+      console.warn("Geolocation notice:", err);
+      setVerifyingLocation(false);
+      // Only set error if user explicitly denied permission
+      if (err.code === 1) { // PERMISSION_DENIED
+        setGeoError(t("Please allow location access to verify you are at Table ") + table);
+      }
+      // If code 2 (POSITION_UNAVAILABLE) or 3 (TIMEOUT), do not block indoor customers
+    };
+
+    // Fast low-accuracy first (instant <300ms on mobile)
+    navigator.geolocation.getCurrentPosition(
+      checkPosition,
+      () => {
+        navigator.geolocation.getCurrentPosition(
+          checkPosition,
+          handleGeoError,
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+        );
+      },
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 600000 }
+    );
+  }, [table, t]);
+
   useEffect(() => {
     if (!tenant || !table) {
       setError("Invalid QR Code. Please scan the QR code on your table again.");
@@ -166,76 +270,38 @@ const CustomerMenu = () => {
     }
 
     const fetchMenu = async () => {
-      let menuRes = null;
       try {
-        menuRes = await axios.get(`${API_BASE_URL}/public/menu`, {
+        const menuRes = await axios.get(`${API_BASE_URL}/public/menu`, {
           headers: {
             'X-Tenant-DB': tenant
           }
         });
-        setCategories(menuRes.data.categories);
-        setItems(menuRes.data.items);
-        if (menuRes.data.googleReviewLink) setGoogleReviewLink(menuRes.data.googleReviewLink);
+        if (menuRes.data) {
+          setCategories(menuRes.data.categories || []);
+          setItems(menuRes.data.items || []);
+          if (menuRes.data.googleReviewLink) setGoogleReviewLink(menuRes.data.googleReviewLink);
 
-        // Geo-Fencing Check
-        if (menuRes.data.restaurantSettings && menuRes.data.restaurantSettings.enableGeoFencing) {
-          const { latitude, longitude, geoFencingRadius = 100 } = menuRes.data.restaurantSettings;
-          if (latitude && longitude) {
-            setVerifyingLocation(true);
-            
-            if (!navigator.geolocation) {
-              setGeoError("Geolocation is not supported by your browser. Please order via a waiter.");
-              setVerifyingLocation(false);
-              setLoading(false);
-              return;
-            }
+          // Update cache for instantaneous subsequent visits
+          try {
+            sessionStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
+            localStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
+          } catch (e) {}
 
-            // Haversine distance between two coordinates in meters
-            const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
-              const R = 6371e3;
-              const rad = (deg) => deg * Math.PI / 180;
-              const dLat = rad(lat2 - lat1);
-              const dLon = rad(lon2 - lon1);
-              const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) *
-                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-              return R * c;
-            };
-
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                const dist = getDistanceInMeters(
-                  position.coords.latitude,
-                  position.coords.longitude,
-                  latitude,
-                  longitude
-                );
-                if (dist > geoFencingRadius) {
-                  setGeoError("It looks like you aren't at the restaurant! You must be at the restaurant to place an order.");
-                }
-                setVerifyingLocation(false);
-                setLoading(false);
-              },
-              (err) => {
-                console.error("GeoError:", err);
-                setGeoError("Please allow location access to view the menu and place orders.");
-                setVerifyingLocation(false);
-                setLoading(false);
-              },
-              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-            );
-            return; // Exit here, state will be set by the async callback
-          }
+          // Never block menu viewing; verify location in parallel
+          setLoading(false);
+          verifyLocation(menuRes.data.restaurantSettings);
         }
       } catch (err) {
         console.error("Failed to load menu", err);
-        setError("Could not load the menu. Please ask a staff member for assistance.");
+        // If we already have items from cache, don't show full error
+        setItems(prev => {
+          if (prev.length === 0) {
+            setError("Could not load the menu. Please ask a staff member for assistance.");
+          }
+          return prev;
+        });
       } finally {
-        // If we are verifying location, the callback handles setLoading
-        if (!menuRes?.data?.restaurantSettings?.enableGeoFencing) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
@@ -400,22 +466,43 @@ const CustomerMenu = () => {
 
   }
 
-  if (verifyingLocation) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <MapPin className="w-12 h-12 text-orange-500 animate-bounce mb-4" />
-        <h2 className="text-xl font-bold text-slate-700">{t("Verifying your location...")}</h2>
-        <p className="text-sm text-slate-500 mt-2 text-center max-w-xs">{t("Please allow location access when prompted to view the menu.")}</p>
-      </div>);
-  }
-
   if (geoError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-        <MapPin className="w-16 h-16 text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">{t("Access Denied")}</h2>
-        <p className="text-slate-600 font-medium">{geoError}</p>
-      </div>);
+        <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-600 mb-4">
+          <MapPin size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">{t("Location Verification")}</h2>
+        <p className="text-slate-600 font-medium max-w-sm mb-6 leading-relaxed">{geoError}</p>
+
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+          <button
+            onClick={() => {
+              setGeoError(null);
+              const cached = sessionStorage.getItem(`customer_menu_${tenant}`);
+              if (cached) {
+                try {
+                  const data = JSON.parse(cached);
+                  verifyLocation(data.restaurantSettings);
+                } catch (e) {}
+              }
+            }}
+            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={18} />
+            <span>{t("Retry Location")}</span>
+          </button>
+
+          <button
+            onClick={() => setGeoError(null)}
+            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            <UtensilsCrossed size={18} className="text-orange-500" />
+            <span>{t("Continue to Menu")}</span>
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (error) {

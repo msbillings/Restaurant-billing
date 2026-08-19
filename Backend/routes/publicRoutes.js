@@ -57,23 +57,26 @@ router.get('/menu', async (req, res) => {
     const Category = getTenantModel(req, 'Category', CategoryDefault);
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
 
-    const categories = await Category.find();
-    const items = await Menu.find({ isAvailable: true }).populate('category', 'name');
-    
+    const [categories, items, settingDocs] = await Promise.all([
+      Category.find().sort({ order: 1, name: 1 }).lean(),
+      Menu.find({ isAvailable: true }).populate('category', 'name').lean(),
+      Setting.find({ key: { $in: ['googleReviewLink', 'restaurantSettings'] } }).lean()
+    ]);
+
     let googleReviewLink = null;
     let restaurantSettings = {};
-    try {
-      const setting = await Setting.findOne({ key: 'googleReviewLink' });
-      if (setting && setting.value) googleReviewLink = setting.value;
-      
-      const rSettings = await Setting.findOne({ key: 'restaurantSettings' });
-      if (rSettings && rSettings.value) {
-        restaurantSettings = rSettings.value;
-      }
-    } catch (e) {
-      console.log("Could not fetch settings", e);
+
+    if (Array.isArray(settingDocs)) {
+      settingDocs.forEach(s => {
+        if (s.key === 'googleReviewLink' && s.value) {
+          googleReviewLink = s.value;
+        } else if (s.key === 'restaurantSettings' && s.value) {
+          restaurantSettings = typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+        }
+      });
     }
 
+    res.setHeader('Cache-Control', 'public, max-age=10, stale-while-revalidate=60');
     res.status(200).json({ categories, items, googleReviewLink, restaurantSettings });
   } catch (error) {
     console.error("Error fetching public menu:", error);
