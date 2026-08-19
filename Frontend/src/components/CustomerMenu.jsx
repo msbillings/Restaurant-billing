@@ -22,6 +22,7 @@ const CustomerMenu = () => {
   const [items, setItems] = useState([]);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isCheckingOrder, setIsCheckingOrder] = useState(true);
   const [error, setError] = useState(null);
   const [geoError, setGeoError] = useState(null);
   const [verifyingLocation, setVerifyingLocation] = useState(false);
@@ -361,7 +362,10 @@ const CustomerMenu = () => {
     };
 
     const checkOrderStatus = async () => {
-      if (!table || !tenant) return;
+      if (!table || !tenant) {
+        setIsCheckingOrder(false);
+        return;
+      }
 
       const candidateTableNames = [table];
       if (!table.includes(' - ')) {
@@ -371,26 +375,38 @@ const CustomerMenu = () => {
         });
       }
 
-      for (const candidate of candidateTableNames) {
-        try {
-          const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
-            headers: { 
-              'X-Tenant-DB': tenant,
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache'
+      try {
+        const results = await Promise.allSettled(
+          candidateTableNames.map(candidate =>
+            apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
+              headers: { 
+                'X-Tenant-DB': tenant,
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
+              },
+              timeout: 10000
+            })
+          )
+        );
+
+        let foundOrder = null;
+        for (const res of results) {
+          if (res.status === 'fulfilled' && res.value?.data && res.value.data.items && Array.isArray(res.value.data.items)) {
+            const validItems = res.value.data.items.filter(i => !i.isCancelled);
+            if (validItems.length > 0) {
+              foundOrder = res.value.data;
+              break;
             }
-          });
-          if (res.data && res.data.items && Array.isArray(res.data.items) && res.data.items.filter(i => !i.isCancelled).length > 0) {
-            setActiveOrderData(res.data);
-            return;
-          }
-        } catch (err) {
-          if (err.response && err.response.status === 404) {
-            continue;
           }
         }
+
+        setActiveOrderData(foundOrder);
+      } catch (err) {
+        console.warn("Error checking table order status:", err);
+        setActiveOrderData(null);
+      } finally {
+        setIsCheckingOrder(false);
       }
-      setActiveOrderData(null);
     };
 
     fetchMenu();
@@ -746,6 +762,48 @@ const CustomerMenu = () => {
           </div>
         </div>
       </div>
+
+      {/* ── ORDER LOADING SPINNER SKELETON ── shown while checking table order */}
+      {isCheckingOrder && !activeOrderData && (
+        <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
+          <div className="bg-white/90 border border-orange-200/90 rounded-2xl p-3.5 flex items-center gap-3.5 shadow-sm">
+            <div className="w-9 h-9 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <RefreshCw className="animate-spin" size={17} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-black text-slate-800">{t("Checking active table order...")}</p>
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping inline-block"></span>
+              </div>
+              <p className="text-[11px] text-slate-500 truncate">{t("Checking current items for")} {table}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EMPTY TABLE / READY TO ORDER BADGE ── shown when table is empty and no active order */}
+      {!isCheckingOrder && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
+        <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
+          <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                <UtensilsCrossed size={16} />
+              </div>
+              <div>
+                <p className="text-xs font-black text-emerald-950">
+                  {t("This is an empty table")} ({table})
+                </p>
+                <p className="text-[10.5px] text-emerald-700 font-medium">
+                  {t("No active order. Select delicious items below to place your order!")}
+                </p>
+              </div>
+            </div>
+            <span className="text-[9px] font-black bg-emerald-600 text-white px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
+              {t("Empty Table")}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── YOUR CURRENT ORDER SECTION ── shown when table has an active bill */}
       {activeOrderData && activeOrderData.items && activeOrderData.items.filter(i => !i.isCancelled).length > 0 && (

@@ -127,7 +127,7 @@ export const getActiveOrder = async (req, res) => {
     let order = await Bill.findOne({ 
       tableNo: getTableMatchCondition(tableNo), 
       status: { $in: ['Open', 'Billed'] } 
-    }).lean();
+    }).sort({ updatedAt: -1, createdAt: -1 }).lean();
 
     if (order) {
       const hasValidItems = order.items && order.items.length > 0 && order.items.some(i => (Number(i.quantity || 0) > 0 || (i.printedQuantity || 0) > 0));

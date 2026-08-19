@@ -16,6 +16,24 @@ import TransferTableModal from './TransferTableModal';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 
+// Helper to extract space type (e.g. "cabin", "table", "sofa", "room", "bar")
+const getSpaceType = (str) => {
+  if (!str) return 'table';
+  const s = str.toLowerCase();
+  if (s.includes('cabin') || s.startsWith('c')) return 'cabin';
+  if (s.includes('sofa') || s.startsWith('s')) return 'sofa';
+  if (s.includes('room') || s.startsWith('r')) return 'room';
+  if (s.includes('bar') || s.startsWith('b')) return 'bar';
+  if (s.includes('table') || s.startsWith('t')) return 'table';
+  return 'table';
+};
+
+const extractNumber = (str) => {
+  if (!str) return null;
+  const match = str.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
 // Helper to match tables bidirectionally (e.g. "Ground Floor - Table 8" vs "Table 8" vs "T8")
 const isTableMatching = (tableA, tableB) => {
   if (!tableA || !tableB) return false;
@@ -23,25 +41,35 @@ const isTableMatching = (tableA, tableB) => {
   const cleanB = tableB.trim().replace(/\s+/g, ' ').toLowerCase();
   if (cleanA === cleanB) return true;
 
-  const spaceA = cleanA.includes(' - ') ? cleanA.split(' - ').slice(1).join(' - ').trim() : cleanA;
-  const spaceB = cleanB.includes(' - ') ? cleanB.split(' - ').slice(1).join(' - ').trim() : cleanB;
+  const hasFloorA = cleanA.includes(' - ');
+  const hasFloorB = cleanB.includes(' - ');
+
+  // 1. If BOTH have a floor prefix, the floors MUST match!
+  if (hasFloorA && hasFloorB) {
+    const floorA = cleanA.split(' - ')[0].trim();
+    const floorB = cleanB.split(' - ')[0].trim();
+    if (floorA !== floorB) {
+      return false; // Different floors (e.g. Ground Floor vs First Floor)
+    }
+  }
+
+  // 2. Extract space parts
+  const spaceA = hasFloorA ? cleanA.split(' - ').slice(1).join(' - ').trim() : cleanA;
+  const spaceB = hasFloorB ? cleanB.split(' - ').slice(1).join(' - ').trim() : cleanB;
+
   if (spaceA === spaceB) return true;
 
-  const extractNum = (str) => {
-    const match = str.match(/(\d+)/);
-    return match ? parseInt(match[1], 10) : null;
-  };
-  const numA = extractNum(spaceA);
-  const numB = extractNum(spaceB);
+  // 3. Compare space types (Cabin vs Table vs Sofa vs Room)
+  const typeA = getSpaceType(spaceA);
+  const typeB = getSpaceType(spaceB);
+  if (typeA !== typeB) {
+    return false; // Cabin cannot match Table, Sofa cannot match Table!
+  }
+
+  // 4. Compare numbers
+  const numA = extractNumber(spaceA);
+  const numB = extractNumber(spaceB);
   if (numA !== null && numB !== null && numA === numB) {
-    const isCabinA = spaceA.includes('cabin') || spaceA.startsWith('c');
-    const isCabinB = spaceB.includes('cabin') || spaceB.startsWith('c');
-    const isSofaA = spaceA.includes('sofa') || spaceA.startsWith('s');
-    const isSofaB = spaceB.includes('sofa') || spaceB.startsWith('s');
-    if ((isCabinA && !isCabinB && (isSofaB || spaceB.includes('table'))) ||
-        (isSofaA && !isSofaB && (isCabinB || spaceB.includes('table')))) {
-      return false;
-    }
     return true;
   }
 
