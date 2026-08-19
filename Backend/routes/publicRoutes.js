@@ -11,42 +11,64 @@ import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 
-// Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1" vs "1" vs "Table 01")
+// Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1")
 export const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
   
-  // Extract table part if floor prefix exists (e.g. "Floor 1 - Table 1" -> "Table 1")
-  let tablePart = trimmed;
+  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - Sofa 3")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
-    tablePart = parts.slice(1).join(' - ').trim();
+    const floorPart = parts[0].trim();
+    const tablePart = parts.slice(1).join(' - ').trim();
+    
+    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    const patterns = [];
+    // Exact match: "Ground Floor - Cabin 1"
+    patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
+    
+    // Check if tablePart has a space type word and number (e.g. "Cabin 1", "Sofa 2", "Table 3", "Room 4")
+    const spaceMatch = tablePart.match(/^([A-Za-z]+)\s*0*(\d+)$/);
+    if (spaceMatch) {
+      const type = spaceMatch[1]; // e.g. "Cabin", "Table", "Sofa"
+      const num = parseInt(spaceMatch[2], 10);
+      const firstLetter = type.charAt(0);
+      // Matches "Ground Floor - Cabin 1", "Ground Floor - Cabin 01", "Ground Floor - C1", "Ground Floor - C-1"
+      // NEVER cross-matches other space types like "Table" or "Sofa"!
+      patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+    } else {
+      const numOnly = tablePart.match(/^0*(\d+)$/);
+      if (numOnly) {
+        const num = parseInt(numOnly[1], 10);
+        // Matches "Ground Floor - 1", "Ground Floor - 01"
+        patterns.push(`^${escapedFloor}\\s*-\\s*0*${num}$`);
+      }
+    }
+    
+    return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // Extract number if exists (e.g. "Table 1" -> "1", "T2" -> "2")
-  const numMatch = tablePart.match(/\d+/);
-  const num = numMatch ? numMatch[0] : null;
-
-  const patterns = [];
+  // If no floor prefix (e.g. "Cabin 1", "Table 2", "Sofa 3", "2"):
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
-
-  if (tablePart !== trimmed) {
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    patterns.push(`^${escapedTable}$`);
-    patterns.push(`.*-\\s*${escapedTable}$`);
+  
+  const spaceMatch = trimmed.match(/^([A-Za-z]+)\s*0*(\d+)$/);
+  if (spaceMatch) {
+    const type = spaceMatch[1];
+    const num = parseInt(spaceMatch[2], 10);
+    const firstLetter = type.charAt(0);
+    patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
   } else {
-    // If input was just "Table 1", it might be stored as "Floor 1 - Table 1" in DB
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    patterns.push(`.*-\\s*${escapedTable}$`);
+    const numOnly = trimmed.match(/^0*(\d+)$/);
+    if (numOnly) {
+      const num = parseInt(numOnly[1], 10);
+      patterns.push(`^0*${num}$`);
+    }
   }
-
-  if (num) {
-    const numInt = parseInt(num, 10);
-    // Matches "Table 1", "Table 01", "Table1", "Floor X - Table 1", "T1", "1", "Floor X - 1"
-    patterns.push(`^(?:.*-\\s*)?(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
-  }
-
+  
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
@@ -450,7 +472,15 @@ router.post('/request-item-cancel', async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    const item = bill.items.id(itemId);
+    let item = null;
+    if (bill.items && typeof bill.items.id === 'function') {
+      try {
+        item = bill.items.id(itemId);
+      } catch (e) {}
+    }
+    if (!item && bill.items) {
+      item = bill.items.find(i => (i._id && i._id.toString() === itemId?.toString()) || (i.id && i.id.toString() === itemId?.toString()));
+    }
     if (!item) {
       return res.status(404).json({ message: 'Item not found in order' });
     }

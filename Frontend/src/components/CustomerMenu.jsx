@@ -6,10 +6,17 @@ import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, Chev
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
-let API_BASE_URL = getApiUrl();
-if ((API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1')) && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-  API_BASE_URL = API_BASE_URL.replace(/localhost|127\.0\.0\.1/, window.location.hostname);
-}
+const getPublicApiUrl = () => {
+  if (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'https:')) {
+    return 'https://restaurant-billing-apk.vercel.app/api';
+  }
+  return getApiUrl();
+};
+
+const API_BASE_URL = getPublicApiUrl();
+const apiClient = axios.create({
+  timeout: 10000
+});
 
 const CustomerMenu = () => {
   const { language, setLanguage, t } = useLanguage();
@@ -114,7 +121,7 @@ const CustomerMenu = () => {
   const table = urlParams.get('table');
 
   const handleRequestItemCancel = async (item) => {
-    const itemId = item._id;
+    const itemId = item._id || item.id;
     let cancelQty = item.quantity;
     
     if (item.quantity > 1) {
@@ -132,7 +139,7 @@ const CustomerMenu = () => {
     try {
       const tenant = urlParams.get('tenant') || 'default';
       const tableNo = urlParams.get('table');
-      await axios.post(`${API_BASE_URL}/public/request-item-cancel`, {
+      await apiClient.post(`${API_BASE_URL}/public/request-item-cancel`, {
         orderId: activeOrderData._id,
         itemId,
         tableNo,
@@ -144,8 +151,10 @@ const CustomerMenu = () => {
       // Update local state to show pending
       setActiveOrderData(prev => {
         if (!prev) return prev;
-        const newItems = prev.items.map(i => 
-          i._id === itemId ? { ...i, cancellationRequested: true, cancellationRequestedQty: cancelQty } : i
+        const newItems = (prev.items || []).map(i => 
+          ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
+            ? { ...i, cancellationRequested: true, cancellationRequestedQty: cancelQty } 
+            : i
         );
         return { ...prev, items: newItems };
       });
@@ -154,7 +163,8 @@ const CustomerMenu = () => {
       setTimeout(() => setServiceMessage(''), 3000);
     } catch (error) {
       console.error('Error requesting cancellation:', error);
-      alert('Failed to request cancellation');
+      const errMsg = error.response?.data?.message || 'Failed to request cancellation';
+      alert(errMsg);
     }
   };
 
@@ -271,7 +281,7 @@ const CustomerMenu = () => {
 
     const fetchMenu = async () => {
       try {
-        const menuRes = await axios.get(`${API_BASE_URL}/public/menu`, {
+        const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu`, {
           headers: {
             'X-Tenant-DB': tenant
           }
@@ -308,7 +318,7 @@ const CustomerMenu = () => {
     const checkOrderStatus = async () => {
       if (!table || !tenant) return;
       try {
-        const res = await axios.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}`, {
+        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}`, {
           headers: { 'X-Tenant-DB': tenant }
         });
         setActiveOrderData(res.data);
@@ -323,37 +333,44 @@ const CustomerMenu = () => {
     checkOrderStatus();
 
     // WebSocket real-time updates for instant KDS sync
-    const socketUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketUrl);
+    let socket = null;
+    try {
+      const socketUrl = API_BASE_URL.replace('/api', '');
+      socket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 5000,
+        reconnectionAttempts: 3
+      });
 
-    socket.on('connect', () => {
-      if (tenant) {
-        socket.emit('joinTenant', { tenantDb: tenant });
-      }
-    });
+      socket.on('connect', () => {
+        if (tenant) {
+          socket.emit('joinTenant', { tenantDb: tenant });
+        }
+      });
 
-    socket.on('kotUpdated', checkOrderStatus);
-    socket.on('orderUpdated', checkOrderStatus);
-    socket.on('newKOT', checkOrderStatus);
-    socket.on('billSettled', checkOrderStatus);
-    socket.on('foodReady', () => {
-      checkOrderStatus();
-    });
-    socket.on('prepTimeUpdated', (data) => {
-      setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
-      setTimeout(() => setServiceMessage(''), 5000);
-      checkOrderStatus();
-    });
-    socket.on('cancellationResolved', (data) => {
-      setServiceMessage(`Item cancellation ${data.action}ed: ${data.itemName}`);
-      setTimeout(() => setServiceMessage(''), 3000);
-      checkOrderStatus();
-    });
+      socket.on('kotUpdated', checkOrderStatus);
+      socket.on('orderUpdated', checkOrderStatus);
+      socket.on('newKOT', checkOrderStatus);
+      socket.on('billSettled', checkOrderStatus);
+      socket.on('foodReady', checkOrderStatus);
+      socket.on('prepTimeUpdated', (data) => {
+        setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
+        setTimeout(() => setServiceMessage(''), 5000);
+        checkOrderStatus();
+      });
+      socket.on('cancellationResolved', (data) => {
+        setServiceMessage(`Item cancellation ${data.action}ed: ${data.itemName}`);
+        setTimeout(() => setServiceMessage(''), 3000);
+        checkOrderStatus();
+      });
+    } catch (sockErr) {
+      console.warn("Socket connection warning:", sockErr);
+    }
     
     // Fast poll fallback every 3 seconds for instant response
     const interval = setInterval(checkOrderStatus, 3000);
     return () => {
-      socket.disconnect();
+      if (socket) socket.disconnect();
       clearInterval(interval);
     };
   }, [tenant, table]);
@@ -408,7 +425,7 @@ const CustomerMenu = () => {
     setOrderStatus('placing');
     try {
       const total = calculateTotal();
-      await axios.post(`${API_BASE_URL}/public/order`, {
+      await apiClient.post(`${API_BASE_URL}/public/order`, {
         tableNo: table,
         items: cart,
         subTotal: total,
@@ -426,7 +443,7 @@ const CustomerMenu = () => {
       
       // Instantly trigger an order status check to show the tracking banner
       try {
-        const res = await axios.get(`${API_BASE_URL}/public/order-status?tableNo=${table}`, {
+        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${table}`, {
           headers: { 'X-Tenant-DB': tenant }
         });
         setActiveOrderData(res.data);
@@ -443,7 +460,7 @@ const CustomerMenu = () => {
   const requestService = async (type) => {
     setIsServiceOpen(false);
     try {
-      await axios.post(`${API_BASE_URL}/public/request-service`, {
+      await apiClient.post(`${API_BASE_URL}/public/request-service`, {
         tableNumber: table,
         requestType: type
       }, {

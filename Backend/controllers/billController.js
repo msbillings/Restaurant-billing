@@ -11,43 +11,62 @@ import { emitNotification } from '../utils/notificationHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 
-// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Table 01" vs "Ground Floor - Table 1")
+// Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
   
-  // If floor prefix exists (e.g. "First Floor - Table 2")
+  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - Sofa 3")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
     const tablePart = parts.slice(1).join(' - ').trim();
-    const numMatch = tablePart.match(/\d+/);
-    const numInt = numMatch ? parseInt(numMatch[0], 10) : null;
     
     const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     const patterns = [];
-    // Exact match: "First Floor - Table 2"
+    // Exact match: "Ground Floor - Cabin 1"
     patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
     
-    if (numInt !== null) {
-      // Matches "First Floor - Table 2", "First Floor - Table 02", "First Floor - T2", "First Floor - 2"
-      patterns.push(`^${escapedFloor}\\s*-\\s*(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
+    // Check if tablePart has a space type word and number (e.g. "Cabin 1", "Sofa 2", "Table 3", "Room 4")
+    const spaceMatch = tablePart.match(/^([A-Za-z]+)\s*0*(\d+)$/);
+    if (spaceMatch) {
+      const type = spaceMatch[1]; // e.g. "Cabin", "Table", "Sofa"
+      const num = parseInt(spaceMatch[2], 10);
+      const firstLetter = type.charAt(0);
+      // Matches "Ground Floor - Cabin 1", "Ground Floor - Cabin 01", "Ground Floor - C1", "Ground Floor - C-1"
+      // NEVER cross-matches other space types like "Table" or "Sofa"!
+      patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+    } else {
+      const numOnly = tablePart.match(/^0*(\d+)$/);
+      if (numOnly) {
+        const num = parseInt(numOnly[1], 10);
+        // Matches "Ground Floor - 1", "Ground Floor - 01"
+        patterns.push(`^${escapedFloor}\\s*-\\s*0*${num}$`);
+      }
     }
     
     return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // If no floor prefix (e.g. "Table 2", "T2", "2"):
-  const numMatch = trimmed.match(/\d+/);
-  const numInt = numMatch ? parseInt(numMatch[0], 10) : null;
+  // If no floor prefix (e.g. "Cabin 1", "Table 2", "Sofa 3", "2"):
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
   const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
-  if (numInt !== null) {
-    patterns.push(`^(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
+  
+  const spaceMatch = trimmed.match(/^([A-Za-z]+)\s*0*(\d+)$/);
+  if (spaceMatch) {
+    const type = spaceMatch[1];
+    const num = parseInt(spaceMatch[2], 10);
+    const firstLetter = type.charAt(0);
+    patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+  } else {
+    const numOnly = trimmed.match(/^0*(\d+)$/);
+    if (numOnly) {
+      const num = parseInt(numOnly[1], 10);
+      patterns.push(`^0*${num}$`);
+    }
   }
   
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
