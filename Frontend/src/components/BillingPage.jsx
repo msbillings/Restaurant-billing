@@ -16,6 +16,38 @@ import TransferTableModal from './TransferTableModal';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 
+// Helper to match tables bidirectionally (e.g. "Ground Floor - Table 8" vs "Table 8" vs "T8")
+const isTableMatching = (tableA, tableB) => {
+  if (!tableA || !tableB) return false;
+  const cleanA = tableA.trim().replace(/\s+/g, ' ').toLowerCase();
+  const cleanB = tableB.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (cleanA === cleanB) return true;
+
+  const spaceA = cleanA.includes(' - ') ? cleanA.split(' - ').slice(1).join(' - ').trim() : cleanA;
+  const spaceB = cleanB.includes(' - ') ? cleanB.split(' - ').slice(1).join(' - ').trim() : cleanB;
+  if (spaceA === spaceB) return true;
+
+  const extractNum = (str) => {
+    const match = str.match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+  const numA = extractNum(spaceA);
+  const numB = extractNum(spaceB);
+  if (numA !== null && numB !== null && numA === numB) {
+    const isCabinA = spaceA.includes('cabin') || spaceA.startsWith('c');
+    const isCabinB = spaceB.includes('cabin') || spaceB.startsWith('c');
+    const isSofaA = spaceA.includes('sofa') || spaceA.startsWith('s');
+    const isSofaB = spaceB.includes('sofa') || spaceB.startsWith('s');
+    if ((isCabinA && !isCabinB && (isSofaB || spaceB.includes('table'))) ||
+        (isSofaA && !isSofaB && (isCabinB || spaceB.includes('table')))) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+};
+
 const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRole = 'Admin' }) => {
   const { t } = useLanguage();
   const [activeTable, setActiveTable] = useState(initialTable || '');
@@ -473,12 +505,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       if (!ordersArr || !Array.isArray(ordersArr) || ordersArr.length === 0) return false;
       if (isEditLocked && !forceReset) return false; // Never let stale cache clobber local edits
 
-      const cleanTarget = tableToFetch.trim().replace(/\s+/g, ' ').toLowerCase();
-
       const cached = ordersArr.find(o => {
         if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
-        const oClean = o.tableNo.trim().replace(/\s+/g, ' ').toLowerCase();
-        return oClean === cleanTarget;
+        return isTableMatching(o.tableNo, tableToFetch);
       });
 
       if (cached && cached.items && cached.items.length > 0) {
@@ -539,11 +568,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       let order = await getActiveOrder(tableToFetch);
       if (!order && openOrdersList && openOrdersList.length > 0) {
-        const cleanTarget = tableToFetch.trim().replace(/\s+/g, ' ').toLowerCase();
         order = openOrdersList.find(o => {
           if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
-          const oClean = o.tableNo.trim().replace(/\s+/g, ' ').toLowerCase();
-          return oClean === cleanTarget;
+          return isTableMatching(o.tableNo, tableToFetch);
         });
       }
 
@@ -1465,7 +1492,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                       </option>
                 )
                 }
-                  {activeTable && !openOrdersList.some((o) => o.tableNo === activeTable) &&
+                  {activeTable && !openOrdersList.some((o) => isTableMatching(o.tableNo, activeTable)) &&
                 <option value={activeTable} className="bg-surface text-white">
                       {activeTable} ({t('newCurrent')})
                     </option>

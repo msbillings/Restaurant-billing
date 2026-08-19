@@ -11,7 +11,7 @@ import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 
-// Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1")
+// Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1" vs "Table 1")
 export const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
@@ -26,8 +26,10 @@ export const getTableMatchCondition = (tblStr) => {
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     const patterns = [];
-    // Exact match: "Ground Floor - Cabin 1"
+    // Exact match with floor: "Ground Floor - Table 8"
     patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
+    // Bare match without floor: "Table 8" (from QR code public orders)
+    patterns.push(`^${escapedTable}$`);
     
     // Check if tablePart has a space type word and number (e.g. "Cabin 1", "Sofa 2", "Table 3", "Room 4")
     const spaceMatch = tablePart.match(/^([A-Za-z]+)\s*0*(\d+)$/);
@@ -35,25 +37,29 @@ export const getTableMatchCondition = (tblStr) => {
       const type = spaceMatch[1]; // e.g. "Cabin", "Table", "Sofa"
       const num = parseInt(spaceMatch[2], 10);
       const firstLetter = type.charAt(0);
-      // Matches "Ground Floor - Cabin 1", "Ground Floor - Cabin 01", "Ground Floor - C1", "Ground Floor - C-1"
-      // NEVER cross-matches other space types like "Table" or "Sofa"!
+      // Matches "Ground Floor - Table 8", "Ground Floor - Table 08", "Ground Floor - T8", "Ground Floor - T-8"
       patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+      // Matches bare "Table 8", "Table 08", "T8", "T-8"
+      patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
     } else {
       const numOnly = tablePart.match(/^0*(\d+)$/);
       if (numOnly) {
         const num = parseInt(numOnly[1], 10);
         // Matches "Ground Floor - 1", "Ground Floor - 01"
         patterns.push(`^${escapedFloor}\\s*-\\s*0*${num}$`);
+        patterns.push(`^0*${num}$`);
       }
     }
     
     return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // If no floor prefix (e.g. "Cabin 1", "Table 2", "Sofa 3", "2"):
+  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "8"):
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
+  // Match any floor prefix in DB: "Ground Floor - Table 8", "First Floor - Table 8"
+  patterns.push(`^.*?\\s*-\\s*${escapedTrimmed}$`);
   
   const spaceMatch = trimmed.match(/^([A-Za-z]+)\s*0*(\d+)$/);
   if (spaceMatch) {
@@ -61,11 +67,13 @@ export const getTableMatchCondition = (tblStr) => {
     const num = parseInt(spaceMatch[2], 10);
     const firstLetter = type.charAt(0);
     patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+    patterns.push(`^.*?\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
   } else {
     const numOnly = trimmed.match(/^0*(\d+)$/);
     if (numOnly) {
       const num = parseInt(numOnly[1], 10);
       patterns.push(`^0*${num}$`);
+      patterns.push(`^.*?\\s*-\\s*0*${num}$`);
     }
   }
   
@@ -164,9 +172,9 @@ router.post('/order', async (req, res) => {
       return res.status(400).json({ message: 'Table number and items are required' });
     }
 
-    // Sanitize items format safely (handles item._id and item.name)
+    // Sanitize items format safely (handles item._id, item.menuItem, and item.name)
     const sanitizedItems = items.map(item => ({
-      _id: item._id,
+      _id: item._id || item.menuItem || item.id,
       name: item.name || item.itemName || 'Menu Item',
       price: Number(item.price || 0),
       quantity: Number(item.quantity || 1),
@@ -259,13 +267,17 @@ router.post('/order', async (req, res) => {
     }
 
     // Emit socket events to notify POS, Floor, KDS, and Kitchen Screens
-    const io = req.app?.locals?.io;
-    const tenantDb = req.headers['x-tenant-db'];
-    if (io && tenantDb) {
-      io.to(tenantDb).emit('orderUpdated', { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}` });
-      io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
-      io.to(tenantDb).emit('newKOT', { tableNo, kotNumber, items: sanitizedItems });
-      io.to(tenantDb).emit('kotUpdated', { tableNo, kotNumber });
+    try {
+      const io = req.app?.locals?.io;
+      const tenantDb = req.headers['x-tenant-db'];
+      if (io && tenantDb) {
+        io.to(tenantDb).emit('orderUpdated', { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}` });
+        io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
+        io.to(tenantDb).emit('newKOT', { tableNo, kotNumber, items: sanitizedItems });
+        io.to(tenantDb).emit('kotUpdated', { tableNo, kotNumber });
+      }
+    } catch (sockErr) {
+      console.warn("Socket broadcast warning on public order:", sockErr.message);
     }
 
     // Trigger physical network thermal printing for new digital QR menu order
@@ -278,36 +290,38 @@ router.post('/order', async (req, res) => {
     }
 
     // Emit persistent notification for Navbar Panel (including items)
-    const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-    
-    // Get actual restaurant name
-    const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
-    let shopName = 'Unknown Shop';
-    if (settingsDoc?.value) {
-      if (typeof settingsDoc.value === 'string') {
-        try {
-          const parsed = JSON.parse(settingsDoc.value);
-          shopName = parsed.restaurantName || 'Unknown Shop';
-        } catch (e) {}
-      } else {
-        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+    try {
+      const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+      const Setting = getTenantModel(req, 'Setting', SettingDefault);
+      const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).catch(() => null);
+      let shopName = 'Unknown Shop';
+      if (settingsDoc?.value) {
+        if (typeof settingsDoc.value === 'string') {
+          try {
+            const parsed = JSON.parse(settingsDoc.value);
+            shopName = parsed.restaurantName || 'Unknown Shop';
+          } catch (e) {}
+        } else {
+          shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
+        }
       }
+      
+      const cleanTable = tableNo.replace(/^Table\s*/i, '');
+      emitNotification(
+        req, 
+        `${shopName} | Table ${cleanTable} Order`, 
+        `${itemNames}`, 
+        'success', 
+        ['Admin', 'Manager', 'Captain', 'Chef']
+      );
+    } catch (notifErr) {
+      console.warn("Notification error on public order:", notifErr.message);
     }
-    
-    const cleanTable = tableNo.replace('Table ', '');
-    emitNotification(
-      req, 
-      `${shopName} | Table ${cleanTable} Order`, 
-      `${itemNames}`, 
-      'success', 
-      ['Admin', 'Manager', 'Captain', 'Chef']
-    );
 
     res.status(201).json(bill);
   } catch (error) {
     console.error("Error submitting public order:", error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: error.message || 'Failed to place order' });
   }
 });
 
@@ -545,6 +559,59 @@ router.post('/request-item-cancel', async (req, res) => {
     res.status(200).json({ message: 'Cancellation requested successfully', item });
   } catch (error) {
     console.error("Error requesting item cancellation:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Public endpoint to withdraw item cancellation request
+router.post('/withdraw-item-cancel', async (req, res) => {
+  try {
+    const { orderId, itemId, tableNo } = req.body;
+    if (!orderId || !itemId) {
+      return res.status(400).json({ message: 'orderId and itemId are required' });
+    }
+
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const bill = await Bill.findById(orderId);
+    
+    if (!bill) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    let item = null;
+    if (bill.items && typeof bill.items.id === 'function') {
+      try {
+        item = bill.items.id(itemId);
+      } catch (e) {}
+    }
+    if (!item && bill.items) {
+      item = bill.items.find(i => (i._id && i._id.toString() === itemId?.toString()) || (i.id && i.id.toString() === itemId?.toString()));
+    }
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found in order' });
+    }
+
+    item.cancellationRequested = false;
+    item.cancellationRequestedQty = 0;
+    bill.markModified('items');
+    await bill.save();
+
+    const io = req.app?.locals?.io;
+    const tenantDb = req.headers['x-tenant-db'];
+
+    if (io && tenantDb) {
+      io.to(tenantDb).emit('itemCancellationWithdrawn', { 
+        orderId: bill._id, 
+        itemId: item._id, 
+        tableNo: bill.tableNo,
+        itemName: item.name
+      });
+      io.to(tenantDb).emit('orderUpdated', { tableNo: bill.tableNo, status: bill.status });
+    }
+
+    res.status(200).json({ message: 'Cancellation request withdrawn successfully', item });
+  } catch (error) {
+    console.error("Error withdrawing item cancellation:", error);
     res.status(500).json({ message: error.message });
   }
 });

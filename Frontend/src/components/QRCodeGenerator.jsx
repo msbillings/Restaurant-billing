@@ -1,10 +1,12 @@
 import { getApiUrl, isCapacitorApp } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle, Layers } from 'lucide-react';
+import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle, Layers, Globe, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
+
+const DEFAULT_VERCEL_URL = 'https://restaurant-billing-seven.vercel.app';
 
 const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -16,6 +18,17 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
   // Detect Electron (file: protocol)
   const isElectron = window.location.protocol === 'file:';
+
+  // QR Mode: 'cloud' (Vercel / Online URL) vs 'wifi' (Local POS IP)
+  const [qrMode, setQrMode] = useState(localStorage.getItem('resto_qr_mode') || 'cloud');
+
+  // Vercel / Cloud URL Configuration
+  const initialVercelUrl = localStorage.getItem('resto_vercel_url') || 
+    (typeof window !== 'undefined' && window.location.hostname?.includes('vercel.app') ? window.location.origin : DEFAULT_VERCEL_URL);
+  const [vercelUrl, setVercelUrl] = useState(initialVercelUrl);
+  const [customVercelInput, setCustomVercelInput] = useState(initialVercelUrl);
+  const [vercelSavedToast, setVercelSavedToast] = useState(false);
+  const [copiedTable, setCopiedTable] = useState(null);
 
   // Initial IP setup from stored resto_server_ip or hostname
   const storedIp = localStorage.getItem('resto_server_ip');
@@ -149,12 +162,49 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     setTimeout(() => setIpSavedToast(false), 2500);
   };
 
+  const handleSaveVercelUrl = (urlToSave) => {
+    let cleanUrl = urlToSave.trim().replace(/\/+$/, '');
+    if (cleanUrl) {
+      if (!/^https?:\/\//i.test(cleanUrl)) {
+        cleanUrl = 'https://' + cleanUrl;
+      }
+      localStorage.setItem('resto_vercel_url', cleanUrl);
+      setVercelUrl(cleanUrl);
+      setCustomVercelInput(cleanUrl);
+    } else {
+      localStorage.removeItem('resto_vercel_url');
+      setVercelUrl(DEFAULT_VERCEL_URL);
+      setCustomVercelInput(DEFAULT_VERCEL_URL);
+    }
+    setVercelSavedToast(true);
+    setTimeout(() => setVercelSavedToast(false), 2500);
+  };
+
+  const handleSelectQrMode = (mode) => {
+    setQrMode(mode);
+    localStorage.setItem('resto_qr_mode', mode);
+  };
+
+  const handleCopyMenuLink = (url, table) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url);
+      setCopiedTable(table);
+      setTimeout(() => setCopiedTable(null), 2000);
+    }
+  };
+
   const getQRUrl = (table) => {
     const dbName = localStorage.getItem('resto_db_name') || 'default';
 
-    // 1. If running inside native mobile app (Capacitor APK)
+    // 1. Cloud / Vercel Menu URL mode (Recommended for .exe, .apk, .dmg, .ipa to work over internet)
+    if (qrMode === 'cloud') {
+      const targetVercel = (localStorage.getItem('resto_vercel_url') || vercelUrl || DEFAULT_VERCEL_URL).trim().replace(/\/+$/, '');
+      return `${targetVercel}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+    }
+
+    // 2. Local Wi-Fi IP Mode (Exact existing logic preserved)
     if (isCapacitorApp()) {
-      const apiUrl = getApiUrl(); // e.g. http://192.168.1.15:5002/api or https://domain/api
+      const apiUrl = getApiUrl();
       const baseApiUrl = apiUrl.replace(/\/api$/, '');
       return `${baseApiUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
@@ -163,8 +213,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     const isIpAddress = (h) => /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(h);
     const isLocalNetwork = (h) => h === 'localhost' || h === '127.0.0.1' || isIpAddress(h);
 
-    // If we have an explicit stored IP (from the UI), we MUST use it!
-    // This allows an Admin on Vercel to generate QR codes pointing to their Local POS IP.
     if (storedIp && storedIp !== 'localhost' && storedIp !== '127.0.0.1') {
       const port = isElectron ? '5002' : (isIpAddress(storedIp) ? '10000' : ''); 
       const portStr = port ? `:${port}` : '';
@@ -172,12 +220,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       return `${protocol}//${storedIp}${portStr}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
-    // 2. If hosted on a public cloud domain (Vercel, Render, custom domain) without a stored IP
     if (!isElectron && window.location.hostname && !isLocalNetwork(window.location.hostname)) {
       return `${window.location.origin}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
-    // 3. Desktop App (.exe/.dmg) or Local Development
     let host = storedIp;
     if (!host || host === 'localhost' || host === '127.0.0.1') {
       host = isElectron ? '127.0.0.1' : (window.location.hostname || '127.0.0.1');
@@ -189,7 +235,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (isDev) {
       port = window.location.port || '5173';
     } else {
-      // In production built .exe/.dmg, the backend ALWAYS runs on 5002/10000 and serves the frontend
       port = isElectron ? '5002' : '10000';
     }
 
@@ -197,7 +242,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (host.includes('://')) {
       baseUrl = host;
     } else {
-      // Force HTTP for IP addresses to prevent SSL errors
       const protocol = isIpAddress(host) ? 'http:' : window.location.protocol;
       baseUrl = `${protocol}//${host}:${port}`;
     }
@@ -218,7 +262,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
    */
   const getFloorsToRender = () => {
     if (selectedTable === 'ALL') return floors;
-    // Find the floor + table matching the selection
     for (const floor of floors) {
       if (floor.tables.includes(selectedTable)) {
         return [{ floorName: floor.floorName, tables: [selectedTable] }];
@@ -272,56 +315,147 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       </div>
 
-      {/* Local Wi-Fi IP Configuration Bar */}
-      <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-1.5 sm:p-2 rounded-xl ${isLoopback ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-            <Wifi size={18} />
-          </div>
-          <div>
-            <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("POS Wi-Fi IP Address")}</div>
-            <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
-              <span>{localIP}:{localPort}</span>
-              {isLoopback && (
-                <span className="text-[8px] sm:text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase border border-amber-500/20">
-                  Local Only
-                </span>
-              )}
-            </div>
-          </div>
+      {/* QR Mode Switcher Tabs (Cloud / Vercel URL vs Local Wi-Fi) */}
+      <div className="bg-surface border border-border p-2 sm:p-2.5 rounded-2xl mb-3 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs shrink-0 print:hidden">
+        <div className="flex items-center gap-1.5 p-1 bg-background rounded-xl border border-border/60 w-full sm:w-auto">
+          <button
+            onClick={() => handleSelectQrMode('cloud')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              qrMode === 'cloud'
+                ? 'bg-primary text-white shadow-xs'
+                : 'text-text-muted hover:text-text-main hover:bg-surface'
+            }`}
+          >
+            <Globe size={14} /> {t("Cloud / Vercel Menu")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">4G/5G/Wi-Fi</span>
+          </button>
+          <button
+            onClick={() => handleSelectQrMode('wifi')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              qrMode === 'wifi'
+                ? 'bg-primary text-white shadow-xs'
+                : 'text-text-muted hover:text-text-main hover:bg-surface'
+            }`}
+          >
+            <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          <input
-            type="text"
-            value={customIpInput}
-            onChange={(e) => setCustomIpInput(e.target.value)}
-            placeholder="e.g. 192.168.29.79"
-            className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-44 focus:outline-none focus:border-primary"
-          />
-          <button
-            onClick={() => handleSaveCustomIp(customIpInput)}
-            className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs"
-          >
-            <Save size={12} /> {t("Save IP")}
-          </button>
-          <button
-            onClick={() => { localStorage.removeItem('resto_server_ip'); fetchIP(); }}
-            className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0"
-            title="Auto-detect Wi-Fi IP"
-          >
-            <RefreshCw size={12} />
-          </button>
+        <div className="text-[11px] text-text-muted font-medium px-2 text-center sm:text-right">
+          {qrMode === 'cloud' ? (
+            <span className="text-primary font-bold">✓ {t("QR codes point to public Vercel cloud for mobile data & Wi-Fi scanning (.exe, .apk, .dmg, .ipa)")}</span>
+          ) : (
+            <span>ℹ️ {t("QR codes point to your local POS Wi-Fi IP address (same router required)")}</span>
+          )}
         </div>
       </div>
 
-      {/* Warning Alert if Loopback IP */}
-      {isLoopback && (
+      {/* Cloud / Vercel URL Configuration Bar */}
+      {qrMode === 'cloud' && (
+        <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 text-blue-500">
+              <Globe size={18} />
+            </div>
+            <div>
+              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Vercel Menu Domain / Cloud URL")}</div>
+              <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
+                <span className="text-primary">{vercelUrl}</span>
+                <span className="text-[8px] sm:text-[10px] bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded-full font-bold uppercase border border-blue-500/20">
+                  Active
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <input
+              type="text"
+              value={customVercelInput}
+              onChange={(e) => setCustomVercelInput(e.target.value)}
+              placeholder="e.g. https://restaurant-billing-seven.vercel.app"
+              className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-64 focus:outline-none focus:border-primary"
+            />
+            <button
+              onClick={() => handleSaveVercelUrl(customVercelInput)}
+              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs"
+            >
+              <Save size={12} /> {t("Save URL")}
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('resto_vercel_url');
+                setVercelUrl(DEFAULT_VERCEL_URL);
+                setCustomVercelInput(DEFAULT_VERCEL_URL);
+                setVercelSavedToast(true);
+                setTimeout(() => setVercelSavedToast(false), 2500);
+              }}
+              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0"
+              title="Reset to default Vercel URL"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Local Wi-Fi IP Configuration Bar */}
+      {qrMode === 'wifi' && (
+        <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-1.5 sm:p-2 rounded-xl ${isLoopback ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+              <Wifi size={18} />
+            </div>
+            <div>
+              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("POS Wi-Fi IP Address")}</div>
+              <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
+                <span>{localIP}:{localPort}</span>
+                {isLoopback && (
+                  <span className="text-[8px] sm:text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase border border-amber-500/20">
+                    Local Only
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+            <input
+              type="text"
+              value={customIpInput}
+              onChange={(e) => setCustomIpInput(e.target.value)}
+              placeholder="e.g. 192.168.29.79"
+              className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-44 focus:outline-none focus:border-primary"
+            />
+            <button
+              onClick={() => handleSaveCustomIp(customIpInput)}
+              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs"
+            >
+              <Save size={12} /> {t("Save IP")}
+            </button>
+            <button
+              onClick={() => { localStorage.removeItem('resto_server_ip'); fetchIP(); }}
+              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0"
+              title="Auto-detect Wi-Fi IP"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Warning Alert if Loopback IP when in Wi-Fi mode */}
+      {qrMode === 'wifi' && isLoopback && (
         <div className="bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 px-3 py-2 sm:px-4 sm:py-3 rounded-2xl mb-4 text-[10px] sm:text-xs font-medium flex items-start gap-2 shrink-0 print:hidden">
           <AlertTriangle size={16} className="shrink-0 text-amber-500 mt-0.5" />
           <div>
-            <span className="font-bold">{t("Important Network Notice:")}</span> {t("QR codes currently point to 127.0.0.1. Mobile phones cannot open this. Enter your Billing PC's Wi-Fi IP address above (e.g. 192.168.29.79).")}
+            <span className="font-bold">{t("Important Network Notice:")}</span> {t("QR codes currently point to 127.0.0.1. Mobile phones cannot open this. Switch to 'Cloud / Vercel Menu' mode above or enter your Billing PC's Wi-Fi IP address (e.g. 192.168.29.79).")}
           </div>
+        </div>
+      )}
+
+      {vercelSavedToast && (
+        <div className="bg-blue-600 text-white text-[10px] sm:text-xs font-bold px-4 py-2 rounded-xl mb-4 text-center animate-fade-in shrink-0">
+          ✓ {t("Vercel Menu Cloud URL updated successfully!")}
         </div>
       )}
 
@@ -358,43 +492,61 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
               {/* Cards Grid */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 print:grid-cols-3 print:gap-4">
-                {floor.tables.map((table, tableIdx) => (
-                  <div
-                    key={`${floor.floorName}-${table}-${tableIdx}`}
-                    className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
-                  >
-                    <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
+                {floor.tables.map((table, tableIdx) => {
+                  const currentQrUrl = getQRUrl(table);
+                  const isCopied = copiedTable === table;
+                  return (
+                    <div
+                      key={`${floor.floorName}-${table}-${tableIdx}`}
+                      className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group"
+                    >
+                      <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
 
-                    {/* Floor badge on card */}
-                    <div className={`text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border print:hidden ${color.bg} ${color.text} ${color.border}`}>
-                      {floor.floorName}
-                    </div>
+                      {/* Floor & Mode badges on card */}
+                      <div className="flex items-center gap-1 flex-wrap justify-center print:hidden">
+                        <div className={`text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${color.bg} ${color.text} ${color.border}`}>
+                          {floor.floorName}
+                        </div>
+                        <div className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
+                          qrMode === 'cloud' ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                        }`}>
+                          {qrMode === 'cloud' ? 'Cloud' : 'Wi-Fi'}
+                        </div>
+                      </div>
 
-                    <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
-                      <QRCodeSVG
-                        value={getQRUrl(table)}
-                        size={100}
-                        level="H"
-                        includeMargin={true}
-                        className="sm:hidden"
-                      />
-                      <QRCodeSVG
-                        value={getQRUrl(table)}
-                        size={140}
-                        level="H"
-                        includeMargin={true}
-                        className="hidden sm:block"
-                      />
-                    </div>
-                    <div className="w-full">
-                      <p className="text-[9px] sm:text-xs text-text-muted font-bold tracking-widest uppercase mb-0.5">{t("Scan to Order")}</p>
-                      <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
-                      <div className="mt-1.5 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg break-all border border-border/50 max-w-full truncate print:hidden">
-                        {getQRUrl(table)}
+                      <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
+                        <QRCodeSVG
+                          value={currentQrUrl}
+                          size={100}
+                          level="H"
+                          includeMargin={true}
+                          className="sm:hidden"
+                        />
+                        <QRCodeSVG
+                          value={currentQrUrl}
+                          size={140}
+                          level="H"
+                          includeMargin={true}
+                          className="hidden sm:block"
+                        />
+                      </div>
+                      <div className="w-full">
+                        <p className="text-[9px] sm:text-xs text-text-muted font-bold tracking-widest uppercase mb-0.5">{t("Scan to Order")}</p>
+                        <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
+                        <div className="mt-1.5 flex items-center justify-between gap-1 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg border border-border/50 max-w-full print:hidden">
+                          <span className="truncate">{currentQrUrl}</span>
+                          <button
+                            onClick={() => handleCopyMenuLink(currentQrUrl, table)}
+                            className="text-text-muted hover:text-primary shrink-0 p-0.5"
+                            title="Copy QR Order Link"
+                          >
+                            {isCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

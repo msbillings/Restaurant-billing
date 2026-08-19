@@ -7,9 +7,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
 const getPublicApiUrl = () => {
-  if (typeof window !== 'undefined' && (window.location.hostname.includes('vercel.app') || window.location.protocol === 'https:')) {
-    return 'https://restaurant-billing-apk.vercel.app/api';
-  }
   return getApiUrl();
 };
 
@@ -164,6 +161,39 @@ const CustomerMenu = () => {
     } catch (error) {
       console.error('Error requesting cancellation:', error);
       const errMsg = error.response?.data?.message || 'Failed to request cancellation';
+      alert(errMsg);
+    }
+  };
+
+  const handleWithdrawItemCancel = async (item) => {
+    const itemId = item._id || item.id;
+    try {
+      const tenant = urlParams.get('tenant') || 'default';
+      const tableNo = urlParams.get('table');
+      await apiClient.post(`${API_BASE_URL}/public/withdraw-item-cancel`, {
+        orderId: activeOrderData._id,
+        itemId,
+        tableNo
+      }, {
+        headers: { 'X-Tenant-DB': tenant }
+      });
+      
+      // Update local state immediately
+      setActiveOrderData(prev => {
+        if (!prev) return prev;
+        const newItems = (prev.items || []).map(i => 
+          ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
+            ? { ...i, cancellationRequested: false, cancellationRequestedQty: 0 } 
+            : i
+        );
+        return { ...prev, items: newItems };
+      });
+      
+      setServiceMessage(`Cancellation request withdrawn for ${item.name}`);
+      setTimeout(() => setServiceMessage(''), 3000);
+    } catch (error) {
+      console.error('Error withdrawing cancellation:', error);
+      const errMsg = error.response?.data?.message || 'Failed to withdraw cancellation';
       alert(errMsg);
     }
   };
@@ -323,16 +353,31 @@ const CustomerMenu = () => {
 
     const checkOrderStatus = async () => {
       if (!table || !tenant) return;
-      try {
-        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}`, {
-          headers: { 'X-Tenant-DB': tenant }
+
+      const candidateTableNames = [table];
+      if (!table.includes(' - ')) {
+        const floorPrefixes = ['Ground Floor', 'First Floor', 'Second Floor', 'Floor 1', 'Floor 2', 'Floor 3', 'Main Hall', 'AC Hall', 'Outdoor', 'Rooftop', 'Garden', 'Terrace', 'VIP Lounge', 'Dining'];
+        floorPrefixes.forEach(floor => {
+          candidateTableNames.push(`${floor} - ${table}`);
         });
-        setActiveOrderData(res.data);
-      } catch (err) {
-        if (err.response && err.response.status === 404) {
-          setActiveOrderData(null); // No active order
+      }
+
+      for (const candidate of candidateTableNames) {
+        try {
+          const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}`, {
+            headers: { 'X-Tenant-DB': tenant }
+          });
+          if (res.data && res.data.items && Array.isArray(res.data.items) && res.data.items.filter(i => !i.isCancelled).length > 0) {
+            setActiveOrderData(res.data);
+            return;
+          }
+        } catch (err) {
+          if (err.response && err.response.status === 404) {
+            continue;
+          }
         }
       }
+      setActiveOrderData(null);
     };
 
     fetchMenu();
@@ -431,9 +476,21 @@ const CustomerMenu = () => {
     setOrderStatus('placing');
     try {
       const total = calculateTotal();
+      const sanitizedCart = cart.map(item => ({
+        _id: item.menuItem || item._id,
+        menuItem: item.menuItem || item._id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        variant: item.variant,
+        specialNote: item.specialNote || ''
+      }));
+
+      const effectiveTableNo = activeOrderData?.tableNo || table;
+
       await apiClient.post(`${API_BASE_URL}/public/order`, {
-        tableNo: table,
-        items: cart,
+        tableNo: effectiveTableNo,
+        items: sanitizedCart,
         subTotal: total,
         taxes: 0,
         total: total,
@@ -449,17 +506,11 @@ const CustomerMenu = () => {
       setTimeout(() => setOrderStatus('menu'), 5000);
       
       // Instantly trigger an order status check to show the tracking banner
-      try {
-        const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}`, {
-          headers: { 'X-Tenant-DB': tenant }
-        });
-        setActiveOrderData(res.data);
-      } catch (e) {
-        console.error("Error fetching status post-order", e);
-      }
+      checkOrderStatus();
     } catch (err) {
       console.error("Order failed", err);
-      alert("Failed to place order. Please try again or call a waiter.");
+      const errorMsg = err.response?.data?.message || err.message || "Please try again or call a waiter.";
+      alert(`Failed to place order: ${errorMsg}`);
       setOrderStatus('menu');
     }
   };
@@ -739,7 +790,16 @@ const CustomerMenu = () => {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {item.cancellationRequested ? (
-                        <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
+                            className="text-[9px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-all shadow-xs cursor-pointer"
+                            title={t("Withdraw Cancel Request")}
+                          >
+                            ↩️ {t("Withdraw")}
+                          </button>
+                        </div>
                       ) : isPrepared ? (
                         <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
                           <Check size={10} strokeWidth={3} /> {t("Prepared")}
@@ -1035,7 +1095,18 @@ const CustomerMenu = () => {
                             ) : item.cancellationRejected ? (
                               <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-1 rounded-full text-white/90">{t("Rejected")}</span>
                             ) : item.cancellationRequested ? (
-                              <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">{item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">
+                                  {item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}
+                                </span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
+                                  className="text-[10px] font-black bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-900 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all shadow-sm cursor-pointer"
+                                  title={t("Withdraw Cancel Request")}
+                                >
+                                  ↩️ {t("Withdraw")}
+                                </button>
+                              </div>
                             ) : (item.kdsStatus === 'Ready' || item.status === 'Ready') ? (
                               <span className="text-[10px] font-bold bg-emerald-500/60 text-white border border-emerald-400/40 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
                                 <Check size={11} strokeWidth={3} /> {t("Prepared")}
