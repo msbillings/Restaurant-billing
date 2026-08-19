@@ -219,6 +219,15 @@ const CustomerMenu = () => {
 
   // Geolocation verification with mobile/iOS indoor tolerance (min 500m buffer)
   const verifyLocation = useCallback((settings) => {
+    // If running on local IP / LAN (http://192.168.x.x), localhost, or non-HTTPS origin, skip location check
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host);
+    if (typeof window !== 'undefined' && (window.location.protocol !== 'https:' || isIp || host === 'localhost' || host === '127.0.0.1')) {
+      setGeoError(null);
+      setVerifyingLocation(false);
+      return;
+    }
+
     if (!settings || !settings.enableGeoFencing) {
       setGeoError(null);
       setVerifyingLocation(false);
@@ -364,8 +373,12 @@ const CustomerMenu = () => {
 
       for (const candidate of candidateTableNames) {
         try {
-          const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}`, {
-            headers: { 'X-Tenant-DB': tenant }
+          const res = await apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
+            headers: { 
+              'X-Tenant-DB': tenant,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
           });
           if (res.data && res.data.items && Array.isArray(res.data.items) && res.data.items.filter(i => !i.isCancelled).length > 0) {
             setActiveOrderData(res.data);

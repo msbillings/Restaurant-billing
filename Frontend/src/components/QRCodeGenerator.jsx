@@ -214,8 +214,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     const isLocalNetwork = (h) => h === 'localhost' || h === '127.0.0.1' || isIpAddress(h);
 
     if (storedIp && storedIp !== 'localhost' && storedIp !== '127.0.0.1') {
-      const port = isElectron ? '5002' : (isIpAddress(storedIp) ? '10000' : ''); 
-      const portStr = port ? `:${port}` : '';
+      const port = isElectron ? '5002' : (localPort || '5002'); 
+      const portStr = port ? `:${port}` : ':5002';
       const protocol = isIpAddress(storedIp) ? 'http:' : 'https:';
       return `${protocol}//${storedIp}${portStr}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
@@ -235,7 +235,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (isDev) {
       port = window.location.port || '5173';
     } else {
-      port = isElectron ? '5002' : '10000';
+      port = isElectron ? '5002' : (localPort || '5002');
     }
 
     let baseUrl = '';
@@ -338,14 +338,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           >
             <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN</span>
           </button>
-        </div>
-
-        <div className="text-[11px] text-text-muted font-medium px-2 text-center sm:text-right">
-          {qrMode === 'cloud' ? (
-            <span className="text-primary font-bold">✓ {t("QR codes point to public Vercel cloud for mobile data & Wi-Fi scanning (.exe, .apk, .dmg, .ipa)")}</span>
-          ) : (
-            <span>ℹ️ {t("QR codes point to your local POS Wi-Fi IP address (same router required)")}</span>
-          )}
         </div>
       </div>
 
