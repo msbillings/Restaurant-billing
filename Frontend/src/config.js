@@ -41,6 +41,12 @@ export const getApiUrl = () => {
     }
 
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+
+    // If running on Vercel or any cloud HTTPS deployment without a stored local IP
+    if (host && (host.includes('vercel.app') || (typeof window !== 'undefined' && window.location.protocol === 'https:'))) {
+        return 'https://restaurant-billing-apk.vercel.app/api';
+    }
+
     if (host && host !== 'localhost' && host !== '127.0.0.1') {
         return `http://${host}:5002/api`;
     }
