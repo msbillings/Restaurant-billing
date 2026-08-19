@@ -4,15 +4,71 @@ import React, { useState, useEffect } from 'react';
 import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle, Layers, Globe, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api/axios';
+import { getOpenOrders } from '../api/billing';
 import BackButton from './common/BackButton';
 
 const DEFAULT_VERCEL_URL = 'https://restaurant-billing-seven.vercel.app';
+
+const getSpaceType = (str) => {
+  if (!str) return 'table';
+  const s = str.toLowerCase();
+  if (s.includes('cabin') || s.startsWith('c')) return 'cabin';
+  if (s.includes('sofa') || s.startsWith('s')) return 'sofa';
+  if (s.includes('room') || s.startsWith('r')) return 'room';
+  if (s.includes('bar') || s.startsWith('b')) return 'bar';
+  if (s.includes('table') || s.startsWith('t')) return 'table';
+  return 'table';
+};
+
+const extractNumber = (str) => {
+  if (!str) return null;
+  const match = str.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+};
+
+const isTableMatching = (tableA, tableB) => {
+  if (!tableA || !tableB) return false;
+  const cleanA = tableA.trim().replace(/\s+/g, ' ').toLowerCase();
+  const cleanB = tableB.trim().replace(/\s+/g, ' ').toLowerCase();
+  if (cleanA === cleanB) return true;
+
+  const hasFloorA = cleanA.includes(' - ');
+  const hasFloorB = cleanB.includes(' - ');
+
+  if (hasFloorA && hasFloorB) {
+    const floorA = cleanA.split(' - ')[0].trim();
+    const floorB = cleanB.split(' - ')[0].trim();
+    if (floorA !== floorB) {
+      return false;
+    }
+  }
+
+  const spaceA = hasFloorA ? cleanA.split(' - ').slice(1).join(' - ').trim() : cleanA;
+  const spaceB = hasFloorB ? cleanB.split(' - ').slice(1).join(' - ').trim() : cleanB;
+
+  if (spaceA === spaceB) return true;
+
+  const typeA = getSpaceType(spaceA);
+  const typeB = getSpaceType(spaceB);
+  if (typeA !== typeB) {
+    return false;
+  }
+
+  const numA = extractNumber(spaceA);
+  const numB = extractNumber(spaceB);
+  if (numA !== null && numB !== null && numA === numB) {
+    return true;
+  }
+
+  return false;
+};
 
 const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
 
   // floors = [{ floorName: string, tables: string[] }]
   const [floors, setFloors] = useState([]);
+  const [openOrders, setOpenOrders] = useState([]);
   const [selectedTable, setSelectedTable] = useState('ALL');
   const [restaurantName, setRestaurantName] = useState('MSBillings');
 
@@ -130,7 +186,19 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       }
     };
 
+    const fetchActiveOrders = async () => {
+      try {
+        const orders = await getOpenOrders();
+        if (orders && Array.isArray(orders)) {
+          setOpenOrders(orders);
+        }
+      } catch (err) {
+        console.warn('Could not fetch open orders for QR page:', err);
+      }
+    };
+
     fetchFloorsAndSettings();
+    fetchActiveOrders();
 
     const handleSpacesUpdated = (event) => {
       if (event.detail && Array.isArray(event.detail)) {
@@ -142,10 +210,32 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
     fetchIP();
 
+    // Fast polling every 4s for real-time table busy/empty status sync
+    const pollInterval = setInterval(() => {
+      fetchActiveOrders();
+    }, 4000);
+
     return () => {
       window.removeEventListener('spacesUpdated', handleSpacesUpdated);
+      clearInterval(pollInterval);
     };
   }, []);
+
+  const getTableStatusInfo = (floorName, tableName) => {
+    if (!openOrders || !Array.isArray(openOrders) || openOrders.length === 0) {
+      return { isBusy: false, statusText: t('Empty') };
+    }
+    const fullTableName = `${floorName} - ${tableName}`;
+    const order = openOrders.find(o => {
+      if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed' && o.status !== 'Occupied')) return false;
+      return isTableMatching(o.tableNo, fullTableName);
+    });
+
+    if (order && order.items && order.items.filter(i => !i.isCancelled && ((i.quantity || 0) - (i.cancelledQuantity || 0)) > 0).length > 0) {
+      return { isBusy: true, statusText: t('Busy'), total: order.total || 0, order };
+    }
+    return { isBusy: false, statusText: t('Empty') };
+  };
 
   const handleSaveCustomIp = (ipToSave) => {
     let cleanIp = ipToSave.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
@@ -293,17 +383,22 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           </h1>
         </div>
         <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
-          {/* Floor-grouped dropdown */}
+          {/* Floor-grouped dropdown with dynamic Empty / Busy status */}
           <select
             value={selectedTable}
             onChange={(e) => setSelectedTable(e.target.value)}
-            className="w-full sm:w-56 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main">
+            className="w-full sm:w-64 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium shadow-xs">
             <option value="ALL">{t("All Tables")} ({floors.reduce((s, f) => s + f.tables.length, 0)})</option>
             {floors.map((floor, fi) => (
               <optgroup key={`floor-group-${fi}`} label={`📍 ${floor.floorName}`}>
-                {floor.tables.map((tbl, ti) => (
-                  <option key={`${tbl}-${fi}-${ti}`} value={tbl}>{tbl}</option>
-                ))}
+                {floor.tables.map((tbl, ti) => {
+                  const statusInfo = getTableStatusInfo(floor.floorName, tbl);
+                  return (
+                    <option key={`${tbl}-${fi}-${ti}`} value={tbl}>
+                      {tbl} ({statusInfo.isBusy ? `🔴 ${t("Busy")}${statusInfo.total ? ` · ₹${statusInfo.total}` : ''}` : `🟢 ${t("Empty")}`})
+                    </option>
+                  );
+                })}
               </optgroup>
             ))}
           </select>
@@ -494,7 +589,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                     >
                       <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
 
-                      {/* Floor & Mode badges on card */}
+                      {/* Floor, Mode & Dynamic Status badges on card */}
                       <div className="flex items-center gap-1 flex-wrap justify-center print:hidden">
                         <div className={`text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${color.bg} ${color.text} ${color.border}`}>
                           {floor.floorName}
@@ -504,6 +599,21 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                         }`}>
                           {qrMode === 'cloud' ? 'Cloud' : 'Wi-Fi'}
                         </div>
+                        {(() => {
+                          const statusInfo = getTableStatusInfo(floor.floorName, table);
+                          return statusInfo.isBusy ? (
+                            <div className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 border border-rose-500/30 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                              <span>{t("Busy")}</span>
+                              {statusInfo.total > 0 && <span className="font-mono text-[7px] bg-rose-500/20 px-1 py-0.2 rounded font-bold">₹{statusInfo.total}</span>}
+                            </div>
+                          ) : (
+                            <div className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              <span>{t("Empty")}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
