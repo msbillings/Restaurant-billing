@@ -524,6 +524,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false, isBackground = false) {
     if (!tableToFetch) return;
+    if (!isBackground) setLoading(true);
 
     const msSinceEdit = Date.now() - lastLocalEditTime.current;
     const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
@@ -574,6 +575,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setBillType(cached.billType || 'Dine-In');
           setCustomerPhone(cached.customerPhone || '');
           setCustomerName(cached.customerName || '');
+          if (!isBackground) setLoading(false);
           return true;
         }
       }
@@ -587,10 +589,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         const idbOrders = await getCachedOpenOrders();
         hasInstantCache = checkAndApplyCache(idbOrders);
       } catch (e) {}
-    }
-
-    if (!hasInstantCache && !isBackground) {
-      setLoading(true);
     }
 
     try {

@@ -278,13 +278,18 @@ const BillSummary = ({
       </div>
 
       {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto bg-white p-0.5">
-        {cart.length === 0 ?
+      <div className="flex-1 overflow-y-auto bg-white p-0.5 relative">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12 gap-2.5">
+            <Loader2 className="animate-spin text-primary" size={26} />
+            <span className="text-xs font-bold text-gray-600 animate-pulse">{t("Loading table order...")}</span>
+          </div>
+        ) : cart.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <span className="text-xs">{t("No items added")}</span>
-          </div> :
-
-          cart.map((item, index) =>
+          </div>
+        ) : (
+          cart.map((item, index) => (
             <div key={item._id || item.name || index} className={`flex items-start py-1.5 px-1.5 border-b border-gray-100 hover:bg-gray-50 transition-colors group ${item.isCancelled ? 'opacity-50' : ''}`}>
               {/* Delete Icon */}
               <button
@@ -347,8 +352,8 @@ const BillSummary = ({
                 <div className={`text-[11px] font-bold text-gray-700 ${item.isCancelled ? 'line-through text-gray-400' : ''}`}>{(item.price * (item.quantity - (item.cancelledQuantity || 0))).toFixed(0)}</div>
               </div>
             </div>
-          )
-        }
+          ))
+        )}
         <div ref={cartEndRef} />
       </div>
 
