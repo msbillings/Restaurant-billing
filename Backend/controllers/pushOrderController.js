@@ -1,4 +1,5 @@
 import PushOrder from '../models/PushOrder.js';
+import { emitNotification } from '../utils/notificationHelper.js';
 
 // Get all push orders (can filter by status)
 export const getPushOrders = async (req, res) => {
@@ -21,18 +22,16 @@ export const receivePushOrder = async (req, res) => {
     const newOrder = new PushOrder(req.body);
     await newOrder.save();
     
-    // Emit a socket.io event here so the frontend dings
+    // Emit a tenant-scoped notification so the frontend dings
     console.log('New online order received:', newOrder._id);
-    if (req.app && req.app.locals.io) {
-      req.app.locals.io.emit('new_notification', {
-        id: `order-${newOrder._id}-${Date.now()}`,
-        type: 'info',
-        title: 'New Online Order',
-        message: `Order ${newOrder.platformOrderId || ''} received from website!`,
-        timestamp: new Date(),
-        targetRoles: ['Admin', 'Manager', 'Cashier']
-      });
-    }
+    emitNotification(
+      req,
+      'New Online Order',
+      `Order ${newOrder.platformOrderId || ''} received from website!`,
+      'info',
+      ['Admin', 'Manager', 'Cashier'],
+      { orderId: newOrder._id }
+    );
     
     res.status(201).json({ message: 'Order received successfully', orderId: newOrder._id });
   } catch (error) {

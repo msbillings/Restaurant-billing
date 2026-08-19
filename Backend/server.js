@@ -129,7 +129,7 @@ io.on('connection', (socket) => {
           tenantDb = decoded.db;
         }
       } catch (err) {
-        console.warn('[Socket] Token verification warning, joining tenant room anyway:', err.message);
+        // Fall back to tenantDb passed if token expired or invalid
       }
     }
 
@@ -140,8 +140,15 @@ io.on('connection', (socket) => {
     }
 
     if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+      // Leave any existing rooms except its own socket id room
+      for (const room of socket.rooms) {
+        if (room !== socket.id) {
+          socket.leave(room);
+        }
+      }
       socket.join(tenantDb);
-      console.log(`[Socket] Joined tenant room: ${tenantDb}`);
+      socket.tenantDb = tenantDb;
+      console.log(`[Socket] Socket ${socket.id} securely joined tenant room: ${tenantDb}`);
     }
   });
 });

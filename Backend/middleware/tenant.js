@@ -24,8 +24,10 @@ export const tenantMiddleware = async (req, res, next) => {
     if (tenantDbName && tenantDbName !== 'undefined' && tenantDbName !== 'null') {
       const models = await getTenantModels(tenantDbName);
       req.models = models;
+      req.tenantDb = tenantDbName;
     } else {
       req.models = null;
+      req.tenantDb = null;
     }
   } catch (error) {
     console.error('[TenantMiddleware] Error loading tenant models:', error);

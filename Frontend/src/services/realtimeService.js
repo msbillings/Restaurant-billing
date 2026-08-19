@@ -96,11 +96,18 @@ class RealtimeService {
       'new_notification',
       'settingsUpdated',
       'securitySettingsUpdated',
-      'spacesUpdated'
+      'spacesUpdated',
+      'menuUpdated'
     ];
 
     events.forEach(eventName => {
       this.socket.on(eventName, (data) => {
+        // Client-side tenant filtering: ignore events belonging to other tenants
+        const currentTenant = localStorage.getItem('resto_db_name');
+        if (data && data.tenantDb && currentTenant && data.tenantDb !== currentTenant) {
+          return;
+        }
+
         // Cache synchronization in background
         this.handleAutoCacheSync(eventName, data);
 

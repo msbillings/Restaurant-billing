@@ -16,9 +16,12 @@ export const getNotificationSocket = () => {
 };
 
 const useNotifications = (userRole = 'Admin') => {
+  const getTenantKey = () => localStorage.getItem('resto_db_name') || 'default';
+
   const [notifications, setNotifications] = useState(() => {
     try {
-      const saved = localStorage.getItem('realtime_notifications');
+      const tenantKey = getTenantKey();
+      const saved = localStorage.getItem(`realtime_notifications_${tenantKey}`) || localStorage.getItem('realtime_notifications');
       if (saved) {
         const parsed = JSON.parse(saved);
         const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
@@ -32,31 +35,43 @@ const useNotifications = (userRole = 'Admin') => {
     }
     return [];
   });
+
   const [unreadCount, setUnreadCount] = useState(() => {
     try {
-      return parseInt(localStorage.getItem('realtime_unread_count') || '0', 10);
+      const tenantKey = getTenantKey();
+      return parseInt(localStorage.getItem(`realtime_unread_count_${tenantKey}`) || localStorage.getItem('realtime_unread_count') || '0', 10);
     } catch {
       return 0;
     }
   });
 
-  // Save to localStorage whenever notifications change
+  // Save to localStorage whenever notifications change (tenant-scoped)
   useEffect(() => {
+    const tenantKey = getTenantKey();
     const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
     const freshNotifs = notifications.filter(n => {
       const t = new Date(n.time || n.timestamp || Date.now()).getTime();
       return t > twoDaysAgo;
     });
-    localStorage.setItem('realtime_notifications', JSON.stringify(freshNotifs));
+    localStorage.setItem(`realtime_notifications_${tenantKey}`, JSON.stringify(freshNotifs));
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem('realtime_unread_count', unreadCount.toString());
+    const tenantKey = getTenantKey();
+    localStorage.setItem(`realtime_unread_count_${tenantKey}`, unreadCount.toString());
   }, [unreadCount]);
 
   useEffect(() => {
     const handleNewNotification = (notification) => {
       if (!notification) return;
+
+      // Strict Tenant Filtering on Client
+      const activeTenant = localStorage.getItem('resto_db_name');
+      if (notification.tenantDb && activeTenant && notification.tenantDb !== activeTenant) {
+        console.warn(`[useNotifications] Blocked notification from other tenant (${notification.tenantDb} != ${activeTenant})`);
+        return;
+      }
+
       // Role-Based Filtering
       if (notification.targetRoles && !notification.targetRoles.includes(userRole) && userRole !== 'Admin') {
         return; // Ignore if user doesn't have the required role
@@ -95,10 +110,11 @@ const useNotifications = (userRole = 'Admin') => {
   const markAllAsRead = () => {
     setUnreadCount(0);
     try {
-      const existingRead = JSON.parse(localStorage.getItem('realtime_read_ids') || '[]');
+      const tenantKey = getTenantKey();
+      const existingRead = JSON.parse(localStorage.getItem(`realtime_read_ids_${tenantKey}`) || localStorage.getItem('realtime_read_ids') || '[]');
       const allNotifIds = notifications.map(n => n.id);
       const combined = Array.from(new Set([...existingRead, ...allNotifIds]));
-      localStorage.setItem('realtime_read_ids', JSON.stringify(combined));
+      localStorage.setItem(`realtime_read_ids_${tenantKey}`, JSON.stringify(combined));
     } catch (e) {
       console.error('Error marking all as read:', e);
     }

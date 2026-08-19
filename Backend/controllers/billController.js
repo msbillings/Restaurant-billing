@@ -8,22 +8,8 @@ import { updateTableStatusHelper } from './floorController.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 import { updateCustomerFromBill, syncCustomer } from './customerController.js';
 import { emitNotification } from '../utils/notificationHelper.js';
+import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
-
-const emitSocketEvent = (req, eventName, data) => {
-  try {
-    const io = req.app?.locals?.io;
-    if (io) {
-      const tenantDb = req.tenantDb || req.headers['x-tenant-db'] || req.user?.db;
-      if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
-        io.to(tenantDb).emit(eventName, data);
-      }
-      io.emit(eventName, data);
-    }
-  } catch (err) {
-    console.error('Socket emit error:', err);
-  }
-};
 
 // Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1" vs "1" vs "Table 01")
 const getTableMatchCondition = (tblStr) => {
