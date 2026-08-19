@@ -100,6 +100,11 @@ export const getActiveOrder = async (req, res) => {
     }).lean();
 
     if (order) {
+      const hasValidItems = order.items && order.items.length > 0 && order.items.some(i => (Number(i.quantity || 0) > 0 || (i.printedQuantity || 0) > 0));
+      if (!hasValidItems) {
+        return res.json(null);
+      }
+
       if (order.kots && Array.isArray(order.kots)) {
         const kotStatusMap = {};
         order.kots.forEach(kot => {
@@ -162,7 +167,50 @@ export const saveOrder = async (req, res) => {
       return res.status(400).json({ message: 'Table number is required' });
     }
     
+    // Handle empty items array or removing all items from a table:
     if (!items || !Array.isArray(items) || items.length === 0) {
+      let existingOrder = null;
+      if (id) {
+        existingOrder = await Bill.findById(id);
+      } else if (tableNo) {
+        existingOrder = await Bill.findOne({ 
+          tableNo: getTableMatchCondition(tableNo), 
+          status: { $in: ['Open', 'Billed'] } 
+        });
+      }
+
+      if (existingOrder) {
+        const hasPrintedKots = existingOrder.kots && existingOrder.kots.length > 0;
+        const hasPrintedItems = (existingOrder.items || []).some(i => (i.printedQuantity || 0) > 0);
+
+        if (!hasPrintedKots && !hasPrintedItems) {
+          // Unprinted draft order: Cancel/delete it and release table
+          existingOrder.status = 'Cancelled';
+          existingOrder.cancelReason = 'All unprinted items removed from table';
+          existingOrder.items = [];
+          existingOrder.subtotal = 0;
+          existingOrder.total = 0;
+          await existingOrder.save();
+
+          cache.clear('dailyStats');
+          cache.clear('openOrders');
+
+          emitSocketEvent(req, 'orderUpdated', { tableNo: existingOrder.tableNo, status: 'Cancelled', orderId: existingOrder._id });
+
+          if (existingOrder.billType === 'Dine-In') {
+            updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => {});
+          }
+
+          return res.status(200).json({ 
+            _id: existingOrder._id, 
+            tableNo: existingOrder.tableNo, 
+            status: 'Cancelled', 
+            items: [], 
+            total: 0 
+          });
+        }
+      }
+
       return res.status(400).json({ message: 'Items array is required and must not be empty' });
     }
 
@@ -1010,18 +1058,23 @@ export const getOpenOrders = async (req, res) => {
 
     const dynamicTaxRate = await getDynamicTaxRate(req);
 
-    const formattedOrders = orders.map(order => {
-      const subtotal = (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
-      const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
-      const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
-      const totalWithTax = Math.round(subtotal + taxAmount);
-      return {
-        ...order,
-        subtotal,
-        tax: taxRate,
-        total: totalWithTax
-      };
-    });
+    const formattedOrders = orders
+      .filter(order => {
+        const validItems = (order.items || []).filter(i => (Number(i.quantity || 0) > 0 || (i.printedQuantity || 0) > 0));
+        return validItems.length > 0;
+      })
+      .map(order => {
+        const subtotal = (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
+        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+        const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+        const totalWithTax = Math.round(subtotal + taxAmount);
+        return {
+          ...order,
+          subtotal,
+          tax: taxRate,
+          total: totalWithTax
+        };
+      });
 
     res.json(formattedOrders);
   } catch (error) {

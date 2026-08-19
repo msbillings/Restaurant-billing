@@ -174,23 +174,33 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
     // Real-Time Events via singleton RealtimeService
     const handleRealtimeRefresh = (data) => {
-      if (data && data.order) {
-        const orderTableNorm = normalizeTable(data.order.tableNo);
-        setOrders(prev => {
-          const matchIndex = prev.findIndex(o => 
-            (data.order._id && o._id === data.order._id) || 
-            (orderTableNorm && normalizeTable(o.tableNo) === orderTableNorm)
-          );
-          if (data.order.status === 'Paid' || data.order.status === 'Cancelled') {
-            return prev.filter(o => o._id !== data.order._id && normalizeTable(o.tableNo) !== orderTableNorm);
-          }
-          if (matchIndex >= 0) {
-            const copy = [...prev];
-            copy[matchIndex] = data.order;
-            return copy;
-          }
-          return [data.order, ...prev];
-        });
+      if (data) {
+        const targetTable = data.tableNo || data.order?.tableNo;
+        const targetTableNorm = targetTable ? normalizeTable(targetTable) : null;
+        const targetStatus = data.status || data.order?.status;
+
+        if (targetStatus === 'Paid' || targetStatus === 'Cancelled' || targetStatus === 'Available') {
+          setOrders(prev => prev.filter(o => {
+            if (data.orderId && o._id === data.orderId) return false;
+            if (data.order?._id && o._id === data.order._id) return false;
+            if (targetTableNorm && normalizeTable(o.tableNo) === targetTableNorm) return false;
+            return true;
+          }));
+        } else if (data.order) {
+          const orderTableNorm = normalizeTable(data.order.tableNo);
+          setOrders(prev => {
+            const matchIndex = prev.findIndex(o => 
+              (data.order._id && o._id === data.order._id) || 
+              (orderTableNorm && normalizeTable(o.tableNo) === orderTableNorm)
+            );
+            if (matchIndex >= 0) {
+              const copy = [...prev];
+              copy[matchIndex] = data.order;
+              return copy;
+            }
+            return [data.order, ...prev];
+          });
+        }
       }
       fetchOrders();
       syncSpaces();

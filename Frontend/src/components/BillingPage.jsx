@@ -566,6 +566,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status
           }));
 
+        if (backendItems.length === 0) {
+          setCart([]);
+          setOrderId(null);
+          setOrderStatus('Open');
+          setBillNumber(null);
+          return;
+        }
+
         setCart(backendItems);
         setOrderId(order._id);
         setOrderStatus(order.status);
@@ -695,7 +703,38 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const syncTimeoutRef = useRef(null);
 
   const autoSyncOrder = useCallback((targetTable, currentCart, currentOrderId) => {
-    if (!targetTable || !currentCart || currentCart.length === 0) return;
+    if (!targetTable) return;
+
+    if (!currentCart || currentCart.length === 0) {
+      // Clear debounced save
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+
+      // Instantly remove from IndexedDB and local state
+      if (currentOrderId) {
+        removeCachedOpenOrder(currentOrderId).catch(() => {});
+      }
+      removeCachedOpenOrder(targetTable).catch(() => {});
+      setOpenOrdersList(prev => prev.filter(o => o.tableNo !== targetTable && o._id !== currentOrderId));
+      setOrderId(null);
+      setOrderStatus('Open');
+      setBillNumber(null);
+
+      // Notify backend to cancel/delete the draft order and free the table
+      saveOrder({
+        tableNo: targetTable,
+        items: [],
+        billType,
+        ...(currentOrderId && !currentOrderId.startsWith('offline_') && { id: currentOrderId })
+      }).then(() => {
+        if (onOrderUpdate) onOrderUpdate();
+        realtimeService.emit('orderUpdated', { tableNo: targetTable, status: 'Cancelled', orderId: currentOrderId });
+        realtimeService.emit('tableStatusChanged', { tableNo: targetTable, status: 'Available' });
+      }).catch((err) => {
+        console.warn('Auto-sync empty order error:', err);
+      });
+      return;
+    }
+
     const computedTax = taxRate === '' ? 0 : parseFloat(taxRate) || 0;
     const orderData = {
       tableNo: targetTable,
@@ -724,10 +763,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     syncTimeoutRef.current = setTimeout(() => {
       saveOrder(orderData).then((saved) => {
         if (saved && saved._id) {
-          if (!currentOrderId || currentOrderId !== saved._id) {
-            setOrderId(saved._id);
+          if (saved.status === 'Cancelled' || !saved.items || saved.items.length === 0) {
+            setOrderId(null);
+            removeCachedOpenOrder(saved._id).catch(() => {});
+            removeCachedOpenOrder(targetTable).catch(() => {});
+          } else {
+            if (!currentOrderId || currentOrderId !== saved._id) {
+              setOrderId(saved._id);
+            }
+            upsertCachedOpenOrder(saved).catch(() => {});
           }
-          upsertCachedOpenOrder(saved).catch(() => {});
           if (onOrderUpdate) onOrderUpdate();
         }
       }).catch((err) => {
