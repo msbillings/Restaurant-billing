@@ -24,7 +24,9 @@ export const getApiUrl = () => {
     // Capacitor APK without a stored IP — use cloud/production URL
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_API_URL;
-        if (envUrl) return envUrl;
+        if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+            return envUrl;
+        }
         return 'https://restaurant-billing-apk.vercel.app/api';
     }
 
