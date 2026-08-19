@@ -240,7 +240,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-background px-2.5 py-4 sm:p-6 overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Top Navigation */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 shrink-0">
         <div className="flex items-center gap-3">

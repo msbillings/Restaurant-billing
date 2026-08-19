@@ -15,7 +15,7 @@ const getPublicApiUrl = () => {
 
 const API_BASE_URL = getPublicApiUrl();
 const apiClient = axios.create({
-  timeout: 10000
+  timeout: 35000
 });
 
 const CustomerMenu = () => {
@@ -279,7 +279,7 @@ const CustomerMenu = () => {
       return;
     }
 
-    const fetchMenu = async () => {
+    const fetchMenu = async (retryAttempt = 0) => {
       try {
         const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
           headers: {
@@ -300,9 +300,15 @@ const CustomerMenu = () => {
           // Never block menu viewing; verify location in parallel
           setLoading(false);
           verifyLocation(menuRes.data.restaurantSettings);
+          return;
         }
       } catch (err) {
-        console.error("Failed to load menu", err);
+        console.warn(`[PublicMenu] Attempt ${retryAttempt + 1} failed:`, err);
+        if (retryAttempt < 2) {
+          await new Promise(r => setTimeout(r, 1200));
+          return fetchMenu(retryAttempt + 1);
+        }
+        
         // If we already have items from cache, don't show full error
         setItems(prev => {
           if (prev.length === 0) {

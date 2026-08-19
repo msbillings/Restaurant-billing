@@ -345,10 +345,11 @@ function App() {
 
     setTimeout(() => setLoading(false), 0);
 
-    // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue)
-    initSyncEngine();
-
-    setTimeout(() => syncConfigFromBackend(), 0);
+    // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue for POS only)
+    if (!window.location.pathname.includes('order')) {
+      initSyncEngine();
+      setTimeout(() => syncConfigFromBackend(), 0);
+    }
 
     const fetchSuperAdminConfig = async () => {
       try {
@@ -1618,7 +1619,7 @@ function App() {
             <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           </Suspense>
 
-          <main className={`flex-1 overflow-y-auto overflow-x-hidden pb-[calc(76px+env(safe-area-inset-bottom,0px))] ${['floor', 'billing'].includes(view) ? 'md:pb-0' : 'p-2 sm:p-6 md:pb-6'}`}>
+          <main className={`flex-1 overflow-y-auto overflow-x-hidden ${['floor', 'billing', 'dashboard', 'analytics'].includes(view) ? 'p-0' : 'p-2 sm:p-4 md:p-6'}`}>
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-4">
