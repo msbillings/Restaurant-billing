@@ -25,20 +25,43 @@ const emitSocketEvent = (req, eventName, data) => {
   }
 };
 
-// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
+// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1" vs "1" vs "Table 01")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
-  const variations = [tblStr, trimmed];
+  
+  // Extract table part if floor prefix exists (e.g. "Floor 1 - Table 1" -> "Table 1")
+  let tablePart = trimmed;
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
-    const floorPart = parts[0].trim();
-    const tablePart = parts.slice(1).join(' - ').trim();
-    variations.push(`${floorPart} - ${tablePart}`);
-    variations.push(tablePart);
-    variations.push(`${floorPart.toLowerCase()} - ${tablePart.toLowerCase()}`);
+    tablePart = parts.slice(1).join(' - ').trim();
   }
-  return { $in: [...new Set(variations)] };
+
+  // Extract number if exists (e.g. "Table 1" -> "1", "T2" -> "2")
+  const numMatch = tablePart.match(/\d+/);
+  const num = numMatch ? numMatch[0] : null;
+
+  const patterns = [];
+  const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  patterns.push(`^${escapedTrimmed}$`);
+
+  if (tablePart !== trimmed) {
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(`^${escapedTable}$`);
+    patterns.push(`.*-\\s*${escapedTable}$`);
+  } else {
+    // If input was just "Table 1", it might be stored as "Floor 1 - Table 1" in DB
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(`.*-\\s*${escapedTable}$`);
+  }
+
+  if (num) {
+    const numInt = parseInt(num, 10);
+    // Matches "Table 1", "Table 01", "Table1", "Floor X - Table 1", "T1", "1", "Floor X - 1"
+    patterns.push(`^(?:.*-\\s*)?(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
+  }
+
+  return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
 

@@ -270,6 +270,9 @@ const CustomerMenu = () => {
     socket.on('orderUpdated', checkOrderStatus);
     socket.on('newKOT', checkOrderStatus);
     socket.on('billSettled', checkOrderStatus);
+    socket.on('foodReady', () => {
+      checkOrderStatus();
+    });
     socket.on('prepTimeUpdated', (data) => {
       setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
       setTimeout(() => setServiceMessage(''), 5000);
@@ -575,14 +578,18 @@ const CustomerMenu = () => {
                   ? 'bg-emerald-100 text-emerald-700'
                   : activeOrderData.kitchenStatus === 'Preparing'
                   ? 'bg-amber-100 text-amber-700'
+                  : activeOrderData.kitchenStatus === 'Completed'
+                  ? 'bg-purple-100 text-purple-700'
                   : 'bg-blue-100 text-blue-700'
               }`}>
                 <span className={`w-2 h-2 rounded-full animate-pulse inline-block ${
                   activeOrderData.kitchenStatus === 'Ready' ? 'bg-emerald-500' :
-                  activeOrderData.kitchenStatus === 'Preparing' ? 'bg-amber-500' : 'bg-blue-500'
+                  activeOrderData.kitchenStatus === 'Preparing' ? 'bg-amber-500' :
+                  activeOrderData.kitchenStatus === 'Completed' ? 'bg-purple-500' : 'bg-blue-500'
                 }`}></span>
-                {activeOrderData.kitchenStatus === 'Ready' ? t('Ready') :
-                 activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') : t('Received')}
+                {activeOrderData.kitchenStatus === 'Ready' ? t('Prepared & Ready') :
+                 activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') :
+                 activeOrderData.kitchenStatus === 'Completed' ? t('Bill Generated') : t('Received')}
               </div>
             </div>
 
@@ -591,6 +598,9 @@ const CustomerMenu = () => {
               {activeOrderData.items.filter(i => !i.isCancelled).map((item, idx) => {
                 const effectiveQty = item.quantity - (item.cancelledQuantity || 0);
                 const itemTotal = item.price * effectiveQty;
+                const isPrepared = item.kdsStatus === 'Ready' || item.status === 'Ready';
+                const isPreparing = item.kdsStatus === 'Preparing' || item.status === 'Preparing';
+
                 return (
                   <div key={item._id || idx} className="flex items-center justify-between px-4 py-2.5 gap-3">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -605,8 +615,20 @@ const CustomerMenu = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {item.cancellationRequested && (
+                      {item.cancellationRequested ? (
                         <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                      ) : isPrepared ? (
+                        <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                          <Check size={10} strokeWidth={3} /> {t("Prepared")}
+                        </span>
+                      ) : isPreparing ? (
+                        <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                          👨‍🍳 {t("Preparing")}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-bold">
+                          ⏳ {t("Received")}
+                        </span>
                       )}
                       <span className="text-xs font-black text-orange-600">₹{itemTotal}</span>
                     </div>
@@ -722,10 +744,10 @@ const CustomerMenu = () => {
       {activeOrderData && (
         <>
           {/* Mini bar at bottom — tap to open modal */}
-          {orderStatus === 'menu' && activeOrderData.kitchenStatus !== 'Completed' && (
+          {orderStatus === 'menu' && (
             <motion.div
               initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
-              className="fixed bottom-6 left-0 right-0 px-4 z-30"
+              className={`fixed ${cart.length > 0 ? 'bottom-20' : 'bottom-6'} left-0 right-0 px-4 z-30 transition-all duration-300`}
             >
               <button
                 onClick={() => setShowOrderModal(prev => !prev)}
@@ -734,15 +756,21 @@ const CustomerMenu = () => {
                     ? 'bg-emerald-600 border-2 border-emerald-400'
                     : activeOrderData.kitchenStatus === 'Preparing'
                     ? 'bg-amber-600'
+                    : activeOrderData.kitchenStatus === 'Completed'
+                    ? 'bg-purple-600'
                     : 'bg-blue-600'
                 }`}
               >
                 <span className="font-bold flex items-center gap-2 text-sm">
-                  {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
+                  {activeOrderData.kitchenStatus === 'Ready' ? '🎉' :
+                   activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' :
+                   activeOrderData.kitchenStatus === 'Completed' ? '🧾' : '📋'}
                   {activeOrderData.kitchenStatus === 'Ready'
-                    ? t("Order Ready & Served!")
+                    ? t("Food Prepared & Ready!")
                     : activeOrderData.kitchenStatus === 'Preparing'
-                    ? t("Order in Kitchen")
+                    ? t("Order in Kitchen (Preparing)")
+                    : activeOrderData.kitchenStatus === 'Completed'
+                    ? t("Bill Generated (Ready to Pay)")
                     : t("Order Received")}
                 </span>
                 <div className="flex items-center gap-2 shrink-0">
@@ -776,17 +804,23 @@ const CustomerMenu = () => {
                       ? 'bg-emerald-600'
                       : activeOrderData.kitchenStatus === 'Preparing'
                       ? 'bg-amber-600'
+                      : activeOrderData.kitchenStatus === 'Completed'
+                      ? 'bg-purple-600'
                       : 'bg-blue-600'
                   }`}
                 >
                   {/* Modal Header */}
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-black flex items-center gap-2">
-                      {activeOrderData.kitchenStatus === 'Ready' ? '🎉' : activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' : '📋'}
+                      {activeOrderData.kitchenStatus === 'Ready' ? '🎉' :
+                       activeOrderData.kitchenStatus === 'Preparing' ? '👨‍🍳' :
+                       activeOrderData.kitchenStatus === 'Completed' ? '🧾' : '📋'}
                       {activeOrderData.kitchenStatus === 'Ready'
-                        ? t("Order Ready & Served!")
+                        ? t("Food Prepared & Ready!")
                         : activeOrderData.kitchenStatus === 'Preparing'
                         ? t("Order in Kitchen")
+                        : activeOrderData.kitchenStatus === 'Completed'
+                        ? t("Bill Generated")
                         : t("Order Received")}
                     </h2>
                     <span className="font-black text-2xl">₹{activeOrderData.total}</span>
@@ -796,7 +830,7 @@ const CustomerMenu = () => {
                   <div className="flex items-center gap-3">
                     <div className="h-3 flex-1 bg-black/20 rounded-full overflow-hidden">
                       <div className={`h-full bg-white rounded-full transition-all duration-500 ${
-                        activeOrderData.kitchenStatus === 'Ready' ? 'w-full'
+                        activeOrderData.kitchenStatus === 'Ready' || activeOrderData.kitchenStatus === 'Completed' ? 'w-full'
                           : activeOrderData.kitchenStatus === 'Preparing' ? 'w-2/3'
                           : 'w-1/3'
                       }`} />
@@ -809,17 +843,19 @@ const CustomerMenu = () => {
                     {t("Status")}:{' '}
                     <span className="font-black">
                       {activeOrderData.kitchenStatus === 'Ready'
-                        ? t("Food is Ready! Hot & Fresh 🍲")
+                        ? t("Food is Prepared! Hot & Fresh 🍲")
                         : activeOrderData.kitchenStatus === 'Preparing'
                         ? t("Chef is preparing your food...")
+                        : activeOrderData.kitchenStatus === 'Completed'
+                        ? t("Bill generated. Ready for payment 💳")
                         : t("Sent to Kitchen ⏳")}
                     </span>
                   </p>
 
                   {/* Steps indicator */}
                   <div className="flex items-center gap-2 mt-1">
-                    {['Order Received', 'Preparing', 'Ready'].map((step, i) => {
-                      const currentIdx = activeOrderData.kitchenStatus === 'Ready' ? 2 : activeOrderData.kitchenStatus === 'Preparing' ? 1 : 0;
+                    {['Order Received', 'Preparing', 'Prepared'].map((step, i) => {
+                      const currentIdx = (activeOrderData.kitchenStatus === 'Ready' || activeOrderData.kitchenStatus === 'Completed') ? 2 : activeOrderData.kitchenStatus === 'Preparing' ? 1 : 0;
                       return (
                         <React.Fragment key={step}>
                           <div className={`flex flex-col items-center gap-1`}>
@@ -877,8 +913,14 @@ const CustomerMenu = () => {
                               <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-1 rounded-full text-white/90">{t("Rejected")}</span>
                             ) : item.cancellationRequested ? (
                               <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">{item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}</span>
-                            ) : (item.kdsStatus === 'Preparing' || item.kdsStatus === 'Ready') ? (
-                              <span className="text-[10px] font-bold bg-amber-500/40 px-2 py-1 rounded-full text-white/90">👨‍🍳 {t("Preparing...")}</span>
+                            ) : (item.kdsStatus === 'Ready' || item.status === 'Ready') ? (
+                              <span className="text-[10px] font-bold bg-emerald-500/60 text-white border border-emerald-400/40 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                                <Check size={11} strokeWidth={3} /> {t("Prepared")}
+                              </span>
+                            ) : (item.kdsStatus === 'Preparing' || item.status === 'Preparing') ? (
+                              <span className="text-[10px] font-bold bg-amber-500/50 text-white border border-amber-400/30 px-2.5 py-1 rounded-full flex items-center gap-1">
+                                👨‍🍳 {t("Preparing...")}
+                              </span>
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}

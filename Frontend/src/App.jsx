@@ -259,7 +259,7 @@ function App() {
   }, [isCaptain, view]);
 
   useEffect(() => {
-    if (isChef && view !== 'kds') {
+    if (isChef && !['kds', 'kothistory', 'notification'].includes(view)) {
       setTimeout(() => setView('kds'), 0);
     }
   }, [isChef, view]);
@@ -1284,6 +1284,44 @@ function App() {
 
           <nav className="flex-1 px-3 pt-8 pb-4 space-y-6 overflow-y-auto custom-scrollbar">
 
+            {/* CHEF SECTION */}
+            {isChef && (
+              <div>
+                <div className="px-3 py-1 mb-1.5 flex items-center justify-between">
+                  <h3 className="text-[13px] font-black text-amber-500 uppercase tracking-widest">{t('Chef Portal')}</h3>
+                </div>
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => handleViewChange('kds')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kds' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-lg shadow-amber-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                    <UtensilsCrossed size={22} />
+                    <span>{t('Kitchen Display (KDS)')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleViewChange('kothistory')}
+                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'kothistory' ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                    <Printer size={22} />
+                    <span>{t('KOT Page / History')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleViewChange('notification')}
+                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'notification' ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+                    <div className="flex items-center gap-3">
+                      <Bell size={22} />
+                      <span>{t('Notifications')}</span>
+                    </div>
+                    {totalUnreadCount > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${view === 'notification' ? 'bg-white text-red-600' : 'bg-red-500 text-white'}`}>
+                        {totalUnreadCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* MAIN SECTION */}
             {!isChef &&
               <div>
@@ -1359,7 +1397,7 @@ function App() {
             }
 
             {/* OPERATIONS SECTION */}
-            {!isCaptain && (features.kds !== false || features.expenses !== false || features.delivery !== false) &&
+            {!isCaptain && !isChef && (features.kds !== false || features.expenses !== false || features.delivery !== false) &&
               <div>
                 <button
                   onClick={() => setSidebarSections((s) => ({ ...s, operations: !s.operations }))}

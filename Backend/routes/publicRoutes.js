@@ -11,20 +11,43 @@ import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 
-// Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
-const getTableMatchCondition = (tblStr) => {
+// Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1" vs "1" vs "Table 01")
+export const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
+  
+  // Extract table part if floor prefix exists (e.g. "Floor 1 - Table 1" -> "Table 1")
+  let tablePart = trimmed;
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
-    const floorPart = parts[0].trim();
-    const tablePart = parts.slice(1).join(' - ').trim();
-    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^${escapedFloor}\\s*-\\s*${escapedTable}$`, 'i');
+    tablePart = parts.slice(1).join(' - ').trim();
   }
-  const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escapedClean}$`, 'i');
+
+  // Extract number if exists (e.g. "Table 1" -> "1", "T2" -> "2")
+  const numMatch = tablePart.match(/\d+/);
+  const num = numMatch ? numMatch[0] : null;
+
+  const patterns = [];
+  const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  patterns.push(`^${escapedTrimmed}$`);
+
+  if (tablePart !== trimmed) {
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(`^${escapedTable}$`);
+    patterns.push(`.*-\\s*${escapedTable}$`);
+  } else {
+    // If input was just "Table 1", it might be stored as "Floor 1 - Table 1" in DB
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    patterns.push(`.*-\\s*${escapedTable}$`);
+  }
+
+  if (num) {
+    const numInt = parseInt(num, 10);
+    // Matches "Table 1", "Table 01", "Table1", "Floor X - Table 1", "T1", "1", "Floor X - 1"
+    patterns.push(`^(?:.*-\\s*)?(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
+  }
+
+  return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
 // Public endpoint to fetch categories and active menu items
@@ -117,7 +140,7 @@ router.post('/order', async (req, res) => {
 
     // Case-insensitive table matching for open order
     const tableRegex = getTableMatchCondition(tableNo);
-    let bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed'] } });
+    let bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } });
 
     const kotNumber = `KOT-${(bill && bill.kots ? bill.kots.length : 0) + 1}`;
     const newKotTicket = {
@@ -298,23 +321,34 @@ router.get('/order-status', async (req, res) => {
     
     // Find the most recent active order for this table
     const tableRegex = getTableMatchCondition(tableNo);
-    const bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed'] } }).sort({ createdAt: -1 });
+    const bill = await Bill.findOne({ 
+      tableNo: tableRegex, 
+      status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
+    }).sort({ createdAt: -1 });
     
     if (!bill) {
       return res.status(404).json({ message: 'No active order found' });
     }
 
-    let kitchenStatus = 'Preparing';
+    let kitchenStatus = 'Pending';
     if (bill.status === 'Billed') {
       kitchenStatus = 'Completed';
-    } else if (bill.kots && bill.kots.length > 0) {
-      const allItems = bill.kots.flatMap(k => k.items || []);
+    } else {
+      let allItems = [];
+      if (bill.kots && bill.kots.length > 0) {
+        allItems = bill.kots.flatMap(k => k.items || []).filter(i => !i.isCancelled);
+      }
+      if (allItems.length === 0 && bill.items && bill.items.length > 0) {
+        allItems = bill.items.filter(i => !i.isCancelled);
+      }
+
       if (allItems.length > 0) {
         const allReady = allItems.every(i => i.status === 'Ready');
         const anyPreparing = allItems.some(i => i.status === 'Preparing');
+        const anyReady = allItems.some(i => i.status === 'Ready');
         if (allReady) {
           kitchenStatus = 'Ready';
-        } else if (anyPreparing) {
+        } else if (anyPreparing || anyReady) {
           kitchenStatus = 'Preparing';
         } else {
           kitchenStatus = 'Pending';
@@ -330,7 +364,7 @@ router.get('/order-status', async (req, res) => {
     let taxBreakdown = { cgst: 0, sgst: 0, igst: 0 };
     let computedTotal = bill.total;
 
-    if (bill.status === 'Open' || bill.status === 'open') {
+    if (bill.status === 'Open' || bill.status === 'open' || bill.status === 'Occupied' || bill.status === 'Pending') {
       taxAmount = Number(((subTotal * currentTaxRate) / 100).toFixed(2));
       const effectiveCgst = currentTaxRate === taxRate ? cgstRate : currentTaxRate / 2;
       const effectiveSgst = currentTaxRate === taxRate ? sgstRate : currentTaxRate / 2;
@@ -348,7 +382,7 @@ router.get('/order-status', async (req, res) => {
     const processedItems = (bill.items || []).map(item => {
       let prepMins = item.prepTimeMinutes;
       let prepStart = item.prepStartTime;
-      let kdsStatus = 'Pending'; // default: not yet picked up by KDS
+      let kdsStatus = item.status || 'Pending'; // default to item.status if present
 
       if (bill.kots) {
         bill.kots.forEach(k => {
@@ -358,10 +392,12 @@ router.get('/order-status', async (req, res) => {
                 prepMins = ki.prepTimeMinutes;
                 prepStart = ki.prepStartTime;
               }
-              // Capture the latest KDS status for this item
-              if (ki.status && (ki.status === 'Preparing' || ki.status === 'Ready')) {
-                kdsStatus = ki.status;
-              } else if (ki.status) {
+              // Prioritize Ready, then Preparing, then others
+              if (ki.status === 'Ready') {
+                kdsStatus = 'Ready';
+              } else if (ki.status === 'Preparing' && kdsStatus !== 'Ready') {
+                kdsStatus = 'Preparing';
+              } else if (ki.status && kdsStatus === 'Pending') {
                 kdsStatus = ki.status;
               }
             }
@@ -380,6 +416,7 @@ router.get('/order-status', async (req, res) => {
 
     res.status(200).json({
       _id: bill._id,
+      billNumber: bill.billNumber,
       status: bill.status,
       kitchenStatus,
       total: computedTotal,

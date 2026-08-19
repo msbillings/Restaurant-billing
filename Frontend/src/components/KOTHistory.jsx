@@ -2,7 +2,7 @@ import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
 import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
-import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp, ChefHat } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
@@ -225,6 +225,16 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-4 w-full md:w-auto">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('kds')}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+            >
+              <ChefHat size={16} />
+              <span>{t("Kitchen Display (KDS)")}</span>
+            </button>
+          )}
+
           {/* Search Bar */}
           <div className="relative w-full sm:w-64">
             <input
@@ -237,7 +247,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
           </div>
 
           {/* Date Picker */}
-          <div className="flex items-center gap-1.5 bg-background px-3 py-2 rounded-xl border border-border text-xs shrink-0 shadow-2xs">
+          <div className="flex items-center gap-1.5 bg-background px-3 py-2 rounded-xl border border-border text-xs shrink-0 shadow-2xs w-full sm:w-auto justify-center">
             <input
               type="date"
               value={selectedDate}

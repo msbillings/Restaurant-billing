@@ -37,9 +37,9 @@ const GlobalHeader = ({
           </button>
         )}
         <button
-          onClick={() => onNavigate && onNavigate('floor')}
+          onClick={() => onNavigate && onNavigate(userRole === 'Chef' ? 'kds' : 'floor')}
           className="flex items-center cursor-pointer select-none py-1 px-1 min-w-[150px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity focus:outline-none shrink-0 overflow-visible"
-          title={t("Go to Table View / Floor Management")}>
+          title={t(userRole === 'Chef' ? "Go to Kitchen Display" : "Go to Table View / Floor Management")}>
           <img
             src={logoImg}
             alt="msbillings"
@@ -49,27 +49,31 @@ const GlobalHeader = ({
         </button>
       </div>
 
-      {/* Middle section: New Order & Search */}
+      {/* Middle section: New Order & Search (Hidden for Chef) */}
       <div className="flex items-center gap-2 sm:gap-4 flex-1 justify-center px-2 sm:px-4 max-w-2xl">
-        <button
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('createNewOrder'));
-            onNavigate('billing');
-          }}
-          className="bg-danger hover:bg-red-700 text-white font-bold py-1.5 px-3 sm:px-6 rounded-lg shadow-xs transition-colors whitespace-nowrap text-xs sm:text-sm">
-          {t("New Order")}
-        </button>
-        
-        <div className="relative w-full max-w-md hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input
-            type="text" 
-            placeholder={t("Bill No")}
-            value={searchBillNo}
-            onChange={(e) => setSearchBillNo(e.target.value)}
-            onKeyDown={handleSearchKeyPress}
-            className="w-full pl-9 pr-4 py-1.5 bg-surface border border-border rounded-lg focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main" />
-        </div>
+        {userRole !== 'Chef' && (
+          <>
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('createNewOrder'));
+                onNavigate('billing');
+              }}
+              className="bg-danger hover:bg-red-700 text-white font-bold py-1.5 px-3 sm:px-6 rounded-lg shadow-xs transition-colors whitespace-nowrap text-xs sm:text-sm">
+              {t("New Order")}
+            </button>
+            
+            <div className="relative w-full max-w-md hidden md:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+              <input
+                type="text" 
+                placeholder={t("Bill No")}
+                value={searchBillNo}
+                onChange={(e) => setSearchBillNo(e.target.value)}
+                onKeyDown={handleSearchKeyPress}
+                className="w-full pl-9 pr-4 py-1.5 bg-surface border border-border rounded-lg focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main" />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right section: Support & Icons */}
@@ -88,7 +92,7 @@ const GlobalHeader = ({
           <button onClick={onCalculatorToggle} className="hover:text-primary transition-colors p-1.5 rounded-lg touch-target flex items-center justify-center">
             <Calculator size={18} />
           </button>
-          <button className="hover:text-primary transition-colors relative p-1.5 rounded-lg touch-target flex items-center justify-center" onClick={() => onNavigate('operations')}>
+          <button className="hover:text-primary transition-colors relative p-1.5 rounded-lg touch-target flex items-center justify-center" onClick={() => onNavigate(userRole === 'Chef' ? 'notification' : 'operations')}>
             <Bell size={18} />
             {unreadCount > 0 && (
               <span className="absolute top-0 right-0 w-4 h-4 bg-danger rounded-full border border-white text-[9px] text-white flex items-center justify-center font-bold">

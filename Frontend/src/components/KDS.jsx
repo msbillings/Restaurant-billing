@@ -1,7 +1,7 @@
 import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChefHat, CheckCircle, Clock, Timer, Ban } from 'lucide-react';
+import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer } from 'lucide-react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
 import Toast from './Toast';
@@ -15,7 +15,17 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const [customPrepInputs, setCustomPrepInputs] = useState({});
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
+  const [activeTableIndex, setActiveTableIndex] = useState(0);
+  const scrollContainerRef = useRef(null);
   const fetchingRef = useRef(false);
+
+  const scrollToTable = (tableNo, index) => {
+    setActiveTableIndex(index);
+    const element = document.getElementById(`kds-table-${tableNo}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -280,12 +290,67 @@ const KDS = ({ onNavigate, onGoBack }) => {
             <span>{t("KITCHEN DISPLAY SYSTEM")}</span>
           </h1>
         </div>
-        <div className="text-slate-400 font-mono text-xs sm:text-sm bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl self-end sm:self-auto font-bold">
-          {new Date().toLocaleTimeString()}
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('kothistory')}
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+              title={t("Open KOT Page / History")}
+            >
+              <Printer size={15} />
+              <span>{t("KOT Page / History")}</span>
+            </button>
+          )}
+          <div className="text-slate-400 font-mono text-xs sm:text-sm bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl font-bold">
+            {new Date().toLocaleTimeString()}
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory scroll-smooth custom-scrollbar">
+      {/* Mobile Swipe Guidance Banner & Table Quick-Select */}
+      {groupedKOTs.length > 1 && (
+        <div className="flex flex-col sm:hidden gap-2 mb-3 shrink-0">
+          <div className="flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 border border-amber-500/40 rounded-2xl px-3.5 py-2 shadow-lg shadow-amber-950/40 backdrop-blur-sm animate-pulse">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">👆</span>
+              <span className="text-xs font-black text-amber-300 tracking-wide">
+                {t("Swipe to view another table food")}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono font-black bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/40">
+              {groupedKOTs.length} {t("Tables")}
+            </span>
+          </div>
+
+          {/* Quick Table Switch Pills */}
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {groupedKOTs.map((group, idx) => {
+              const pendingCount = group.items.filter(i => !i.isCancelled && (i.status === 'Pending' || i.status === 'Preparing')).length;
+              const isSelected = activeTableIndex === idx;
+              return (
+                <button
+                  key={`pill-${group.tableNo}`}
+                  onClick={() => scrollToTable(group.tableNo, idx)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 border ${
+                    isSelected
+                      ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md font-black ring-2 ring-amber-400/50'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <span>{group.tableNo}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    isSelected ? 'bg-slate-950 text-amber-400 font-black' : 'bg-slate-800 text-slate-400 font-bold'
+                  }`}>
+                    {pendingCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div ref={scrollContainerRef} className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory scroll-smooth custom-scrollbar">
         <div className="flex gap-3.5 sm:gap-4 h-full">
           {groupedKOTs.length === 0 ? (
             <div className="w-full flex flex-col items-center justify-center text-slate-500 font-bold text-lg sm:text-xl p-8">
@@ -293,14 +358,14 @@ const KDS = ({ onNavigate, onGoBack }) => {
               <span>{t("No Active Tickets")}</span>
             </div>
           ) : (
-            groupedKOTs.map((group) => {
+            groupedKOTs.map((group, idx) => {
               const tableMinutesOld = Math.floor((new Date() - new Date(group.createdAt)) / 60000);
               let cardColor = 'bg-slate-900 border-slate-800';
               if (tableMinutesOld > 15) cardColor = 'bg-red-950/40 border-red-900/60';
               else if (tableMinutesOld > 10) cardColor = 'bg-amber-950/40 border-amber-900/60';
 
               return (
-                <div key={group.tableNo} className={`w-[88vw] sm:w-80 md:w-88 shrink-0 rounded-2xl border-2 flex flex-col overflow-hidden shadow-2xl snap-center ${cardColor}`}>
+                <div key={group.tableNo} id={`kds-table-${group.tableNo}`} className={`w-[88vw] sm:w-80 md:w-88 shrink-0 rounded-2xl border-2 flex flex-col overflow-hidden shadow-2xl snap-center ${cardColor}`}>
                   <div className="bg-slate-900/90 p-3 flex justify-between items-center border-b border-inherit backdrop-blur-md">
                     <div>
                       <h3 className="font-bold text-base sm:text-lg text-white tracking-wide">{group.tableNo}</h3>
