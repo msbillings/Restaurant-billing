@@ -494,7 +494,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           });
         }
 
-        const validItems = cached.items.filter(i => i.quantity > 0 || i.isCancelled).map(i => ({
+        const validItems = cached.items.filter(i => {
+          if (i.isCancelled || i.status === 'Cancelled') return false;
+          const activeQty = Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0));
+          return activeQty > 0;
+        }).map(i => ({
           ...i,
           specialNote: i.specialNote || '',
           printedQuantity: i.printedQuantity !== undefined ? i.printedQuantity : (cached.status === 'Open' ? (i.quantity || 0) : 0),
@@ -720,66 +724,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setBillNumber(null);
 
       // Notify backend to cancel/delete the draft order and free the table
-      saveOrder({
-        tableNo: targetTable,
-        items: [],
-        billType,
-        ...(currentOrderId && !currentOrderId.startsWith('offline_') && { id: currentOrderId })
-      }).then(() => {
-        if (onOrderUpdate) onOrderUpdate();
-        realtimeService.emit('orderUpdated', { tableNo: targetTable, status: 'Cancelled', orderId: currentOrderId });
-        realtimeService.emit('tableStatusChanged', { tableNo: targetTable, status: 'Available' });
-      }).catch((err) => {
-        console.warn('Auto-sync empty order error:', err);
-      });
+      if (currentOrderId) {
+        saveOrder({
+          tableNo: targetTable,
+          items: [],
+          billType,
+          ...(currentOrderId && !currentOrderId.startsWith('offline_') && { id: currentOrderId })
+        }).then(() => {
+          if (onOrderUpdate) onOrderUpdate();
+          realtimeService.emit('orderUpdated', { tableNo: targetTable, status: 'Cancelled', orderId: currentOrderId });
+          realtimeService.emit('tableStatusChanged', { tableNo: targetTable, status: 'Available' });
+        }).catch((err) => {
+          console.warn('Auto-sync empty order error:', err);
+        });
+      }
       return;
     }
-
-    const computedTax = taxRate === '' ? 0 : parseFloat(taxRate) || 0;
-    const orderData = {
-      tableNo: targetTable,
-      items: currentCart,
-      billType,
-      customerName,
-      customerPhone,
-      discountType: discount.type,
-      discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-      tax: computedTax,
-      ...(currentOrderId && !currentOrderId.startsWith('offline_') && { id: currentOrderId }),
-      ...(billType === 'Delivery' && { orderSource })
-    };
-
-    // 1. Instant optimistic update to local cache (0ms)
-    upsertCachedOpenOrder({
-      _id: currentOrderId || `temp_${targetTable}`,
-      ...orderData,
-      status: orderStatus || 'Open',
-      total,
-      subtotal
-    }).catch(() => {});
-
-    // 2. Debounced 200ms background save to backend to avoid network collision
-    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-    syncTimeoutRef.current = setTimeout(() => {
-      saveOrder(orderData).then((saved) => {
-        if (saved && saved._id) {
-          if (saved.status === 'Cancelled' || !saved.items || saved.items.length === 0) {
-            setOrderId(null);
-            removeCachedOpenOrder(saved._id).catch(() => {});
-            removeCachedOpenOrder(targetTable).catch(() => {});
-          } else {
-            if (!currentOrderId || currentOrderId !== saved._id) {
-              setOrderId(saved._id);
-            }
-            upsertCachedOpenOrder(saved).catch(() => {});
-          }
-          if (onOrderUpdate) onOrderUpdate();
-        }
-      }).catch((err) => {
-        console.warn('Auto-sync order error:', err);
-      });
-    }, 200);
-  }, [billType, customerName, customerPhone, discount.type, discount.value, taxRate, orderSource, orderStatus, total, subtotal, onOrderUpdate]);
+  }, [billType, onOrderUpdate]);
 
   const addToCart = (item) => {
     let currentTable = activeTable;
@@ -815,7 +776,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
-    autoSyncOrder(currentTable, newCart, orderId);
   };
 
   const updateQuantity = (id, delta) => {
@@ -863,7 +823,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
-    autoSyncOrder(currentTable, newCart, orderId);
+    if (newCart.length === 0) {
+      autoSyncOrder(currentTable, [], orderId);
+    }
   };
 
   const updateItemNote = async (identifier, specialNote) => {
@@ -875,10 +837,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const cleanNote = (specialNote || '').trim();
     
     lastLocalEditTime.current = Date.now();
-    let updatedCart = [];
-
     setCart((prev) => {
-      updatedCart = prev.map((i) => {
+      return prev.map((i) => {
         const iIdStr = String(i._id || '').trim().toLowerCase();
         const iNameStr = String(i.name || '').trim().toLowerCase();
         const match = (iIdStr && cleanId === iIdStr) || 
@@ -886,15 +846,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         if (match) return { ...i, specialNote: cleanNote };
         return i;
       });
-      return updatedCart;
     });
 
     showToast(t('Note updated for kitchen'), 'success');
-
-    // Auto-save the note to backend so polling/cache never overrides it
-    if (activeTable && updatedCart.length > 0) {
-      autoSyncOrder(activeTable, updatedCart, orderId);
-    }
   };
 
   const handleSaveOrder = async () => {
@@ -958,7 +912,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           .map(i => ({ ...i, status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status }));
         setCart(confirmedItems);
       }
-      showToast(t('orderSaved'), 'success');
+      showToast(orderId ? t('orderUpdated', { defaultValue: 'Order updated successfully' }) : t('orderSaved'), 'success');
       // Extend edit lock after save completes so poll doesn't overwrite confirmed state
       lastLocalEditTime.current = Date.now();
       if (onOrderUpdate) onOrderUpdate();
@@ -1000,6 +954,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
+    // If order is ALREADY billed with the exact same items/state, just display print preview directly!
+    if (orderStatus === 'Billed' && orderId) {
+      showToast(t('billAlreadySavedAndPrinted', { defaultValue: 'Bill already saved and printed' }), 'info');
+      setShowInvoice(true);
+      return;
+    }
+
     setLoading(true);
     setActionLoading('print');
     try {
@@ -1014,6 +975,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         tax: taxVal,
         deliveryCharge: parseFloat(deliveryCharge || 0),
         containerCharge: parseFloat(containerCharge || 0),
+        skipNotification: true, // Do not trigger "Order Updated" right before billing
         ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
         ...(billType === 'Delivery' && { orderSource })
       };
@@ -1066,7 +1028,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setBillNumber(billedOrder.billNumber);
       setCompletedBill(billedOrder);
 
-      showToast(t('billGenerated'), 'success');
+      showToast(t('billSavedAndPrinted', { defaultValue: 'Bill saved & printed successfully' }), 'success');
       if (onOrderUpdate) onOrderUpdate();
       // Always open Invoice/print modal immediately
       setShowInvoice(true);

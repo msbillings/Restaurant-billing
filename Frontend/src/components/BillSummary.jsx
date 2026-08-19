@@ -499,10 +499,10 @@ const BillSummary = ({
             {actionLoading === 'save' ? (
               <>
                 <Loader2 size={16} className="animate-spin text-red-600" />
-                <span>{t("Saving...")}</span>
+                <span>{orderId ? t("Updating...") : t("Saving...")}</span>
               </>
             ) : (
-              t("SAVE")
+              orderId ? t("UPDATE") : t("SAVE")
             )}
           </button>
           <button

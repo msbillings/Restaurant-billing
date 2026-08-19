@@ -11,42 +11,45 @@ import { emitNotification } from '../utils/notificationHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 
-// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1" vs "1" vs "Table 01")
+// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Table 01" vs "Ground Floor - Table 1")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
   
-  // Extract table part if floor prefix exists (e.g. "Floor 1 - Table 1" -> "Table 1")
-  let tablePart = trimmed;
+  // If floor prefix exists (e.g. "First Floor - Table 2")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
-    tablePart = parts.slice(1).join(' - ').trim();
+    const floorPart = parts[0].trim();
+    const tablePart = parts.slice(1).join(' - ').trim();
+    const numMatch = tablePart.match(/\d+/);
+    const numInt = numMatch ? parseInt(numMatch[0], 10) : null;
+    
+    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    const patterns = [];
+    // Exact match: "First Floor - Table 2"
+    patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
+    
+    if (numInt !== null) {
+      // Matches "First Floor - Table 2", "First Floor - Table 02", "First Floor - T2", "First Floor - 2"
+      patterns.push(`^${escapedFloor}\\s*-\\s*(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
+    }
+    
+    return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // Extract number if exists (e.g. "Table 1" -> "1", "T2" -> "2")
-  const numMatch = tablePart.match(/\d+/);
-  const num = numMatch ? numMatch[0] : null;
-
-  const patterns = [];
+  // If no floor prefix (e.g. "Table 2", "T2", "2"):
+  const numMatch = trimmed.match(/\d+/);
+  const numInt = numMatch ? parseInt(numMatch[0], 10) : null;
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
-
-  if (tablePart !== trimmed) {
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    patterns.push(`^${escapedTable}$`);
-    patterns.push(`.*-\\s*${escapedTable}$`);
-  } else {
-    // If input was just "Table 1", it might be stored as "Floor 1 - Table 1" in DB
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    patterns.push(`.*-\\s*${escapedTable}$`);
+  if (numInt !== null) {
+    patterns.push(`^(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
   }
-
-  if (num) {
-    const numInt = parseInt(num, 10);
-    // Matches "Table 1", "Table 01", "Table1", "Floor X - Table 1", "T1", "1", "Floor X - 1"
-    patterns.push(`^(?:.*-\\s*)?(?:Table\\s*0*|T-?0*|0*)${numInt}$`);
-  }
-
+  
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
@@ -214,26 +217,68 @@ export const saveOrder = async (req, res) => {
       return res.status(400).json({ message: 'Items array is required and must not be empty' });
     }
 
-    // Sanitize items and calculate item totals
-    const sanitizedItems = items.map(item => {
-      const isCancelled = item.isCancelled || false;
-      const cancelledQty = item.cancelledQuantity || 0;
-      const activeQty = isCancelled ? 0 : Math.max(0, Number(item.quantity || 0) - cancelledQty);
-      return {
-        _id: item._id,
-        name: item.name,
-        price: Number(item.price || 0),
-        quantity: Number(item.quantity || 0),
-        total: Number(item.price || 0) * activeQty,
-        specialNote: item.specialNote !== undefined ? item.specialNote : undefined,
-        status: item.status || 'Pending',
-        isCancelled: isCancelled,
-        cancelledQuantity: cancelledQty,
-        cancellationRequested: item.cancellationRequested || false,
-        cancellationRequestedQty: item.cancellationRequestedQty || 0,
-        cancellationRejected: item.cancellationRejected || false
-      };
-    });
+    // Sanitize items and calculate item totals - ignore items with 0 quantity that aren't printed/cancelled
+    const sanitizedItems = items
+      .filter(item => (Number(item.quantity || 0) > 0 || (item.printedQuantity || 0) > 0 || item.isCancelled))
+      .map(item => {
+        const isCancelled = item.isCancelled || false;
+        const cancelledQty = item.cancelledQuantity || 0;
+        const activeQty = isCancelled ? 0 : Math.max(0, Number(item.quantity || 0) - cancelledQty);
+        return {
+          _id: item._id,
+          name: item.name,
+          price: Number(item.price || 0),
+          quantity: Number(item.quantity || 0),
+          total: Number(item.price || 0) * activeQty,
+          specialNote: item.specialNote !== undefined ? item.specialNote : undefined,
+          status: item.status || 'Pending',
+          isCancelled: isCancelled,
+          cancelledQuantity: cancelledQty,
+          cancellationRequested: item.cancellationRequested || false,
+          cancellationRequestedQty: item.cancellationRequestedQty || 0,
+          cancellationRejected: item.cancellationRejected || false
+        };
+      });
+
+    if (sanitizedItems.length === 0) {
+      let existingOrder = null;
+      if (id) {
+        existingOrder = await Bill.findById(id);
+      } else if (tableNo) {
+        existingOrder = await Bill.findOne({ 
+          tableNo: getTableMatchCondition(tableNo), 
+          status: { $in: ['Open', 'Billed'] } 
+        });
+      }
+
+      if (existingOrder) {
+        existingOrder.status = 'Cancelled';
+        existingOrder.cancelReason = 'All unprinted items removed from table';
+        existingOrder.items = [];
+        existingOrder.subtotal = 0;
+        existingOrder.total = 0;
+        await existingOrder.save();
+
+        cache.clear('dailyStats');
+        cache.clear('openOrders');
+
+        emitSocketEvent(req, 'orderUpdated', { tableNo: existingOrder.tableNo, status: 'Cancelled', orderId: existingOrder._id });
+
+        if (existingOrder.billType === 'Dine-In') {
+          updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => {});
+        }
+
+        return res.status(200).json({ 
+          _id: existingOrder._id, 
+          tableNo: existingOrder.tableNo, 
+          status: 'Cancelled', 
+          items: [], 
+          total: 0 
+        });
+      }
+
+      return res.status(400).json({ message: 'Items array is required and must not be empty' });
+    }
 
     let order;
     if (id) {
@@ -488,10 +533,12 @@ export const saveOrder = async (req, res) => {
     
     emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status, order });
 
-    if (id) {
-      emitNotification(req, 'Order Updated', `Order updated for Table ${tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
-    } else {
-      emitNotification(req, 'New Order Placed', `Order placed for Table ${tableNo} (${order.billType})`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+    if (!req.body.skipNotification) {
+      if (id) {
+        emitNotification(req, 'Order Updated', `Order updated for Table ${tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+      } else {
+        emitNotification(req, 'New Order Placed', `Order placed for Table ${tableNo} (${order.billType})`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+      }
     }
     
     // Update Floor/Table status in DB in background
@@ -543,6 +590,7 @@ export const generateBill = async (req, res) => {
       cache.clear('dailyStats');
       cache.clear('openOrders');
       emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
+      emitNotification(req, 'Bill Saved & Printed', `Bill #${order.billNumber || ''} saved and printed for Table ${order.tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
       return res.json(order);
     }
 
@@ -603,6 +651,7 @@ export const generateBill = async (req, res) => {
     cache.clear('openOrders');
     
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
+    emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
     
     // Update Floor/Table status in DB in background
     if (order.billType === 'Dine-In') {
@@ -1055,6 +1104,20 @@ export const getOpenOrders = async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
+
+    // Auto-clean any legacy empty/zero-item bills in DB in the background
+    Bill.updateMany(
+      {
+        status: { $in: ['Open', 'Billed'] },
+        $or: [
+          { items: { $size: 0 } },
+          { 'items.quantity': { $lte: 0 }, 'items.printedQuantity': { $lte: 0 } }
+        ]
+      },
+      {
+        $set: { status: 'Cancelled', cancelReason: 'Auto-cleaned empty zero-item bill' }
+      }
+    ).catch(() => {});
 
     const dynamicTaxRate = await getDynamicTaxRate(req);
 
@@ -2008,6 +2071,3 @@ export const resolveItemCancel = async (req, res) => {
     res.status(500).json({ message: 'Server error while resolving item cancellation' });
   }
 };
-
-
-

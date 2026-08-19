@@ -49,6 +49,27 @@ const normalizeTable = (tbl) => {
   return tbl.trim().replace(/[^a-z0-9]/gi, '').toLowerCase();
 };
 
+const isValidOrder = (o) => {
+  if (!o) return false;
+  if (o.status === 'Cancelled' || o.status === 'Paid') return false;
+  if (!o.items || !Array.isArray(o.items) || o.items.length === 0) return false;
+  
+  const activeItems = o.items.filter(i => {
+    if (i.isCancelled || i.status === 'Cancelled') return false;
+    const activeQty = Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0));
+    return activeQty > 0;
+  });
+  
+  if (activeItems.length === 0) return false;
+  
+  const subtotal = activeItems.reduce((sum, i) => {
+    const activeQty = Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0));
+    return sum + (Number(i.price || 0) * activeQty);
+  }, 0);
+  
+  return subtotal > 0;
+};
+
 const FloorManagement = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
@@ -144,7 +165,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     // 1. Instant Cache Load (0ms delay)
     getCachedOpenOrders().then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
-        setOrders(cached);
+        setOrders(cached.filter(isValidOrder));
         setLoading(false);
       }
     }).catch(() => {});
@@ -179,14 +200,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         const targetTableNorm = targetTable ? normalizeTable(targetTable) : null;
         const targetStatus = data.status || data.order?.status;
 
-        if (targetStatus === 'Paid' || targetStatus === 'Cancelled' || targetStatus === 'Available') {
+        if (targetStatus === 'Paid' || targetStatus === 'Cancelled' || targetStatus === 'Available' || (data.order && !isValidOrder(data.order))) {
           setOrders(prev => prev.filter(o => {
             if (data.orderId && o._id === data.orderId) return false;
             if (data.order?._id && o._id === data.order._id) return false;
             if (targetTableNorm && normalizeTable(o.tableNo) === targetTableNorm) return false;
-            return true;
+            return isValidOrder(o);
           }));
-        } else if (data.order) {
+        } else if (data.order && isValidOrder(data.order)) {
           const orderTableNorm = normalizeTable(data.order.tableNo);
           setOrders(prev => {
             const matchIndex = prev.findIndex(o => 
@@ -196,9 +217,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             if (matchIndex >= 0) {
               const copy = [...prev];
               copy[matchIndex] = data.order;
-              return copy;
+              return copy.filter(isValidOrder);
             }
-            return [data.order, ...prev];
+            return [data.order, ...prev].filter(isValidOrder);
           });
         }
       }
@@ -254,7 +275,13 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   async function fetchOrders() {
     try {
       const data = await getOpenOrders();
-      setOrders(data);
+      const validOrders = (data || []).filter(o => {
+        if (o.status === 'Cancelled' || o.status === 'Paid') return false;
+        if (!o.items || !Array.isArray(o.items) || o.items.length === 0) return false;
+        const hasActive = o.items.some(i => (Number(i.quantity || 0) > 0 && !i.isCancelled && i.status !== 'Cancelled') || ((i.printedQuantity || 0) > 0));
+        return hasActive;
+      });
+      setOrders(validOrders);
     } catch (error) {
       console.error('Error fetching open orders:', error);
     } finally {
@@ -438,7 +465,6 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     if (!spaceName) return null;
     const targetClean = normalizeTable(spaceName);
     let order = orders.find((o) => normalizeTable(o.tableNo) === targetClean);
-    if (order) return order;
 
     // Fallback for ANY floor (in case table was saved without floor prefix)
     if (!order && rawItemName) {
@@ -448,6 +474,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         return !oTbl.includes(' - ') && normalizeTable(oTbl) === rawClean;
       });
     }
+
+    if (!order || !isValidOrder(order)) return null;
+
     return order;
   };
 
@@ -548,7 +577,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     if (resolvedType === 'sofa') Icon = Sofa;else
     Icon = Utensils; // fallback
 
-    if (activeOrder) {
+    if (isOccupied && activeOrder) {
       if (activeOrder.status === 'Open') {
         statusBgClass = 'bg-blue-100/60';
         statusBorderClass = 'border-blue-300';
