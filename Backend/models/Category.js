@@ -25,6 +25,5 @@ const categorySchema = new mongoose.Schema({
 
 // Add indexes for better performance
 categorySchema.index({ isActive: 1, sortOrder: 1 });
-categorySchema.index({ name: 1 });
 
-export default mongoose.model('Category', categorySchema);
+export default mongoose.model('Category', categorySchema);

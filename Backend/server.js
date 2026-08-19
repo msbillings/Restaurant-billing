@@ -33,7 +33,6 @@ const app = express();
 const server = http.createServer(app);
 app.set('trust proxy', 1); // Required for Render.com / Vercel reverse proxy rate limiting
 
-// Middleware
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
@@ -54,6 +53,8 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-DB', 'X-License-Key', 'x-tenant-db', 'x-license-key', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-DB', 'X-License-Key', 'x-tenant-db', 'x-license-key']
 };
+
+app.use(cors(corsOptions));
 
 // Security Middleware Imports
 import helmet from 'helmet';
@@ -98,7 +99,6 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
 // Initialize Socket.io with same CORS config as express
@@ -423,13 +423,12 @@ const frontendCandidates = [
 
 const staticFrontendDir = frontendCandidates.find(p => {
   const indexPath = path.join(p, 'index.html');
-  const exists = fs.existsSync(indexPath);
-  console.log(`[Static Frontend] Checking: ${p} → ${exists ? '✓ FOUND' : '✗ not found'}`);
-  return exists;
+  return fs.existsSync(indexPath);
 });
 
 if (staticFrontendDir) {
   console.log(`[Static Frontend] ✅ Serving from: ${staticFrontendDir}`);
+
 
   // Serve static assets for root /assets AND sub-route /order/assets
   const assetsDir = path.join(staticFrontendDir, 'assets');

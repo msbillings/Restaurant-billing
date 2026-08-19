@@ -29,12 +29,12 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       });
       setReservations(response.data);
     } catch (error) {
-      console.error('Error fetching reservations', error);
-      alert('DEBUG ERROR: ' + error.response?.status + ' - ' + (error.response?.data?.message || error.message));
+      console.error('Error fetching reservations:', error);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchReservations();

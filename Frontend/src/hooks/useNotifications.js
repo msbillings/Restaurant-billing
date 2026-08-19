@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
+import realtimeService from '../services/realtimeService';
 
-import { getSocketUrl } from '../config.js';
-
-const SOCKET_URL = getSocketUrl();
-
-// Create a singleton socket for notifications so we don't open multiple connections
-let notificationSocket = null;
 let lastAudioPlayTime = 0;
 // Pre-load notification audio object once globally so audio plays instantly without network fetch lag
 let notificationAudio = null;
@@ -18,14 +12,7 @@ try {
 }
 
 export const getNotificationSocket = () => {
-  if (!notificationSocket) {
-    notificationSocket = io(SOCKET_URL);
-
-    // The connect listener here is prone to race conditions if localStorage isn't ready.
-    // We will handle joining the tenant inside the useNotifications hook instead.
-
-  }
-  return notificationSocket;
+  return realtimeService.getSocket();
 };
 
 const useNotifications = (userRole = 'Admin') => {
@@ -68,29 +55,8 @@ const useNotifications = (userRole = 'Admin') => {
   }, [unreadCount]);
 
   useEffect(() => {
-    const socket = getNotificationSocket();
-
-    const joinTenantRoom = () => {
-      const tenantDb = localStorage.getItem('resto_db_name');
-      const token = localStorage.getItem('accessToken');
-      if (tenantDb) {
-        console.log(`[useNotifications] Joining tenant room: ${tenantDb}`);
-        socket.emit('joinTenant', { tenantDb, token });
-      } else {
-        console.warn(`[useNotifications] No tenantDb found in localStorage!`);
-      }
-    };
-
-    // If already connected, join immediately
-    if (socket.connected) {
-      console.log(`[useNotifications] Socket already connected, joining room directly.`);
-      joinTenantRoom();
-    }
-
-    // Also join on any future reconnects
-    socket.on('connect', joinTenantRoom);
-
     const handleNewNotification = (notification) => {
+      if (!notification) return;
       // Role-Based Filtering
       if (notification.targetRoles && !notification.targetRoles.includes(userRole) && userRole !== 'Admin') {
         return; // Ignore if user doesn't have the required role
@@ -119,11 +85,10 @@ const useNotifications = (userRole = 'Admin') => {
       }
     };
 
-    socket.on('new_notification', handleNewNotification);
+    const unsubNotif = realtimeService.subscribe('new_notification', handleNewNotification);
 
     return () => {
-      socket.off('connect', joinTenantRoom);
-      socket.off('new_notification', handleNewNotification);
+      unsubNotif();
     };
   }, [userRole]);
 

@@ -34,41 +34,22 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const fetchPickupOrders = async () => {
     setLoading(true);
     try {
-      // Get only paid pickup orders from bill history with pagination
-      // getBills already returns only 'Paid' bills (status: 'Paid')
-      const paidBills = await getBills(currentPage, itemsPerPage, searchTerm);
-
-      // Filter for pickup orders
-      // Only show orders with billType === 'Takeaway'
-      const paidPickupOrders = (paidBills.bills || []).filter((bill) => {
-        return bill.billType === 'Takeaway';
+      // Get paginated takeaway/pickup orders directly from server in <20ms
+      const data = await getBills({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchTerm,
+        billType: 'Takeaway',
+        orderSource: platformFilter !== 'all' ? platformFilter : undefined
       });
 
-      // Sort by date (newest first) - backend already sorts, but ensure it
-      const allPickupOrders = paidPickupOrders.sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.createdAt);
-        const dateB = new Date(b.updatedAt || b.createdAt);
-        return dateB - dateA;
+      const pickupBills = Array.isArray(data.bills) ? data.bills : [];
+      setOrders(pickupBills);
+      setPagination(data.pagination || {
+        totalBills: pickupBills.length,
+        totalPages: Math.max(1, Math.ceil(pickupBills.length / itemsPerPage)),
+        currentPage: currentPage
       });
-
-      setOrders(allPickupOrders);
-
-      // Calculate pagination for pickup orders
-      // We need to get total count of pickup orders
-      if (currentPage === 1) {
-        const allBills = await getBills(1, 1000, searchTerm);
-        const allPickupCount = (allBills.bills || []).filter((bill) => {
-          return bill.billType === 'Takeaway';
-        }).length;
-
-        setPagination({
-          totalBills: allPickupCount,
-          totalPages: Math.ceil(allPickupCount / itemsPerPage),
-          currentPage: currentPage
-        });
-      } else {
-        setPagination(paidBills.pagination || { totalBills: allPickupOrders.length, totalPages: 1, currentPage: 1 });
-      }
     } catch (error) {
       console.error('Error fetching pickup orders:', error);
       setToast({ message: 'Failed to load pickup orders', type: 'error' });
@@ -78,10 +59,9 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   };
 
   useEffect(() => {
-    // eslint-disable-next-line
     fetchPickupOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchTerm]);
+  }, [currentPage, searchTerm, platformFilter]);
+
 
   const handleDeleteClick = (id) => {
     setDeleteModal({ isOpen: true, billId: id });

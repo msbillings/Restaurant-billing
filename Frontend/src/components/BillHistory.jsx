@@ -1,4 +1,5 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
 import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
@@ -7,8 +8,10 @@ import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
+import realtimeService from '../services/realtimeService';
 
-const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
+const BillHistory = ({ onNavigate, onGoBack }) => {
+  const { t } = useLanguage();
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState(null);
@@ -46,6 +49,29 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     // Reset to page 1 and fetch latest bills when component mounts
     setCurrentPage(1);
     fetchBills(true);
+
+    // Listen for real-time settlement and refund events
+    const handleBillSettled = (data) => {
+      if (data && (data.bill || data.order)) {
+        const newBill = data.bill || data.order;
+        if (newBill.billType !== 'Delivery') {
+          setBills(prev => {
+            const exists = prev.some(b => b._id === newBill._id || b.billNumber === newBill.billNumber);
+            if (exists) return prev;
+            return [newBill, ...prev];
+          });
+        }
+      }
+      fetchBills(true);
+    };
+
+    const unsubSettled = realtimeService.subscribe('billSettled', handleBillSettled);
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', () => fetchBills(true));
+
+    return () => {
+      unsubSettled();
+      unsubOrderUpdated();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,45 +81,35 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     }
     try {
       const searchForBackend = debouncedSearchTerm.trim().replace(/^#/, '');
-      const data = await getBills(currentPage, itemsPerPage, searchForBackend);
+      const data = await getBills({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchForBackend,
+        excludeBillType: 'Delivery',
+        paymentMode: filterType !== 'All' ? filterType : undefined,
+        startDate: startDate ? new Date(startDate).toISOString() : undefined,
+        endDate: endDate ? new Date(endDate).toISOString() : undefined
+      });
 
-      // Handle both old format (array) and new format (object with pagination)
       let billsData = [];
       if (Array.isArray(data)) {
         billsData = data;
+        setPagination({ totalBills: billsData.length, totalPages: 1, currentPage: 1 });
       } else {
         billsData = data.bills || [];
+        setPagination(data.pagination || {
+          totalBills: billsData.length,
+          totalPages: Math.max(1, Math.ceil(billsData.length / itemsPerPage)),
+          currentPage: currentPage
+        });
 
-        if (data.totalBills === 0 && /^MS\d+$/i.test(searchForBackend)) {
+        if (data.pagination?.totalBills === 0 && /^MS\d+$/i.test(searchForBackend)) {
           setToast({ message: 'This bill is missing or deleted', type: 'error' });
         }
       }
 
+      setBills(billsData);
       cacheBillHistory(billsData).catch(() => {});
-
-      // Filter out delivery orders - only show dine-in and takeaway
-      // Only filter by billType, not orderSource
-      const filteredBills = billsData.filter((bill) => {
-        return bill.billType !== 'Delivery';
-      });
-
-      setBills(filteredBills);
-
-      // Adjust pagination for filtered results
-      if (Array.isArray(data)) {
-        setPagination({ totalBills: filteredBills.length, totalPages: 1, currentPage: 1 });
-      } else {
-        // For server-side pagination, we need to estimate the filtered count
-        // This is approximate since we don't know the exact count without additional query
-        const originalPagination = data.pagination || { totalBills: 0, totalPages: 1, currentPage: 1 };
-        // Assume roughly 30% are delivery orders for estimation
-        const estimatedFilteredTotal = Math.floor(originalPagination.totalBills * 0.7);
-        setPagination({
-          ...originalPagination,
-          totalBills: estimatedFilteredTotal,
-          totalPages: Math.max(1, Math.ceil(estimatedFilteredTotal / itemsPerPage))
-        });
-      }
     } catch (error) {
       console.error('Error fetching bills:', error);
       setToast({ message: 'Failed to load bills', type: 'error' });
@@ -101,6 +117,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       setLoading(false);
     }
   };
+
 
   const handleDeleteClick = (id) => {
     setDeleteModal({ isOpen: true, billId: id, password: '', error: '', loading: false, showPassword: false });

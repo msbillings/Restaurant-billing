@@ -40,12 +40,12 @@ export const getApiUrl = () => {
         }
     }
 
-    const host = window.location.hostname;
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     if (host && host !== 'localhost' && host !== '127.0.0.1') {
         return `http://${host}:5002/api`;
     }
 
-    return 'http://127.0.0.1:5002/api';
+    return `http://${host || 'localhost'}:5002/api`;
 };
 
 export const getSuperadminApiUrl = () => {

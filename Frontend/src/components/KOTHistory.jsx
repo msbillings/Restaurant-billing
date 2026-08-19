@@ -1,4 +1,5 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
 import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
 import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
@@ -6,94 +7,121 @@ import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
 import BackButton from './common/BackButton';
-import { getNotificationSocket } from '../hooks/useNotifications';
+import realtimeService from '../services/realtimeService';
 
-const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
+const KOTHistory = ({ onNavigate, onGoBack }) => {
+  const { t } = useLanguage();
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedKOT, setSelectedKOT] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
-  const fetchingRef = useRef(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState(() => {
+  const getTodayDateStr = () => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
 
+  const [selectedDate, setSelectedDate] = useState(getTodayDateStr);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  // 1. Instant Cache Load (0ms delay) on mount
-  useEffect(() => {
-    getCachedKotHistory().then((cached) => {
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        setKots(cached);
-      }
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
-  }, []);
-
-  const fetchKOTs = useCallback(async (isBackground = false) => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
+  const fetchKOTs = useCallback(async (dateParam, searchParam, isBackground = false) => {
+    const d = dateParam !== undefined ? dateParam : selectedDate;
+    const s = searchParam !== undefined ? searchParam : debouncedSearchTerm;
+    if (!isBackground) {
+      setLoading(true);
+    }
     try {
-      if (!isBackground && kots.length === 0) {
-        setLoading(true);
-      }
-      const data = await apiGetTodayKOTs(selectedDate, debouncedSearchTerm);
-      setKots(data || []);
-      if (data && Array.isArray(data)) {
-        cacheKotHistory(data).catch(() => {});
-      }
+      const data = await apiGetTodayKOTs(d, s);
+      const safeData = Array.isArray(data) ? data : [];
+      setKots(safeData);
+      cacheKotHistory(safeData, d).catch(() => {});
     } catch (error) {
       console.error('Error fetching KOTs:', error);
       setToast({ message: 'Failed to load KOT history', type: 'error' });
+      setKots([]);
     } finally {
       setLoading(false);
-      fetchingRef.current = false;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, debouncedSearchTerm]);
 
+  // Initial load
   useEffect(() => {
-    fetchKOTs(true);
+    // 1. Instant Cache Load
+    getCachedKotHistory(selectedDate).then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setKots(cached);
+        setLoading(false);
+      }
+    }).catch(() => {});
 
-    // Use SHARED socket — already connected & joined tenant room = 0ms delay
-    const socket = getNotificationSocket();
-    if (!socket) return;
+    // 2. Fetch fresh
+    fetchKOTs(selectedDate, debouncedSearchTerm, false);
+  }, []);
 
-    // Optimistic instant update: add new KOT from socket payload immediately
+  // When debounced search term changes
+  const isFirstMount = useRef(true);
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    fetchKOTs(selectedDate, debouncedSearchTerm, false);
+  }, [debouncedSearchTerm]);
+
+  const handleDateChange = (newDate) => {
+    setSelectedDate(newDate);
+    // Instant cache peek if available
+    getCachedKotHistory(newDate).then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        setKots(cached);
+      }
+    }).catch(() => {});
+    fetchKOTs(newDate, debouncedSearchTerm, false);
+  };
+
+  const handleResetToToday = () => {
+    const todayStr = getTodayDateStr();
+    setSelectedDate(todayStr);
+    setSearchTerm('');
+    fetchKOTs(todayStr, '', false);
+  };
+
+  useEffect(() => {
+    // Optimistic instant update via singleton RealtimeService
     const handleNewKOT = (data) => {
       if (data && data.kot) {
-        setKots(prev => {
-          const exists = prev.some(k =>
-            k._id?.toString() === data.kot._id?.toString() ||
-            k.kotId?.toString() === data.kot._id?.toString()
-          );
-          if (exists) {
-            // KOT already in list, just background-refresh for accuracy
-            fetchKOTs(true);
-            return prev;
-          }
-          // Build a KOT history entry from socket payload (0ms)
-          const newKot = {
-            _id: data.kot._id,
-            kotId: data.kot._id,
-            kotNumber: data.kot.kotNumber,
-            tableNo: data.tableNo || data.kot.tableNo,
-            billType: data.billType || data.kot.billType || 'Dine-In',
-            billId: data.orderId || data.kot.orderId,
-            createdAt: data.kot.createdAt || new Date().toISOString(),
-            items: (data.kot.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))
-          };
-          return [newKot, ...prev];
-        });
+        const todayStr = getTodayDateStr();
+        if (selectedDate === todayStr) {
+          const targetKotId = String(data.kot._id || data.kot.kotId || '');
+          setKots(prev => {
+            if (targetKotId) {
+              const exists = prev.some(k => String(k.kotId || k._id || '') === targetKotId);
+              if (exists) {
+                fetchKOTs(selectedDate, debouncedSearchTerm, true);
+                return prev;
+              }
+            }
+            const newKot = {
+              _id: data.kot._id,
+              kotId: data.kot._id,
+              kotNumber: data.kot.kotNumber,
+              tableNo: data.tableNo || data.kot.tableNo,
+              billType: data.billType || data.kot.billType || 'Dine-In',
+              billId: data.orderId || data.kot.orderId,
+              createdAt: data.kot.createdAt || new Date().toISOString(),
+              items: (data.kot.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))
+            };
+            return [newKot, ...prev];
+          });
+        }
       }
-      fetchKOTs(true);
+      fetchKOTs(selectedDate, debouncedSearchTerm, true);
     };
 
     const handleKotUpdated = (data) => {
@@ -119,20 +147,19 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           return kot;
         }));
       }
-      fetchKOTs(true);
+      fetchKOTs(selectedDate, debouncedSearchTerm, true);
     };
 
-    socket.on('newKOT', handleNewKOT);
-    socket.on('kotUpdated', handleKotUpdated);
-    socket.on('orderUpdated', () => fetchKOTs(true));
+    const unsubNewKOT = realtimeService.subscribe('newKOT', handleNewKOT);
+    const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleKotUpdated);
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', () => fetchKOTs(selectedDate, debouncedSearchTerm, true));
 
     return () => {
-      socket.off('newKOT', handleNewKOT);
-      socket.off('kotUpdated', handleKotUpdated);
-      socket.off('orderUpdated', () => fetchKOTs(true));
+      unsubNewKOT();
+      unsubKotUpdated();
+      unsubOrderUpdated();
     };
-  }, [fetchKOTs]);
-
+  }, [selectedDate, debouncedSearchTerm, fetchKOTs]);
 
   const handleReprint = (kot) => {
     setSelectedKOT(kot);
@@ -180,7 +207,6 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     return Object.values(groups).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [kots]);
 
-
   return (
     <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -215,7 +241,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => handleDateChange(e.target.value)}
               className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[128px] sm:w-[138px] border-none"
               style={{ colorScheme: 'light' }}
               title={t("Select Date")}
@@ -235,11 +261,17 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         ) : kots.length === 0 ? (
           <div className="bg-surface border border-border rounded-2xl flex-1 flex flex-col items-center justify-center text-text-muted shadow-xs p-6 text-center">
             <FileText size={48} className="opacity-20 mb-3" />
-            <p className="font-mono text-base sm:text-lg">{t("No KOTs found.")}</p>
-            <p className="text-xs sm:text-sm text-text-muted mt-1">{t("Try adjusting your filters or search.")}</p>
+            <p className="font-mono text-base sm:text-lg text-text-main font-bold">{t("No KOTs found.")}</p>
+            <p className="text-xs sm:text-sm text-text-muted mt-1 mb-4">{t("No Kitchen Order Tickets found for")} <span className="font-mono font-bold text-text-main">{selectedDate}</span></p>
+            <button
+              onClick={handleResetToToday}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5">
+              <span>{t("View Today's KOTs")}</span>
+            </button>
           </div>
         ) : (
           <div className="bg-surface border border-border rounded-2xl overflow-hidden flex-1 flex flex-col shadow-xs">
+
             {/* Desktop Wide Table (Visible on md and larger) */}
             <div className="hidden md:block overflow-x-auto flex-1">
               <table className="w-full text-left border-collapse">

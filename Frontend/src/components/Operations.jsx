@@ -4,7 +4,7 @@ import {
   LayoutGrid, RefreshCw, HelpCircle, MonitorPlay, IndianRupee, Languages, UserCog,
   MessageSquarePlus, Truck, Monitor,
   UtensilsCrossed, Printer, Percent, Tags, MonitorSmartphone, Settings as SettingsIcon,
-  Globe, ToggleLeft, Clock, ListChecks, Shield, Award, LineChart, Search, X, SearchX } from
+  Globe, ToggleLeft, Clock, ListChecks, Shield, Lock, Award, LineChart, Search, X, SearchX } from
 'lucide-react';
 import BackButton from './common/BackButton';
 
@@ -51,7 +51,7 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
   { id: 'menu-toggle', name: t('Menu Item On Off'), icon: ToggleLeft },
   { id: 'renewal', name: t('Service Renewal'), icon: Clock },
   { id: 'custom-status', name: t('Custom Order Status'), icon: ListChecks },
-  { id: 'security', name: t('Security & PINs'), icon: Shield }];
+  { id: 'security', name: t('Security & PINs'), icon: Lock }];
 
 
   const handleFeatureClick = (id) => {

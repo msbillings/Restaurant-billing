@@ -100,11 +100,16 @@ const LicenseScreen = ({ onValidLicense }) => {
       const data = await response.json();
 
       if (response.ok && data.valid) {
-        // Setup local database configuration
+        localStorage.setItem('resto_license', data.licenseKey || 'ACCOUNT-LOGIN');
+        localStorage.setItem('resto_license_expiry', data.validUntil);
+        if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
+        if (data.restaurantName) localStorage.setItem('resto_restaurant_name', data.restaurantName);
+
+        // Configure backend database asynchronously (non-blocking for production/cloud/offline environments)
         if (data.databaseName && data.plainTextPassword) {
           try {
             const API_BASE_URL = getApiUrl();
-            const setupResponse = await fetch(`${API_BASE_URL}/config/setup`, {
+            fetch(`${API_BASE_URL}/config/setup`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -116,40 +121,30 @@ const LicenseScreen = ({ onValidLicense }) => {
                 password: data.plainTextPassword,
                 staffAccounts: data.staffAccounts
               })
-            });
-
-            if (!setupResponse.ok) {
-              let errText = 'Backend Error';
-              try {
-                const errObj = await setupResponse.json();
-                errText = errObj.message || errObj.error || JSON.stringify(errObj);
-              } catch (e) {
-                errText = await setupResponse.text().catch(() => setupResponse.statusText);
+            }).then(async (res) => {
+              if (res.ok) {
+                console.log('Database configured successfully');
+              } else {
+                console.warn('Database config responded with status:', res.status);
               }
-              throw new Error(`[${setupResponse.status}] ${errText}`);
-            }
+            }).catch((setupErr) => {
+              console.warn('Background local database setup note:', setupErr.message);
+            });
           } catch (setupErr) {
-            console.error('Failed to configure local database:', setupErr);
-            setError(`Failed to setup database: ${setupErr.message}`);
-            setLoading(false);
-            return;
+            console.warn('Local database setup skipped:', setupErr);
           }
         }
 
-        localStorage.setItem('resto_license', data.licenseKey || 'ACCOUNT-LOGIN');
-        localStorage.setItem('resto_license_expiry', data.validUntil);
-        if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
-
         try {
           const API_BASE_URL = getApiUrl();
-          await fetch(`${API_BASE_URL}/config/info`, {
+          fetch(`${API_BASE_URL}/config/info`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-Tenant-DB': data.databaseName || localStorage.getItem('resto_db_name') || ''
             },
             body: JSON.stringify({ licenseExpiry: data.validUntil })
-          });
+          }).catch(() => {});
         } catch (e) {}
 
         onValidLicense();
@@ -162,6 +157,7 @@ const LicenseScreen = ({ onValidLicense }) => {
       setLoading(false);
     }
   };
+
 
   const handleQuickDemo = () => {
     localStorage.setItem('resto_license', 'MSBILL-DEMO-TEAM-2026');

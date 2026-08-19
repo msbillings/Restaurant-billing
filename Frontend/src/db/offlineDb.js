@@ -43,9 +43,13 @@ db.version(1).stores({
   // Floor/Table layout cache
   floors: '_id, name',
   
+  // KDS active KOTs store (isolated from historical KOTs)
+  kdsActiveKots: '_id, kotId, tableNo, status, createdAt',
+
   // Metadata (last sync timestamps, etc.)
   meta: 'key'
 });
+
 
 // ==================== MENU CACHE ====================
 
@@ -151,6 +155,35 @@ export const getCachedOpenOrders = async () => {
   }
 };
 
+export const upsertCachedOpenOrder = async (order) => {
+  if (!order) return;
+  try {
+    if (order._id) {
+      await db.openOrders.put(order);
+    } else if (order.tableNo) {
+      const existing = await db.openOrders.where('tableNo').equals(order.tableNo).first();
+      if (existing) {
+        await db.openOrders.put({ ...existing, ...order });
+      } else {
+        await db.openOrders.put({ _id: `local_${Date.now()}`, ...order });
+      }
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to upsert open order:', err);
+  }
+};
+
+export const removeCachedOpenOrder = async (orderIdOrTableNo) => {
+  if (!orderIdOrTableNo) return;
+  try {
+    await db.openOrders.delete(orderIdOrTableNo);
+    // Also remove if tableNo matches
+    await db.openOrders.where('tableNo').equals(orderIdOrTableNo).delete();
+  } catch (err) {
+    console.error('[OfflineDB] Failed to remove cached open order:', err);
+  }
+};
+
 // ==================== BILL HISTORY CACHE ====================
 
 export const cacheBillHistory = async (bills) => {
@@ -172,6 +205,15 @@ export const getCachedBillHistory = async () => {
   } catch (err) {
     console.error('[OfflineDB] Failed to read cached bill history:', err);
     return null;
+  }
+};
+
+export const prependCachedBillHistory = async (bill) => {
+  if (!bill || !bill._id) return;
+  try {
+    await db.billHistory.put(bill);
+  } catch (err) {
+    console.error('[OfflineDB] Failed to prepend bill history:', err);
   }
 };
 
@@ -285,19 +327,28 @@ export const setMeta = async (key, value) => {
 
 // ==================== KOT HISTORY CACHE ====================
 
-export const cacheKotHistory = async (kots) => {
+export const cacheKotHistory = async (kots, date = null) => {
   try {
     await db.kotHistory.clear();
     if (kots && kots.length > 0) {
       await db.kotHistory.bulkPut(kots);
+    }
+    if (date) {
+      await db.meta.put({ key: 'lastKotHistoryDate', value: date });
     }
   } catch (err) {
     console.error('[OfflineDB] Failed to cache KOT history:', err);
   }
 };
 
-export const getCachedKotHistory = async () => {
+export const getCachedKotHistory = async (date = null) => {
   try {
+    if (date) {
+      const cachedDate = await getMeta('lastKotHistoryDate');
+      if (cachedDate && cachedDate !== date) {
+        return null; // Do not return stale cache if querying a different date
+      }
+    }
     const kots = await db.kotHistory.toArray();
     return kots.length > 0 ? kots : null;
   } catch (err) {
@@ -306,7 +357,126 @@ export const getCachedKotHistory = async () => {
   }
 };
 
+// ==================== KDS ACTIVE TICKETS CACHE ====================
+
+export const cacheKdsActiveKots = async (kots) => {
+  try {
+    if (db.kdsActiveKots) {
+      await db.kdsActiveKots.clear();
+      if (kots && kots.length > 0) {
+        await db.kdsActiveKots.bulkPut(kots);
+      }
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache KDS active KOTs:', err);
+  }
+};
+
+export const getCachedKdsActiveKots = async () => {
+  try {
+    if (db.kdsActiveKots) {
+      const kots = await db.kdsActiveKots.toArray();
+      return kots.length > 0 ? kots : null;
+    }
+    return null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached KDS active KOTs:', err);
+    return null;
+  }
+};
+
+export const updateCachedKotItem = async (kotId, itemId, status) => {
+  try {
+    if (db.kdsActiveKots) {
+      const allActive = await db.kdsActiveKots.toArray();
+      let changedActive = false;
+      for (const kot of allActive) {
+        if (kot.kotId?.toString() === kotId?.toString() || kot._id?.toString() === kotId?.toString()) {
+          if (kot.items && Array.isArray(kot.items)) {
+            kot.items.forEach(item => {
+              if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
+                item.status = status;
+                changedActive = true;
+              }
+            });
+          }
+        }
+      }
+      if (changedActive) {
+        await db.kdsActiveKots.clear();
+        await db.kdsActiveKots.bulkPut(allActive);
+      }
+    }
+
+    const allKots = await db.kotHistory.toArray();
+    let changed = false;
+    for (const kot of allKots) {
+      if (kot.kotId?.toString() === kotId?.toString() || kot._id?.toString() === kotId?.toString()) {
+        if (kot.items && Array.isArray(kot.items)) {
+          kot.items.forEach(item => {
+            if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
+              item.status = status;
+              changed = true;
+            }
+          });
+        }
+      }
+    }
+    if (changed) {
+      await db.kotHistory.clear();
+      await db.kotHistory.bulkPut(allKots);
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to update cached KOT item:', err);
+  }
+};
+
+export const removeCachedKotItem = async (kotId, itemId) => {
+  try {
+    if (db.kdsActiveKots) {
+      const allActive = await db.kdsActiveKots.toArray();
+      let changedActive = false;
+      for (const kot of allActive) {
+        if (kot.kotId?.toString() === kotId?.toString() || kot._id?.toString() === kotId?.toString()) {
+          if (kot.items && Array.isArray(kot.items)) {
+            const originalLength = kot.items.length;
+            kot.items = kot.items.filter(item => item._id?.toString() !== itemId?.toString() && item.name !== itemId);
+            if (kot.items.length !== originalLength) {
+              changedActive = true;
+            }
+          }
+        }
+      }
+      if (changedActive) {
+        await db.kdsActiveKots.clear();
+        await db.kdsActiveKots.bulkPut(allActive);
+      }
+    }
+
+    const allKots = await db.kotHistory.toArray();
+    let changed = false;
+    for (const kot of allKots) {
+      if (kot.kotId?.toString() === kotId?.toString() || kot._id?.toString() === kotId?.toString()) {
+        if (kot.items && Array.isArray(kot.items)) {
+          const originalLength = kot.items.length;
+          kot.items = kot.items.filter(item => item._id?.toString() !== itemId?.toString() && item.name !== itemId);
+          if (kot.items.length !== originalLength) {
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      await db.kotHistory.clear();
+      await db.kotHistory.bulkPut(allKots);
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to remove cached KOT item:', err);
+  }
+};
+
 // ==================== INVENTORY CACHE ====================
+
 
 export const cacheInventory = async (items) => {
   try {

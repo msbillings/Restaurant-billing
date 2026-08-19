@@ -6,7 +6,7 @@ import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offline
 import { getMenuItems } from '../api/menu';
 import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { io } from 'socket.io-client';
+import realtimeService from '../services/realtimeService';
 import Toast from './Toast';
 import Invoice from './Invoice';
 
@@ -155,14 +155,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       }
     }).catch(() => {});
 
-    // 2. Background Revalidation
+    // 2. Background Revalidation (3-second fast poll)
     fetchOrders();
     syncSpaces();
     fetchMenuItemsMap();
     const interval = setInterval(() => {
       fetchOrders();
       syncSpaces();
-    }, 10000);
+    }, 3000);
 
     const handleSpacesUpdated = (event) => {
       if (event.detail && Array.isArray(event.detail)) {
@@ -172,40 +172,59 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     };
     window.addEventListener('spacesUpdated', handleSpacesUpdated);
 
-    // Socket.io Real-Time Connection
-    const API_BASE_URL = getApiUrl();
-    const socketUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketUrl);
-    const tenantDb = localStorage.getItem('resto_db_name');
-    const token = localStorage.getItem('accessToken');
-    if (tenantDb) {
-      socket.emit('joinTenant', { tenantDb, token });
-    }
-    socket.on('orderUpdated', () => {
-      fetchOrders();
-      syncSpaces(); // Sync table status
-    });
-    socket.on('tableTransferred', () => {
+    // Real-Time Events via singleton RealtimeService
+    const handleRealtimeRefresh = (data) => {
+      if (data && data.order) {
+        const orderTableNorm = normalizeTable(data.order.tableNo);
+        setOrders(prev => {
+          const matchIndex = prev.findIndex(o => 
+            (data.order._id && o._id === data.order._id) || 
+            (orderTableNorm && normalizeTable(o.tableNo) === orderTableNorm)
+          );
+          if (data.order.status === 'Paid' || data.order.status === 'Cancelled') {
+            return prev.filter(o => o._id !== data.order._id && normalizeTable(o.tableNo) !== orderTableNorm);
+          }
+          if (matchIndex >= 0) {
+            const copy = [...prev];
+            copy[matchIndex] = data.order;
+            return copy;
+          }
+          return [data.order, ...prev];
+        });
+      }
       fetchOrders();
       syncSpaces();
-    });
-    socket.on('billSettled', () => {
-      fetchOrders();
-      syncSpaces();
-    });
-    socket.on('tableStatusChanged', () => {
-      fetchOrders();
-      syncSpaces(); // Update the UI instantly when DB changes
-    });
-    socket.on('spacesUpdated', (newFloors) => {
-      setFloors(newFloors);
-      localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
-    });
+    };
+
+    const handleSpacesSocket = (newFloors) => {
+      if (newFloors && Array.isArray(newFloors)) {
+        setFloors(newFloors);
+        localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
+      }
+    };
+
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', handleRealtimeRefresh);
+    const unsubOrdersUpdated = realtimeService.subscribe('ordersUpdated', handleRealtimeRefresh);
+    const unsubTableTransferred = realtimeService.subscribe('tableTransferred', handleRealtimeRefresh);
+    const unsubBillSettled = realtimeService.subscribe('billSettled', handleRealtimeRefresh);
+    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', handleRealtimeRefresh);
+    const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeRefresh);
+    const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleRealtimeRefresh);
+    const unsubFoodReady = realtimeService.subscribe('foodReady', handleRealtimeRefresh);
+    const unsubSpacesUpdated = realtimeService.subscribe('spacesUpdated', handleSpacesSocket);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('spacesUpdated', handleSpacesUpdated);
-      socket.disconnect();
+      unsubOrderUpdated();
+      unsubOrdersUpdated();
+      unsubTableTransferred();
+      unsubBillSettled();
+      unsubTableStatusChanged();
+      unsubNewKOT();
+      unsubKotUpdated();
+      unsubFoodReady();
+      unsubSpacesUpdated();
     };
   }, []);
 
@@ -383,17 +402,23 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   const handlePrintDirect = async (spaceName, activeOrder) => {
     if (!activeOrder) return;
+    const hasUnprinted = (activeOrder.items || []).some(i => !i.isCancelled && ((i.quantity || 0) > (i.printedQuantity || 0)));
+    if (!hasUnprinted) {
+      setToast({ message: `All items for ${spaceName} already printed. Opening billing view.`, type: 'info' });
+      onNavigate('billing', spaceName);
+      return;
+    }
     setToast({ message: `🖨️ Sending print job for ${spaceName}...`, type: 'info' });
     try {
       if (activeOrder._id && activeOrder.items && activeOrder.items.length > 0) {
         await apiGenerateKOT(activeOrder._id, activeOrder.items);
-        setToast({ message: `🖨️ KOT/Bill printed successfully for ${spaceName}!`, type: 'success' });
+        setToast({ message: `🖨️ KOT printed successfully for ${spaceName}!`, type: 'success' });
       } else {
         setToast({ message: `No active items to print for ${spaceName}`, type: 'warning' });
       }
     } catch (err) {
       console.warn("Direct print warning:", err);
-      setToast({ message: `Opening billing print view for ${spaceName}`, type: 'info' });
+      setToast({ message: err.response?.data?.message || `Opening billing print view for ${spaceName}`, type: 'info' });
     }
     // Navigate to billing screen preset with this table so cashier can view/print
     onNavigate('billing', spaceName);
@@ -444,28 +469,28 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   const getCalculatedOrderTotalWithTax = (activeOrder) => {
     if (!activeOrder) return 0;
-    const subtotal = activeOrder.subtotal !== undefined ? activeOrder.subtotal : activeOrder.items?.reduce((sum, item) => {
+    const subtotal = (activeOrder.items || []).reduce((sum, item) => {
       if (item.isCancelled || item.status === 'Cancelled') return sum;
       const activeQty = Math.max(0, (item.quantity || 0) - (item.cancelledQuantity || 0));
       return sum + (Number(item.price || 0) * activeQty);
-    }, 0) || 0;
+    }, 0);
 
-    let totRate = 0;
-    try {
-      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-      if (s.enableCgst) totRate += Number(s.cgstRate || 0);
-      if (s.enableSgst) totRate += Number(s.sgstRate || 0);
-      if (s.enableGst) totRate += Number(s.gstRate || 0);
-    } catch(e) {}
+    let totRate = (activeOrder.tax !== undefined && activeOrder.tax !== null && activeOrder.tax > 0) ? Number(activeOrder.tax) : 0;
+    if (!totRate) {
+      try {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        if (s.enableCgst) totRate += Number(s.cgstRate || 0);
+        if (s.enableSgst) totRate += Number(s.sgstRate || 0);
+        if (s.enableGst) totRate += Number(s.gstRate || 0);
+      } catch(e) {}
+    }
 
     const disc = Number(activeOrder.discount || activeOrder.discountValue || 0);
     const taxable = Math.max(0, subtotal - disc);
     const taxAmt = taxable * (totRate / 100);
+    const extraCharges = Number(activeOrder.deliveryCharge || 0) + Number(activeOrder.containerCharge || 0) + Number(activeOrder.serviceCharge || 0);
 
-    if (activeOrder.total && activeOrder.total > subtotal) {
-      return Math.round(activeOrder.total);
-    }
-    return Math.round(taxable + taxAmt);
+    return Math.round(taxable + taxAmt + extraCharges);
   };
 
   const handleConfirmMerge = async () => {
@@ -648,7 +673,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           <h2 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500 tracking-tight">{t('Table View')}</h2>
 
           {/* On mobile: refresh visible inline with title. On sm+ hidden here (shown in button row) */}
-          <button onClick={() => window.location.reload()} className="sm:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title={t("Refresh")}>
+          <button onClick={() => { setLoading(true); fetchOrders(); syncSpaces(); }} className="sm:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title={t("Refresh")}>
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
           </button>
 
@@ -659,9 +684,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               className={`px-3 py-1.5 rounded-lg shadow-xs transition-colors text-xs font-bold flex items-center gap-1.5 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
               {t("✨ AI Predictor")}
             </button>
-            <button onClick={() => window.location.reload()} className="p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center" title={t("Refresh")}>
+            <button onClick={() => { setLoading(true); fetchOrders(); syncSpaces(); }} className="p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center" title={t("Refresh")}>
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
             </button>
+
             <button onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
               {t("Merge Bills")}
             </button>
@@ -1194,33 +1220,29 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             {(() => {
               const activeSubtotal = selectedOrderForView.items?.reduce((sum, item) => {
                 if (item.isCancelled || item.status === 'Cancelled') return sum;
-                const activeQty = Math.max(0, item.quantity - (item.cancelledQuantity || 0));
+                const activeQty = Math.max(0, (item.quantity || 0) - (item.cancelledQuantity || 0));
                 return sum + (Number(item.price || 0) * activeQty);
               }, 0) || 0;
 
-              const subTotal = selectedOrderForView.subtotal !== undefined ? selectedOrderForView.subtotal : activeSubtotal;
+              const subTotal = activeSubtotal;
               
-              let taxAmount = selectedOrderForView.taxTotal || 0;
-              let serviceCharge = selectedOrderForView.serviceCharge || 0;
-              let packagingCharge = selectedOrderForView.packagingCharge || 0;
-              
-              if (selectedOrderForView.taxTotal === undefined || selectedOrderForView.taxTotal === null) {
+              let totRate = (selectedOrderForView.tax !== undefined && selectedOrderForView.tax !== null && selectedOrderForView.tax > 0) ? Number(selectedOrderForView.tax) : 0;
+              if (!totRate) {
                 try {
                   const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-                  let totRate = 0;
                   if (s.enableCgst) totRate += Number(s.cgstRate || 0);
                   if (s.enableSgst) totRate += Number(s.sgstRate || 0);
                   if (s.enableGst) totRate += Number(s.gstRate || 0);
-                  
-                  const disc = Number(selectedOrderForView.discount || 0);
-                  const taxable = Math.max(0, subTotal - disc);
-                  taxAmount = taxable * (totRate / 100);
-                } catch(e) {
-                  taxAmount = 0;
-                }
+                } catch(e) {}
               }
               
-              const calculatedTotal = selectedOrderForView.finalTotal || (subTotal - Number(selectedOrderForView.discount || 0) + taxAmount + serviceCharge + packagingCharge);
+              const disc = Number(selectedOrderForView.discount || selectedOrderForView.discountValue || 0);
+              const taxable = Math.max(0, subTotal - disc);
+              const taxAmount = taxable * (totRate / 100);
+              const serviceCharge = Number(selectedOrderForView.serviceCharge || 0);
+              const packagingCharge = Number(selectedOrderForView.packagingCharge || selectedOrderForView.deliveryCharge || selectedOrderForView.containerCharge || 0);
+              
+              const calculatedTotal = subTotal - disc + taxAmount + serviceCharge + packagingCharge;
               
               return (
                 <div className="bg-white border-t border-gray-200/80 p-6 shrink-0">

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { getDailyStats, getBillById, deleteBill } from '../api/billing';
 import { LayoutDashboard, Clock, Eye, ChevronDown, Filter } from 'lucide-react';
-import { io } from 'socket.io-client';
+import realtimeService from '../services/realtimeService';
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -125,26 +125,17 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
   useEffect(() => {
     fetchTodayStats();
     
-    // Realtime events
-    const API_BASE_URL = getApiUrl();
-    const socketUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketUrl);
-
-    socket.on('connect', () => {
-      const tenantDb = localStorage.getItem('resto_db_name');
-      const token = localStorage.getItem('accessToken');
-      if (tenantDb) {
-        socket.emit('joinTenant', { tenantDb, token });
-      }
-    });
-
-    socket.on('orderUpdated', fetchTodayStats);
-    socket.on('billSettled', fetchTodayStats);
-    socket.on('tableStatusChanged', fetchTodayStats);
-    socket.on('newKOT', fetchTodayStats);
+    // Realtime events via singleton RealtimeService
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', fetchTodayStats);
+    const unsubBillSettled = realtimeService.subscribe('billSettled', fetchTodayStats);
+    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', fetchTodayStats);
+    const unsubNewKOT = realtimeService.subscribe('newKOT', fetchTodayStats);
 
     return () => {
-      socket.disconnect();
+      unsubOrderUpdated();
+      unsubBillSettled();
+      unsubTableStatusChanged();
+      unsubNewKOT();
     };
   }, [fetchTodayStats]);
 

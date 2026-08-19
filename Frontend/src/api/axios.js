@@ -11,6 +11,7 @@ if (navigator.userAgent.toLowerCase().indexOf('electron') > -1) {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -19,6 +20,7 @@ const api = axios.create({
 // Create a separate axios instance for auth refresh to avoid interceptor recursion
 const authApi = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -62,9 +64,10 @@ const forceLogout = () => {
   setTimeout(() => { isForceLoggingOut = false; }, 2000);
 };
 
-// Add a request interceptor to include the token and tenant DB header
+// Add a request interceptor to include the token, tenant DB header, and dynamic baseURL
 api.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiUrl();
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -80,6 +83,7 @@ api.interceptors.request.use(
 
 authApi.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiUrl();
     const tenantDb = localStorage.getItem('resto_db_name');
     if (tenantDb) {
       config.headers['X-Tenant-DB'] = tenantDb;

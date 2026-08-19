@@ -1,6 +1,6 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
@@ -40,6 +40,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [systemPrinters, setSystemPrinters] = useState([]);
+  const [showOwnerPin, setShowOwnerPin] = useState(false);
 
   useEffect(() => {
     // Load settings from localStorage
@@ -75,7 +76,22 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
           },
           body: JSON.stringify({ restaurantSettings: settings })
         });
-      } catch (e) {}
+        
+        // Also update Master PIN if provided
+        if (settings.ownerPin) {
+          await fetch(`${API_BASE_URL}/config/security`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Tenant-DB': tenantDb,
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ ownerPin: settings.ownerPin })
+          });
+          // Clear it after saving so we don't resave unnecessarily
+          setSettings(prev => ({ ...prev, ownerPin: '' }));
+        }
+      } catch (e) { console.error("Error saving to config/info or config/security:", e); }
 
       // Dispatch custom event to notify other components
       window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settings }));
@@ -581,20 +597,29 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
                 </label>
               </div>
 
+
               {/* Owner Security PIN */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <User size={14} />{t("Owner Security PIN (Reports Lock)")}
-
-                  </label>
-                <input
-                    type="password"
-                    value={settings.ownerPin || '786786'}
+                  <Lock size={14} />{t("Owner Security PIN (Reports Lock)")}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showOwnerPin ? "text" : "password"}
+                    value={settings.ownerPin || ''}
                     onChange={(e) => handleInputChange('ownerPin', e.target.value)}
                     maxLength={10}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono tracking-widest font-bold"
-                    placeholder="••••••" />
-                  
+                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono tracking-widest font-bold pr-12"
+                    placeholder={t("•••••• (Leave blank to keep)")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOwnerPin(!showOwnerPin)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {showOwnerPin ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
               {/* Footer Message */}

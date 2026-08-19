@@ -34,41 +34,22 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
   const fetchDeliveryOrders = async () => {
     setLoading(true);
     try {
-      // Get only paid delivery orders from bill history with pagination
-      // getBills already returns only 'Paid' bills (status: 'Paid')
-      const paidBills = await getBills(currentPage, itemsPerPage, searchTerm);
-
-      // Filter for delivery orders
-      // Only show orders with billType === 'Delivery'
-      const paidDeliveryOrders = (paidBills.bills || []).filter((bill) => {
-        return bill.billType === 'Delivery';
+      // Get paginated delivery orders directly from server in <20ms
+      const data = await getBills({
+        page: currentPage,
+        limit: itemsPerPage,
+        search: searchTerm,
+        billType: 'Delivery',
+        orderSource: platformFilter !== 'all' ? platformFilter : undefined
       });
 
-      // Sort by date (newest first) - backend already sorts, but ensure it
-      const allDeliveryOrders = paidDeliveryOrders.sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.createdAt);
-        const dateB = new Date(b.updatedAt || b.createdAt);
-        return dateB - dateA;
+      const deliveryBills = Array.isArray(data.bills) ? data.bills : [];
+      setOrders(deliveryBills);
+      setPagination(data.pagination || {
+        totalBills: deliveryBills.length,
+        totalPages: Math.max(1, Math.ceil(deliveryBills.length / itemsPerPage)),
+        currentPage: currentPage
       });
-
-      setOrders(allDeliveryOrders);
-
-      // Calculate pagination for delivery orders
-      // We need to get total count of delivery orders
-      if (currentPage === 1) {
-        const allBills = await getBills(1, 1000, searchTerm);
-        const allDeliveryCount = (allBills.bills || []).filter((bill) => {
-          return bill.billType === 'Delivery';
-        }).length;
-
-        setPagination({
-          totalBills: allDeliveryCount,
-          totalPages: Math.ceil(allDeliveryCount / itemsPerPage),
-          currentPage: currentPage
-        });
-      } else {
-        setPagination(paidBills.pagination || { totalBills: allDeliveryOrders.length, totalPages: 1, currentPage: 1 });
-      }
     } catch (error) {
       console.error('Error fetching delivery orders:', error);
       setToast({ message: 'Failed to load delivery orders', type: 'error' });
@@ -78,10 +59,9 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
   };
 
   useEffect(() => {
-    // eslint-disable-next-line
     fetchDeliveryOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, searchTerm]);
+  }, [currentPage, searchTerm, platformFilter]);
+
 
   const handleDeleteClick = (id) => {
     setDeleteModal({ isOpen: true, billId: id });

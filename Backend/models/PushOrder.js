@@ -54,7 +54,7 @@ const pushOrderSchema = new mongoose.Schema({
   timestamps: true
 });
 
-pushOrderSchema.index({ platformOrderId: 1 });
 pushOrderSchema.index({ status: 1 });
 
 export default mongoose.model('PushOrder', pushOrderSchema);
+

@@ -21,6 +21,7 @@ const billSchema = new mongoose.Schema({
     },
     hsnCode: { type: String },
     specialNote: { type: String },
+    lastPrintedNote: { type: String },
     total: { type: Number, min: [0, 'Total cannot be negative'] },
     cancellationRequested: { type: Boolean, default: false },
     cancellationRequestedQty: { type: Number, default: 0 },
@@ -183,11 +184,18 @@ const billSchema = new mongoose.Schema({
 
 // Add indexes for performance optimization (critical for 150+ orders/day)
 billSchema.index({ status: 1, createdAt: -1 }); // For getBills and getOpenOrders
+billSchema.index({ status: 1, billType: 1, updatedAt: -1 }); // For server-paginated delivery/pickup/history
+billSchema.index({ status: 1, updatedAt: -1, createdAt: -1 }); // For getBills sorting
 billSchema.index({ tableNo: 1, status: 1 }); // For getActiveOrder
 billSchema.index({ createdAt: -1, status: 1 }); // For analytics queries
+billSchema.index({ updatedAt: -1, status: 1 }); // For dashboard & stats queries
 billSchema.index({ paymentMode: 1, createdAt: -1 }); // For payment method analytics
 billSchema.index({ billType: 1, createdAt: -1 }); // For bill type filtering
 billSchema.index({ orderSource: 1, createdAt: -1 }); // For delivery platform analytics
 billSchema.index({ deliveryStatus: 1, createdAt: -1 }); // For delivery status tracking
+billSchema.index({ 'kots.createdAt': -1 }); // For KOT history date lookups
+billSchema.index({ 'kots.kotNumber': 1 }); // For KOT search
+billSchema.index({ isEdited: 1, updatedAt: -1 }); // For edited bills list
+billSchema.index({ customerPhone: 1, createdAt: -1 }); // For customer lookup
 
 export default mongoose.model('Bill', billSchema);

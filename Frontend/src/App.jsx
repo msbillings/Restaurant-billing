@@ -65,12 +65,12 @@ import GlobalHeader from './components/GlobalHeader';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
-import { io } from 'socket.io-client';
+import realtimeService from './services/realtimeService';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import './App.css';
 import logoImg from './assets/images/logo.png';
@@ -97,6 +97,8 @@ function App() {
   const [settingsUpdateTicker, setSettingsUpdateTicker] = useState(0);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showPin, setShowPin] = useState(false);
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
 
   // Keyboard shortcut for Calculator (Alt + C or Ctrl + Alt + C)
   useEffect(() => {
@@ -167,7 +169,13 @@ function App() {
     return ['floor'];
   });
   const [hasLicense, setHasLicense] = useState(false);
-  const [ownerUnlocked, setOwnerUnlocked] = useState(false);
+  const [unlockedFeatures, setUnlockedFeatures] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('unlockedFeatures') || '{}');
+    } catch {
+      return {};
+    }
+  });
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [licenseExpiry, setLicenseExpiry] = useState(null); // Date object
@@ -276,6 +284,20 @@ function App() {
           }
         }
         if (data.restaurantSettings) {
+          try {
+            const secRes = await fetch(`${API_BASE_URL}/config/security`, {
+              headers: {
+                'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
+                'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+              }
+            });
+            if (secRes.ok) {
+              const secData = await secRes.json();
+              data.restaurantSettings.requireMasterPin = secData.requireMasterPin;
+              data.restaurantSettings.customLocks = secData.customLocks;
+            }
+          } catch (e) { console.error('Security fetch failed', e); }
+
           localStorage.setItem('restaurantSettings', JSON.stringify(data.restaurantSettings));
           setRestaurantName(data.restaurantSettings.restaurantName || 'msbillings');
           document.title = `${data.restaurantSettings.restaurantName || 'msbillings'} - Restaurant Management`;
@@ -632,29 +654,34 @@ function App() {
 
   useEffect(() => {
     if (user) {
-      const API_BASE_URL = getApiUrl();
-      const socketUrl = API_BASE_URL.replace('/api', '');
-      const socket = io(socketUrl);
+      realtimeService.rejoinTenant();
 
-      socket.on('connect', () => {
-        const tenantDb = localStorage.getItem('resto_db_name');
-        const token = localStorage.getItem('accessToken');
-        if (tenantDb) {
-          socket.emit('joinTenant', { tenantDb, token });
-        }
-      });
-
-      socket.on('orderUpdated', fetchActiveOrdersCount);
-      socket.on('billSettled', fetchActiveOrdersCount);
-      socket.on('tableStatusChanged', fetchActiveOrdersCount);
-      socket.on('newKOT', fetchActiveOrdersCount);
-      socket.on('settingsUpdated', (newSettings) => {
-        localStorage.setItem('restaurantSettings', JSON.stringify(newSettings));
+      const unsubOrder = realtimeService.subscribe('orderUpdated', fetchActiveOrdersCount);
+      const unsubBill = realtimeService.subscribe('billSettled', fetchActiveOrdersCount);
+      const unsubTable = realtimeService.subscribe('tableStatusChanged', fetchActiveOrdersCount);
+      const unsubKOT = realtimeService.subscribe('newKOT', fetchActiveOrdersCount);
+      const unsubSettings = realtimeService.subscribe('settingsUpdated', (newSettings) => {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        // Preserve security settings locally, only update restaurant info
+        const updated = { ...newSettings, requireMasterPin: s.requireMasterPin, customLocks: s.customLocks };
+        localStorage.setItem('restaurantSettings', JSON.stringify(updated));
         setSettingsUpdateTicker(prev => prev + 1); // Trigger re-render to enforce locks instantly
+      });
+      const unsubSecurity = realtimeService.subscribe('securitySettingsUpdated', (newSecurity) => {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        s.requireMasterPin = newSecurity.requireMasterPin;
+        s.customLocks = newSecurity.customLocks;
+        localStorage.setItem('restaurantSettings', JSON.stringify(s));
+        setSettingsUpdateTicker(prev => prev + 1);
       });
 
       return () => {
-        socket.disconnect();
+        unsubOrder();
+        unsubBill();
+        unsubTable();
+        unsubKOT();
+        unsubSettings();
+        unsubSecurity();
       };
     }
   }, [user]);
@@ -676,6 +703,7 @@ function App() {
     localStorage.removeItem('resto_license_expiry');
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
+    sessionStorage.removeItem('unlockedFeatures');
     window.history.replaceState(null, '', '/login');
   };
 
@@ -1569,7 +1597,7 @@ function App() {
                 if (view === 'security') isProtected = s.requireMasterPin !== false;
                 else if (s.customLocks && s.customLocks[view]) isProtected = s.customLocks[view].enabled;
                 
-                return isProtected && !ownerUnlocked;
+                return isProtected && !unlockedFeatures[view];
               })() ?
                 <div className="h-full flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
                   <div className="bg-surface p-8 rounded-3xl border border-border shadow-2xl max-w-md w-full text-center space-y-6">
@@ -1577,55 +1605,79 @@ function App() {
                       <Lock size={32} />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-extrabold text-text-main">{t("Owner Access Protected")}</h2>
-                      <p className="text-[1.05rem] text-text-muted mt-1.5 leading-relaxed">{t("Please enter the security PIN to access sensitive financial reports (")}
-                        {getTitle()}).
+                      <h2 className="text-2xl font-extrabold text-text-main">{t(view === 'security' ? 'Security Settings Locked' : 'Owner Access Protected')}</h2>
+                      <p className="text-[1.05rem] text-text-muted mt-1.5 leading-relaxed">
+                        {t(view === 'security' ? 'Please enter your Master PIN to access security settings.' : 'Please enter the security PIN to access sensitive features (')}
+                        {view !== 'security' ? getTitle() + ').' : ''}
                       </p>
                     </div>
 
-                    <form onSubmit={(e) => {
+                    <form onSubmit={async (e) => {
                       e.preventDefault();
-                      let currentPin = '1234';
-                      let masterPin = '1234';
+                      if (!pinInput || isVerifyingPin) return;
+                      setIsVerifyingPin(true);
                       try {
-                        const ticker = settingsUpdateTicker; // React dependency
-                        const s = JSON.parse(localStorage.getItem('restaurantSettings'));
-                        if (s?.ownerPin) masterPin = s.ownerPin;
+                        const API_BASE_URL = getApiUrl();
+                        const token = localStorage.getItem('accessToken');
+                        const dbName = localStorage.getItem('resto_db_name');
                         
-                        if (s?.customLocks && s.customLocks[view] && s.customLocks[view].pin) {
-                          currentPin = s.customLocks[view].pin;
+                        const res = await fetch(`${API_BASE_URL}/config/verify-pin`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'X-Tenant-DB': dbName || '',
+                            'Authorization': `Bearer ${token}`
+                          },
+                          body: JSON.stringify({ featureId: view, pin: pinInput })
+                        });
+                        
+                        const data = await res.json();
+                        if (data.success) {
+                          setUnlockedFeatures(prev => {
+                            const updated = { ...prev, [view]: true };
+                            sessionStorage.setItem('unlockedFeatures', JSON.stringify(updated));
+                            return updated;
+                          });
+                          setPinError(false);
+                          setPinInput('');
                         } else {
-                          currentPin = masterPin;
+                          setPinError(true);
                         }
-                      } catch {/* ignore */ }
-                      if (pinInput === currentPin || pinInput === masterPin || pinInput === '1234' || pinInput === '0000' || pinInput === '999999') {
-                        setOwnerUnlocked(true);
-                        setPinError(false);
-                        setPinInput('');
-                      } else {
+                      } catch (err) {
+                        console.error('Error verifying PIN:', err);
                         setPinError(true);
+                      } finally {
+                        setIsVerifyingPin(false);
                       }
                     }} className="space-y-4">
-                      <div>
+                      <div className="relative">
                         <input
-                          type="password"
-                          maxLength="6"
+                          type={showPin ? "text" : "password"}
+                          maxLength="10"
                           placeholder="• • • •"
                           value={pinInput}
                           onChange={(e) => {
                             setPinInput(e.target.value);
                             setPinError(false);
                           }}
-                          className={`w-full text-center tracking-[1em] text-2xl font-bold py-4 bg-background border-2 rounded-2xl focus:outline-none transition-all ${pinError ? 'border-danger bg-danger/5 text-danger' : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/10'}`
+                          className={`w-full text-center tracking-[0.5em] text-2xl font-bold py-4 bg-background border-2 rounded-2xl focus:outline-none transition-all ${pinError ? 'border-danger bg-danger/5 text-danger' : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/10'}`
                           }
                           autoFocus />
+                        <button
+                          type="button"
+                          onClick={() => setShowPin(!showPin)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          {showPin ? <EyeOff size={24} /> : <Eye size={24} />}
+                        </button>
 
-                        {pinError && <p className="text-xs font-bold text-danger animate-bounce mt-2">{t("Incorrect PIN! Default is 1234 or 0000.")}</p>}
+                        {pinError && <p className="text-xs font-bold text-danger animate-bounce mt-2">{t("Incorrect PIN! Please try again.")}</p>}
                       </div>
 
                       <button
                         type="submit"
-                        className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all text-base transform active:scale-[0.98] cursor-pointer">{t("Unlock Owner Reports")}
+                        disabled={isVerifyingPin}
+                        className="w-full py-4 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all text-base transform active:scale-[0.98] cursor-pointer disabled:opacity-50">{t(view === 'security' ? 'Unlock Settings' : 'Unlock Owner Reports')}
 
 
                       </button>

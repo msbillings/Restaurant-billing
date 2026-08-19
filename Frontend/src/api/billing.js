@@ -125,14 +125,33 @@ export const getOpenOrders = async () => {
   }
 };
 
-export const getBills = async (page = 1, limit = 50, search = '') => {
+export const getBills = async (pageOrOptions = 1, limit = 50, search = '', billType = '', excludeBillType = '', orderSource = '') => {
   const params = new URLSearchParams();
-  params.append('page', page);
-  params.append('limit', limit);
-  if (search) params.append('search', search);
+  
+  if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
+    const opts = pageOrOptions;
+    if (opts.page) params.append('page', opts.page);
+    if (opts.limit) params.append('limit', opts.limit);
+    if (opts.search) params.append('search', opts.search);
+    if (opts.billType) params.append('billType', opts.billType);
+    if (opts.excludeBillType) params.append('excludeBillType', opts.excludeBillType);
+    if (opts.orderSource) params.append('orderSource', opts.orderSource);
+    if (opts.paymentMode) params.append('paymentMode', opts.paymentMode);
+    if (opts.startDate) params.append('startDate', opts.startDate);
+    if (opts.endDate) params.append('endDate', opts.endDate);
+  } else {
+    params.append('page', pageOrOptions);
+    params.append('limit', limit);
+    if (search) params.append('search', search);
+    if (billType) params.append('billType', billType);
+    if (excludeBillType) params.append('excludeBillType', excludeBillType);
+    if (orderSource) params.append('orderSource', orderSource);
+  }
+
   const response = await api.get(`/bills?${params.toString()}`);
   return response.data;
 };
+
 
 export const getEditedBills = async () => {
   const response = await api.get('/bills/edited');
@@ -156,13 +175,13 @@ export const getDailyStats = async (startDate, endDate) => {
   return response.data;
 };
 
-export const apiGenerateKOT = async (id, cartItems) => {
+export const apiGenerateKOT = async (id, cartItems, tableNo) => {
   try {
-    const response = await api.post(`/bills/kot/${id}`, { items: cartItems });
+    const response = await api.post(`/bills/kot/${id}`, { items: cartItems, tableNo });
     return response.data;
   } catch (err) {
     if (isTrulyOffline()) {
-      await addToSyncQueue(`/bills/kot/${id}`, 'post', { items: cartItems });
+      await addToSyncQueue(`/bills/kot/${id}`, 'post', { items: cartItems, tableNo });
       return { _offline: true, message: 'KOT queued for sync' };
     }
     throw err;

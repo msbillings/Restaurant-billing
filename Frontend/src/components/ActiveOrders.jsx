@@ -1,51 +1,65 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect } from 'react';
 import BackButton from './common/BackButton';
 import { getOpenOrders } from '../api/billing';
 import { getCachedOpenOrders } from '../db/offlineDb';
 import { UtensilsCrossed, Clock, ChevronRight, ArrowLeft, FileText, CheckCircle } from 'lucide-react';
-import { io } from 'socket.io-client';
+import realtimeService from '../services/realtimeService';
 
-const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {const { t } = useLanguage();
+const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Online'
 
   useEffect(() => {
-    // 1. Instant Cache Load (0ms delay)
-    getCachedOpenOrders().then((cached) => {
-      if (cached && Array.isArray(cached) && cached.length > 0) {
-        setOrders(cached);
-      }
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
-
-    // 2. Background Server Revalidation
+    // 1. Initial Load directly from server
     fetchOrders(false);
 
-    // Set up Real-Time WebSocket connection
-    const API_BASE_URL = getApiUrl();
-    const socketUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketUrl);
+    // 2. Continuous 3-second live revalidation
+    const interval = setInterval(() => {
+      fetchOrders(true);
+    }, 3000);
 
-    socket.on('connect', () => {
-      const tenantDb = localStorage.getItem('resto_db_name');
-      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
-      if (tenantDb) {
-        socket.emit('joinTenant', { tenantDb, token });
+    // Listen for real-time events via singleton RealtimeService
+    const handleRealtimeOrders = (data) => {
+      if (data && data.order) {
+        setOrders(prev => {
+          if (data.order.status === 'Paid' || data.order.status === 'Cancelled' || data.order.status === 'Deleted') {
+            return prev.filter(o => o._id !== data.order._id && o.tableNo !== data.order.tableNo);
+          }
+          const idx = prev.findIndex(o => o._id === data.order._id || o.tableNo === data.order.tableNo);
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = data.order;
+            return copy;
+          }
+          return [data.order, ...prev];
+        });
       }
-    });
+      fetchOrders(true);
+    };
 
-    // Listen for real-time events that affect active orders
-    socket.on('orderUpdated', () => fetchOrders(true));
-    socket.on('billSettled', () => fetchOrders(true));
-    socket.on('tableStatusChanged', () => fetchOrders(true));
-    socket.on('newKOT', () => fetchOrders(true));
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', handleRealtimeOrders);
+    const unsubOrdersUpdated = realtimeService.subscribe('ordersUpdated', handleRealtimeOrders);
+    const unsubBillSettled = realtimeService.subscribe('billSettled', handleRealtimeOrders);
+    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', handleRealtimeOrders);
+    const unsubTableTransferred = realtimeService.subscribe('tableTransferred', handleRealtimeOrders);
+    const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeOrders);
+    const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleRealtimeOrders);
+    const unsubFoodReady = realtimeService.subscribe('foodReady', handleRealtimeOrders);
 
     return () => {
-      socket.disconnect();
+      clearInterval(interval);
+      unsubOrderUpdated();
+      unsubOrdersUpdated();
+      unsubBillSettled();
+      unsubTableStatusChanged();
+      unsubTableTransferred();
+      unsubNewKOT();
+      unsubKotUpdated();
+      unsubFoodReady();
     };
   }, []);
 
@@ -55,7 +69,8 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {const { t } =
     }
     try {
       const data = await getOpenOrders();
-      setOrders(data || []);
+      const validOpen = (data || []).filter(o => o.status === 'Open' || o.status === 'Billed');
+      setOrders(validOpen);
     } catch (error) {
       console.error('Error fetching open orders:', error);
     } finally {

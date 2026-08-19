@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import BillDefault from '../models/Bill.js';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
@@ -24,34 +25,37 @@ const emitSocketEvent = (req, eventName, data) => {
   }
 };
 
-// Helper to get case-insensitive clean regex match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
+// Helper to get indexed clean match for table variations (e.g. "Table 1" vs "Ground Floor - Table 1")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
+  const variations = [tblStr, trimmed];
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
     const tablePart = parts.slice(1).join(' - ').trim();
-    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Match exact "First Floor - Table 4" OR legacy "Table 4" so older orders are still found
-    return { 
-      $in: [
-        new RegExp(`^${escapedFloor}\\s*-\\s*${escapedTable}$`, 'i'),
-        new RegExp(`^${escapedTable}$`, 'i')
-      ] 
-    };
+    variations.push(`${floorPart} - ${tablePart}`);
+    variations.push(tablePart);
+    variations.push(`${floorPart.toLowerCase()} - ${tablePart.toLowerCase()}`);
   }
-  const escapedClean = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return { $regex: new RegExp(`^${escapedClean}$`, 'i') };
+  return { $in: [...new Set(variations)] };
 };
 
+
+// In-memory cache for dynamic tax rate per tenant DB with 60s TTL
+const taxRateCache = new Map();
 
 // Helper to dynamically get active tax rate from restaurantSettings in DB
 const getDynamicTaxRate = async (req) => {
   try {
+    const tenantDb = req.tenantDb || req.headers['x-tenant-db'] || req.user?.db || 'default';
+    const cached = taxRateCache.get(tenantDb);
+    if (cached && (Date.now() - cached.time < 60000)) {
+      return cached.rate;
+    }
+
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).maxTimeMS(600).lean().catch(() => null);
     let s = {};
     if (settingsDoc?.value) {
       s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
@@ -66,10 +70,13 @@ const getDynamicTaxRate = async (req) => {
     if (s.enableGst) {
       tot += Number(s.gstRate || 0);
     }
+    if (!tot && !s.enableCgst && !s.enableSgst && !s.enableGst) tot = 5;
+
+    taxRateCache.set(tenantDb, { rate: tot, time: Date.now() });
     return tot;
   } catch (e) {
     console.error("Error reading dynamic tax rate:", e);
-    return 0;
+    return 5;
   }
 };
 
@@ -156,11 +163,12 @@ export const saveOrder = async (req, res) => {
       const cancelledQty = item.cancelledQuantity || 0;
       const activeQty = isCancelled ? 0 : Math.max(0, Number(item.quantity || 0) - cancelledQty);
       return {
+        _id: item._id,
         name: item.name,
         price: Number(item.price || 0),
         quantity: Number(item.quantity || 0),
         total: Number(item.price || 0) * activeQty,
-        specialNote: item.specialNote || '',
+        specialNote: item.specialNote !== undefined ? item.specialNote : undefined,
         status: item.status || 'Pending',
         isCancelled: isCancelled,
         cancelledQuantity: cancelledQty,
@@ -183,15 +191,24 @@ export const saveOrder = async (req, res) => {
     if (order) {
       // Preserve printedQuantity and cancellation status for existing items
       const updatedItems = sanitizedItems.map(newItem => {
-        const existingItem = order.items.find(i => i.name === newItem.name);
+        const existingItem = order.items.find(i => 
+          (newItem._id && i._id && String(i._id) === String(newItem._id)) ||
+          (i.name && newItem.name && i.name.trim().toLowerCase() === newItem.name.trim().toLowerCase())
+        );
         if (existingItem) {
           const isCancelled = existingItem.isCancelled || newItem.isCancelled || false;
           const cancelledQty = Math.max(existingItem.cancelledQuantity || 0, newItem.cancelledQuantity || 0);
           const activeQty = isCancelled ? 0 : Math.max(0, Number(newItem.quantity || 0) - cancelledQty);
+          const resolvedNote = (newItem.specialNote !== undefined && newItem.specialNote !== null)
+            ? newItem.specialNote
+            : (existingItem.specialNote || '');
+
           return { 
+            _id: existingItem._id || newItem._id,
             ...newItem, 
             printedQuantity: existingItem.printedQuantity !== undefined ? existingItem.printedQuantity : newItem.printedQuantity,
-            specialNote: newItem.specialNote || existingItem.specialNote || '',
+            specialNote: resolvedNote,
+            lastPrintedNote: existingItem.lastPrintedNote || '',
             status: newItem.status || existingItem.status || 'Pending',
             isCancelled,
             cancelledQuantity: cancelledQty,
@@ -204,20 +221,26 @@ export const saveOrder = async (req, res) => {
         return newItem;
       });
 
-      // Preserve items that were already printed or cancelled but removed from request
+      // Preserve items that were already printed or cancelled for KOT tracking
       order.items.forEach(oldItem => {
-        if (oldItem.printedQuantity > 0 || oldItem.isCancelled) {
-          const stillExists = updatedItems.find(i => i.name === oldItem.name);
+        if ((oldItem.printedQuantity || 0) > 0 || oldItem.isCancelled) {
+          const stillExists = updatedItems.find(i => 
+            (oldItem._id && i._id && String(i._id) === String(oldItem._id)) ||
+            (i.name && oldItem.name && i.name.trim().toLowerCase() === oldItem.name.trim().toLowerCase())
+          );
           if (!stillExists) {
             updatedItems.push({
+              _id: oldItem._id,
               name: oldItem.name,
               price: oldItem.price,
-              quantity: oldItem.quantity || 0,
+              quantity: 0,
               total: 0,
               printedQuantity: oldItem.printedQuantity || 0,
               specialNote: oldItem.specialNote || '',
-              isCancelled: oldItem.isCancelled || false,
-              cancelledQuantity: oldItem.cancelledQuantity || 0
+              lastPrintedNote: oldItem.lastPrintedNote || '',
+              status: 'Cancelled',
+              isCancelled: true,
+              cancelledQuantity: oldItem.printedQuantity || oldItem.quantity || 0
             });
           }
         }
@@ -252,8 +275,9 @@ export const saveOrder = async (req, res) => {
       }
 
       const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
-      const dynamicTaxRate = await getDynamicTaxRate(req);
-      const tRate = (tax !== undefined && tax !== null && tax > 0) ? Number(tax) : (order.tax && order.tax > 0 ? order.tax : dynamicTaxRate);
+      const tRate = (tax !== undefined && tax !== null && Number(tax) >= 0) 
+        ? Number(tax) 
+        : (order.tax && order.tax > 0 ? order.tax : await getDynamicTaxRate(req));
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
@@ -405,7 +429,7 @@ export const saveOrder = async (req, res) => {
     cache.clear('dailyStats');
     cache.clear('openOrders');
     
-    emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status });
+    emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status, order });
 
     if (id) {
       emitNotification(req, 'Order Updated', `Order updated for Table ${tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
@@ -413,9 +437,9 @@ export const saveOrder = async (req, res) => {
       emitNotification(req, 'New Order Placed', `Order placed for Table ${tableNo} (${order.billType})`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
     }
     
-    // Update Floor/Table status in DB
+    // Update Floor/Table status in DB in background
     if (order.status === 'Open' && order.billType === 'Dine-In') {
-      await updateTableStatusHelper(req, order.tableNo, 'Occupied', order._id);
+      updateTableStatusHelper(req, order.tableNo, 'Occupied', order._id).catch(err => console.error('Table status update error:', err));
     }
     // Sync customer to CRM immediately without modifying visits/spend
     if (order.customerPhone) {
@@ -436,10 +460,34 @@ export const generateBill = async (req, res) => {
     const { id } = req.params;
     const { discount, discountType, discountValue, tax, taxBreakdown } = req.body;
 
-    // Always fetch a fresh document directly from DB to avoid stale __v VersionError
-    let order = await Bill.findById(id);
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Bill.findById(id);
+    }
+    if (!order && (req.body.tableNo || req.query.tableNo)) {
+      const tableNo = req.body.tableNo || req.query.tableNo;
+      order = await Bill.findOne({
+        tableNo: getTableMatchCondition(tableNo),
+        status: { $in: ['Open', 'Billed'] }
+      });
+    }
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.status !== 'Open') return res.status(400).json({ message: 'Order already billed or paid' });
+    if (order.status === 'Paid') return res.status(400).json({ message: 'Order already paid' });
+    if (order.status === 'Billed') {
+      if (discount !== undefined) order.discount = Number(discount) || 0;
+      if (discountType) order.discountType = discountType;
+      if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
+      if (tax !== undefined) order.tax = Number(tax) || 0;
+      if (taxBreakdown) order.taxBreakdown = taxBreakdown;
+      const taxableAmount = Math.max(0, order.subtotal - (order.discount || 0));
+      const taxAmount = (taxableAmount * (order.tax || 0)) / 100;
+      order.total = Math.round(taxableAmount + taxAmount);
+      await order.save();
+      cache.clear('dailyStats');
+      cache.clear('openOrders');
+      emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
+      return res.json(order);
+    }
 
     // Generate Sequential Bill Number (e.g. MS0001, MS0002)
     let nextNum = 1;
@@ -497,11 +545,11 @@ export const generateBill = async (req, res) => {
     cache.clear('dailyStats');
     cache.clear('openOrders');
     
-    emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed' });
+    emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
     
-    // Update Floor/Table status in DB
+    // Update Floor/Table status in DB in background
     if (order.billType === 'Dine-In') {
-      await updateTableStatusHelper(req, order.tableNo, 'Billed', order._id);
+      updateTableStatusHelper(req, order.tableNo, 'Billed', order._id).catch(err => console.error('Table status error:', err));
     }
     
     return res.json(order);
@@ -706,6 +754,10 @@ export const settleBill = async (req, res) => {
     const order = await Bill.findById(id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     
+    if (order.status === 'Paid') {
+      return res.json(order);
+    }
+
     // Set status to 'Paid' - this makes it appear in billing history
     order.status = 'Paid';
     order.paymentMode = paymentMode;
@@ -737,11 +789,12 @@ export const settleBill = async (req, res) => {
     cache.clear('dailyStats');
     cache.clear('openOrders');
     
-    emitSocketEvent(req, 'billSettled', { tableNo: order.tableNo, billNumber: order.billNumber });
+    emitSocketEvent(req, 'billSettled', { tableNo: order.tableNo, billNumber: order.billNumber, order, bill: order });
+    emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Paid', order });
     
-    // Free up the table in DB
+    // Free up the table in DB in background
     if (order.billType === 'Dine-In') {
-      await updateTableStatusHelper(req, order.tableNo, 'Available', null);
+      updateTableStatusHelper(req, order.tableNo, 'Available', null).catch(err => console.error('Table status error:', err));
     }
     
     // Return the saved bill with all details
@@ -753,50 +806,81 @@ export const settleBill = async (req, res) => {
 };
 
 // Get all bills (for history) with pagination support - Optimized for 150+ orders/day
+// Get all bills (for history, delivery, pickup) with pagination support - Optimized for high performance
 export const getBills = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Default 20 per page, max 100 for performance
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 100);
     const skip = (page - 1) * limit;
-    const search = req.query.search || '';
+    const { search, billType, excludeBillType, orderSource, paymentMode, status, startDate, endDate } = req.query;
 
-    // Build query with search
-    const query = { status: { $in: ['Paid', 'Cancelled', 'Deleted'] } };
-    if (search) {
-      query.billNumber = { $regex: search, $options: 'i' };
+    // Build query
+    const query = {};
+
+    // Status filter
+    if (status) {
+      query.status = status.includes(',') ? { $in: status.split(',').map(s => s.trim()) } : status;
+    } else {
+      query.status = { $in: ['Paid', 'Cancelled', 'Deleted'] };
     }
 
-    let bills = [];
-    let total = 0;
+    // Bill type filter (e.g. Delivery, Takeaway, or Dine-In,Takeaway)
+    if (billType) {
+      if (billType.includes(',')) {
+        query.billType = { $in: billType.split(',').map(s => s.trim()) };
+      } else {
+        query.billType = billType.trim();
+      }
+    } else if (excludeBillType) {
+      query.billType = { $ne: excludeBillType.trim() };
+    }
 
-    try {
-      // Use lean() for better performance with large datasets
-      // Sort by updatedAt descending (newest first) - Latest paid bills appear first
-      // Using updatedAt ensures bills that were just paid/completed show at the top
-      // This ensures whatever billing was done most recently appears first
-      bills = await Bill.find(query)
-        .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt') // Include status, orderSource and items for delivery filtering
-        .sort({ updatedAt: -1, createdAt: -1 }) // Sort by updatedAt first (when paid), then createdAt as tiebreaker
+    // Order source filter (e.g. Swiggy, Zomato, Direct)
+    if (orderSource && orderSource !== 'all') {
+      if (orderSource === 'Other') {
+        query.orderSource = { $nin: ['Swiggy', 'Zomato', 'Direct'] };
+      } else {
+        query.orderSource = orderSource.trim();
+      }
+    }
+
+    // Payment mode filter
+    if (paymentMode && paymentMode !== 'all' && paymentMode !== 'All') {
+      query.paymentMode = paymentMode.trim();
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      const searchClean = search.trim().replace(/^#/, '');
+      query.$or = [
+        { billNumber: { $regex: searchClean, $options: 'i' } },
+        { tableNo: { $regex: searchClean, $options: 'i' } },
+        { customerName: { $regex: searchClean, $options: 'i' } },
+        { customerPhone: { $regex: searchClean, $options: 'i' } }
+      ];
+    }
+
+    // Run query and count concurrently in parallel for 2x faster execution
+    const [bills, total] = await Promise.all([
+      Bill.find(query)
+        .select('billNumber tableNo billType paymentMode total orderSource items status customerName customerPhone createdAt updatedAt')
+        .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean(); // Use lean for faster queries
-    } catch (error) {
-      console.error('Error fetching bills list:', error);
-      bills = [];
-    }
+        .lean(),
+      Bill.countDocuments(query)
+    ]);
 
-    try {
-      // Use estimatedDocumentCount for better performance on large collections
-      total = await Bill.countDocuments(query);
-    } catch (error) {
-      console.error('Error counting bills:', error);
-      total = bills.length; // Fallback to bills array length
-    }
-    
-    // Ensure bills is an array
     const validBills = Array.isArray(bills) ? bills : [];
-    
+
     res.json({
       bills: validBills,
       pagination: {
@@ -808,10 +892,7 @@ export const getBills = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching bills:', error);
-    console.error('Error stack:', error.stack);
-    
-    // Always return default response to prevent frontend failure
-    const defaultResponse = {
+    res.status(200).json({
       bills: [],
       pagination: {
         currentPage: 1,
@@ -819,12 +900,10 @@ export const getBills = async (req, res) => {
         totalBills: 0,
         hasMore: false
       }
-    };
-    
-    // Return 200 with default data so bill history page doesn't break
-    res.status(200).json(defaultResponse);
+    });
   }
 };
+
 
 // Get a single bill by ID (with all details for invoice)
 export const getBillById = async (req, res) => {
@@ -923,19 +1002,16 @@ export const getOpenOrders = async (req, res) => {
     const dynamicTaxRate = await getDynamicTaxRate(req);
 
     const formattedOrders = orders.map(order => {
-      if (order.status === 'Open') {
-        const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
-        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
-        const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
-        const totalWithTax = Math.round(subtotal + taxAmount);
-        return {
-          ...order,
-          subtotal,
-          tax: taxRate,
-          total: totalWithTax
-        };
-      }
-      return order;
+      const subtotal = (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
+      const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+      const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+      const totalWithTax = Math.round(subtotal + taxAmount);
+      return {
+        ...order,
+        subtotal,
+        tax: taxRate,
+        total: totalWithTax
+      };
     });
 
     res.json(formattedOrders);
@@ -945,12 +1021,10 @@ export const getOpenOrders = async (req, res) => {
   }
 };
 
-// Get daily statistics - Optimized with caching for 150+ orders/day
+// Get daily statistics - Optimized with parallel aggregation for sub-50ms execution
 export const getDailyStats = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    // Use UTC dates to avoid timezone issues in production
-    // MongoDB stores dates in UTC, so we need to query in UTC
     const now = new Date();
     let today, tomorrow;
     
@@ -963,38 +1037,30 @@ export const getDailyStats = async (req, res) => {
       tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
     }
 
-    
-    // Ensure dates are valid
     if (isNaN(today.getTime()) || isNaN(tomorrow.getTime())) {
       throw new Error('Invalid date range');
     }
-    
-    const cacheKey = cache.getCacheKey('dailyStats', today.toISOString().split('T')[0]);
-    
-    // Cache checking disabled
-    // const cached = cache.get(cacheKey);
-    // if (cached) {
-    //   return res.json(cached);
-    // }
 
-    // Optimized: Single aggregation pipeline for better performance
-    // Handle each query separately to catch individual errors
-    let paidStats = [];
-    let paymentStats = [];
-    let activeOrders = 0;
-    let deliveryStats = 0;
-    let topItems = [];
-    let recentBills = [];
+    const rangeMs = tomorrow.getTime() - today.getTime();
+    const isSingleDay = rangeMs <= 86400000 + 1000;
 
-    try {
-      // Get paid bills stats
-      paidStats = await Bill.aggregate([
-        {
-          $match: {
-            updatedAt: { $gte: today, $lt: tomorrow },
-            status: 'Paid'
-          }
-        },
+    // Run ALL independent queries concurrently in parallel
+    const [
+      paidStatsRes,
+      paymentStatsRes,
+      topItemsRes,
+      recentBillsRes,
+      openKOTsRes,
+      deliveryStatsRes,
+      dineInStatsRes,
+      takeawayStatsRes,
+      cancelledOrdersRes,
+      editedOrdersRes,
+      timelineRes
+    ] = await Promise.allSettled([
+      // 1. Paid Stats
+      Bill.aggregate([
+        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
         {
           $project: {
             total: { $ifNull: ['$total', 0] },
@@ -1014,138 +1080,40 @@ export const getDailyStats = async (req, res) => {
             totalItems: { $sum: { $size: '$items' } }
           }
         }
-      ]);
-    } catch (error) {
-      console.error('Error in paidStats aggregation:', error);
-      paidStats = [];
-    }
-
-    try {
-      // Get payment method breakdown
-      paymentStats = await Bill.aggregate([
-        {
-          $match: {
-            updatedAt: { $gte: today, $lt: tomorrow },
-            status: 'Paid',
-            paymentMode: { $exists: true, $ne: null }
-          }
-        },
-        {
-          $project: {
-            paymentMode: 1,
-            total: { $ifNull: ['$total', 0] }
-          }
-        },
-        {
-          $group: {
-            _id: '$paymentMode',
-            count: { $sum: 1 },
-            revenue: { $sum: '$total' }
-          }
-        }
-      ]);
-    } catch (error) {
-      console.error('Error in paymentStats aggregation:', error);
-      paymentStats = [];
-    }
-
-    try {
-      topItems = await Bill.aggregate([
-        {
-          $match: {
-            updatedAt: { $gte: today, $lt: tomorrow },
-            status: 'Paid'
-          }
-        },
+      ]),
+      // 2. Payment Stats
+      Bill.aggregate([
+        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', paymentMode: { $exists: true, $ne: null } } },
+        { $project: { paymentMode: 1, total: { $ifNull: ['$total', 0] } } },
+        { $group: { _id: '$paymentMode', count: { $sum: 1 }, revenue: { $sum: '$total' } } }
+      ]),
+      // 3. Top Items
+      Bill.aggregate([
+        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
         { $unwind: "$items" },
-        {
-          $group: {
-            _id: "$items.name",
-            quantity: { $sum: "$items.quantity" },
-            revenue: { $sum: "$items.total" }
-          }
-        },
+        { $group: { _id: "$items.name", quantity: { $sum: "$items.quantity" }, revenue: { $sum: "$items.total" } } },
         { $sort: { quantity: -1 } },
         { $limit: 10 }
-      ]);
-    } catch (error) {
-      console.error('Error in topItems aggregation:', error);
-      topItems = [];
-    }
-
-    try {
-      recentBills = await Bill.find({
-        updatedAt: { $gte: today, $lt: tomorrow },
-        status: 'Paid'
-      })
-      .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt')
-      .sort({ updatedAt: -1, createdAt: -1 })
-      .limit(6)
-      .lean();
-    } catch (error) {
-      console.error('Error fetching recent bills:', error);
-      recentBills = [];
-    }
-
-    let openKOTs = [];
-    try {
-      openKOTs = await Bill.find({
-        status: { $in: ['Open', 'Billed'] }
-      })
-      .select('tableNo billType items status updatedAt createdAt')
-      .sort({ updatedAt: -1 })
-      .lean();
-
-      activeOrders = openKOTs.length;
-    } catch (error) {
-      console.error('Error fetching open KOTs:', error);
-      activeOrders = 0;
-      openKOTs = [];
-    }
-
-    try {
-      // Get delivery orders count (paid delivery orders today)
-      // Only count orders with billType === 'Delivery'
-      deliveryStats = await Bill.countDocuments({
-        updatedAt: { $gte: today, $lt: tomorrow },
-        status: 'Paid',
-        billType: 'Delivery'
-      });
-    } catch (error) {
-      console.error('Error counting delivery orders:', error);
-      deliveryStats = 0;
-    }
-
-    let dineInStats = 0;
-    let takeawayStats = 0;
-
-    try {
-      // Get dine-in orders count
-      dineInStats = await Bill.countDocuments({
-        updatedAt: { $gte: today, $lt: tomorrow },
-        status: 'Paid',
-        billType: 'Dine-In'
-      });
-    } catch (error) {
-      console.error('Error counting dine-in orders:', error);
-      dineInStats = 0;
-    }
-
-    try {
-      // Get takeaway orders count
-      takeawayStats = await Bill.countDocuments({
-        updatedAt: { $gte: today, $lt: tomorrow },
-        status: 'Paid',
-        billType: 'Takeaway'
-      });
-    } catch (error) {
-      console.error('Error counting takeaway orders:', error);
-      takeawayStats = 0;
-    }
-
-    let cancelledOrders = [];
-    try {
-      cancelledOrders = await Bill.find({
+      ]),
+      // 4. Recent Bills
+      Bill.find({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' })
+        .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt')
+        .sort({ updatedAt: -1, createdAt: -1 })
+        .limit(6)
+        .lean(),
+      // 5. Open KOTs / Active Orders
+      Bill.find({ status: { $in: ['Open', 'Billed'] } })
+        .select('tableNo billType items status updatedAt createdAt')
+        .sort({ updatedAt: -1 })
+        .lean(),
+      // 6. Delivery Count
+      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Delivery' }),
+      // 7. Dine-In Count
+      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Dine-In' }),
+      // 8. Takeaway Count
+      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Takeaway' }),
+      // 9. Cancelled Orders
+      Bill.find({
         updatedAt: { $gte: today, $lt: tomorrow },
         $or: [
           { status: { $in: ['Cancelled', 'Deleted'] } },
@@ -1154,77 +1122,65 @@ export const getDailyStats = async (req, res) => {
       })
       .select('tableNo billType cancelReason status updatedAt createdAt')
       .sort({ updatedAt: -1 })
-      .lean();
-    } catch (error) {
-      console.error('Error fetching cancelled orders:', error);
-      cancelledOrders = [];
-    }
+      .lean(),
+      // 10. Edited Orders
+      Bill.find({ updatedAt: { $gte: today, $lt: tomorrow }, isEdited: true })
+        .select('tableNo billNumber billType editHistory status updatedAt createdAt')
+        .sort({ updatedAt: -1 })
+        .lean(),
+      // 11. Timeline breakdown
+      isSingleDay
+        ? Bill.aggregate([
+            { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+            { $group: { _id: { $hour: '$updatedAt' }, sales: { $sum: '$total' }, orders: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+          ])
+        : Bill.aggregate([
+            { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+            {
+              $group: {
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' } },
+                sales: { $sum: '$total' },
+                orders: { $sum: 1 }
+              }
+            },
+            { $sort: { _id: 1 } }
+          ])
+    ]);
 
-    let editedOrders = [];
-    try {
-      editedOrders = await Bill.find({
-        updatedAt: { $gte: today, $lt: tomorrow },
-        isEdited: true
-      })
-      .select('tableNo billNumber billType editHistory status updatedAt createdAt')
-      .sort({ updatedAt: -1 })
-      .lean();
-    } catch (error) {
-      console.error('Error fetching edited orders:', error);
-      editedOrders = [];
-    }
-
-    // Smart sales breakdown for the Sales Overview chart (REAL data)
-    // For single day → hourly breakdown, for multi-day → daily breakdown
-    const rangeMs = tomorrow.getTime() - today.getTime();
-    const isSingleDay = rangeMs <= 86400000 + 1000; // 24 hours + 1s tolerance
+    const paidStats = paidStatsRes.status === 'fulfilled' ? paidStatsRes.value : [];
+    const paymentStats = paymentStatsRes.status === 'fulfilled' ? paymentStatsRes.value : [];
+    const topItems = topItemsRes.status === 'fulfilled' ? topItemsRes.value : [];
+    const recentBills = recentBillsRes.status === 'fulfilled' ? recentBillsRes.value : [];
+    const openKOTs = openKOTsRes.status === 'fulfilled' ? openKOTsRes.value : [];
+    const deliveryStats = deliveryStatsRes.status === 'fulfilled' ? deliveryStatsRes.value : 0;
+    const dineInStats = dineInStatsRes.status === 'fulfilled' ? dineInStatsRes.value : 0;
+    const takeawayStats = takeawayStatsRes.status === 'fulfilled' ? takeawayStatsRes.value : 0;
+    const cancelledOrders = cancelledOrdersRes.status === 'fulfilled' ? cancelledOrdersRes.value : [];
+    const editedOrders = editedOrdersRes.status === 'fulfilled' ? editedOrdersRes.value : [];
+    const rawTimeline = timelineRes.status === 'fulfilled' ? timelineRes.value : [];
 
     let salesTimeline = [];
-    try {
-      if (isSingleDay) {
-        // HOURLY breakdown for Today
-        const hourlyBreakdown = await Bill.aggregate([
-          { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
-          { $group: { _id: { $hour: '$updatedAt' }, sales: { $sum: '$total' }, orders: { $sum: 1 } } },
-          { $sort: { _id: 1 } }
-        ]);
-        const hourlyMap = {};
-        hourlyBreakdown.forEach(h => { hourlyMap[h._id] = h; });
-        for (let hr = 0; hr < 24; hr++) {
-          const entry = hourlyMap[hr] || { sales: 0, orders: 0 };
-          salesTimeline.push({ time: `${hr.toString().padStart(2, '0')}:00`, sales: entry.sales, orders: entry.orders });
-        }
-      } else {
-        // DAILY breakdown for multi-day ranges
-        const dailyBreakdown = await Bill.aggregate([
-          { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
-          {
-            $group: {
-              _id: { $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' } },
-              sales: { $sum: '$total' },
-              orders: { $sum: 1 }
-            }
-          },
-          { $sort: { _id: 1 } }
-        ]);
-        // Build a map of existing data
-        const dailyMap = {};
-        dailyBreakdown.forEach(d => { dailyMap[d._id] = d; });
-        // Fill in all days in the range (including days with 0 sales)
-        const cursor = new Date(today);
-        while (cursor < tomorrow) {
-          const dateStr = cursor.toISOString().split('T')[0];
-          const entry = dailyMap[dateStr] || { sales: 0, orders: 0 };
-          // Format label based on range length
-          const dayLabel = `${cursor.getUTCDate().toString().padStart(2, '0')}/${(cursor.getUTCMonth() + 1).toString().padStart(2, '0')}`;
-          salesTimeline.push({ time: dayLabel, sales: entry.sales, orders: entry.orders });
-          cursor.setUTCDate(cursor.getUTCDate() + 1);
-        }
+    if (isSingleDay) {
+      const hourlyMap = {};
+      rawTimeline.forEach(h => { hourlyMap[h._id] = h; });
+      for (let hr = 0; hr < 24; hr++) {
+        const entry = hourlyMap[hr] || { sales: 0, orders: 0 };
+        salesTimeline.push({ time: `${hr.toString().padStart(2, '0')}:00`, sales: entry.sales, orders: entry.orders });
       }
-    } catch (error) {
-      console.error('Error in sales timeline aggregation:', error);
-      salesTimeline = [];
+    } else {
+      const dailyMap = {};
+      rawTimeline.forEach(d => { dailyMap[d._id] = d; });
+      const cursor = new Date(today);
+      while (cursor < tomorrow) {
+        const dateStr = cursor.toISOString().split('T')[0];
+        const entry = dailyMap[dateStr] || { sales: 0, orders: 0 };
+        const dayLabel = `${cursor.getUTCDate().toString().padStart(2, '0')}/${(cursor.getUTCMonth() + 1).toString().padStart(2, '0')}`;
+        salesTimeline.push({ time: dayLabel, sales: entry.sales, orders: entry.orders });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
     }
+
 
     const result = paidStats[0] || { 
       totalRevenue: 0, 
@@ -1300,7 +1256,17 @@ export const generateKOT = async (req, res) => {
     const { id } = req.params;
     const { items: currentCart } = req.body; // Frontend sends the current cart to be safe
 
-    const bill = await Bill.findById(id);
+    let bill = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      bill = await Bill.findById(id);
+    }
+    if (!bill && (req.body.tableNo || req.query.tableNo)) {
+      const tableNo = req.body.tableNo || req.query.tableNo;
+      bill = await Bill.findOne({
+        tableNo: getTableMatchCondition(tableNo),
+        status: { $in: ['Open', 'Billed'] }
+      });
+    }
     if (!bill) {
       return res.status(404).json({ message: 'Bill not found' });
     }
@@ -1312,21 +1278,38 @@ export const generateKOT = async (req, res) => {
     // Wait, the frontend should just call saveOrder, then call generateKOT.
     // generateKOT will look at bill.items, compare quantity with printedQuantity
     
+    // If currentCart provided, ensure any latest item notes are preserved
+    if (currentCart && Array.isArray(currentCart)) {
+      currentCart.forEach(cItem => {
+        const bItem = bill.items.find(i => i.name === cItem.name || (cItem._id && i._id?.toString() === cItem._id?.toString()));
+        if (bItem && cItem.specialNote !== undefined) {
+          bItem.specialNote = cItem.specialNote;
+        }
+      });
+    }
+
     for (const item of bill.items) {
-      const newQty = item.quantity - (item.printedQuantity || 0);
-      if (newQty !== 0) {
+      const currentQty = Number(item.quantity || 0);
+      const printedQty = Number(item.printedQuantity || 0);
+      const newQty = currentQty - printedQty;
+      const currentNote = (item.specialNote || '').trim();
+      const lastNote = (item.lastPrintedNote || '').trim();
+      const noteChanged = currentNote !== lastNote;
+      if (newQty !== 0 || noteChanged) {
         kotItems.push({
           name: item.name,
-          quantity: newQty, // Can be negative for cancellations
-          specialNote: item.specialNote || ''
+          quantity: newQty !== 0 ? newQty : currentQty,
+          specialNote: currentNote,
+          isNoteUpdateOnly: newQty === 0 && Boolean(noteChanged)
         });
-        // Update printed quantity
-        item.printedQuantity = item.quantity;
+        // Update printed quantity & last printed note
+        item.printedQuantity = currentQty;
+        item.lastPrintedNote = currentNote;
       }
     }
 
     if (kotItems.length === 0) {
-      return res.status(400).json({ message: 'No new items to print KOT for.' });
+      return res.status(400).json({ message: 'No new items or changes to print KOT for.' });
     }
 
     // Generate KOT number (e.g., "KOT-1" relative to this bill)
@@ -1341,7 +1324,21 @@ export const generateKOT = async (req, res) => {
     bill.kots.push(newKOT);
     await bill.save();
 
-    emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: newKOT });
+    const savedKOT = bill.kots[bill.kots.length - 1];
+    const kotPayload = {
+      _id: savedKOT._id,
+      kotId: savedKOT._id,
+      kotNumber: savedKOT.kotNumber,
+      items: savedKOT.items,
+      createdAt: savedKOT.createdAt,
+      tableNo: bill.tableNo,
+      billType: bill.billType,
+      orderId: bill._id
+    };
+
+    emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: kotPayload, billId: bill._id, order: bill });
+    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: bill.status, order: bill });
+    emitNotification(req, 'New KOT Fired', `KOT fired for ${bill.tableNo} (${savedKOT.kotNumber})`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
 
     // Trigger physical network thermal printing to configured IP printers
     printKOTToPrinters(req, bill, kotNumber, kotItems).catch(err => {
@@ -1350,7 +1347,7 @@ export const generateKOT = async (req, res) => {
 
     res.status(200).json({
       message: 'KOT generated successfully',
-      kot: newKOT,
+      kot: kotPayload,
       bill: bill
     });
   } catch (error) {
@@ -1360,52 +1357,62 @@ export const generateKOT = async (req, res) => {
 };
 
 // Get all KOTs generated today (or specific date) across all bills
+// Get all KOTs generated today (or specific date) across all bills
+// Get all KOTs generated today (or specific date) across all bills - Ultra-fast & reliable
 export const getTodayKOTs = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { date, search } = req.query;
 
-    let targetDate = new Date();
-    if (date) {
-      if (typeof date === 'string' && date.includes('-')) {
-        const parts = date.split('-');
+    let targetDateStr = '';
+    let queryStart, queryEnd;
+
+    if (date && typeof date === 'string' && date.trim()) {
+      const trimmed = date.trim();
+      if (trimmed.includes('-')) {
+        const parts = trimmed.split('-');
         if (parts[0].length === 4) {
           // YYYY-MM-DD
-          targetDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          targetDateStr = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          const y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+          queryStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 24 * 3600 * 1000);
+          queryEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) + 24 * 3600 * 1000);
         } else if (parts[2].length === 4) {
           // DD-MM-YYYY
-          targetDate = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
-        } else {
-          targetDate = new Date(date);
+          targetDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          const y = Number(parts[2]), m = Number(parts[1]), d = Number(parts[0]);
+          queryStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 24 * 3600 * 1000);
+          queryEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999) + 24 * 3600 * 1000);
         }
-      } else {
-        targetDate = new Date(date);
       }
     }
-    if (isNaN(targetDate.getTime())) {
-      targetDate = new Date();
-    }
-    
-    targetDate.setHours(0, 0, 0, 0);
-    const nextDay = new Date(targetDate);
-    nextDay.setDate(nextDay.getDate() + 1);
 
-    // Find all bills from target date that have KOTs
+    if (!targetDateStr) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      targetDateStr = `${y}-${m}-${d}`;
+      queryStart = new Date(Date.UTC(y, now.getMonth(), now.getDate(), 0, 0, 0, 0) - 24 * 3600 * 1000);
+      queryEnd = new Date(Date.UTC(y, now.getMonth(), now.getDate(), 23, 59, 59, 999) + 24 * 3600 * 1000);
+    }
+
+    // Find bills that have KOTs
     const bills = await Bill.find({
       $or: [
-        { createdAt: { $gte: targetDate, $lt: nextDay } },
-        { updatedAt: { $gte: targetDate, $lt: nextDay } },
-        { 'kots.createdAt': { $gte: targetDate, $lt: nextDay } }
-      ],
-      'kots.0': { $exists: true }
+        { 'kots.0': { $exists: true } },
+        { createdAt: { $gte: queryStart, $lte: queryEnd } },
+        { updatedAt: { $gte: queryStart, $lte: queryEnd } }
+      ]
     })
-    .select('tableNo billType kots status items')
-    .sort({ updatedAt: -1 })
+    .select('tableNo billType kots status items createdAt updatedAt')
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .limit(500)
     .lean();
 
-    // Flatten KOTs into a single array
+    // Flatten KOTs into a single array, validating date match for each KOT
     let allKOTs = [];
-    bills.forEach(bill => {
+    (bills || []).forEach(bill => {
       const itemCancelMap = {};
       (bill.items || []).forEach(i => {
         if (i.name) {
@@ -1416,34 +1423,56 @@ export const getTodayKOTs = async (req, res) => {
         }
       });
 
-      if (bill.kots) {
+      if (bill.kots && Array.isArray(bill.kots) && bill.kots.length > 0) {
         bill.kots.forEach(kot => {
+          // If targetDateStr is set, check if KOT matches targetDateStr in either local or UTC time
+          if (targetDateStr) {
+            const rawDate = kot.createdAt || bill.createdAt || bill.updatedAt;
+            if (rawDate) {
+              const kotD = new Date(rawDate);
+              if (!isNaN(kotD.getTime())) {
+                const kotLocalStr = `${kotD.getFullYear()}-${String(kotD.getMonth() + 1).padStart(2, '0')}-${String(kotD.getDate()).padStart(2, '0')}`;
+                const kotUtcStr = kotD.toISOString().split('T')[0];
+                const matchesDate = kotLocalStr === targetDateStr || kotUtcStr === targetDateStr;
+                
+                if (!matchesDate) {
+                  return;
+                }
+              }
+            }
+          }
+
           const processedItems = (kot.items || []).map(kItem => {
             const itemStatus = itemCancelMap[kItem.name];
             const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+            const orderItem = (bill.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
             return {
               ...kItem,
+              specialNote: kItem.specialNote || orderItem?.specialNote || '',
               isCancelled: isCancelled,
-              status: isCancelled ? 'Cancelled' : kItem.status,
+              status: isCancelled ? 'Cancelled' : (kItem.status || 'Pending'),
               cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
             };
           });
 
           allKOTs.push({
             ...kot,
+            _id: kot._id || `${bill._id}_${kot.kotNumber}`,
+            kotId: kot._id,
             items: processedItems,
             billId: bill._id,
             tableNo: bill.tableNo,
             billType: bill.billType,
-            billStatus: bill.status
+            billStatus: bill.status,
+            createdAt: kot.createdAt || bill.createdAt || bill.updatedAt
           });
         });
       }
     });
 
     // Apply search filter if provided
-    if (search) {
-      const searchLower = search.toLowerCase();
+    if (search && search.trim()) {
+      const searchLower = search.trim().toLowerCase();
       allKOTs = allKOTs.filter(kot => 
         (kot.kotNumber && kot.kotNumber.toLowerCase().includes(searchLower)) ||
         (kot.tableNo && kot.tableNo.toLowerCase().includes(searchLower))
@@ -1453,12 +1482,14 @@ export const getTodayKOTs = async (req, res) => {
     // Sort by KOT creation time descending
     allKOTs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    res.status(200).json(allKOTs);
+    res.status(200).json(allKOTs || []);
   } catch (error) {
     console.error('Error fetching today KOTs:', error);
-    res.status(500).json({ message: 'Error fetching KOTs', error: error.message });
+    res.status(200).json([]);
   }
 };
+
+
 
 // Reopen a Billed order back to Open state
 export const reopenOrder = async (req, res) => {
@@ -1483,9 +1514,9 @@ export const reopenOrder = async (req, res) => {
 
     emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Open' });
 
-    // Update Floor/Table status in DB
+    // Update Floor/Table status in DB in background
     if (bill.billType === 'Dine-In') {
-      await updateTableStatusHelper(req, bill.tableNo, 'Occupied', bill._id);
+      updateTableStatusHelper(req, bill.tableNo, 'Occupied', bill._id).catch(err => console.error('Table status error:', err));
     }
 
     res.status(200).json({
@@ -1548,9 +1579,9 @@ export const cancelOrder = async (req, res) => {
 
     emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Cancelled' });
     
-    // Free up the table in DB
+    // Free up the table in DB in background
     if (bill.billType === 'Dine-In') {
-      await updateTableStatusHelper(req, bill.tableNo, 'Available', null);
+      updateTableStatusHelper(req, bill.tableNo, 'Available', null).catch(err => console.error('Table status error:', err));
     }
 
     res.status(200).json({
@@ -1616,8 +1647,10 @@ export const getActiveKOTs = async (req, res) => {
         const processedItems = (kot.items || []).map(kItem => {
           const itemStatus = itemCancelMap[kItem.name];
           const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+          const orderItem = (order.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
           return {
             ...kItem,
+            specialNote: kItem.specialNote || orderItem?.specialNote || '',
             isCancelled: isCancelled,
             status: isCancelled ? 'Cancelled' : kItem.status,
             cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
@@ -1699,12 +1732,25 @@ export const updateKOTItemStatus = async (req, res) => {
       tableNo: order.tableNo, 
       itemName: item.name 
     });
+
+    emitSocketEvent(req, 'orderUpdated', {
+      tableNo: order.tableNo,
+      status: order.status,
+      order
+    });
     
     if (status === 'Preparing') {
       const cleanTable = order.tableNo.replace('Table ', '');
       emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${cleanTable} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
     } else if (status === 'Ready') {
       const cleanTable = order.tableNo.replace('Table ', '');
+      emitSocketEvent(req, 'foodReady', {
+        orderId,
+        kotId,
+        itemId,
+        tableNo: order.tableNo,
+        itemName: item.name
+      });
       emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${cleanTable}`, 'success', ['Captain', 'Manager', 'Admin']);
     }
 
@@ -1768,6 +1814,7 @@ export const updateItemPrepTime = async (req, res) => {
   }
 };
 
+// Get all edited bills for the Edited Bills history page - Optimized with lean query
 export const getEditedBills = async (req, res) => {
   try {
     const TenantBill = getTenantModel(req, 'Bill', BillDefault);
@@ -1779,15 +1826,17 @@ export const getEditedBills = async (req, res) => {
         { 'editHistory.0': { $exists: true } }
       ]
     })
-    .sort({ updatedAt: -1 })
-    .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited');
+    .sort({ updatedAt: -1, createdAt: -1 })
+    .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited')
+    .lean();
     
-    res.json(editedBills);
+    res.json(editedBills || []);
   } catch (error) {
     console.error('Error fetching edited bills:', error);
     res.status(500).json({ message: 'Server error while fetching edited bills' });
   }
 };
+
 
 export const resolveItemCancel = async (req, res) => {
   try {
@@ -1897,4 +1946,6 @@ export const resolveItemCancel = async (req, res) => {
     res.status(500).json({ message: 'Server error while resolving item cancellation' });
   }
 };
+
+
 

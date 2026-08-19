@@ -4,8 +4,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChefHat, CheckCircle, Clock, Timer, Ban } from 'lucide-react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
-import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
-import { getNotificationSocket } from '../hooks/useNotifications';
+import Toast from './Toast';
+import { getCachedKdsActiveKots, cacheKdsActiveKots, removeCachedKotItem } from '../db/offlineDb';
+import realtimeService from '../services/realtimeService';
 
 const KDS = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -13,6 +14,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [customPrepInputs, setCustomPrepInputs] = useState({});
   const [now, setNow] = useState(Date.now());
+  const [toast, setToast] = useState(null);
   const fetchingRef = useRef(false);
 
   useEffect(() => {
@@ -45,8 +47,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
       const response = await api.get('/bills/kots/active');
       const data = response.data || [];
       setKots(data);
-      // Cache for instant load next time
-      cacheKotHistory(data).catch(() => {});
+      // Cache in isolated KDS store for instant load next time
+      cacheKdsActiveKots(data).catch(() => {});
     } catch (error) {
       console.error('Error fetching KDS KOTs:', error);
     } finally {
@@ -56,8 +58,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
   }, []);
 
   useEffect(() => {
-    // 1. INSTANT 0ms cache load
-    getCachedKotHistory().then((cached) => {
+    // 1. INSTANT 0ms cache load from isolated KDS store
+    getCachedKdsActiveKots().then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
         const activeCached = cached.filter(kot =>
           (kot.items || []).some(i => (i.status === 'Pending' || i.status === 'Preparing') && !i.isCancelled)
@@ -69,25 +71,24 @@ const KDS = ({ onNavigate, onGoBack }) => {
       setLoading(false);
     }).catch(() => { setLoading(false); });
 
+
     // 2. Background network fetch to confirm freshness
     fetchKOTs();
 
-    // 3. Use SHARED socket (already connected, already joined tenant)
-    //    so there is zero socket-connect delay for this page
-    const socket = getNotificationSocket();
-    if (!socket) return;
+    // 3. 3-Second real-time auto-polling for guaranteed freshness
+    const pollTimer = setInterval(() => {
+      fetchKOTs();
+    }, 3000);
 
-    // Optimistic 0ms update: when newKOT event arrives with payload,
-    // immediately append/merge the new KOT into state WITHOUT waiting for API
+    // 4. Connect to singleton RealtimeService
     const handleNewKOT = (data) => {
       if (data && data.kot) {
-        // Instantly add the new KOT to state from socket payload
+        const targetKotId = String(data.kot._id || data.kot.kotId || '');
         setKots(prev => {
-          const exists = prev.some(k =>
-            k.kotId?.toString() === data.kot._id?.toString() ||
-            k.kotId?.toString() === data.kot.kotId?.toString()
-          );
-          if (exists) return prev;
+          if (targetKotId) {
+            const exists = prev.some(k => String(k.kotId || k._id || '') === targetKotId);
+            if (exists) return prev;
+          }
           const newEntry = {
             kotId: data.kot._id || data.kot.kotId,
             kotNumber: data.kot.kotNumber,
@@ -100,11 +101,9 @@ const KDS = ({ onNavigate, onGoBack }) => {
           return [...prev, newEntry];
         });
       }
-      // Background confirm from server (won't show delay since UI already updated)
       fetchKOTs();
     };
 
-    // kotUpdated: optimistically update item status in existing KOT
     const handleKotUpdated = (data) => {
       if (data && (data.itemId || data.itemName) && data.status) {
         setKots(prev => prev.map(kot => {
@@ -129,22 +128,22 @@ const KDS = ({ onNavigate, onGoBack }) => {
           return kot;
         }));
       }
-      // Confirm from server in background
       fetchKOTs();
     };
 
-    socket.on('newKOT', handleNewKOT);
-    socket.on('kotUpdated', handleKotUpdated);
-    socket.on('orderUpdated', fetchKOTs);
+    const unsubNewKOT = realtimeService.subscribe('newKOT', handleNewKOT);
+    const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleKotUpdated);
+    const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', fetchKOTs);
 
     return () => {
-      socket.off('newKOT', handleNewKOT);
-      socket.off('kotUpdated', handleKotUpdated);
-      socket.off('orderUpdated', fetchKOTs);
+      clearInterval(pollTimer);
+      unsubNewKOT();
+      unsubKotUpdated();
+      unsubOrderUpdated();
     };
   }, [fetchKOTs]);
 
-  const updateItemStatus = async (orderId, kotId, itemId, newStatus) => {
+  const updateItemStatus = async (orderId, kotId, itemId, newStatus, itemName = '', tableNo = '') => {
     // 1. Instant 0ms Local State Update
     setKots((prevKots) =>
       prevKots.map((kot) => {
@@ -161,6 +160,34 @@ const KDS = ({ onNavigate, onGoBack }) => {
       })
     );
 
+    // 2. If marked as Ready: auto-remove after 1.5 seconds and conditionally show prepared toast
+    if (newStatus === 'Ready') {
+      const notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+      const hasActiveNotifications = notifPermission === 'granted' && localStorage.getItem('realtime_notifications');
+
+      // Only show popup toast if no push notification system is active/handled
+      if (!hasActiveNotifications || notifPermission !== 'granted') {
+        const displayName = itemName || 'Item';
+        const displayTable = tableNo ? ` for ${tableNo}` : '';
+        setToast({ message: `✅ ${displayName}${displayTable} is prepared & ready!`, type: 'success' });
+      }
+
+      setTimeout(() => {
+        setKots((prevKots) =>
+          prevKots.map((kot) => {
+            if (kot.kotId?.toString() === kotId?.toString() || kot.orderId?.toString() === orderId?.toString()) {
+              const remaining = (kot.items || []).filter(item =>
+                item._id?.toString() !== itemId?.toString() && item.name !== itemId
+              );
+              return { ...kot, items: remaining };
+            }
+            return kot;
+          }).filter(kot => (kot.items || []).some(i => (i.status === 'Pending' || i.status === 'Preparing') && !i.isCancelled))
+        );
+        removeCachedKotItem(kotId, itemId).catch(() => {});
+      }, 1500);
+    }
+
     try {
       await api.post('/bills/kot/item/status', {
         orderId,
@@ -168,7 +195,6 @@ const KDS = ({ onNavigate, onGoBack }) => {
         itemId,
         status: newStatus
       });
-      // Background refresh to confirm server state
       fetchKOTs();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -328,11 +354,17 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                   </span>
                                 )}
                               </div>
+                              {item.specialNote && (
+                                <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/35 flex items-start gap-1.5 text-amber-300 text-xs font-bold">
+                                  <span className="shrink-0 text-amber-400">📝</span>
+                                  <span className="break-words leading-tight">{item.specialNote}</span>
+                                </div>
+                              )}
                             </div>
 
                             {!isCancelled && (
                               <button
-                                onClick={() => updateItemStatus(item.originalOrderId, item.kotId, item._id, item.status === 'Pending' ? 'Preparing' : 'Ready')}
+                                onClick={() => updateItemStatus(item.originalOrderId, item.kotId, item._id, item.status === 'Pending' ? 'Preparing' : 'Ready', item.name, group.tableNo)}
                                 className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target ${
                                   item.status === 'Pending'
                                     ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700'
@@ -446,6 +478,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
           )}
         </div>
       </div>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 };

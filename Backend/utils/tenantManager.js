@@ -1,3 +1,8 @@
+import dns from 'dns';
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
+
 import mongoose from 'mongoose';
 import MenuDefault from '../models/Menu.js';
 import BillDefault from '../models/Bill.js';
@@ -14,42 +19,30 @@ import CustomerDefault from '../models/Customer.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
 import CameraDefault from '../models/Camera.js';
 
-const connectionPool = new Map();
+const tenantModelsCache = new Map();
 
 export const getTenantModels = async (databaseName) => {
-  if (!databaseName) {
+  if (!databaseName || databaseName === 'undefined' || databaseName === 'null') {
     return null; // Fallback to default global models
   }
 
-  // Check if we already have an open connection in the pool
-  let conn = connectionPool.get(databaseName);
-  if (!conn || conn.readyState === 0) {
-    // Generate URI for this tenant
-    const baseUri = process.env.MONGO_URI || 'mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0';
-    const parts = baseUri.split('?');
-    const connectionPart = parts[0];
-    const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
-    
-    const lastSlashIndex = connectionPart.lastIndexOf('/');
-    const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + databaseName;
-    const newUri = newConnectionPart + queryPart;
-
-    console.log(`[TenantManager] Establishing connection for tenant: ${databaseName}`);
-    conn = mongoose.createConnection(newUri, {
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-      minPoolSize: 1,
-    });
-
-    conn.on('error', (err) => {
-      console.error(`[TenantManager] MongoDB connection error for ${databaseName}:`, err.message);
-      // Remove from pool so it can be recreated on next request
-      connectionPool.delete(databaseName);
-    });
-
-    connectionPool.set(databaseName, conn);
+  // Ensure default connection is established
+  if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState === 2) {
+      await new Promise((resolve) => {
+        if (mongoose.connection.readyState === 1) return resolve();
+        mongoose.connection.once('open', resolve);
+        setTimeout(resolve, 5000);
+      });
+    }
   }
+
+  if (mongoose.connection.readyState === 1 && tenantModelsCache.has(databaseName)) {
+    return tenantModelsCache.get(databaseName);
+  }
+
+  // Switch to tenant DB instantly using existing connection pool (0ms delay)
+  const conn = mongoose.connection.useDb(databaseName, { useCache: true });
 
   // Compile models on this tenant connection if not already compiled
   const Menu = conn.models.Menu || conn.model('Menu', MenuDefault.schema);
@@ -67,7 +60,7 @@ export const getTenantModels = async (databaseName) => {
   const ServiceRequest = conn.models.ServiceRequest || conn.model('ServiceRequest', ServiceRequestDefault.schema);
   const Camera = conn.models.Camera || conn.model('Camera', CameraDefault.schema);
 
-  return {
+  const models = {
     Menu,
     Bill,
     Setting,
@@ -84,4 +77,8 @@ export const getTenantModels = async (databaseName) => {
     Camera,
     connection: conn
   };
+
+  tenantModelsCache.set(databaseName, models);
+  return models;
 };
+

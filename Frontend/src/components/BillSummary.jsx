@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import TableDropdown from './TableDropdown';
-import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart } from 'lucide-react';
+import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2 } from 'lucide-react';
 
 const BillSummary = ({
   orderId,
@@ -32,6 +32,7 @@ const BillSummary = ({
   billType,
   setBillType,
   loading,
+  actionLoading,
   orderSource,
   setOrderSource,
   userRole = 'Admin',
@@ -47,7 +48,7 @@ const BillSummary = ({
   hasUnprintedItems = true
 }) => {
   const { t, language } = useLanguage();
-  const isLocked = orderStatus !== 'Open';
+  const isLocked = orderStatus === 'Paid' || orderStatus === 'Cancelled';
   const isCaptain = userRole === 'Captain';
 
   const cartEndRef = React.useRef(null);
@@ -147,9 +148,9 @@ const BillSummary = ({
 
   const submitNote = () => {
     if (selectedCartItemForNote) {
-      updateItemNote(selectedCartItemForNote._id || selectedCartItemForNote.name, noteInput);
+      updateItemNote(selectedCartItemForNote.name || selectedCartItemForNote._id, noteInput);
     } else if (cart && cart.length > 0) {
-      updateItemNote(cart[0]._id || cart[0].name, noteInput);
+      updateItemNote(cart[0].name || cart[0]._id, noteInput);
     }
     setSelectedCartItemForNote(null);
     setShowNoteModal(false);
@@ -465,8 +466,16 @@ const BillSummary = ({
                 setIsPaid(true);
                 if (onSettleBill) onSettleBill();
               }}
-              disabled={cart.length === 0 || orderStatus === 'Paid'}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md transition-all whitespace-nowrap disabled:opacity-50">{t("Settle")}
+              disabled={cart.length === 0 || orderStatus === 'Paid' || loading}
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1">
+              {actionLoading === 'settle' ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>{t("Settling...")}</span>
+                </>
+              ) : (
+                t("Settle")
+              )}
             </button>
           </div>
         </div>
@@ -485,36 +494,86 @@ const BillSummary = ({
         <div className="grid grid-cols-3 gap-3 px-3 py-4 bg-white border-t border-gray-100 w-full overflow-x-auto no-scrollbar">
           <button
             onClick={onSaveOrder}
-            disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 transition-all shadow-sm border border-red-100 disabled:opacity-50">{t("SAVE")}
+            disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
+            className="col-span-1 bg-red-50 text-red-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+            {actionLoading === 'save' ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-red-600" />
+                <span>{t("Saving...")}</span>
+              </>
+            ) : (
+              t("SAVE")
+            )}
           </button>
           <button
             onClick={onHoldOrder}
-            disabled={loading || cart.length === 0 || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            className="col-span-1 bg-orange-50 text-orange-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-orange-100 transition-all shadow-sm border border-orange-100 disabled:opacity-50">{t("HOLD")}
+            disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
+            className="col-span-1 bg-orange-50 text-orange-600 py-3.5 rounded-xl text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+            {actionLoading === 'hold' ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-orange-600" />
+                <span>{t("Holding...")}</span>
+              </>
+            ) : (
+              t("HOLD")
+            )}
           </button>
           <button
             onClick={onGenerateBill}
             disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center">{t("SAVE & PRINT")}
+            className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3.5 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg active:scale-95 transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center gap-1.5">
+            {actionLoading === 'print' ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-white" />
+                <span>{t("Printing...")}</span>
+              </>
+            ) : (
+              t("SAVE & PRINT")
+            )}
           </button>
           <button
             onClick={onPrintKOT}
-            disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Billed' || orderStatus === 'Paid'}
-            title={!hasUnprintedItems && cart.length > 0 ? t("KOT already fired for these items. Status: Preparing") : t("KOT")}
-            className="col-span-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl text-sm font-bold hover:bg-gray-200 transition-all shadow-sm border border-gray-200 disabled:opacity-50">
-            {t("KOT")}
+            disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
+            title={!hasUnprintedItems && cart.length > 0 ? t("All items already sent to kitchen. No changes detected.") : t("KOT")}
+            className={`col-span-1 py-3.5 rounded-xl text-sm font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1.5 ${
+              hasUnprintedItems 
+                ? 'bg-amber-500 hover:bg-amber-600 text-white font-black hover:shadow-lg cursor-pointer border border-amber-600' 
+                : 'bg-gray-100 text-gray-400 border border-gray-200 disabled:opacity-50'
+            }`}>
+            {actionLoading === 'kot' ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>{t("Sending...")}</span>
+              </>
+            ) : (
+              t("KOT")
+            )}
           </button>
           <button
             onClick={onReopenOrder}
             disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}
-            className="col-span-1 bg-blue-50 text-blue-600 py-3.5 rounded-xl text-sm font-bold hover:bg-blue-100 transition-all shadow-sm border border-blue-100 disabled:opacity-50">
-            {t("EDIT")}
+            className="col-span-1 bg-blue-50 text-blue-600 py-3.5 rounded-xl text-sm font-bold hover:bg-blue-100 active:scale-95 transition-all shadow-sm border border-blue-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+            {actionLoading === 'edit' ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-blue-600" />
+                <span>{t("Opening...")}</span>
+              </>
+            ) : (
+              t("EDIT")
+            )}
           </button>
           <button
             onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
             disabled={loading || cart.length === 0}
-            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-3.5 rounded-xl text-sm font-bold hover:bg-gray-50 hover:text-red-500 transition-all shadow-sm disabled:opacity-50">{t("CANCEL")}
+            className="col-span-1 bg-white text-gray-400 border border-gray-200 py-3.5 rounded-xl text-sm font-bold hover:bg-gray-50 hover:text-red-500 active:scale-95 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
+            {actionLoading === 'cancel' ? (
+              <>
+                <Loader2 size={16} className="animate-spin text-red-500" />
+                <span>{t("Cancelling...")}</span>
+              </>
+            ) : (
+              t("CANCEL")
+            )}
           </button>
         </div>
       </div>

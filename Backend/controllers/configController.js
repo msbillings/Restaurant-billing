@@ -4,6 +4,7 @@ import path from 'path';
 import bcrypt from 'bcryptjs';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
+import FloorDefault from '../models/Floor.js';
 import { getTenantModels } from '../utils/tenantManager.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
@@ -128,7 +129,7 @@ export const resetLicense = async (req, res) => {
 export const getRestaurantInfo = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const Floor = getTenantModel(req, 'Floor', (await import('../models/Floor.js')).default);
+    const Floor = getTenantModel(req, 'Floor', FloorDefault);
     const expiryDoc = await Setting.findOne({ key: 'licenseExpiry' });
     const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
     const spacesDoc = await Floor.find().sort({ createdAt: 1 }).lean();
@@ -217,5 +218,138 @@ export const syncUsersFromSuperAdmin = async (req, res) => {
   } catch (error) {
     console.error('Error syncing users:', error);
     res.status(500).json({ message: 'Error syncing users', error: error.message });
+  }
+};
+
+export const getSecuritySettings = async (req, res) => {
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const securityDoc = await Setting.findOne({ key: 'securitySettings' });
+    
+    let config = { 
+      requireMasterPin: true, 
+      ownerPin: '1234',
+      customLocks: {} 
+    };
+
+    if (securityDoc && securityDoc.value) {
+      config.requireMasterPin = securityDoc.value.requireMasterPin !== false;
+      config.ownerPin = securityDoc.value.masterPin || securityDoc.value.ownerPin || '1234';
+      
+      if (securityDoc.value.customLocks) {
+        Object.entries(securityDoc.value.customLocks).forEach(([key, lock]) => {
+          config.customLocks[key] = {
+            enabled: lock.enabled,
+            pin: lock.pin || '',
+            hasCustomPin: !!(lock.pin || lock.pinHash)
+          };
+        });
+      }
+    }
+    
+    res.status(200).json(config);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching security settings', error: error.message });
+  }
+};
+
+export const updateSecuritySettings = async (req, res) => {
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const { requireMasterPin, ownerPin, customLocks } = req.body;
+    
+    // Fetch existing so we don't overwrite if not provided
+    const existingDoc = await Setting.findOne({ key: 'securitySettings' });
+    const existingValue = existingDoc ? existingDoc.value : {};
+    
+    const finalMasterPin = (ownerPin !== undefined && ownerPin !== '') ? String(ownerPin) : (existingValue.masterPin || existingValue.ownerPin || '1234');
+    const masterPinHash = await bcrypt.hash(finalMasterPin, 10);
+
+    let updatedValue = {
+      requireMasterPin: requireMasterPin !== false,
+      masterPin: finalMasterPin,
+      masterPinHash: masterPinHash,
+      customLocks: {}
+    };
+
+    if (customLocks) {
+      for (const [key, lock] of Object.entries(customLocks)) {
+        const lockPin = (lock.pin !== undefined && lock.pin !== '') ? String(lock.pin) : (existingValue.customLocks?.[key]?.pin || '');
+        const pinHash = lockPin ? await bcrypt.hash(lockPin, 10) : (existingValue.customLocks?.[key]?.pinHash || '');
+
+        updatedValue.customLocks[key] = {
+          enabled: lock.enabled !== false,
+          pin: lockPin,
+          pinHash: pinHash
+        };
+      }
+    }
+    
+    await Setting.findOneAndUpdate({ key: 'securitySettings' }, { value: updatedValue }, { upsert: true });
+    
+    // Notify connected clients that settings changed (structure only)
+    emitSocketEvent(req, 'securitySettingsUpdated', {
+      requireMasterPin: updatedValue.requireMasterPin,
+      customLocks: Object.fromEntries(
+        Object.entries(updatedValue.customLocks).map(([k, v]) => [k, { enabled: v.enabled }])
+      )
+    });
+    
+    res.status(200).json({ 
+      message: 'Security settings saved successfully',
+      ownerPin: finalMasterPin,
+      customLocks: Object.fromEntries(
+        Object.entries(updatedValue.customLocks).map(([k, v]) => [k, { enabled: v.enabled, pin: v.pin, hasCustomPin: !!v.pin }])
+      )
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating security settings', error: error.message });
+  }
+};
+
+export const verifyPin = async (req, res) => {
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const { featureId, pin } = req.body;
+    
+    if (!pin) {
+      return res.status(400).json({ success: false, message: 'PIN is required' });
+    }
+    
+    const securityDoc = await Setting.findOne({ key: 'securitySettings' });
+    const config = securityDoc ? securityDoc.value : {};
+    
+    const inputPin = String(pin).trim();
+    let isMatch = false;
+
+    // 1. Check feature-specific lock first
+    if (featureId && config.customLocks && config.customLocks[featureId]) {
+      const lock = config.customLocks[featureId];
+      if (lock.enabled) {
+        if (lock.pin && String(lock.pin).trim() === inputPin) {
+          isMatch = true;
+        } else if (lock.pinHash) {
+          isMatch = await bcrypt.compare(inputPin, lock.pinHash);
+        }
+      }
+    }
+
+    // 2. If not matched or no custom lock matched, check Master PIN (master PIN can unlock ANY feature)
+    if (!isMatch) {
+      const master = config.masterPin || config.ownerPin;
+      if (master && String(master).trim() === inputPin) {
+        isMatch = true;
+      } else if (config.masterPinHash) {
+        isMatch = await bcrypt.compare(inputPin, config.masterPinHash);
+      } else if (inputPin === '1234') {
+        // Fallback default
+        isMatch = true;
+      }
+    }
+    
+    res.status(200).json({ success: isMatch });
+  } catch (error) {
+    console.error('Error verifying PIN:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

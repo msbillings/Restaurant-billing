@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from "../context/LanguageContext";
-import { Shield, Key, Save, Lock, LayoutDashboard, LineChart, Banknote, FileX, Plus, Trash2, Settings as SettingsIcon, Loader2 } from 'lucide-react';
+import { Shield, Key, Save, Lock, LayoutDashboard, LineChart, Banknote, FileX, Plus, Trash2, Settings as SettingsIcon, Loader2, Eye, EyeOff } from 'lucide-react';
 import BackButton from './common/BackButton';
 import { getApiUrl } from '../config.js';
 
@@ -21,6 +21,8 @@ const AVAILABLE_FEATURES = [
 const SecuritySettings = ({ onGoBack }) => {
   const { t } = useLanguage();
   const [ownerPin, setOwnerPin] = useState('1234');
+  const [showMasterPin, setShowMasterPin] = useState(true);
+  const [showLockPins, setShowLockPins] = useState({});
   const [requireMasterPin, setRequireMasterPin] = useState(true);
   const [customLocks, setCustomLocks] = useState({});
   const [saved, setSaved] = useState(false);
@@ -28,56 +30,82 @@ const SecuritySettings = ({ onGoBack }) => {
   const [showAddMenu, setShowAddMenu] = useState(false);
 
   useEffect(() => {
-    const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-    setOwnerPin(s.ownerPin || '1234');
-    setRequireMasterPin(s.requireMasterPin !== false);
-    
-    // Migrate old settings if customLocks doesn't exist
-    if (!s.customLocks) {
-      const initialLocks = {};
-      if (s.requireDashboardPin) initialLocks['dashboard'] = { enabled: true, pin: s.dashboardPin || '' };
-      if (s.requireAnalyticsPin) initialLocks['analytics'] = { enabled: true, pin: s.analyticsPin || '' };
-      if (s.requireDaybookPin) initialLocks['daybook'] = { enabled: true, pin: s.daybookPin || '' };
-      if (s.requireCancelPin !== false) initialLocks['cancel-order'] = { enabled: true, pin: s.cancelPin || '' };
-      setCustomLocks(initialLocks);
-    } else {
-      setCustomLocks(s.customLocks);
-    }
+    const fetchSecurity = async () => {
+      try {
+        const API_BASE_URL = getApiUrl();
+        const token = localStorage.getItem('accessToken');
+        const dbName = localStorage.getItem('resto_db_name');
+        
+        const res = await fetch(`${API_BASE_URL}/config/security`, {
+          headers: {
+            'X-Tenant-DB': dbName || '',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setRequireMasterPin(data.requireMasterPin !== false);
+          
+          if (data.ownerPin !== undefined && data.ownerPin !== null && data.ownerPin !== '') {
+            setOwnerPin(String(data.ownerPin));
+          } else {
+            setOwnerPin('1234');
+          }
+
+          if (data.customLocks && Object.keys(data.customLocks).length > 0) {
+            setCustomLocks(data.customLocks);
+          } else {
+            // Provide defaults if empty
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            const initialLocks = {};
+            if (s.requireDashboardPin) initialLocks['dashboard'] = { enabled: true, pin: '' };
+            if (s.requireAnalyticsPin) initialLocks['analytics'] = { enabled: true, pin: '' };
+            if (s.requireDaybookPin) initialLocks['daybook'] = { enabled: true, pin: '' };
+            if (s.requireCancelPin !== false) initialLocks['cancel-order'] = { enabled: true, pin: '' };
+            setCustomLocks(initialLocks);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch security settings:', err);
+      }
+    };
+    fetchSecurity();
   }, []);
 
   const handleSave = async () => {
     try {
       setLoading(true);
-      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-      const updatedSettings = { ...s, ownerPin, requireMasterPin, customLocks };
       
       const API_BASE_URL = getApiUrl();
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
+      const dbName = localStorage.getItem('resto_db_name');
       
-      const response = await fetch(`${API_BASE_URL}/config/info`, {
+      const response = await fetch(`${API_BASE_URL}/config/security`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
+          'X-Tenant-DB': dbName || '',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ restaurantSettings: updatedSettings })
+        body: JSON.stringify({ requireMasterPin, ownerPin, customLocks })
       });
       
       if (response.ok) {
-        localStorage.setItem('restaurantSettings', JSON.stringify(updatedSettings));
+        const data = await response.json();
         setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        if (data.ownerPin !== undefined) {
+          setOwnerPin(String(data.ownerPin));
+        }
+        if (data.customLocks) {
+          setCustomLocks(data.customLocks);
+        }
+        setTimeout(() => setSaved(false), 2500);
       } else {
         console.error('Failed to save settings to server');
-        // Still save locally as fallback
-        localStorage.setItem('restaurantSettings', JSON.stringify(updatedSettings));
       }
     } catch (error) {
       console.error('Error saving settings:', error);
-      // Still save locally as fallback
-      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-      const updatedSettings = { ...s, ownerPin, requireMasterPin, customLocks };
-      localStorage.setItem('restaurantSettings', JSON.stringify(updatedSettings));
     } finally {
       setLoading(false);
     }
@@ -103,6 +131,13 @@ const SecuritySettings = ({ onGoBack }) => {
     setCustomLocks(prev => ({
       ...prev,
       [featureId]: { ...prev[featureId], [field]: value }
+    }));
+  };
+
+  const toggleLockPinVisibility = (featureId) => {
+    setShowLockPins(prev => ({
+      ...prev,
+      [featureId]: !prev[featureId]
     }));
   };
 
@@ -141,17 +176,25 @@ const SecuritySettings = ({ onGoBack }) => {
               <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <p className="text-xs text-gray-500 mb-2">{t("This PIN protects this settings page and can unlock ANY module, even if they have their own PINs.")}</p>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-400">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-orange-400 pointer-events-none">
                     <Lock size={18} />
                   </div>
                   <input
-                    type="text"
+                    type={showMasterPin ? "text" : "password"}
                     value={ownerPin}
                     onChange={(e) => setOwnerPin(e.target.value)}
                     maxLength={10}
-                    className="w-full pl-11 pr-4 py-3 bg-orange-50/50 border border-orange-200 rounded-xl font-mono text-lg tracking-widest font-bold text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all"
-                    placeholder="Master PIN"
+                    className="w-full pl-11 pr-12 py-3 bg-orange-50/50 border border-orange-200 rounded-xl font-mono text-lg tracking-widest font-bold text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all"
+                    placeholder="1234"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowMasterPin(!showMasterPin)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 p-1 transition-colors"
+                    title={showMasterPin ? t("Hide PIN") : t("Show PIN")}
+                  >
+                    {showMasterPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
             )}
@@ -177,9 +220,10 @@ const SecuritySettings = ({ onGoBack }) => {
             {Object.entries(customLocks).map(([featureId, lock]) => {
               const featureDef = AVAILABLE_FEATURES.find(f => f.id === featureId) || { name: featureId, icon: Lock, color: 'text-gray-500' };
               const Icon = featureDef.icon;
+              const isRevealed = !!showLockPins[featureId];
               
               return (
-                <div key={featureId} className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm space-y-4 relative group transition-all hover:border-primary/30">
+                <div key={featureId} className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm space-y-3 relative group transition-all hover:border-primary/30">
                   <button 
                     onClick={() => removeLock(featureId)}
                     className="absolute top-3 right-4 text-gray-300 hover:text-red-500 transition-colors"
@@ -188,7 +232,7 @@ const SecuritySettings = ({ onGoBack }) => {
                     <Trash2 size={16} />
                   </button>
                   
-                  <div className="flex items-center justify-between pr-4">
+                  <div className="flex items-center justify-between pr-8">
                     <label className="text-sm font-bold text-gray-800 flex items-center gap-2">
                       <div className={`p-1.5 rounded-lg bg-gray-50 ${featureDef.color.replace('text-', 'bg-').replace('-500', '-50')} border border-gray-100`}>
                         <Icon size={16} className={featureDef.color} />
@@ -199,14 +243,32 @@ const SecuritySettings = ({ onGoBack }) => {
                   </div>
                   
                   {lock.enabled && (
-                    <input
-                      type="text"
-                      value={lock.pin}
-                      onChange={(e) => updateLock(featureId, 'pin', e.target.value)}
-                      maxLength={10}
-                      className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg font-mono tracking-widest text-gray-800 focus:outline-none focus:border-primary transition-all animate-in fade-in slide-in-from-top-1"
-                      placeholder={t("Leave blank to use Master PIN")}
-                    />
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1">
+                      <div className="relative">
+                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+                          <Lock size={15} />
+                        </div>
+                        <input
+                          type={isRevealed ? "text" : "password"}
+                          value={lock.pin !== undefined ? lock.pin : ''}
+                          onChange={(e) => updateLock(featureId, 'pin', e.target.value)}
+                          maxLength={10}
+                          className="w-full pl-10 pr-10 py-2.5 bg-gray-50/70 border border-gray-200 rounded-lg font-mono tracking-widest text-gray-800 font-semibold focus:outline-none focus:bg-white focus:border-primary transition-all text-sm"
+                          placeholder={t("Custom PIN (leave blank to use Master PIN)")}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => toggleLockPinVisibility(featureId)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 transition-colors"
+                          title={isRevealed ? t("Hide PIN") : t("Show PIN")}
+                        >
+                          {isRevealed ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-gray-400 px-1">
+                        {lock.pin ? t("Custom PIN active for this feature") : t("Using Master Security Vault PIN")}
+                      </p>
+                    </div>
                   )}
                 </div>
               );
