@@ -614,24 +614,29 @@ const BillSummary = ({
               t("SAVE & PRINT")
             )}
           </button>
-          <button
-            onClick={onPrintKOT}
-            disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
-            title={!hasUnprintedItems && cart.length > 0 ? t("All items already sent to kitchen. No changes detected.") : t("KOT")}
-            className={`col-span-1 py-3.5 rounded-xl text-sm font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1.5 ${
-              hasUnprintedItems 
-                ? 'bg-amber-500 hover:bg-amber-600 text-white font-black hover:shadow-lg cursor-pointer border border-amber-600' 
-                : 'bg-gray-100 text-gray-400 border border-gray-200 disabled:opacity-50'
-            }`}>
-            {actionLoading === 'kot' ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                <span>{t("Sending...")}</span>
-              </>
-            ) : (
-              t("KOT")
-            )}
-          </button>
+          {(() => {
+            const isKotAlreadyFired = (cart || []).some(item => (item.printedQuantity || 0) > 0);
+            return (
+              <button
+                onClick={onPrintKOT}
+                disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
+                title={!hasUnprintedItems && cart.length > 0 ? t("All items already sent to kitchen. No changes detected.") : (isKotAlreadyFired ? t("KOT UPDATE", { defaultValue: "KOT UPDATE" }) : t("KOT"))}
+                className={`col-span-1 py-3.5 rounded-xl text-sm font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1.5 ${
+                  hasUnprintedItems 
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white font-black hover:shadow-lg cursor-pointer border border-amber-600' 
+                    : 'bg-gray-100 text-gray-400 border border-gray-200 disabled:opacity-50'
+                }`}>
+                {actionLoading === 'kot' ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin text-white" />
+                    <span>{isKotAlreadyFired ? t("Updating KOT...", { defaultValue: "Updating KOT..." }) : t("Sending...")}</span>
+                  </>
+                ) : (
+                  isKotAlreadyFired ? t("KOT UPDATE", { defaultValue: "KOT UPDATE" }) : t("KOT")
+                )}
+              </button>
+            );
+          })()}
           <button
             onClick={onReopenOrder}
             disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}

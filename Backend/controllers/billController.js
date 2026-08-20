@@ -1436,13 +1436,6 @@ export const generateKOT = async (req, res) => {
       return res.status(404).json({ message: 'Bill not found' });
     }
 
-    // Calculate delta and update printed quantities
-    const kotItems = [];
-
-    // We trust the backend's `items` array which was just saved by saveOrder
-    // Wait, the frontend should just call saveOrder, then call generateKOT.
-    // generateKOT will look at bill.items, compare quantity with printedQuantity
-    
     // If currentCart provided, ensure any latest item notes are preserved
     if (currentCart && Array.isArray(currentCart)) {
       currentCart.forEach(cItem => {
@@ -1453,79 +1446,138 @@ export const generateKOT = async (req, res) => {
       });
     }
 
+    // Calculate delta and update printed quantities
+    const kotItems = [];
+    let hadQuantityReductions = false;
+
     for (const item of bill.items) {
-      const currentQty = Number(item.quantity || 0);
-      const printedQty = Number(item.printedQuantity || 0);
+      const currentQty = Math.max(0, parseInt(item.quantity || 0, 10));
+      const printedQty = Math.max(0, parseInt(item.printedQuantity || 0, 10));
       const newQty = currentQty - printedQty;
       const currentNote = (item.specialNote || '').trim();
       const lastNote = (item.lastPrintedNote || '').trim();
       const noteChanged = currentNote !== lastNote;
-      if (newQty !== 0 || noteChanged) {
-        const kotQty = Math.max(0, parseInt(newQty !== 0 ? newQty : currentQty, 10) || 0);
-        const safeCurrentQty = Math.max(0, parseInt(currentQty, 10) || 0);
-        kotItems.push({
-          name: item.name,
-          quantity: kotQty,
-          specialNote: currentNote,
-          isNoteUpdateOnly: newQty === 0 && Boolean(noteChanged),
-          status: 'Pending',
-          preparedQuantity: 0,
-          preparingQuantity: 0,
-          pendingQuantity: kotQty,
-          unitStatuses: Array.from({ length: kotQty }, () => 'Pending')
-        });
+
+      if (newQty > 0 || (newQty === 0 && noteChanged)) {
+        const kotQty = newQty > 0 ? newQty : currentQty;
+        if (kotQty > 0) {
+          kotItems.push({
+            name: item.name,
+            quantity: kotQty,
+            specialNote: currentNote,
+            isNoteUpdateOnly: newQty === 0 && Boolean(noteChanged),
+            status: 'Pending',
+            preparedQuantity: 0,
+            preparingQuantity: 0,
+            pendingQuantity: kotQty,
+            unitStatuses: Array.from({ length: kotQty }, () => 'Pending')
+          });
+        }
         // Update printed quantity & last printed note
         item.printedQuantity = currentQty;
         item.lastPrintedNote = currentNote;
-        if (!item.unitStatuses || item.unitStatuses.length !== safeCurrentQty) {
-          item.unitStatuses = Array.from({ length: safeCurrentQty }, () => item.status || 'Pending');
-          item.pendingQuantity = safeCurrentQty;
-          item.preparingQuantity = 0;
-          item.preparedQuantity = 0;
+        if (!item.unitStatuses || item.unitStatuses.length !== currentQty) {
+          const prevUnits = item.unitStatuses || [];
+          item.unitStatuses = Array.from({ length: currentQty }, (_, idx) => prevUnits[idx] || item.status || 'Pending');
+          item.preparedQuantity = item.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+          item.preparingQuantity = item.unitStatuses.filter(s => s === 'Preparing').length;
+          item.pendingQuantity = item.unitStatuses.filter(s => s === 'Pending').length;
+        }
+      } else if (newQty < 0) {
+        // Quantity was reduced (e.g. from 5 to 4 or 5 to 0)
+        hadQuantityReductions = true;
+        item.printedQuantity = currentQty;
+        item.lastPrintedNote = currentNote;
+
+        // Scale down bill item unitStatuses
+        if (item.unitStatuses && item.unitStatuses.length > currentQty) {
+          item.unitStatuses = item.unitStatuses.slice(0, currentQty);
+          item.preparedQuantity = item.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+          item.preparingQuantity = item.unitStatuses.filter(s => s === 'Preparing').length;
+          item.pendingQuantity = item.unitStatuses.filter(s => s === 'Pending').length;
+        }
+
+        // Adjust existing KOTs for this item so total active quantity across kots equals currentQty
+        if (bill.kots && Array.isArray(bill.kots)) {
+          let targetRemaining = currentQty;
+          for (let k = bill.kots.length - 1; k >= 0; k--) {
+            const kot = bill.kots[k];
+            const kItem = (kot.items || []).find(i => i.name === item.name || (item._id && i._id?.toString() === item._id?.toString()));
+            if (kItem) {
+              if (targetRemaining <= 0) {
+                kItem.quantity = 0;
+                kItem.status = 'Cancelled';
+                kItem.isCancelled = true;
+                kItem.unitStatuses = [];
+                kItem.pendingQuantity = 0;
+                kItem.preparingQuantity = 0;
+                kItem.preparedQuantity = 0;
+              } else {
+                const kQty = Math.min(kItem.quantity, targetRemaining);
+                kItem.quantity = kQty;
+                targetRemaining -= kQty;
+                kItem.unitStatuses = (kItem.unitStatuses || []).slice(0, kQty);
+                while (kItem.unitStatuses.length < kQty) {
+                  kItem.unitStatuses.push(kItem.status || 'Pending');
+                }
+                kItem.preparedQuantity = kItem.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+                kItem.preparingQuantity = kItem.unitStatuses.filter(s => s === 'Preparing').length;
+                kItem.pendingQuantity = kItem.unitStatuses.filter(s => s === 'Pending').length;
+              }
+            }
+          }
         }
       }
     }
 
-    if (kotItems.length === 0) {
+    if (kotItems.length === 0 && !hadQuantityReductions) {
       return res.status(400).json({ message: 'No new items or changes to print KOT for.' });
     }
 
-    // Generate KOT number (e.g., "KOT-1" relative to this bill)
-    const kotNumber = `KOT-${(bill.kots ? bill.kots.length : 0) + 1}`;
-    
-    const newKOT = {
-      kotNumber,
-      items: kotItems,
-      createdAt: new Date()
-    };
+    let savedKOT = null;
+    let kotPayload = null;
 
-    bill.kots.push(newKOT);
+    if (kotItems.length > 0) {
+      // Generate KOT number (e.g., "KOT-1" relative to this bill)
+      const kotNumber = `KOT-${(bill.kots ? bill.kots.length : 0) + 1}`;
+      const newKOT = {
+        kotNumber,
+        items: kotItems,
+        createdAt: new Date()
+      };
+      bill.kots.push(newKOT);
+      savedKOT = bill.kots[bill.kots.length - 1];
+      kotPayload = {
+        _id: savedKOT._id,
+        kotId: savedKOT._id,
+        kotNumber: savedKOT.kotNumber,
+        items: savedKOT.items,
+        createdAt: savedKOT.createdAt,
+        tableNo: bill.tableNo,
+        billType: bill.billType,
+        orderId: bill._id
+      };
+    }
+
+    bill.markModified('items');
+    bill.markModified('kots');
     await bill.save();
 
-    const savedKOT = bill.kots[bill.kots.length - 1];
-    const kotPayload = {
-      _id: savedKOT._id,
-      kotId: savedKOT._id,
-      kotNumber: savedKOT.kotNumber,
-      items: savedKOT.items,
-      createdAt: savedKOT.createdAt,
-      tableNo: bill.tableNo,
-      billType: bill.billType,
-      orderId: bill._id
-    };
+    if (kotPayload) {
+      emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: kotPayload, billId: bill._id, order: bill });
+      emitNotification(req, 'New KOT Fired', `KOT fired for ${bill.tableNo} (${kotPayload.kotNumber})`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
 
-    emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: kotPayload, billId: bill._id, order: bill });
+      // Trigger physical network thermal printing to configured IP printers
+      printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems).catch(err => {
+        console.error('[KOT Print Error]:', err.message);
+      });
+    }
+
     emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: bill.status, order: bill });
-    emitNotification(req, 'New KOT Fired', `KOT fired for ${bill.tableNo} (${savedKOT.kotNumber})`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
-
-    // Trigger physical network thermal printing to configured IP printers
-    printKOTToPrinters(req, bill, kotNumber, kotItems).catch(err => {
-      console.error('[KOT Print Error]:', err.message);
-    });
 
     res.status(200).json({
-      message: 'KOT generated successfully',
-      kot: kotPayload,
+      message: kotPayload ? 'KOT generated successfully' : 'KOT updated successfully',
+      kot: kotPayload || { items: bill.items, tableNo: bill.tableNo, orderId: bill._id },
       bill: bill
     });
   } catch (error) {
@@ -1837,36 +1889,41 @@ export const getActiveKOTs = async (req, res) => {
       });
 
       order.kots.forEach(kot => {
-        const processedItems = (kot.items || []).map(kItem => {
-          const itemStatus = itemCancelMap[kItem.name];
-          const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
-          const orderItem = (order.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
-          
-          const qty = Math.max(0, parseInt(kItem.quantity || 0, 10) || 1);
-          let unitStatuses = kItem.unitStatuses;
-          if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
-            unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
-          }
+        const processedItems = (kot.items || [])
+          .filter(kItem => {
+            const itemStatus = itemCancelMap[kItem.name];
+            const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+            const qty = Math.max(0, parseInt(kItem.quantity || 0, 10));
+            return qty > 0 && !isCancelled;
+          })
+          .map(kItem => {
+            const orderItem = (order.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
+            const qty = Math.max(0, parseInt(kItem.quantity || 0, 10));
+            let unitStatuses = kItem.unitStatuses;
+            if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
+              unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
+            }
 
-          const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
-          const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
-          const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+            const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+            const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+            const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
 
-          return {
-            ...kItem,
-            specialNote: kItem.specialNote || orderItem?.specialNote || '',
-            isCancelled: isCancelled,
-            status: isCancelled ? 'Cancelled' : kItem.status,
-            cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
-            unitStatuses,
-            preparedQuantity: preparedQty,
-            preparingQuantity: preparingQty,
-            pendingQuantity: pendingQty
-          };
-        });
+            return {
+              ...kItem,
+              quantity: qty,
+              specialNote: kItem.specialNote || orderItem?.specialNote || '',
+              isCancelled: false,
+              status: kItem.status || 'Pending',
+              cancelledQuantity: kItem.cancelledQuantity || 0,
+              unitStatuses,
+              preparedQuantity: preparedQty,
+              preparingQuantity: preparingQty,
+              pendingQuantity: pendingQty
+            };
+          });
 
         // Include KOTs that have active items needing kitchen preparation (Pending or Preparing)
-        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing' || (item.pendingQuantity > 0 || item.preparingQuantity > 0)) && !item.isCancelled);
+        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing' || (item.pendingQuantity > 0 || item.preparingQuantity > 0)));
         if (hasActiveKitchenItems) {
           allKots.push({
             orderId: order._id,

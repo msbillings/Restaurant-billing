@@ -167,14 +167,44 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
 
   const getItemsSummary = (items) => {
     if (!items || items.length === 0) return 'No items';
-    const summary = items.map((i) => {
+    
+    // Group active items by name so multiple KOT batches or reduced items collapse cleanly
+    const itemMap = {};
+    items.forEach(i => {
       const isCancelled = i.status === 'Cancelled' || i.isCancelled;
-      if (isCancelled) return `0x ${t(i.name)} (${t("Cancelled")})`;
       const qty = Math.max(0, parseInt(i.quantity || 0, 10));
-      const units = i.unitStatuses && Array.isArray(i.unitStatuses) && i.unitStatuses.length === qty && qty > 0
-        ? i.unitStatuses
-        : Array.from({ length: qty }, () => i.status || 'Pending');
+      if (qty <= 0 && !isCancelled) return; // Skip 0x items
+      
+      const key = (i.name || '').trim().toLowerCase();
+      if (!itemMap[key]) {
+        itemMap[key] = {
+          name: i.name,
+          quantity: 0,
+          isCancelled: false,
+          unitStatuses: [],
+          status: i.status || 'Pending'
+        };
+      }
+      
+      if (isCancelled) {
+        itemMap[key].isCancelled = true;
+      } else {
+        itemMap[key].quantity += qty;
+        const units = i.unitStatuses && Array.isArray(i.unitStatuses) && i.unitStatuses.length === qty && qty > 0
+          ? i.unitStatuses
+          : Array.from({ length: qty }, () => i.status || 'Pending');
+        itemMap[key].unitStatuses.push(...units);
+        if (i.status === 'Preparing') itemMap[key].status = 'Preparing';
+      }
+    });
 
+    const activeItems = Object.values(itemMap).filter(i => i.quantity > 0 || i.isCancelled);
+    if (activeItems.length === 0) return 'No active items';
+
+    const summary = activeItems.map((i) => {
+      if (i.isCancelled && i.quantity === 0) return `0x ${t(i.name)} (${t("Cancelled")})`;
+      const qty = i.quantity;
+      const units = i.unitStatuses;
       const prep = units.filter(s => s === 'Ready' || s === 'Prepared').length;
       const cook = units.filter(s => s === 'Preparing').length;
       const pend = units.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
@@ -188,15 +218,18 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       }
       return `${qty}x ${t(i.name)} [${t(i.status || 'Pending')}]`;
     }).join(', ');
+
     return summary.length > 90 ? summary.substring(0, 87) + '...' : summary;
   };
 
   const getKOTStatus = (items) => {
     if (!items || items.length === 0) return 'Pending';
-    const allCancelled = items.every(i => i.status === 'Cancelled' || i.isCancelled);
+    const validItems = items.filter(i => (i.quantity || 0) > 0 || i.isCancelled);
+    if (validItems.length === 0) return 'Pending';
+    const allCancelled = validItems.every(i => i.status === 'Cancelled' || i.isCancelled);
     if (allCancelled) return 'Cancelled';
-    const allReady = items.every(i => i.status === 'Ready' || i.status === 'Cancelled' || i.isCancelled);
-    const anyPreparing = items.some(i => i.status === 'Preparing');
+    const allReady = validItems.every(i => i.status === 'Ready' || i.status === 'Cancelled' || i.isCancelled);
+    const anyPreparing = validItems.some(i => i.status === 'Preparing');
     if (allReady) return 'Prepared';
     if (anyPreparing) return 'Preparing';
     return 'Ordered';
@@ -219,7 +252,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         groups[groupId].createdAt = kot.createdAt;
       }
       groups[groupId].kots.push(kot);
-      groups[groupId].items.push(...kot.items);
+      groups[groupId].items.push(...(kot.items || []).filter(i => (i.quantity || 0) > 0 || i.isCancelled));
     });
     return Object.values(groups).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [kots]);

@@ -331,50 +331,233 @@ const KDS = ({ onNavigate, onGoBack }) => {
     }
   };
 
+  const updateAggregatedItemStatus = async (item, newStatus, tableNo) => {
+    // 1. Instant 0ms Local State Optimistic Update across all subKots in this item
+    setKots((prevKots) =>
+      prevKots.map((kot) => {
+        const hasMatch = (item.subKots || []).some(sub => 
+          (kot.kotId?.toString() === sub.kotId?.toString() || kot.orderId?.toString() === sub.originalOrderId?.toString())
+        );
+        if (hasMatch) {
+          const updatedItems = (kot.items || []).map((kItem) => {
+            const isMatchingItem = (item.subKots || []).some(sub =>
+              (sub.itemId?.toString() === kItem._id?.toString() || sub.itemId === kItem.name || kItem.name === item.name)
+            );
+            if (isMatchingItem) {
+              const qty = Math.max(0, parseInt(kItem.quantity || 0, 10));
+              const currentUnits = Array.from({ length: qty }, () => newStatus);
+              return { 
+                ...kItem, 
+                status: newStatus,
+                unitStatuses: currentUnits,
+                preparedQuantity: newStatus === 'Ready' ? qty : 0,
+                preparingQuantity: newStatus === 'Preparing' ? qty : 0,
+                pendingQuantity: newStatus === 'Pending' ? qty : 0
+              };
+            }
+            return kItem;
+          });
+          return { ...kot, items: updatedItems };
+        }
+        return kot;
+      })
+    );
+
+    if (newStatus === 'Ready') {
+      const displayName = item.name || 'Item';
+      const displayTable = tableNo ? ` for ${tableNo}` : '';
+      setToast({ message: `✅ ${displayName}${displayTable} is prepared & ready!`, type: 'success' });
+
+      setTimeout(() => {
+        setKots((prevKots) =>
+          prevKots.map((kot) => {
+            const remaining = (kot.items || []).filter(kItem =>
+              kItem.name !== item.name && !(item.subKots || []).some(sub => sub.itemId?.toString() === kItem._id?.toString())
+            );
+            return { ...kot, items: remaining };
+          }).filter(kot => (kot.items || []).some(i => (i.status === 'Pending' || i.status === 'Preparing') && !i.isCancelled))
+        );
+      }, 1500);
+    }
+
+    try {
+      await Promise.all(
+        (item.subKots || []).map(sub =>
+          api.post('/bills/kot/item/status', {
+            orderId: sub.originalOrderId,
+            kotId: sub.kotId,
+            itemId: sub.itemId,
+            status: newStatus
+          })
+        )
+      );
+      fetchKOTs();
+    } catch (error) {
+      console.error('Error updating aggregated item status:', error);
+      fetchKOTs();
+    }
+  };
+
+  const updateAggregatedUnitStatus = async (item, globalIdx, nextStatus, tableNo) => {
+    let runningCount = 0;
+    let targetSub = null;
+    let localUnitIdx = 0;
+
+    for (const sub of (item.subKots || [])) {
+      const subQty = sub.quantity || 0;
+      if (globalIdx < runningCount + subQty) {
+        targetSub = sub;
+        localUnitIdx = globalIdx - runningCount;
+        break;
+      }
+      runningCount += subQty;
+    }
+
+    if (!targetSub) return;
+
+    updateUnitStatus(
+      targetSub.originalOrderId,
+      targetSub.kotId,
+      targetSub.itemId,
+      localUnitIdx,
+      nextStatus,
+      item.name,
+      tableNo
+    );
+  };
+
+  const updateAggregatedPrepTime = async (item, prepTimeMinutes, keySuffix = '') => {
+    if (!item.subKots || item.subKots.length === 0) return;
+    const primarySub = item.subKots[0];
+    updateItemPrepTime(
+      primarySub.originalOrderId,
+      primarySub.kotId,
+      primarySub.itemId,
+      prepTimeMinutes,
+      item.name,
+      keySuffix
+    );
+  };
+
   const groupedKOTs = React.useMemo(() => {
-    const groups = {};
+    const tableGroups = {};
+
     kots.forEach(kot => {
-      const groupId = kot.tableNo;
-      if (!groups[groupId]) {
-        groups[groupId] = {
+      const tableKey = kot.tableNo;
+      if (!tableGroups[tableKey]) {
+        tableGroups[tableKey] = {
           tableNo: kot.tableNo,
           billType: kot.billType,
           createdAt: kot.createdAt,
-          items: []
+          itemsMap: {}
         };
       }
 
-      if (new Date(kot.createdAt) < new Date(groups[groupId].createdAt)) {
-        groups[groupId].createdAt = kot.createdAt;
+      if (new Date(kot.createdAt) < new Date(tableGroups[tableKey].createdAt)) {
+        tableGroups[tableKey].createdAt = kot.createdAt;
       }
 
-      kot.items.forEach(item => {
+      (kot.items || []).forEach(item => {
         const isCancelled = item.status === 'Cancelled' || item.isCancelled === true;
-        groups[groupId].items.push({
-          ...item,
-          isCancelled,
-          kotId: kot.kotId,
-          kotNumber: kot.kotNumber,
-          originalOrderId: kot.orderId,
-          itemCreatedAt: kot.createdAt
-        });
+        const qty = Math.max(0, parseInt(item.quantity || 0, 10));
+        if (qty <= 0 && !isCancelled) return; // Skip 0x items
+
+        const itemKey = (item.name || '').trim().toLowerCase();
+        if (!tableGroups[tableKey].itemsMap[itemKey]) {
+          tableGroups[tableKey].itemsMap[itemKey] = {
+            _id: item._id,
+            name: item.name,
+            quantity: 0,
+            specialNote: item.specialNote || '',
+            isCancelled: false,
+            status: item.status || 'Pending',
+            itemCreatedAt: kot.createdAt,
+            prepTimeMinutes: item.prepTimeMinutes,
+            prepStartTime: item.prepStartTime,
+            kotNumbers: [],
+            unitStatuses: [],
+            subKots: []
+          };
+        }
+
+        const aggItem = tableGroups[tableKey].itemsMap[itemKey];
+
+        if (isCancelled) {
+          aggItem.isCancelled = true;
+        } else {
+          aggItem.quantity += qty;
+          if (item.specialNote) {
+            aggItem.specialNote = item.specialNote;
+          }
+          if (kot.kotNumber && !aggItem.kotNumbers.includes(kot.kotNumber)) {
+            aggItem.kotNumbers.push(kot.kotNumber);
+          }
+          if (item.prepTimeMinutes) {
+            aggItem.prepTimeMinutes = item.prepTimeMinutes;
+            aggItem.prepStartTime = item.prepStartTime;
+          }
+
+          const units = item.unitStatuses && Array.isArray(item.unitStatuses) && item.unitStatuses.length === qty
+            ? item.unitStatuses
+            : Array.from({ length: qty }, () => item.status || 'Pending');
+          
+          aggItem.unitStatuses.push(...units);
+
+          aggItem.subKots.push({
+            originalOrderId: kot.orderId,
+            kotId: kot.kotId,
+            itemId: item._id || item.name,
+            kotNumber: kot.kotNumber,
+            quantity: qty,
+            unitStatuses: units,
+            status: item.status || 'Pending',
+            specialNote: item.specialNote
+          });
+        }
       });
     });
 
-    Object.values(groups).forEach(g => {
-      g.items.sort((a, b) => {
-        if (!a.isCancelled && b.isCancelled) return -1;
-        if (a.isCancelled && !b.isCancelled) return 1;
+    const result = Object.values(tableGroups).map(group => {
+      const items = Object.values(group.itemsMap)
+        .filter(item => item.quantity > 0 && !item.isCancelled)
+        .map(item => {
+          const qty = item.quantity;
+          const units = item.unitStatuses;
+          const preparedCount = units.filter(s => s === 'Ready' || s === 'Prepared').length;
+          const preparingCount = units.filter(s => s === 'Preparing').length;
+          
+          let overallStatus = 'Pending';
+          if (preparedCount === qty && qty > 0) {
+            overallStatus = 'Ready';
+          } else if (preparingCount > 0 || preparedCount > 0) {
+            overallStatus = 'Preparing';
+          }
+
+          return {
+            ...item,
+            status: overallStatus,
+            preparedQuantity: preparedCount,
+            preparingQuantity: preparingCount,
+            pendingQuantity: Math.max(0, qty - preparedCount - preparingCount),
+            kotNumber: item.kotNumbers.join(', ')
+          };
+        });
+
+      items.sort((a, b) => {
         if (a.status === 'Preparing' && b.status !== 'Preparing') return -1;
         if (b.status === 'Preparing' && a.status !== 'Preparing') return 1;
         return new Date(a.itemCreatedAt) - new Date(b.itemCreatedAt);
       });
-    });
 
-    // Only render table cards with active items needing kitchen preparation
-    return Object.values(groups).filter(g =>
-      g.items.some(item => (item.status === 'Pending' || item.status === 'Preparing') && !item.isCancelled)
-    );
+      return {
+        tableNo: group.tableNo,
+        billType: group.billType,
+        createdAt: group.createdAt,
+        items
+      };
+    }).filter(g => g.items.some(item => item.status === 'Pending' || item.status === 'Preparing'));
+
+    return result;
   }, [kots]);
 
   if (loading) return (
@@ -500,7 +683,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                     {group.items.map((item) => {
                       const itemMinutesOld = Math.floor((new Date() - new Date(item.itemCreatedAt)) / 60000);
                       const isCancelled = item.isCancelled || item.status === 'Cancelled';
-                      const prepKey = `${item.kotId}-${item._id}`;
+                      const prepKey = `${group.tableNo}-${item.name}`;
 
                       return (
                         <div
@@ -516,7 +699,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                           <div className="flex justify-between items-start gap-2">
                             <div className="flex-1">
                               <p className={`font-black text-sm sm:text-base leading-snug ${isCancelled ? 'line-through text-red-400' : 'text-white'}`}>
-                                {isCancelled ? 0 : Math.max(0, (item.quantity || 0) - (item.cancelledQuantity || 0))}x {item.name}
+                                {item.quantity}x {item.name}
                               </p>
                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
                                 <span className="text-[10px] font-mono text-slate-400 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-1">
@@ -551,7 +734,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
                             {!isCancelled && (
                               <button
-                                onClick={() => updateItemStatus(item.originalOrderId, item.kotId, item._id, item.status === 'Pending' ? 'Preparing' : 'Ready', item.name, group.tableNo)}
+                                onClick={() => updateAggregatedItemStatus(item, item.status === 'Pending' ? 'Preparing' : 'Ready', group.tableNo)}
                                 className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target cursor-pointer ${
                                   item.status === 'Pending'
                                     ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700'
@@ -573,7 +756,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                               </div>
                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                                 {(() => {
-                                  const qty = Math.max(0, parseInt(item.quantity || 0, 10));
+                                  const qty = item.quantity;
                                   const units = item.unitStatuses && Array.isArray(item.unitStatuses) && item.unitStatuses.length === qty && qty > 0
                                     ? item.unitStatuses
                                     : Array.from({ length: qty }, () => item.status || 'Pending');
@@ -586,7 +769,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                         key={`unit-${prepKey}-${uIdx}`}
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          updateUnitStatus(item.originalOrderId, item.kotId, item._id, uIdx, nextStatus, item.name, group.tableNo);
+                                          updateAggregatedUnitStatus(item, uIdx, nextStatus, group.tableNo);
                                         }}
                                         className={`px-2 py-1.5 rounded-lg text-[10px] font-black border transition-all flex items-center justify-between gap-1 shadow-xs active:scale-95 cursor-pointer ${
                                           isReady
@@ -666,7 +849,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                   return (
                                     <button
                                       key={mins}
-                                      onClick={() => updateItemPrepTime(item.originalOrderId, item.kotId, item._id, mins, item.name, String(mins))}
+                                      onClick={() => updateAggregatedPrepTime(item, mins, String(mins))}
                                       disabled={isSettingThis}
                                       className={`px-2.5 py-1.5 text-[11px] sm:text-xs font-black rounded-lg border transition-all duration-150 touch-target cursor-pointer flex items-center justify-center gap-1 active:scale-90 ${
                                         isSettingThis
@@ -698,7 +881,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                             if (e.key === 'Enter') {
                                               const val = parseInt(customPrepInputs[prepKey]);
                                               if (val && val > 0) {
-                                                updateItemPrepTime(item.originalOrderId, item.kotId, item._id, val, item.name, 'custom');
+                                                updateAggregatedPrepTime(item, val, 'custom');
                                                 setCustomPrepInputs({ ...customPrepInputs, [prepKey]: '' });
                                               }
                                             }
@@ -713,7 +896,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                           onClick={() => {
                                             const val = parseInt(customPrepInputs[prepKey]);
                                             if (val && val > 0) {
-                                              updateItemPrepTime(item.originalOrderId, item.kotId, item._id, val, item.name, 'custom');
+                                              updateAggregatedPrepTime(item, val, 'custom');
                                               setCustomPrepInputs({ ...customPrepInputs, [prepKey]: '' });
                                             }
                                           }}
