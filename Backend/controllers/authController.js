@@ -20,7 +20,14 @@ export const login = async (req, res) => {
     const databaseName = req.models?.connection?.name || req.headers['x-tenant-db'] || '';
     const licenseKey = req.headers['x-license-key'] || '';
 
-    const user = await User.findOne({ username });
+    const cleanUsername = (username || '').trim();
+    const escapedUsername = cleanUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const user = await User.findOne({
+      $or: [
+        { username: cleanUsername },
+        { username: new RegExp(`^${escapedUsername}$`, 'i') }
+      ]
+    });
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
