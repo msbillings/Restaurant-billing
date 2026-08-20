@@ -7,7 +7,7 @@ import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 import { updateCustomerFromBill, syncCustomer } from './customerController.js';
-import { emitNotification } from '../utils/notificationHelper.js';
+import { emitNotification, emitDismissNotification } from '../utils/notificationHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 
@@ -2200,6 +2200,13 @@ export const resolveItemCancel = async (req, res) => {
       // Update POS/Kitchen screens
       io.to(tenantDb).emit('orderUpdated', { tableNo: bill.tableNo, status: bill.status });
     }
+
+    // ⚡ Dismiss the cancellation request notification from all Admin/Captain notification panels
+    emitDismissNotification(req, {
+      type: 'cancel_item_request',
+      orderId,
+      itemId
+    });
 
     res.status(200).json({ message: `Cancellation ${action}ed successfully`, bill });
   } catch (error) {

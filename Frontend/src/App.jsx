@@ -69,7 +69,7 @@ import { clearCategoryCache } from './api/category';
 import { clearAllOfflineData } from './db/offlineDb';
 import { logoutUser } from './api/auth';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { initSyncEngine } from './utils/syncEngine';
@@ -211,6 +211,41 @@ function App() {
   const { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
   const totalUnreadCount = unreadCount + rtUnreadCount;
+  const [resolvingCancelIds, setResolvingCancelIds] = useState({});
+
+  const handleResolveCancelItem = async (e, n, action) => {
+    e.stopPropagation();
+    if (resolvingCancelIds[n.id]) return;
+
+    setResolvingCancelIds(prev => ({ ...prev, [n.id]: action }));
+    try {
+      const token = localStorage.getItem('accessToken');
+      await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
+        orderId: n.data?.orderId,
+        itemId: n.data?.itemId,
+        action
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      setResolvingCancelIds(prev => ({ ...prev, [n.id]: `${action}_done` }));
+      window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data?.orderId, itemId: n.data?.itemId, action } }));
+      setTimeout(() => {
+        rtClearNotification(n.id);
+        setResolvingCancelIds(prev => {
+          const next = { ...prev };
+          delete next[n.id];
+          return next;
+        });
+      }, 700);
+    } catch (err) {
+      console.error(err);
+      setResolvingCancelIds(prev => {
+        const next = { ...prev };
+        delete next[n.id];
+        return next;
+      });
+      alert(`Failed to ${action} cancellation request`);
+    }
+  };
 
   const [toastMessage, setToastMessage] = useState(null);
   const [toastNotifInfo, setToastNotifInfo] = useState(null);
@@ -1070,39 +1105,41 @@ function App() {
                           <p className="text-xs font-bold text-gray-800 leading-tight">{n.title}</p>
                           <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
                           {n.data?.type === 'cancel_item_request' && (
-                            <div className="mt-2 flex gap-2">
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    const token = localStorage.getItem('accessToken');
-                                    await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
-                                      orderId: n.data.orderId,
-                                      itemId: n.data.itemId,
-                                      action: 'accept'
-                                    }, { headers: { Authorization: `Bearer ${token}` } });
-                                    rtClearNotification(n.id);
-                                    window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data.orderId, itemId: n.data.itemId, action: 'accept' } }));
-                                  } catch (err) { console.error(err); alert('Failed to accept'); }
-                                }}
-                                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-xs font-bold transition-colors"
-                              >{t("Accept")}</button>
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    const token = localStorage.getItem('accessToken');
-                                    await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
-                                      orderId: n.data.orderId,
-                                      itemId: n.data.itemId,
-                                      action: 'reject'
-                                    }, { headers: { Authorization: `Bearer ${token}` } });
-                                    rtClearNotification(n.id);
-                                    window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data.orderId, itemId: n.data.itemId, action: 'reject' } }));
-                                  } catch (err) { console.error(err); alert('Failed to reject'); }
-                                }}
-                                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-colors"
-                              >{t("Reject")}</button>
+                            <div className="mt-2 flex gap-2 items-center">
+                              {resolvingCancelIds[n.id] === 'accept' ? (
+                                <span className="flex items-center gap-1.5 bg-red-100 text-red-600 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                  <Loader2 size={12} className="animate-spin" />
+                                  {t("Accepting...")}
+                                </span>
+                              ) : resolvingCancelIds[n.id] === 'reject' ? (
+                                <span className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                  <Loader2 size={12} className="animate-spin" />
+                                  {t("Rejecting...")}
+                                </span>
+                              ) : resolvingCancelIds[n.id] === 'accept_done' ? (
+                                <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded text-xs font-bold">
+                                  ✓ {t("Accepted")}
+                                </span>
+                              ) : resolvingCancelIds[n.id] === 'reject_done' ? (
+                                <span className="flex items-center gap-1 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold">
+                                  ✕ {t("Rejected")}
+                                </span>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
+                                    className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                  >
+                                    {t("Accept")}
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
+                                    className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                  >
+                                    {t("Reject")}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

@@ -1,7 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2 } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
 import BackButton from './common/BackButton';
@@ -23,6 +23,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   });
   const [showClearModal, setShowClearModal] = useState(false);
   const [resolvedNotifs, setResolvedNotifs] = useState({});
+  const [resolvingNotifs, setResolvingNotifs] = useState({});
 
   // Hook handles fetching broadcasts automatically
   const { broadcasts, markAsRead: markBroadcastRead, clearAllBroadcasts } = useBroadcasts(userRole);
@@ -120,6 +121,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   };
 
   const handleResolveCancel = async (notif, action) => {
+    if (resolvingNotifs[notif.id]) return;
+    setResolvingNotifs(prev => ({ ...prev, [notif.id]: action }));
     try {
       const token = localStorage.getItem('accessToken');
       await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
@@ -129,12 +132,15 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      setResolvingNotifs(prev => ({ ...prev, [notif.id]: null }));
       setResolvedNotifs(prev => ({ ...prev, [notif.id]: action }));
+      window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: notif.data.orderId, itemId: notif.data.itemId, action } }));
       setTimeout(() => {
         clearNotification(notif.id);
-      }, 3000);
+      }, 800);
     } catch (error) {
       console.error(`Error ${action}ing cancellation:`, error);
+      setResolvingNotifs(prev => ({ ...prev, [notif.id]: null }));
       alert(`Failed to ${action} cancellation`);
     }
   };
@@ -274,22 +280,31 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
                 }
                 
                 {notif.data?.type === 'cancel_item_request' && (
-                  <div className="mt-3 flex gap-2">
-                    {resolvedNotifs[notif.id] ? (
-                      <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
-                        {resolvedNotifs[notif.id] === 'accept' ? t("Accepted") : t("Rejected")}
+                  <div className="mt-3 flex gap-2 items-center">
+                    {resolvingNotifs[notif.id] ? (
+                      <span className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold animate-pulse ${
+                        resolvingNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        <Loader2 size={14} className="animate-spin" />
+                        {resolvingNotifs[notif.id] === 'accept' ? t("Accepting...") : t("Rejecting...")}
+                      </span>
+                    ) : resolvedNotifs[notif.id] ? (
+                      <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${
+                        resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {resolvedNotifs[notif.id] === 'accept' ? t("✓ Accepted") : t("✕ Rejected")}
                       </span>
                     ) : (
                       <>
                         <button 
                           onClick={() => handleResolveCancel(notif, 'accept')}
-                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors"
+                          className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
                         >
                           {t("Accept")}
                         </button>
                         <button 
                           onClick={() => handleResolveCancel(notif, 'reject')}
-                          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-colors"
+                          className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
                         >
                           {t("Reject")}
                         </button>

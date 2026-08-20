@@ -90,6 +90,10 @@ const CustomerMenu = () => {
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
 
+  // In-App Cancellation Modal State (replaces blocking window.prompt)
+  const [cancelModalData, setCancelModalData] = useState(null); // { item, maxQty, selectedQty }
+  const isCheckingRef = useRef(false);
+
   const handleBellPointerDown = useCallback((e) => {
     isDragging.current = true;
     didDrag.current = false;
@@ -120,68 +124,54 @@ const CustomerMenu = () => {
   const tenant = urlParams.get('tenant');
   const table = urlParams.get('table');
 
-  const handleRequestItemCancel = async (item) => {
-    const itemId = item._id || item.id;
-    let cancelQty = item.quantity;
-    
-    if (item.quantity > 1) {
-      const qtyStr = window.prompt(`Enter quantity to cancel (Max: ${item.quantity - (item.cancelledQuantity || 0)}):`, '1');
-      if (qtyStr === null) return; // User cancelled prompt
-      cancelQty = parseInt(qtyStr, 10);
-      
-      const maxCancellable = item.quantity - (item.cancelledQuantity || 0);
-      if (isNaN(cancelQty) || cancelQty <= 0 || cancelQty > maxCancellable) {
-        alert(`Invalid quantity. Please enter a number between 1 and ${maxCancellable}`);
-        return;
-      }
+  const handleRequestItemCancel = (item) => {
+    const maxCancellable = Math.max(1, (item.quantity || 1) - (item.cancelledQuantity || 0));
+    if (maxCancellable <= 1) {
+      executeItemCancel(item, 1);
+    } else {
+      setCancelModalData({
+        item,
+        maxQty: maxCancellable,
+        selectedQty: 1
+      });
     }
+  };
+
+  const executeItemCancel = async (item, cancelQty) => {
+    const itemId = item._id || item.id;
+    setCancelModalData(null);
+
+    // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE - NO WAITING, NO FREEZING!
+    setActiveOrderData(prev => {
+      if (!prev) return prev;
+      const newItems = (prev.items || []).map(i => 
+        ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
+          ? { ...i, cancellationRequested: true, cancellationRequestedQty: cancelQty } 
+          : i
+      );
+      return { ...prev, items: newItems };
+    });
+
+    setServiceMessage(`⏳ Requesting cancellation for ${cancelQty}x ${item.name}...`);
 
     try {
       const tenant = urlParams.get('tenant') || 'default';
       const tableNo = urlParams.get('table');
       await apiClient.post(`${API_BASE_URL}/public/request-item-cancel`, {
-        orderId: activeOrderData._id,
+        orderId: activeOrderData?._id,
         itemId,
         tableNo,
         cancelQty
       }, {
-        headers: { 'X-Tenant-DB': tenant }
+        headers: { 'X-Tenant-DB': tenant },
+        timeout: 8000
       });
       
-      // Update local state to show pending
-      setActiveOrderData(prev => {
-        if (!prev) return prev;
-        const newItems = (prev.items || []).map(i => 
-          ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
-            ? { ...i, cancellationRequested: true, cancellationRequestedQty: cancelQty } 
-            : i
-        );
-        return { ...prev, items: newItems };
-      });
-      
-      setServiceMessage(`Cancellation requested for ${cancelQty} item(s)`);
-      setTimeout(() => setServiceMessage(''), 3000);
+      setServiceMessage(`✅ Cancellation requested for ${cancelQty} item(s)`);
+      setTimeout(() => setServiceMessage(''), 3500);
     } catch (error) {
       console.error('Error requesting cancellation:', error);
-      const errMsg = error.response?.data?.message || 'Failed to request cancellation';
-      alert(errMsg);
-    }
-  };
-
-  const handleWithdrawItemCancel = async (item) => {
-    const itemId = item._id || item.id;
-    try {
-      const tenant = urlParams.get('tenant') || 'default';
-      const tableNo = urlParams.get('table');
-      await apiClient.post(`${API_BASE_URL}/public/withdraw-item-cancel`, {
-        orderId: activeOrderData._id,
-        itemId,
-        tableNo
-      }, {
-        headers: { 'X-Tenant-DB': tenant }
-      });
-      
-      // Update local state immediately
+      // Revert optimistic update on failure
       setActiveOrderData(prev => {
         if (!prev) return prev;
         const newItems = (prev.items || []).map(i => 
@@ -191,13 +181,57 @@ const CustomerMenu = () => {
         );
         return { ...prev, items: newItems };
       });
+      const errMsg = error.response?.data?.message || 'Failed to request cancellation. Please try again.';
+      setServiceMessage(`⚠️ ${errMsg}`);
+      setTimeout(() => setServiceMessage(''), 4000);
+    }
+  };
+
+  const handleWithdrawItemCancel = async (item) => {
+    const itemId = item._id || item.id;
+
+    // ⚡ 0ms INSTANT OPTIMISTIC UI UPDATE
+    setActiveOrderData(prev => {
+      if (!prev) return prev;
+      const newItems = (prev.items || []).map(i => 
+        ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
+          ? { ...i, cancellationRequested: false, cancellationRequestedQty: 0 } 
+          : i
+      );
+      return { ...prev, items: newItems };
+    });
+    
+    setServiceMessage(`⏳ Withdrawing cancel request for ${item.name}...`);
+
+    try {
+      const tenant = urlParams.get('tenant') || 'default';
+      const tableNo = urlParams.get('table');
+      await apiClient.post(`${API_BASE_URL}/public/withdraw-item-cancel`, {
+        orderId: activeOrderData?._id,
+        itemId,
+        tableNo
+      }, {
+        headers: { 'X-Tenant-DB': tenant },
+        timeout: 8000
+      });
       
-      setServiceMessage(`Cancellation request withdrawn for ${item.name}`);
+      setServiceMessage(`✅ Cancellation request withdrawn for ${item.name}`);
       setTimeout(() => setServiceMessage(''), 3000);
     } catch (error) {
       console.error('Error withdrawing cancellation:', error);
+      // Revert if error
+      setActiveOrderData(prev => {
+        if (!prev) return prev;
+        const newItems = (prev.items || []).map(i => 
+          ((i._id && i._id === itemId) || (i.id && i.id === itemId) || i.name === item.name) 
+            ? { ...i, cancellationRequested: true, cancellationRequestedQty: item.cancellationRequestedQty || 1 } 
+            : i
+        );
+        return { ...prev, items: newItems };
+      });
       const errMsg = error.response?.data?.message || 'Failed to withdraw cancellation';
-      alert(errMsg);
+      setServiceMessage(`⚠️ ${errMsg}`);
+      setTimeout(() => setServiceMessage(''), 4000);
     }
   };
 
@@ -324,6 +358,9 @@ const CustomerMenu = () => {
       return;
     }
 
+    if (isCheckingRef.current) return;
+    isCheckingRef.current = true;
+
     if (isInitial && !hasLoadedInitialOrderRef.current) {
       setIsCheckingOrder(true);
     }
@@ -333,10 +370,9 @@ const CustomerMenu = () => {
         `${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`,
         {
           headers: { 
-            'X-Tenant-DB': tenant,
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
+            'X-Tenant-DB': tenant
+          },
+          timeout: 8000
         }
       );
 
@@ -362,6 +398,7 @@ const CustomerMenu = () => {
         console.warn("Table order status notice:", err?.message);
       }
     } finally {
+      isCheckingRef.current = false;
       setIsCheckingOrder(false);
     }
   }, [table, tenant]);
@@ -377,7 +414,8 @@ const CustomerMenu = () => {
       const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
         headers: {
           'X-Tenant-DB': tenant
-        }
+        },
+        timeout: 10000
       });
       if (menuRes.data) {
         setCategories(menuRes.data.categories || []);
@@ -433,11 +471,11 @@ const CustomerMenu = () => {
         }
       });
 
-      socket.on('kotUpdated', checkOrderStatus);
-      socket.on('orderUpdated', checkOrderStatus);
-      socket.on('newKOT', checkOrderStatus);
-      socket.on('billSettled', checkOrderStatus);
-      socket.on('foodReady', checkOrderStatus);
+      socket.on('kotUpdated', () => checkOrderStatus());
+      socket.on('orderUpdated', () => checkOrderStatus());
+      socket.on('newKOT', () => checkOrderStatus());
+      socket.on('billSettled', () => checkOrderStatus());
+      socket.on('foodReady', () => checkOrderStatus());
       socket.on('prepTimeUpdated', (data) => {
         setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
         setTimeout(() => setServiceMessage(''), 5000);
@@ -452,8 +490,8 @@ const CustomerMenu = () => {
       console.warn("Socket connection warning:", sockErr);
     }
     
-    // Fast poll fallback every 3 seconds for instant response
-    const interval = setInterval(checkOrderStatus, 3000);
+    // Safety fallback poll every 10 seconds (Sockets handle real-time 0ms updates)
+    const interval = setInterval(() => checkOrderStatus(), 10000);
     return () => {
       if (socket) socket.disconnect();
       clearInterval(interval);
@@ -944,10 +982,19 @@ const CustomerMenu = () => {
                         }
 
                         return (
-                          <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
-                            <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+                              <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
+                              className="text-[9px] font-bold bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-200 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 shadow-2xs"
+                              title={t("Cancel Item")}
+                            >
+                              {t("Cancel")}
+                            </button>
+                          </div>
                         );
                       })()}
                       <span className="text-xs font-black text-orange-600">₹{itemTotal}</span>
@@ -1752,6 +1799,103 @@ const CustomerMenu = () => {
             )}
           </motion.div>
         }
+      </AnimatePresence>
+
+      {/* ── CUSTOM IN-APP MODAL FOR QUANTITY SELECTION DURING ITEM CANCEL ── */}
+      <AnimatePresence>
+        {cancelModalData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+            onClick={() => setCancelModalData(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 10 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+              className="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full border border-slate-100 flex flex-col gap-4 text-slate-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center font-black text-lg">
+                    ✕
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base text-slate-800 leading-tight">
+                      {t("Cancel Item")}
+                    </h3>
+                    <p className="text-xs text-slate-500 truncate max-w-[190px]">
+                      {cancelModalData.item.name}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCancelModalData(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="bg-slate-50 rounded-2xl p-4 flex flex-col items-center gap-2 border border-slate-100">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  {t("Quantity to Cancel")}
+                </span>
+                <div className="flex items-center gap-4 my-1">
+                  <button
+                    type="button"
+                    onClick={() => setCancelModalData(prev => ({
+                      ...prev,
+                      selectedQty: Math.max(1, prev.selectedQty - 1)
+                    }))}
+                    disabled={cancelModalData.selectedQty <= 1}
+                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-lg flex items-center justify-center shadow-xs hover:bg-slate-100 active:scale-95 disabled:opacity-40"
+                  >
+                    -
+                  </button>
+                  <span className="text-2xl font-black text-slate-800 w-12 text-center font-mono">
+                    {cancelModalData.selectedQty}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCancelModalData(prev => ({
+                      ...prev,
+                      selectedQty: Math.min(prev.maxQty, prev.selectedQty + 1)
+                    }))}
+                    disabled={cancelModalData.selectedQty >= cancelModalData.maxQty}
+                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-700 font-black text-lg flex items-center justify-center shadow-xs hover:bg-slate-100 active:scale-95 disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  {t("Max available to cancel")}: <strong className="text-slate-700">{cancelModalData.maxQty}</strong>
+                </span>
+              </div>
+
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalData(null)}
+                  className="flex-1 py-3 rounded-2xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors"
+                >
+                  {t("Keep Item")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => executeItemCancel(cancelModalData.item, cancelModalData.selectedQty)}
+                  className="flex-1 py-3 rounded-2xl bg-red-500 hover:bg-red-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer"
+                >
+                  {t("Confirm Cancel")}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
     </div>);

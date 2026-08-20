@@ -15,6 +15,43 @@ export const getNotificationSocket = () => {
   return realtimeService.getSocket();
 };
 
+// Robust helper to determine if a notification is the cancellation request targeted by criteria
+const isTargetCancelNotification = (n, criteria) => {
+  if (!n || !criteria) return false;
+  if (criteria.id && n.id === criteria.id) return true;
+
+  const isCancelReq = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
+  if (!isCancelReq) return false;
+
+  // 1. Direct itemId match
+  if (criteria.itemId && n.data?.itemId && String(n.data.itemId) === String(criteria.itemId)) {
+    return true;
+  }
+
+  // 2. Item Name match (case-insensitive substring or exact match)
+  const targetItemName = (criteria.itemName || criteria.name || '').trim().toLowerCase();
+  if (targetItemName) {
+    const notifItemName = (n.data?.itemName || '').trim().toLowerCase();
+    const notifMsg = (n.message || '').trim().toLowerCase();
+    if (
+      (notifItemName && notifItemName === targetItemName) ||
+      (notifMsg && notifMsg.includes(targetItemName)) ||
+      (targetItemName && notifItemName && targetItemName.includes(notifItemName) && notifItemName.length > 3)
+    ) {
+      return true;
+    }
+  }
+
+  // 3. Order ID match
+  if (criteria.orderId && n.data?.orderId && String(n.data.orderId) === String(criteria.orderId)) {
+    if (!criteria.itemName || (n.message && n.message.toLowerCase().includes((criteria.itemName || '').toLowerCase()))) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const useNotifications = (userRole = 'Admin') => {
   const getTenantKey = () => localStorage.getItem('resto_db_name') || 'default';
 
@@ -25,9 +62,32 @@ const useNotifications = (userRole = 'Admin') => {
       if (saved) {
         const parsed = JSON.parse(saved);
         const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
+
+        // Collect all withdrawn items from saved notifications
+        const withdrawnItems = [];
+        parsed.forEach(n => {
+          if (n.data?.type === 'cancel_item_withdrawn' || (n.title && n.title.includes('Cancel Withdrawn'))) {
+            withdrawnItems.push({
+              itemId: n.data?.itemId,
+              itemName: n.data?.itemName,
+              orderId: n.data?.orderId,
+              message: n.message
+            });
+          }
+        });
+
         return parsed.filter(n => {
           const t = new Date(n.time || n.timestamp || Date.now()).getTime();
-          return t > twoDaysAgo;
+          if (t <= twoDaysAgo) return false;
+
+          // If this is an old cancel request for an item that has a corresponding withdrawal, purge it!
+          const isCancelReq = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
+          if (isCancelReq) {
+            for (const w of withdrawnItems) {
+              if (isTargetCancelNotification(n, w)) return false;
+            }
+          }
+          return true;
         });
       }
     } catch (e) {
@@ -78,9 +138,23 @@ const useNotifications = (userRole = 'Admin') => {
       }
 
       setNotifications((prev) => {
+        let updatedList = prev;
+
+        // If this new notification is a withdrawal notification, immediately remove previous cancel request notifications!
+        const isWithdrawnNotice = notification.data?.type === 'cancel_item_withdrawn' || (notification.title && notification.title.includes('Cancel Withdrawn'));
+        if (isWithdrawnNotice) {
+          const criteria = {
+            itemId: notification.data?.itemId,
+            itemName: notification.data?.itemName,
+            orderId: notification.data?.orderId,
+            message: notification.message
+          };
+          updatedList = updatedList.filter(n => !isTargetCancelNotification(n, criteria));
+        }
+
         // Deduplicate: Don't add if we already have this notification ID
-        if (prev.some(n => n.id === notification.id)) return prev;
-        return [notification, ...prev];
+        if (updatedList.some(n => n.id === notification.id)) return updatedList;
+        return [notification, ...updatedList];
       });
       
       setUnreadCount((prev) => prev + 1);
@@ -100,10 +174,31 @@ const useNotifications = (userRole = 'Admin') => {
       }
     };
 
+    const handleDismissNotification = (criteria) => {
+      if (!criteria) return;
+      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, criteria)));
+    };
+
+    const handleItemCancellationWithdrawn = (data) => {
+      if (!data) return;
+      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, data)));
+    };
+
+    const handleCancellationResolved = (data) => {
+      if (!data) return;
+      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, data)));
+    };
+
     const unsubNotif = realtimeService.subscribe('new_notification', handleNewNotification);
+    const unsubDismiss = realtimeService.subscribe('dismiss_notification', handleDismissNotification);
+    const unsubWithdrawn = realtimeService.subscribe('itemCancellationWithdrawn', handleItemCancellationWithdrawn);
+    const unsubResolved = realtimeService.subscribe('cancellationResolved', handleCancellationResolved);
 
     return () => {
       unsubNotif();
+      unsubDismiss();
+      unsubWithdrawn();
+      unsubResolved();
     };
   }, [userRole]);
 

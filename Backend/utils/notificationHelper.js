@@ -54,3 +54,24 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
     console.error('Notification emit error:', err);
   }
 };
+
+/**
+ * Utility to broadcast notification dismissal / removal strictly to tenant-scoped connected clients
+ */
+export const emitDismissNotification = (req, criteria = {}) => {
+  try {
+    const io = req?.app?.locals?.io;
+    if (io) {
+      const tenantDb = getTenantDbFromReq(req);
+      if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+        io.to(tenantDb).emit('dismiss_notification', {
+          ...criteria,
+          tenantDb
+        });
+        console.log(`[Notification] Broadcasted dismiss notification to tenant room ${tenantDb}`, criteria);
+      }
+    }
+  } catch (err) {
+    console.error('Notification dismiss emit error:', err);
+  }
+};

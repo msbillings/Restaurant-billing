@@ -9,7 +9,7 @@ import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
-import { emitNotification, getTenantDbFromReq } from '../utils/notificationHelper.js';
+import { emitNotification, emitDismissNotification, getTenantDbFromReq } from '../utils/notificationHelper.js';
 
 // Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1" vs "Table 1")
 export const getTableMatchCondition = (tblStr) => {
@@ -80,15 +80,215 @@ export const getTableMatchCondition = (tblStr) => {
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
-// In-memory cache for public menu per tenant with 5s TTL
+// In-memory cache for public menu per tenant with 30s TTL
 export const publicMenuCache = new Map();
+// In-memory cache for dynamic restaurant settings (tax rates, shop name) per tenant with 60s TTL
+export const dynamicSettingsCache = new Map();
 
 export const clearPublicMenuCache = (tenantKey) => {
   if (tenantKey) {
     publicMenuCache.delete(tenantKey);
+    dynamicSettingsCache.delete(tenantKey);
   } else {
     publicMenuCache.clear();
+    dynamicSettingsCache.clear();
   }
+};
+
+// Helper to dynamically load tax rates & settings with in-memory caching (60s TTL)
+export const getCachedDynamicSettings = async (req) => {
+  const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
+  const cached = dynamicSettingsCache.get(tenantKey);
+  if (cached && (Date.now() - cached.timestamp < 60000)) {
+    return cached.data;
+  }
+
+  let taxRate = 0;
+  let cgstRate = 0;
+  let sgstRate = 0;
+  let restaurantName = 'Restaurant';
+
+  try {
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    let s = {};
+    if (settingsDoc?.value) {
+      s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
+    }
+    
+    if (s.enableCgst) {
+      cgstRate = Number(s.cgstRate || 0);
+    }
+    if (s.enableSgst) {
+      sgstRate = Number(s.sgstRate || 0);
+    }
+    if (s.enableGst) {
+      taxRate = Number(s.gstRate || 0);
+      cgstRate = 0;
+      sgstRate = 0;
+    } else {
+      taxRate = cgstRate + sgstRate;
+    }
+    if (s.restaurantName) {
+      restaurantName = s.restaurantName;
+    }
+  } catch (e) {
+    console.error("Error reading dynamic settings:", e);
+  }
+
+  const data = { taxRate, cgstRate, sgstRate, restaurantName };
+  dynamicSettingsCache.set(tenantKey, { data, timestamp: Date.now() });
+  return data;
+};
+
+// Fast helper to query active bill with exact indexed matches first before regex fallback
+export const findActiveBillForTable = async (Bill, tableNo) => {
+  if (!tableNo) return null;
+  const trimmed = tableNo.trim();
+  const directMatches = [trimmed];
+
+  if (trimmed.includes(' - ')) {
+    const parts = trimmed.split(' - ');
+    directMatches.push(parts.slice(1).join(' - ').trim()); // without floor prefix
+  } else {
+    directMatches.push(`Ground Floor - ${trimmed}`);
+    directMatches.push(`First Floor - ${trimmed}`);
+  }
+
+  // 1. Fast indexed exact match first (0ms latency)
+  let bill = await Bill.findOne({ 
+    tableNo: { $in: directMatches }, 
+    status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
+  }).sort({ createdAt: -1 });
+
+  // 2. Fallback to regex pattern if not found by exact string
+  if (!bill) {
+    const tableRegex = getTableMatchCondition(tableNo);
+    bill = await Bill.findOne({ 
+      tableNo: tableRegex, 
+      status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
+    }).sort({ createdAt: -1 });
+  }
+
+  return bill;
+};
+
+// Unified formatter for public bill payloads (used by /order, /order-status)
+export const formatPublicBillPayload = (bill, taxSettings) => {
+  if (!bill) return null;
+
+  const { taxRate = 0, cgstRate = 0, sgstRate = 0 } = taxSettings || {};
+  const allKots = bill.kots || [];
+
+  const processedItems = (bill.items || []).map(item => {
+    let prepMins = item.prepTimeMinutes || 0;
+    let prepStart = item.prepStartTime || null;
+    let kdsStatus = item.status || 'Pending';
+    const qty = Number(item.quantity || 1);
+    let unitStatuses = item.unitStatuses;
+
+    if (allKots && Array.isArray(allKots) && allKots.length > 0) {
+      for (let i = allKots.length - 1; i >= 0; i--) {
+        const k = allKots[i];
+        const matchingKi = (k.items || []).find(ki => 
+          (ki._id && item._id && ki._id.toString() === item._id.toString()) ||
+          (ki.name && item.name && ki.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+        );
+        if (matchingKi) {
+          if (matchingKi.status) {
+            kdsStatus = matchingKi.status;
+          }
+          if (matchingKi.unitStatuses && Array.isArray(matchingKi.unitStatuses)) {
+            unitStatuses = matchingKi.unitStatuses;
+          }
+          if (matchingKi.prepTimeMinutes) {
+            prepMins = matchingKi.prepTimeMinutes;
+            prepStart = matchingKi.prepStartTime;
+          }
+          break;
+        }
+      }
+    }
+
+    if (kdsStatus === 'Prepared') kdsStatus = 'Ready';
+
+    const safeQty = Math.max(0, parseInt(qty || 0, 10) || 1);
+    if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== safeQty) {
+      unitStatuses = Array.from({ length: safeQty }, () => kdsStatus);
+    }
+
+    const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+    const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+    const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+    const itemObj = item.toObject ? item.toObject() : item;
+    return {
+      ...itemObj,
+      status: kdsStatus,
+      kdsStatus: kdsStatus,
+      unitStatuses,
+      preparedQuantity: preparedQty,
+      preparingQuantity: preparingQty,
+      pendingQuantity: pendingQty,
+      prepTimeMinutes: prepMins,
+      prepStartTime: prepStart
+    };
+  });
+
+  const activeProcessed = processedItems.filter(i => !i.isCancelled);
+  let kitchenStatus = 'Pending';
+  if (bill.status === 'Billed') {
+    kitchenStatus = 'Completed';
+  } else if (activeProcessed.length > 0) {
+    const allReady = activeProcessed.every(i => i.kdsStatus === 'Ready' || (i.preparedQuantity === (i.quantity - (i.cancelledQuantity || 0))));
+    const anyPreparing = activeProcessed.some(i => i.kdsStatus === 'Preparing' || i.preparingQuantity > 0);
+    const anyReady = activeProcessed.some(i => i.kdsStatus === 'Ready' || i.preparedQuantity > 0);
+
+    if (allReady) {
+      kitchenStatus = 'Ready';
+    } else if (anyPreparing || anyReady) {
+      kitchenStatus = 'Preparing';
+    } else {
+      kitchenStatus = 'Pending';
+    }
+  }
+
+  const subTotal = bill.subtotal || activeProcessed.reduce((acc, i) => acc + (i.price * (i.quantity - (i.cancelledQuantity || 0))), 0);
+  const currentTaxRate = (bill.tax && bill.tax > 0) ? bill.tax : taxRate;
+
+  let taxAmount = 0;
+  let taxBreakdown = { cgst: 0, sgst: 0, igst: 0 };
+  let computedTotal = bill.total;
+
+  if (bill.status === 'Open' || bill.status === 'open' || bill.status === 'Occupied' || bill.status === 'Pending') {
+    taxAmount = Number(((subTotal * currentTaxRate) / 100).toFixed(2));
+    const effectiveCgst = currentTaxRate === taxRate ? cgstRate : currentTaxRate / 2;
+    const effectiveSgst = currentTaxRate === taxRate ? sgstRate : currentTaxRate / 2;
+    taxBreakdown = {
+      cgst: Number(((subTotal * effectiveCgst) / 100).toFixed(2)),
+      sgst: Number(((subTotal * effectiveSgst) / 100).toFixed(2)),
+      igst: 0
+    };
+    computedTotal = Math.round(subTotal + taxAmount);
+  } else {
+    taxAmount = bill.taxBreakdown ? Number(((bill.taxBreakdown.cgst || 0) + (bill.taxBreakdown.sgst || 0) + (bill.taxBreakdown.igst || 0)).toFixed(2)) : Number(((subTotal * (bill.tax || 0)) / 100).toFixed(2));
+    taxBreakdown = bill.taxBreakdown || { cgst: 0, sgst: 0, igst: 0 };
+  }
+
+  return {
+    _id: bill._id,
+    tableNo: bill.tableNo,
+    billNumber: bill.billNumber,
+    status: bill.status,
+    kitchenStatus,
+    total: computedTotal,
+    tax: taxAmount,
+    taxBreakdown,
+    subTotal,
+    subtotal: subTotal,
+    itemsCount: activeProcessed.reduce((acc, item) => acc + (item.quantity - (item.cancelledQuantity || 0)), 0),
+    items: processedItems
+  };
 };
 
 // Public endpoint to fetch categories and active menu items
@@ -96,8 +296,8 @@ router.get('/menu', async (req, res) => {
   try {
     const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
     const cached = publicMenuCache.get(tenantKey);
-    if (cached && (Date.now() - cached.timestamp < 5000)) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    if (cached && (Date.now() - cached.timestamp < 30000)) {
+      res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
       return res.status(200).json(cached.data);
     }
 
@@ -127,48 +327,13 @@ router.get('/menu', async (req, res) => {
     const responsePayload = { categories, items, googleReviewLink, restaurantSettings };
     publicMenuCache.set(tenantKey, { data: responsePayload, timestamp: Date.now() });
 
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
     res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching public menu:", error);
     res.status(500).json({ message: error.message });
   }
 });
-
-// Helper to dynamically load tax rates from restaurantSettings in DB
-const getDynamicTaxSettings = async (req) => {
-  let taxRate = 0;
-  let cgstRate = 0;
-  let sgstRate = 0;
-  try {
-    const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
-    let s = {};
-    if (settingsDoc?.value) {
-      s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
-    }
-    
-    if (s.enableCgst) {
-      cgstRate = Number(s.cgstRate || 0);
-    }
-    if (s.enableSgst) {
-      sgstRate = Number(s.sgstRate || 0);
-    }
-    if (s.enableGst) {
-      taxRate = Number(s.gstRate || 0);
-      cgstRate = 0;
-      sgstRate = 0;
-    } else {
-      taxRate = cgstRate + sgstRate;
-    }
-  } catch (e) {
-    console.error("Error reading dynamic tax settings:", e);
-    taxRate = 0;
-    cgstRate = 0;
-    sgstRate = 0;
-  }
-  return { taxRate, cgstRate, sgstRate };
-};
 
 // Public endpoint to submit an order from a customer
 router.post('/order', async (req, res) => {
@@ -192,9 +357,8 @@ router.post('/order', async (req, res) => {
 
     const itemsSubtotal = sanitizedItems.reduce((acc, i) => acc + i.total, 0);
 
-    // Case-insensitive table matching for open order
-    const tableRegex = getTableMatchCondition(tableNo);
-    let bill = await Bill.findOne({ tableNo: tableRegex, status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } });
+    // Fast indexed match first
+    let bill = await findActiveBillForTable(Bill, tableNo);
 
     const kotNumber = `KOT-${(bill && bill.kots ? bill.kots.length : 0) + 1}`;
     const newKotTicket = {
@@ -208,7 +372,8 @@ router.post('/order', async (req, res) => {
       createdAt: new Date()
     };
 
-    const { taxRate, cgstRate, sgstRate } = await getDynamicTaxSettings(req);
+    const taxSettings = await getCachedDynamicSettings(req);
+    const { taxRate, cgstRate, sgstRate } = taxSettings;
 
     if (bill) {
       // Append items to existing order safely
@@ -267,6 +432,9 @@ router.post('/order', async (req, res) => {
       await bill.save();
     }
 
+    // Prepare unified formatted payload for 0ms frontend rendering
+    const formattedPayload = formatPublicBillPayload(bill, taxSettings);
+
     // ⚡ INSTANT REAL-TIME SOCKET BROADCAST (0ms latency to POS, KDS, Floor, Kitchen)
     const io = req.app?.locals?.io;
     const tenantDb = getTenantDbFromReq(req);
@@ -301,8 +469,8 @@ router.post('/order', async (req, res) => {
       console.warn("Notification error on public order:", notifErr.message);
     }
 
-    // ⚡ RETURN SUCCESS TO CUSTOMER IMMEDIATELY
-    res.status(201).json(bill);
+    // ⚡ RETURN STRUCTURED PAYLOAD TO CUSTOMER IMMEDIATELY
+    res.status(201).json(formattedPayload);
 
     // Background printing and floor status DB update
     setImmediate(async () => {
@@ -371,135 +539,16 @@ router.get('/order-status', async (req, res) => {
     }
 
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    
-    // Find the most recent active order for this table
-    const tableRegex = getTableMatchCondition(tableNo);
-    const bill = await Bill.findOne({ 
-      tableNo: tableRegex, 
-      status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
-    }).sort({ createdAt: -1 });
+    const bill = await findActiveBillForTable(Bill, tableNo);
     
     if (!bill) {
       return res.status(404).json({ message: 'No active order found' });
     }
 
-    let kitchenStatus = 'Pending';
-    if (bill.status === 'Billed') {
-      kitchenStatus = 'Completed';
-    } else {
-      let allItems = [];
-      if (bill.kots && bill.kots.length > 0) {
-        allItems = bill.kots.flatMap(k => k.items || []).filter(i => !i.isCancelled);
-      }
-      if (allItems.length === 0 && bill.items && bill.items.length > 0) {
-        allItems = bill.items.filter(i => !i.isCancelled);
-      }
+    const taxSettings = await getCachedDynamicSettings(req);
+    const formatted = formatPublicBillPayload(bill, taxSettings);
 
-      if (allItems.length > 0) {
-        const allReady = allItems.every(i => i.status === 'Ready');
-        const anyPreparing = allItems.some(i => i.status === 'Preparing');
-        const anyReady = allItems.some(i => i.status === 'Ready');
-        if (allReady) {
-          kitchenStatus = 'Ready';
-        } else if (anyPreparing || anyReady) {
-          kitchenStatus = 'Preparing';
-        } else {
-          kitchenStatus = 'Pending';
-        }
-      }
-    }
-
-    const { taxRate, cgstRate, sgstRate } = await getDynamicTaxSettings(req);
-    const subTotal = bill.subtotal || bill.items.reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
-    const currentTaxRate = (bill.tax && bill.tax > 0) ? bill.tax : taxRate;
-
-    let taxAmount = 0;
-    let taxBreakdown = { cgst: 0, sgst: 0, igst: 0 };
-    let computedTotal = bill.total;
-
-    if (bill.status === 'Open' || bill.status === 'open' || bill.status === 'Occupied' || bill.status === 'Pending') {
-      taxAmount = Number(((subTotal * currentTaxRate) / 100).toFixed(2));
-      const effectiveCgst = currentTaxRate === taxRate ? cgstRate : currentTaxRate / 2;
-      const effectiveSgst = currentTaxRate === taxRate ? sgstRate : currentTaxRate / 2;
-      taxBreakdown = {
-        cgst: Number(((subTotal * effectiveCgst) / 100).toFixed(2)),
-        sgst: Number(((subTotal * effectiveSgst) / 100).toFixed(2)),
-        igst: 0
-      };
-      computedTotal = Math.round(subTotal + taxAmount);
-    } else {
-      taxAmount = bill.taxBreakdown ? Number(((bill.taxBreakdown.cgst || 0) + (bill.taxBreakdown.sgst || 0) + (bill.taxBreakdown.igst || 0)).toFixed(2)) : Number(((subTotal * (bill.tax || 0)) / 100).toFixed(2));
-      taxBreakdown = bill.taxBreakdown || { cgst: 0, sgst: 0, igst: 0 };
-    }
-
-    const processedItems = (bill.items || []).map(item => {
-      let prepMins = item.prepTimeMinutes || 0;
-      let prepStart = item.prepStartTime || null;
-      let kdsStatus = item.status || 'Pending';
-      const qty = Number(item.quantity || 1);
-      let unitStatuses = item.unitStatuses;
-
-      if (bill.kots && Array.isArray(bill.kots) && bill.kots.length > 0) {
-        // Find the most recent KOT item status for this specific item
-        for (let i = bill.kots.length - 1; i >= 0; i--) {
-          const k = bill.kots[i];
-          const matchingKi = (k.items || []).find(ki => 
-            (ki._id && item._id && ki._id.toString() === item._id.toString()) ||
-            (ki.name && item.name && ki.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-          );
-          if (matchingKi) {
-            if (matchingKi.status) {
-              kdsStatus = matchingKi.status;
-            }
-            if (matchingKi.unitStatuses && Array.isArray(matchingKi.unitStatuses)) {
-              unitStatuses = matchingKi.unitStatuses;
-            }
-            if (matchingKi.prepTimeMinutes) {
-              prepMins = matchingKi.prepTimeMinutes;
-              prepStart = matchingKi.prepStartTime;
-            }
-            break;
-          }
-        }
-      }
-
-      if (kdsStatus === 'Prepared') kdsStatus = 'Ready';
-
-      const safeQty = Math.max(0, parseInt(qty || 0, 10) || 1);
-      if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== safeQty) {
-        unitStatuses = Array.from({ length: safeQty }, () => kdsStatus);
-      }
-
-      const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
-      const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
-      const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
-
-      const itemObj = item.toObject ? item.toObject() : item;
-      return {
-        ...itemObj,
-        status: kdsStatus,
-        kdsStatus: kdsStatus,
-        unitStatuses,
-        preparedQuantity: preparedQty,
-        preparingQuantity: preparingQty,
-        pendingQuantity: pendingQty,
-        prepTimeMinutes: prepMins,
-        prepStartTime: prepStart
-      };
-    });
-
-    res.status(200).json({
-      _id: bill._id,
-      billNumber: bill.billNumber,
-      status: bill.status,
-      kitchenStatus,
-      total: computedTotal,
-      tax: taxAmount,
-      taxBreakdown,
-      subTotal,
-      itemsCount: bill.items.reduce((acc, item) => acc + (item.isCancelled ? 0 : (item.quantity - (item.cancelledQuantity || 0))), 0),
-      items: processedItems
-    });
+    res.status(200).json(formatted);
   } catch (error) {
     console.error("Error fetching order status:", error);
     res.status(500).json({ message: error.message });
@@ -539,20 +588,8 @@ router.post('/request-item-cancel', async (req, res) => {
     bill.markModified('items');
     await bill.save();
 
-    // Emit notification to admin
-    const Setting = getTenantModel(req, 'Setting', SettingDefault);
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
-    let shopName = 'Unknown Shop';
-    if (settingsDoc?.value) {
-      if (typeof settingsDoc.value === 'string') {
-        try {
-          const parsed = JSON.parse(settingsDoc.value);
-          shopName = parsed.restaurantName || 'Unknown Shop';
-        } catch (e) {}
-      } else {
-        shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
-      }
-    }
+    // Use cached settings for shop name
+    const { restaurantName: shopName } = await getCachedDynamicSettings(req);
 
     const cleanTable = (tableNo || bill.tableNo || '').replace('Table ', '');
     const io = req.app?.locals?.io;
@@ -564,7 +601,7 @@ router.post('/request-item-cancel', async (req, res) => {
       `${item.cancellationRequestedQty}x ${item.name}`,
       'error',
       ['Admin', 'Manager', 'Captain'],
-      { orderId: bill._id, itemId: item._id, type: 'cancel_item_request', itemName: item.name, cancelQty: item.cancellationRequestedQty }
+      { orderId: bill._id, itemId: item._id, type: 'cancel_item_request', itemName: item.name, cancelQty: item.cancellationRequestedQty, tableNo: bill.tableNo }
     );
 
     if (io && tenantDb) {
@@ -620,6 +657,27 @@ router.post('/withdraw-item-cancel', async (req, res) => {
 
     const io = req.app?.locals?.io;
     const tenantDb = req.headers['x-tenant-db'];
+
+    // 1. ⚡ Dismiss the cancellation request notification from all Admin/Captain notification panels
+    emitDismissNotification(req, {
+      type: 'cancel_item_request',
+      orderId: bill._id,
+      itemId: item._id,
+      itemName: item.name,
+      tableNo: bill.tableNo
+    });
+
+    // 2. ⚡ Emit an informative notification that the cancel was withdrawn
+    const cleanTable = (tableNo || bill.tableNo || '').replace('Table ', '');
+    const { restaurantName: shopName } = await getCachedDynamicSettings(req);
+    emitNotification(
+      req,
+      `${shopName} | Table ${cleanTable} Cancel Withdrawn`,
+      `${item.name} cancel request was withdrawn by customer`,
+      'info',
+      ['Admin', 'Manager', 'Captain'],
+      { orderId: bill._id, itemId: item._id, type: 'cancel_item_withdrawn', itemName: item.name, tableNo: bill.tableNo }
+    );
 
     if (io && tenantDb) {
       io.to(tenantDb).emit('itemCancellationWithdrawn', { 
