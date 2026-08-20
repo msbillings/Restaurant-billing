@@ -483,7 +483,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       </div>
 
-      {/* Mode Switcher: In Development show both tabs; in Production show only Cloud Vercel Mode */}
+      {/* Mode Switcher: In Development show both tabs; in Production hide entirely */}
+      {!isProduction && (
       <div className="bg-surface border border-border p-2 sm:p-2.5 rounded-2xl mb-3 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs shrink-0 print:hidden">
         <div className="flex items-center gap-1.5 p-1 bg-background rounded-xl border border-border/60 w-full sm:w-auto">
           {/* Cloud / Vercel Menu Button */}
@@ -513,22 +514,17 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           )}
         </div>
 
-        {/* Environment Badge */}
+        {/* Environment Badge - dev only */}
         <div className="flex items-center gap-2 text-[10px] sm:text-xs text-text-muted">
-          {isProduction ? (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/20">
-              <ShieldCheck size={13} /> {t("Production Mode: Vercel Cloud Active")}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
-              <Server size={13} /> {t("Dev Mode: Test Vercel & Local IP on Phone")}
-            </span>
-          )}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
+            <Server size={13} /> {t("Dev Mode: Test Vercel & Local IP on Phone")}
+          </span>
         </div>
       </div>
+      )}
 
-      {/* Cloud / Vercel URL Configuration Bar */}
-      {(qrMode === 'cloud' || isProduction) && (
+      {/* Cloud / Vercel URL Configuration Bar - Only shown in development */}
+      {!isProduction && (qrMode === 'cloud' || isProduction) && (
         <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 text-blue-500">
@@ -657,18 +653,20 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
               <div className="p-2 rounded-xl bg-primary/10 text-primary">
                 <RefreshCw size={20} className="animate-spin text-primary" />
               </div>
-              <div>
-                <div className="text-xs sm:text-sm font-bold text-text-main flex items-center gap-2">
-                  <span>{t("Dynamically fetching tables and occupancy status...")}</span>
+              {!isProduction && (
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-text-main flex items-center gap-2">
+                    <span>{t("Dynamically fetching tables and occupancy status...")}</span>
+                  </div>
+                  <div className="text-[10px] sm:text-xs text-text-muted">
+                    {t("Checking live table availability (Empty / Busy) from POS database before rendering QR codes...")}
+                  </div>
                 </div>
-                <div className="text-[10px] sm:text-xs text-text-muted">
-                  {t("Checking live table availability (Empty / Busy) from POS database before rendering QR codes...")}
-                </div>
-              </div>
+              )}
             </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
               <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-              <span>{t("Loading Data")}</span>
+              {!isProduction && <span>{t("Loading Data")}</span>}
             </div>
           </div>
 
