@@ -514,14 +514,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       return sum + (Number(item.price || 0) * activeQty);
     }, 0);
 
-    let totRate = (activeOrder.tax !== undefined && activeOrder.tax !== null && activeOrder.tax > 0) ? Number(activeOrder.tax) : 0;
-    if (!totRate) {
-      try {
-        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-        if (s.enableCgst) totRate += Number(s.cgstRate || 0);
-        if (s.enableSgst) totRate += Number(s.sgstRate || 0);
-        if (s.enableGst) totRate += Number(s.gstRate || 0);
-      } catch(e) {}
+    let totRate = 0;
+    try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      if (s.enableCgst) totRate += Number(s.cgstRate || 0);
+      if (s.enableSgst) totRate += Number(s.sgstRate || 0);
+      if (s.enableGst) totRate += Number(s.gstRate || 0);
+    } catch(e) {}
+
+    // Only if order is already Billed (locked bill), use saved bill tax rate; for open orders, strictly obey restaurantSettings
+    if (activeOrder.status === 'Billed' && activeOrder.tax !== undefined && activeOrder.tax !== null) {
+      totRate = Number(activeOrder.tax);
     }
 
     const disc = Number(activeOrder.discount || activeOrder.discountValue || 0);
@@ -1265,14 +1268,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
               const subTotal = activeSubtotal;
               
-              let totRate = (selectedOrderForView.tax !== undefined && selectedOrderForView.tax !== null && selectedOrderForView.tax > 0) ? Number(selectedOrderForView.tax) : 0;
-              if (!totRate) {
-                try {
-                  const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-                  if (s.enableCgst) totRate += Number(s.cgstRate || 0);
-                  if (s.enableSgst) totRate += Number(s.sgstRate || 0);
-                  if (s.enableGst) totRate += Number(s.gstRate || 0);
-                } catch(e) {}
+              let totRate = 0;
+              try {
+                const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+                if (s.enableCgst) totRate += Number(s.cgstRate || 0);
+                if (s.enableSgst) totRate += Number(s.sgstRate || 0);
+                if (s.enableGst) totRate += Number(s.gstRate || 0);
+              } catch(e) {}
+
+              // Only if order is already Billed (locked bill), use saved bill tax rate; for open orders, strictly obey restaurantSettings
+              if (selectedOrderForView.status === 'Billed' && selectedOrderForView.tax !== undefined && selectedOrderForView.tax !== null) {
+                totRate = Number(selectedOrderForView.tax);
               }
               
               const disc = Number(selectedOrderForView.discount || selectedOrderForView.discountValue || 0);

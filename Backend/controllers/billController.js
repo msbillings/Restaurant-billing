@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import BillDefault from '../models/Bill.js';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
+import ServiceRequestDefault from '../models/ServiceRequest.js';
 import cache from '../utils/cache.js';
 import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
@@ -108,13 +109,12 @@ const getDynamicTaxRate = async (req) => {
     if (s.enableGst) {
       tot += Number(s.gstRate || 0);
     }
-    if (!tot && !s.enableCgst && !s.enableSgst && !s.enableGst) tot = 5;
 
     taxRateCache.set(tenantDb, { rate: tot, time: Date.now() });
     return tot;
   } catch (e) {
     console.error("Error reading dynamic tax rate:", e);
-    return 5;
+    return 0;
   }
 };
 
@@ -159,7 +159,7 @@ export const getActiveOrder = async (req, res) => {
       if (order.status === 'Open') {
         const dynamicTaxRate = await getDynamicTaxRate(req);
         const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
-        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+        const taxRate = dynamicTaxRate;
         const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
         order.tax = taxRate;
         order.subtotal = subtotal;
@@ -449,7 +449,7 @@ export const saveOrder = async (req, res) => {
       const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
       const tRate = (tax !== undefined && tax !== null && Number(tax) >= 0) 
         ? Number(tax) 
-        : (order.tax && order.tax > 0 ? order.tax : await getDynamicTaxRate(req));
+        : (order.status === 'Billed' && order.tax !== undefined && order.tax !== null ? Number(order.tax) : await getDynamicTaxRate(req));
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
@@ -1226,7 +1226,7 @@ export const getOpenOrders = async (req, res) => {
       })
       .map(order => {
         const subtotal = (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
-        const taxRate = (order.tax !== undefined && order.tax !== null && order.tax > 0) ? order.tax : dynamicTaxRate;
+        const taxRate = order.status === 'Open' ? dynamicTaxRate : ((order.tax !== undefined && order.tax !== null) ? Number(order.tax) : dynamicTaxRate);
         const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
         const totalWithTax = Math.round(subtotal + taxAmount);
         return {
@@ -2486,16 +2486,19 @@ export const getActiveNotifications = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const Settings = getTenantModel(req, 'Settings', SettingsDefault);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     const settings = await Settings.findOne().lean();
     const shopName = settings?.restaurantName || 'Restaurant';
 
-    // 1. Query open and billed orders that have pending cancellation requests
+    const notifications = [];
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    // 1. Query open and billed orders that have pending cancellation requests (for Admin, Manager, Captain)
     const activeCancelBills = await Bill.find({
       status: { $in: ['Open', 'Billed'] },
       'items.cancellationRequested': true
     }).select('tableNo items createdAt updatedAt').lean();
 
-    const notifications = [];
     activeCancelBills.forEach(bill => {
       const cleanTable = (bill.tableNo || '').replace('Table ', '');
       if (Array.isArray(bill.items)) {
@@ -2523,7 +2526,76 @@ export const getActiveNotifications = async (req, res) => {
       }
     });
 
-    res.json(notifications);
+    // 2. Query recent Service Requests (Call Waiter, Need Water, Pay the Bill) from last 48 hours
+    const serviceRequests = await ServiceRequest.find({
+      createdAt: { $gte: twoDaysAgo }
+    }).sort({ createdAt: -1 }).limit(50).lean();
+
+    serviceRequests.forEach(reqItem => {
+      const cleanTable = (reqItem.tableNumber || '').replace('Table ', '');
+      const reqType = reqItem.requestType || 'Service';
+      const isPayBill = reqType === 'Pay the Bill';
+      
+      notifications.push({
+        id: `service-${reqItem._id}`,
+        type: isPayBill ? 'warning' : 'info',
+        title: `Table ${cleanTable} Service`,
+        message: reqType,
+        time: reqItem.createdAt || new Date(),
+        timestamp: new Date(reqItem.createdAt || Date.now()),
+        targetRoles: isPayBill 
+          ? ['Cashier', 'Captain', 'Manager', 'Admin'] 
+          : ['Captain', 'Manager', 'Admin'],
+        data: {
+          serviceRequestId: reqItem._id,
+          type: 'service_request',
+          requestType: reqType,
+          tableNo: reqItem.tableNumber,
+          status: reqItem.status
+        }
+      });
+    });
+
+    // 3. Query recent KOT orders & item updates from open/cooking bills (for Chef, KDS, Manager, Admin)
+    const recentBills = await Bill.find({
+      createdAt: { $gte: twoDaysAgo },
+      status: { $in: ['Open', 'Hold', 'Billed'] }
+    }).select('billNumber tableNo billType items createdAt updatedAt').sort({ updatedAt: -1 }).limit(30).lean();
+
+    recentBills.forEach(bill => {
+      const cleanTable = (bill.tableNo || '').replace('Table ', '');
+      const hasCookingOrReady = Array.isArray(bill.items) && bill.items.some(i => i.kdsStatus === 'Cooking' || i.kdsStatus === 'Ready');
+      
+      if (hasCookingOrReady || bill.status === 'Open') {
+        const totalItemsCount = (bill.items || []).filter(i => !i.isCancelled).length;
+        if (totalItemsCount > 0) {
+          notifications.push({
+            id: `kot-order-${bill._id}`,
+            type: 'info',
+            title: `Table ${cleanTable} Order Updated`,
+            message: `${totalItemsCount} items • ${bill.billType || 'Dine-In'}`,
+            time: bill.updatedAt || bill.createdAt || new Date(),
+            timestamp: new Date(bill.updatedAt || bill.createdAt || Date.now()),
+            targetRoles: ['Chef', 'Manager', 'Admin', 'Captain'],
+            data: {
+              orderId: bill._id,
+              type: 'kot_update',
+              tableNo: bill.tableNo,
+              billNumber: bill.billNumber
+            }
+          });
+        }
+      }
+    });
+
+    // Sort all notifications newest first
+    const sorted = notifications.sort((a, b) => {
+      const timeA = new Date(a.timestamp || a.time || 0);
+      const timeB = new Date(b.timestamp || b.time || 0);
+      return timeB - timeA;
+    });
+
+    res.json(sorted);
   } catch (error) {
     console.error('Error fetching active notifications:', error);
     res.status(500).json({ message: error.message });

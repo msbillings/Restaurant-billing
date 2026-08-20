@@ -241,9 +241,9 @@ const Invoice = ({ bill, onClose, onSave }) => {
             
             {(() => {
               const s = settings || {};
-              const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
-              const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
-              const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
+              const cRate = s.enableCgst === true ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+              const sRate = s.enableSgst === true ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+              const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
               const totRate = cRate + sRate + gRate;
 
               const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
