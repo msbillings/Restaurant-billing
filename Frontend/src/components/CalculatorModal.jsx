@@ -1,5 +1,6 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, Component } from 'react';
 import { X, Delete, Sparkles, Receipt, Coins, ArrowRight, SplitSquareHorizontal, Percent, Mic, Copy, Check } from 'lucide-react';
+import WhisperWorker from '../workers/whisperWorker.js?worker';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -16,14 +17,14 @@ class ErrorBoundary extends Component {
       return (
         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 text-white p-4">
           <div className="bg-red-900 p-6 rounded-xl max-w-2xl w-full font-mono overflow-auto">
-            <h1 className="text-2xl font-bold mb-4">{t("Calculator Crash!")}</h1>
+            <h1 className="text-2xl font-bold mb-4">Calculator Crash!</h1>
             <p className="text-red-200 mb-2">{this.state.error && this.state.error.toString()}</p>
             <pre className="text-xs bg-black/40 p-4 rounded text-red-100 whitespace-pre-wrap">
               {this.state.error && this.state.error.stack}
             </pre>
             <button
               className="mt-4 px-4 py-2 bg-white text-red-900 font-bold rounded"
-              onClick={() => this.props.onClose && this.props.onClose()}>{t("Close")}
+              onClick={() => this.props.onClose && this.props.onClose()}>Close
 
 
             </button>
@@ -272,9 +273,10 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
   const initWorker = () => {
     let currentWorker = worker;
     if (!currentWorker) {
-      currentWorker = new Worker(new URL('../workers/whisperWorker.js', import.meta.url), { type: 'module' });
-      currentWorker.onmessage = (e) => {
-        const { status, data, output } = e.data;
+      try {
+        currentWorker = new WhisperWorker();
+        currentWorker.onmessage = (e) => {
+          const { status, data, output } = e.data;
         if (status === 'progress') {
           setModelProgress(data.status === 'downloading' ? `Downloading model... ${Math.round(data.progress || 0)}%` : `Loading model...`);
         } else if (status === 'ready') {
@@ -296,6 +298,12 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       setWorker(currentWorker);
       setModelLoading(true);
       currentWorker.postMessage({ type: 'load' });
+      } catch (err) {
+        console.error("Worker initialization failed:", err);
+        setAiResult("Offline voice not supported on this device.");
+        setIsListening(false);
+        return null;
+      }
     }
     return currentWorker;
   };
@@ -356,7 +364,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     if (!SpeechRecognition) {
       // Fallback natively missing
       const w = initWorker();
-      startLocalRecording(w);
+      if (w) startLocalRecording(w);
       return;
     }
 
@@ -383,7 +391,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       if (event.error === 'network' || event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         console.log("Native speech API failed, falling back to local offline model...");
         const w = initWorker();
-        startLocalRecording(w);
+        if (w) startLocalRecording(w);
       } else {
         setIsListening(false);
         let errMsg = "Voice input error. You can type commands like '500 + 1000 - 5%'";
@@ -412,7 +420,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       console.error("Failed to start speech recognition:", err);
       // Fallback
       const w = initWorker();
-      startLocalRecording(w);
+      if (w) startLocalRecording(w);
     }
   };
 
@@ -458,6 +466,8 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, display, equation]);
 
+  const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+
   if (!isOpen) return null;
 
   return (
@@ -491,24 +501,28 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
                   placeholder={t("e.g. 500 + 1000 - 5% discount")}
                   className="w-full bg-black/40 border border-white/15 rounded-xl py-2.5 px-3.5 pr-24 text-xs sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-white placeholder-slate-400 transition-all font-medium" />
                 
-                {/* Language Selector */}
-                <select
-                  value={micLang}
-                  onChange={(e) => setMicLang(e.target.value)}
-                  className="absolute right-[4.25rem] top-1/2 -translate-y-1/2 p-1 bg-transparent text-slate-400 hover:text-white text-[10px] sm:text-xs font-bold focus:outline-none cursor-pointer transition-colors z-10"
-                  title={t("Select Voice Language")}>
-                  <option value="en-IN" className="bg-slate-900 text-white">{t("EN")}</option>
-                  <option value="te-IN" className="bg-slate-900 text-white">{t("TE")}</option>
-                  <option value="hi-IN" className="bg-slate-900 text-white">{t("HI")}</option>
-                </select>
+                {!isElectron && (
+                  <>
+                    {/* Language Selector */}
+                    <select
+                      value={micLang}
+                      onChange={(e) => setMicLang(e.target.value)}
+                      className="absolute right-[4.25rem] top-1/2 -translate-y-1/2 p-1 bg-transparent text-slate-400 hover:text-white text-[10px] sm:text-xs font-bold focus:outline-none cursor-pointer transition-colors z-10"
+                      title={t("Select Voice Language")}>
+                      <option value="en-IN" className="bg-slate-900 text-white">{t("EN")}</option>
+                      <option value="te-IN" className="bg-slate-900 text-white">{t("TE")}</option>
+                      <option value="hi-IN" className="bg-slate-900 text-white">{t("HI")}</option>
+                    </select>
 
-                <button
-                  type="button"
-                  onClick={toggleListening}
-                  className={`absolute right-9 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors flex items-center justify-center ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
-                  title={t("Voice Input")}>
-                  <Mic size={15} />
-                </button>
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      className={`absolute right-9 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-colors flex items-center justify-center ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
+                      title={t("Voice Input")}>
+                      <Mic size={15} />
+                    </button>
+                  </>
+                )}
 
                 <button type="submit" className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 bg-primary/20 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors">
                   <ArrowRight size={15} />

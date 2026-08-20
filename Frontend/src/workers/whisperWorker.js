@@ -4,6 +4,9 @@ import { pipeline, env } from '@xenova/transformers';
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
+// CRITICAL FIX: Disable multithreading to prevent SharedArrayBuffer crashes in Electron's file:// protocol
+env.backends.onnx.wasm.numThreads = 1;
+
 class PipelineSingleton {
     static task = 'automatic-speech-recognition';
     static model = 'Xenova/whisper-tiny';

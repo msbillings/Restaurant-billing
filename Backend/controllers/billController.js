@@ -2482,16 +2482,42 @@ export const resolveItemCancel = async (req, res) => {
 /**
  * Fetch currently active/pending notifications from the database for instant sync on all devices (APK, Desktop, Web)
  */
+import { NotificationDefault } from '../models/Notification.js';
+
 export const getActiveNotifications = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const Settings = getTenantModel(req, 'Settings', SettingsDefault);
+    const Settings = getTenantModel(req, 'Setting', SettingDefault);
     const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
+    const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
+    
     const settings = await Settings.findOne().lean();
     const shopName = settings?.restaurantName || 'Restaurant';
 
-    const notifications = [];
+    let notifications = [];
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    // 0. Fetch persistent notifications from the new DB model
+    try {
+      const persistentNotifs = await NotificationModel.find({
+        createdAt: { $gte: twoDaysAgo }
+      }).sort({ createdAt: -1 }).lean();
+      
+      persistentNotifs.forEach(n => {
+        notifications.push({
+          id: n.data?.id || n._id.toString(),
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          time: n.createdAt,
+          timestamp: new Date(n.createdAt),
+          targetRoles: n.targetRoles || ['Admin'],
+          data: n.data || {}
+        });
+      });
+    } catch (dbErr) {
+      console.error('Error fetching persistent notifications:', dbErr);
+    }
 
     // 1. Query open and billed orders that have pending cancellation requests (for Admin, Manager, Captain)
     const activeCancelBills = await Bill.find({
@@ -2588,8 +2614,16 @@ export const getActiveNotifications = async (req, res) => {
       }
     });
 
+    // Deduplicate notifications by ID so we don't have overlapping old logic & new DB logic
+    const uniqueMap = new Map();
+    notifications.forEach(n => {
+      if (!uniqueMap.has(n.id)) {
+        uniqueMap.set(n.id, n);
+      }
+    });
+
     // Sort all notifications newest first
-    const sorted = notifications.sort((a, b) => {
+    const sorted = Array.from(uniqueMap.values()).sort((a, b) => {
       const timeA = new Date(a.timestamp || a.time || 0);
       const timeB = new Date(b.timestamp || b.time || 0);
       return timeB - timeA;

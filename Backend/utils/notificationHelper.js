@@ -1,5 +1,8 @@
 import jwt from 'jsonwebtoken';
 
+import { getTenantModel } from './tenantHelper.js';
+import { NotificationDefault } from '../models/Notification.js';
+
 /**
  * Utility to reliably extract the tenant database ID from any Express request
  */
@@ -25,13 +28,14 @@ export const getTenantDbFromReq = (req) => {
 };
 
 /**
- * Utility to broadcast real-time notifications STRICTLY to tenant-scoped connected clients
+ * Utility to broadcast real-time notifications STRICTLY to tenant-scoped connected clients and save to DB
  */
 export const emitNotification = (req, title, message, type = 'info', targetRoles = ['Admin'], data = {}) => {
   try {
     const io = req?.app?.locals?.io;
-    if (io) {
-      const tenantDb = getTenantDbFromReq(req);
+    const tenantDb = getTenantDbFromReq(req);
+
+    if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
       const notification = {
         id: Date.now() + Math.random().toString(36).substring(7),
         title,
@@ -39,16 +43,31 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
         time: new Date().toISOString(),
         type, // 'info', 'success', 'warning', 'error'
         targetRoles,
-        tenantDb: tenantDb || null,
+        tenantDb,
         data
       };
 
-      if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+      if (io) {
         io.to(tenantDb).emit('new_notification', notification);
         console.log(`[Notification] Broadcasted real-time notification (${title}) strictly to tenant room: ${tenantDb}`);
-      } else {
-        console.warn(`[Notification] Blocked global emit for (${title}): No tenant database resolved`);
       }
+
+      // Save to database
+      try {
+        const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
+        NotificationModel.create({
+          tenantDb,
+          type,
+          title,
+          message,
+          targetRoles,
+          data
+        }).catch(err => console.error('[Notification] Failed to save to DB:', err));
+      } catch (dbErr) {
+        console.error('[Notification] DB save setup error:', dbErr);
+      }
+    } else {
+      console.warn(`[Notification] Blocked global emit for (${title}): No tenant database resolved`);
     }
   } catch (err) {
     console.error('Notification emit error:', err);
