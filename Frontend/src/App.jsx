@@ -1054,8 +1054,8 @@ function App() {
             </div>
           </div>
 
-          {/* Hold Bills Badge Button (Visible on mobile & desktop except KDS) */}
-          {view !== 'kds' && (
+          {/* Hold Bills Badge Button (Visible on mobile & desktop except KDS and Chef) */}
+          {view !== 'kds' && !isChef && (
             <button
               onClick={() => handleViewChange('orders')}
               className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0"
@@ -1075,10 +1075,10 @@ function App() {
             <button
               onClick={() => {
                 setShowNotifications(!showNotifications);
-                if (!showNotifications) {
-                  markAllAsRead();
-                  rtMarkAllAsRead();
-                }
+                // NOTE: Do NOT call markAllAsRead() here — that would persist all IDs
+                // to localStorage and make NotificationCenter show everything as "Read"
+                // without the user having actually read them.
+                // Unread count is reset only via explicit mark-as-read in NotificationCenter.
               }}
               className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${
                 view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
@@ -1157,7 +1157,10 @@ function App() {
                       onClick={(e) => {
                         e.stopPropagation();
                         rtClearNotification('ALL');
-                        clearAllBroadcasts();
+                        // Only Admin & Manager clear shared broadcasts — other roles clear only their own
+                        if (isAdmin || isManager) {
+                          clearAllBroadcasts();
+                        }
                         setShowNotifications(false);
                       }}
                       className="text-xs font-bold text-red-600 hover:text-red-700">{t("Clear All")}
@@ -1167,6 +1170,22 @@ function App() {
               </>
             )}
           </div>
+
+          {/* Chef-only KOT Page / History Icon in Top Navbar - visible on all chef views */}
+          {isChef && (
+            <button
+              onClick={() => handleViewChange('kothistory')}
+              className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer ${
+                view === 'kothistory'
+                  ? 'bg-amber-500 text-white shadow-md'
+                  : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30'
+              }`}
+              title={t("KOT Page / History")}
+            >
+              <Printer size={18} />
+              <span className="hidden sm:inline text-xs">{t("KOT History")}</span>
+            </button>
+          )}
 
           {/* Desktop-only Quick Icons */}
           <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative text-gray-600" title={t("Calculator")}>
@@ -1228,6 +1247,19 @@ function App() {
                   <X size={18} />
                 </button>
               </div>
+
+              {isChef && (
+                <button
+                  onClick={() => {
+                    handleViewChange('kothistory');
+                    setShowMobileQuickActions(false);
+                  }}
+                  className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 text-sm cursor-pointer"
+                >
+                  <Printer size={18} />
+                  <span>{t('KOT Page / History')}</span>
+                </button>
+              )}
 
               {!isChef && (
                 <>
@@ -2042,7 +2074,7 @@ function App() {
         <div className="fixed inset-0 z-[200] flex items-start justify-center pt-10 sm:pt-14 px-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-surface border border-border rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm transform transition-all">
             <div className="flex flex-col items-center text-center">
-              <p className="text-text-main font-medium text-base mb-6">{t("Are you sure you want to logout")}
+              <p className="text-text-main font-medium text-base mb-6">{t("Are you sure you want to logout")}{' '}
                 <span className="font-bold">{user?.username}</span>?
               </p>
               <div className="flex w-full gap-3">

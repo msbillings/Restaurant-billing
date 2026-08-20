@@ -1,11 +1,11 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import api from '../api/axios';
-import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2, ChefHat, UserCheck, Receipt, Radio } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
-import useNotifications from '../hooks/useNotifications';
+import useNotifications, { isNotificationForRole } from '../hooks/useNotifications';
 import BackButton from './common/BackButton';
 import ConfirmationModal from './ConfirmationModal';
 
@@ -15,9 +15,16 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'kitchen', 'service', 'billing', 'broadcasts'
   const [readIds, setReadIds] = useState(() => {
     try {
-      const savedRealtime = JSON.parse(localStorage.getItem('realtime_read_ids') || '[]');
+      const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+      const roleKeyLC = ((typeof userRole !== 'undefined' ? userRole : 'Admin') || 'Admin').toLowerCase();
+      // ONLY load from the strict role-scoped key — do NOT fall back to shared keys
+      // Falling back to shared keys causes ALL notifications to appear as "Read" on initial load
+      const savedRealtime = JSON.parse(
+        localStorage.getItem(`realtime_read_ids_${tenantKey}_${roleKeyLC}`) || '[]'
+      );
       const savedBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
       return new Set([...savedRealtime, ...savedBroadcasts]);
     } catch (e) {
@@ -28,50 +35,90 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   const [resolvedNotifs, setResolvedNotifs] = useState({});
   const [resolvingNotifs, setResolvingNotifs] = useState({});
 
-  // Hook handles fetching broadcasts automatically
+  // Hook handles fetching broadcasts and real-time notifications automatically filtered by role
   const { broadcasts, markAsRead: markBroadcastRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, markAllAsRead: markRtAllRead, clearNotification } = useNotifications(userRole);
 
+  // One-time cleanup: remove legacy shared realtime_read_ids keys that caused false "Read" on load
+  useEffect(() => {
+    try {
+      // Remove old shared (non-role-scoped) keys so they don't pollute role-scoped state
+      localStorage.removeItem('realtime_read_ids');
+      const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+      localStorage.removeItem(`realtime_read_ids_${tenantKey}`);
+    } catch (e) {}
+  }, []); // run once on mount
+
   useEffect(() => {
     fetchLocalNotifications();
-  }, []);
+  }, [userRole]);
 
   const fetchLocalNotifications = async () => {
     setLoading(true);
     try {
-      // 1. Fetch low-stock inventory alerts with auth & tenant headers
-      const res = await api.get('/inventory');
-      const inventory = Array.isArray(res.data) ? res.data : [];
+      const combined = [];
 
-      const lowStockAlerts = inventory
-        .filter((item) => item.currentStock <= item.minStockAlert)
-        .map((item) => ({
-          id: `inv-${item._id}`,
-          type: 'warning',
-          title: 'Low Stock Alert',
-          message: `${item.name} is running low (${item.currentStock} ${item.unit} remaining). Minimum required is ${item.minStockAlert} ${item.unit}.`,
-          timestamp: new Date(),
-          icon: Package,
-          color: 'text-amber-500',
-          bg: 'bg-amber-50'
-        }));
+      // 1. Fetch low-stock inventory alerts (only for Admin & Manager)
+      if (userRole === 'Admin' || userRole === 'Manager') {
+        try {
+          const res = await api.get('/inventory');
+          const inventory = Array.isArray(res.data) ? res.data : [];
+          const lowStockAlerts = inventory
+            .filter((item) => item.currentStock <= item.minStockAlert)
+            .map((item) => ({
+              id: `inv-${item._id}`,
+              type: 'warning',
+              title: 'Low Stock Alert',
+              message: `${item.name} is running low (${item.currentStock} ${item.unit} remaining). Minimum required is ${item.minStockAlert} ${item.unit}.`,
+              timestamp: new Date(),
+              icon: Package,
+              color: 'text-amber-500',
+              bg: 'bg-amber-50',
+              targetRoles: ['Admin', 'Manager']
+            }));
+          combined.push(...lowStockAlerts);
+        } catch (e) {}
+      }
 
-      // 2. Fetch active server cancellation notifications
-      let activeServerNotifs = [];
+      // 2. Fetch active server notifications and filter by role
       try {
         const notifRes = await api.get('/bills/active-notifications');
         if (Array.isArray(notifRes.data)) {
-          activeServerNotifs = notifRes.data.map(n => ({
-            ...n,
-            icon: AlertTriangle,
-            color: 'text-red-500',
-            bg: 'bg-red-50'
-          }));
+          const roleFiltered = notifRes.data
+            .filter(n => isNotificationForRole(n, userRole))
+            .map(n => {
+              let icon = Bell;
+              let color = 'text-blue-500';
+              let bg = 'bg-blue-50';
+
+              if (n.type === 'error' || n.data?.type === 'cancel_item_request') {
+                icon = AlertTriangle;
+                color = 'text-red-500';
+                bg = 'bg-red-50';
+              } else if (n.data?.type === 'service_request') {
+                icon = UserCheck;
+                color = n.message === 'Pay the Bill' ? 'text-amber-600' : 'text-blue-600';
+                bg = n.message === 'Pay the Bill' ? 'bg-amber-50' : 'bg-blue-50';
+              } else if (n.data?.type === 'kot_update' || (n.title && n.title.includes('Order'))) {
+                icon = ChefHat;
+                color = 'text-orange-600';
+                bg = 'bg-orange-50';
+              }
+
+              return {
+                ...n,
+                icon,
+                color,
+                bg
+              };
+            });
+          combined.push(...roleFiltered);
         }
       } catch (e) {}
 
-      const combined = [...lowStockAlerts, ...activeServerNotifs];
-      setLocalNotifications(combined.sort((a, b) => (new Date(b.timestamp || b.time || 0)) - (new Date(a.timestamp || a.time || 0))));
+      setLocalNotifications(
+        combined.sort((a, b) => new Date(b.timestamp || b.time || 0) - new Date(a.timestamp || a.time || 0))
+      );
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -164,7 +211,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     }
   };
 
-  // Combine and sort all notifications
+  // Combine and sort all notifications strictly filtered by userRole
   const formattedBroadcasts = broadcasts.map((b) => ({
     id: b._id,
     type: 'broadcast',
@@ -175,42 +222,147 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     fileType: b.fileType,
     allowReplies: b.allowReplies,
     timestamp: new Date(b.createdAt),
-    icon: Bell,
+    icon: Radio,
     color: 'text-purple-600',
     bg: 'bg-purple-100'
   }));
 
-  const allNotifications = [...formattedBroadcasts, ...localNotifications, ...realTimeNotifs].sort((a, b) => {
-    const timeA = a.timestamp || new Date(a.time) || 0;
-    const timeB = b.timestamp || new Date(b.time) || 0;
-    return new Date(timeB) - new Date(timeA);
-  });
+  // Role-filtered unified notification list
+  const allNotifications = useMemo(() => {
+    const rawList = [...formattedBroadcasts, ...localNotifications, ...realTimeNotifs];
+    const uniqueMap = new Map();
+    rawList.forEach(n => {
+      if (isNotificationForRole(n, userRole) && !uniqueMap.has(n.id)) {
+        uniqueMap.set(n.id, n);
+      }
+    });
+
+    let list = Array.from(uniqueMap.values()).sort((a, b) => {
+      const timeA = a.timestamp || new Date(a.time) || 0;
+      const timeB = b.timestamp || new Date(b.time) || 0;
+      return new Date(timeB) - new Date(timeA);
+    });
+
+    // Admin / Manager Tab Filtering
+    if (activeTab === 'kitchen') {
+      list = list.filter(n => {
+        const title = (n.title || '').toLowerCase();
+        const type = (n.data?.type || n.type || '').toLowerCase();
+        return title.includes('kot') || title.includes('order') || title.includes('item') || type.includes('kot');
+      });
+    } else if (activeTab === 'service') {
+      list = list.filter(n => {
+        const title = (n.title || '').toLowerCase();
+        const type = (n.data?.type || n.type || '').toLowerCase();
+        return title.includes('service') || title.includes('waiter') || title.includes('water') || title.includes('cancel') || type.includes('service');
+      });
+    } else if (activeTab === 'billing') {
+      list = list.filter(n => {
+        const title = (n.title || '').toLowerCase();
+        const msg = (n.message || '').toLowerCase();
+        return title.includes('bill') || title.includes('payment') || msg.includes('pay the bill');
+      });
+    } else if (activeTab === 'broadcasts') {
+      list = list.filter(n => n.type === 'broadcast');
+    }
+
+    return list;
+  }, [formattedBroadcasts, localNotifications, realTimeNotifs, userRole, activeTab]);
 
   const SUPERADMIN_URL = getSuperadminApiUrl();
 
+  const getRoleHeaderSubtitle = () => {
+    const r = (userRole || 'Admin').toLowerCase();
+    if (r === 'chef' || r === 'kds') return t("Kitchen, KOT updates, and dish notifications");
+    if (r === 'captain') return t("Table service calls, food ready alerts, and requests");
+    if (r === 'cashier') return t("Payment requests, bill settlements, and cashier alerts");
+    return t("System alerts, kitchen orders, service requests, and broadcasts");
+  };
+
   return (
     <div className="h-full flex flex-col bg-gray-50 px-2.5 py-4 sm:p-6 overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 sm:mb-8 shrink-0 gap-3">
-        <div className="flex items-center gap-3">
-          <BackButton onClick={onGoBack} />
-          <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Bell className="text-primary" size={20} />{t("Notification Center")}
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-500">{t("System alerts, broadcasts, and updates")}</p>
+      <div className="flex flex-col mb-4 shrink-0 gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <BackButton onClick={onGoBack} />
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <Bell className="text-orange-500" size={22} />
+                  {userRole === 'Chef' ? t("Kitchen Notifications") :
+                   userRole === 'Captain' ? t("Captain Notifications") :
+                   userRole === 'Cashier' ? t("Cashier Notifications") :
+                   t("Notification Center")}
+                </h1>
+                <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-orange-100 text-orange-700">
+                  {userRole}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{getRoleHeaderSubtitle()}</p>
+            </div>
           </div>
-        </div>
-        
-        {allNotifications.length > 0 &&
-        <button
-          onClick={() => setShowClearModal(true)}
-          className="flex items-center justify-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-xl transition-all font-semibold text-xs sm:text-sm shadow-sm self-start sm:self-auto shrink-0">
           
-            <Trash2 size={14} className="sm:hidden" />
-            <Trash2 size={16} className="hidden sm:block" />
-            {t("Clear All")}
-          </button>
-        }
+          {/* Clear All — Admin only */}
+          {allNotifications.length > 0 && (userRole === 'Admin' || userRole === 'Manager') && (
+            <button
+              onClick={() => setShowClearModal(true)}
+              className="flex items-center justify-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-xl transition-all font-semibold text-xs sm:text-sm shadow-xs self-start sm:self-auto shrink-0 cursor-pointer"
+            >
+              <Trash2 size={15} />
+              {t("Clear All")}
+            </button>
+          )}
+        </div>
+
+        {/* Role category filter tabs for Admin / Manager */}
+        {(userRole === 'Admin' || userRole === 'Manager') && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mt-1 text-xs">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 cursor-pointer ${
+                activeTab === 'all' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {t("All")}
+            </button>
+            <button
+              onClick={() => setActiveTab('kitchen')}
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                activeTab === 'kitchen' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <ChefHat size={13} />
+              <span>{t("Kitchen & KOT")}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('service')}
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                activeTab === 'service' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <UserCheck size={13} />
+              <span>{t("Floor & Service")}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('billing')}
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                activeTab === 'billing' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Receipt size={13} />
+              <span>{t("Cashier & Billing")}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('broadcasts')}
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
+                activeTab === 'broadcasts' ? 'bg-purple-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Radio size={13} />
+              <span>{t("Broadcasts")}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-4">
@@ -227,7 +379,9 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
         allNotifications.map((notif) => {
           const Icon = notif.icon || Bell;
           const isBroadcast = notif.type === 'broadcast';
-          const isRead = readIds.has(notif.id) || notif.isRead || notif.read;
+          // Only Admin/Manager can mark notifications as read — all other roles always see unread state
+          const isAdmin = userRole === 'Admin' || userRole === 'Manager';
+          const isRead = isAdmin && readIds.has(notif.id);
 
           const cardClass = isRead 
             ? 'bg-emerald-50/90 border-emerald-300 shadow-2xs' 
@@ -253,108 +407,137 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                       {formatTimeAgo(notif.timestamp || notif.time)}
                     </div>
                   </div>
-                  
+
                   <p className={`leading-relaxed text-xs sm:text-sm mb-3 whitespace-pre-wrap ${isRead ? 'text-emerald-800/90 font-medium' : 'text-gray-700'}`}>{t(notif.message)}</p>
-                  
+
                   {isBroadcast && notif.imageUrl &&
-                <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">
+                    <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">
                       <img src={notif.imageUrl} alt="Broadcast Attachment" className="w-full h-auto object-cover max-h-64" />
                     </div>
-                }
-                  
+                  }
+
                   {isBroadcast && notif.fileUrl &&
-                <div className="mb-4">
+                    <div className="mb-4">
                       <a
-                    href={notif.fileUrl.startsWith('http') ? notif.fileUrl : `${SUPERADMIN_URL}${notif.fileUrl}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors text-xs sm:text-sm">
-                    
+                        href={notif.fileUrl.startsWith('http') ? notif.fileUrl : `${SUPERADMIN_URL}${notif.fileUrl}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold transition-colors text-xs sm:text-sm">
                         <Download size={14} className="sm:hidden" />
                         <Download size={16} className="hidden sm:block" />
                         {t("Download")}{notif.fileType === 'apk' ? 'Update (APK)' : notif.fileType === 'ipa' ? 'Update (IPA)' : 'Attachment'}
                       </a>
                     </div>
-                }
+                  }
 
                   {isBroadcast && notif.allowReplies &&
-                <div className="mt-4 flex gap-2">
+                    <div className="mt-4 flex gap-2">
                       <input
-                    type="text" placeholder={t("Write a reply to SuperAdmin...")}
-
-                    value={replyText[notif.id] || ''}
-                    onChange={(e) => handleReplyChange(notif.id, e.target.value)}
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                    onKeyDown={(e) => {if (e.key === 'Enter') handleSendReply(notif.id);}} />
-                  
+                        type="text" placeholder={t("Write a reply to SuperAdmin...")}
+                        value={replyText[notif.id] || ''}
+                        onChange={(e) => handleReplyChange(notif.id, e.target.value)}
+                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSendReply(notif.id); }} />
                       <button
-                    onClick={() => handleSendReply(notif.id)}
-                    disabled={isSubmittingReply || !replyText[notif.id]?.trim()}
-                    className="bg-purple-600 hover:bg-purple-700 text-white p-1.5 sm:p-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0">
-                    
+                        onClick={() => handleSendReply(notif.id)}
+                        disabled={isSubmittingReply || !replyText[notif.id]?.trim()}
+                        className="bg-purple-600 hover:bg-purple-700 text-white p-1.5 sm:p-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0">
                         <Send size={16} className="sm:hidden" />
                         <Send size={18} className="hidden sm:block" />
                       </button>
                     </div>
-                }
-                
-                {notif.data?.type === 'cancel_item_request' && (
-                  <div className="mt-3 flex gap-2 items-center">
-                    {resolvingNotifs[notif.id] ? (
-                      <span className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold animate-pulse ${
-                        resolvingNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        <Loader2 size={14} className="animate-spin" />
-                        {resolvingNotifs[notif.id] === 'accept' ? t("Accepting...") : t("Rejecting...")}
-                      </span>
-                    ) : resolvedNotifs[notif.id] ? (
-                      <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${
-                        resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        {resolvedNotifs[notif.id] === 'accept' ? t("✓ Accepted") : t("✕ Rejected")}
-                      </span>
-                    ) : (
-                      <>
-                        <button 
-                          onClick={() => handleResolveCancel(notif, 'accept')}
-                          className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
-                        >
-                          {t("Accept")}
-                        </button>
-                        <button 
-                          onClick={() => handleResolveCancel(notif, 'reject')}
-                          className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
-                        >
-                          {t("Reject")}
-                        </button>
-                      </>
-                    )}
+                  }
+
+                  {notif.data?.type === 'cancel_item_request' && (
+                    <div className="mt-3 flex gap-2 items-center">
+                      {resolvingNotifs[notif.id] ? (
+                        <span className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold animate-pulse ${
+                          resolvingNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          <Loader2 size={14} className="animate-spin" />
+                          {resolvingNotifs[notif.id] === 'accept' ? t("Accepting...") : t("Rejecting...")}
+                        </span>
+                      ) : resolvedNotifs[notif.id] ? (
+                        <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${
+                          resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {resolvedNotifs[notif.id] === 'accept' ? t("✓ Accepted") : t("✕ Rejected")}
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => handleResolveCancel(notif, 'accept')}
+                            className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer">
+                            {t("Accept")}
+                          </button>
+                          <button
+                            onClick={() => handleResolveCancel(notif, 'reject')}
+                            className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer">
+                            {t("Reject")}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right-side actions: Mark as Read + Delete — Admin only */}
+                {(userRole === 'Admin' || userRole === 'Manager') && (
+                  <div className="flex flex-col items-center gap-1.5 shrink-0 self-start mt-0.5">
+                    {/* Mark as Read toggle */}
+                    <button
+                      onClick={() => {
+                        if (isBroadcast) {
+                          markBroadcastRead(notif.id);
+                        }
+                        setReadIds((prev) => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(notif.id)) {
+                            newSet.delete(notif.id);
+                          } else {
+                            newSet.add(notif.id);
+                          }
+                          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+                          const roleKeyLC = (userRole || 'Admin').toLowerCase();
+                          localStorage.setItem(`realtime_read_ids_${tenantKey}_${roleKeyLC}`, JSON.stringify([...newSet]));
+                          return newSet;
+                        });
+                      }}
+                      className={`p-1.5 sm:p-2 rounded-xl transition-colors ${isRead ? 'text-emerald-600 bg-emerald-100' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'}`}
+                      title={t("Mark as read")}
+                    >
+                      <CheckCircle size={18} className={isRead ? 'fill-emerald-200 sm:hidden' : 'sm:hidden'} />
+                      <CheckCircle size={20} className={isRead ? 'fill-emerald-200 hidden sm:block' : 'hidden sm:block'} />
+                    </button>
+
+                    {/* Delete this notification */}
+                    <button
+                      onClick={() => {
+                        if (isBroadcast) {
+                          clearAllBroadcasts && clearAllBroadcasts();
+                        } else {
+                          clearNotification(notif.id);
+                          setLocalNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+                        }
+                        setReadIds((prev) => {
+                          const newSet = new Set(prev);
+                          newSet.delete(notif.id);
+                          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+                          const roleKeyLC = (userRole || 'Admin').toLowerCase();
+                          localStorage.setItem(`realtime_read_ids_${tenantKey}_${roleKeyLC}`, JSON.stringify([...newSet]));
+                          return newSet;
+                        });
+                      }}
+                      className="p-1.5 sm:p-2 rounded-xl text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title={t("Delete notification")}
+                    >
+                      <Trash2 size={16} className="sm:hidden" />
+                      <Trash2 size={18} className="hidden sm:block" />
+                    </button>
                   </div>
                 )}
-                </div>
-                
-                <button
-                onClick={() => {
-                  if (isBroadcast) {
-                    markBroadcastRead(notif.id);
-                  }
-                  setReadIds((prev) => {
-                    const newSet = new Set(prev);
-                    if (newSet.has(notif.id)) {
-                      newSet.delete(notif.id);
-                    } else {
-                      newSet.add(notif.id);
-                    }
-                    localStorage.setItem('realtime_read_ids', JSON.stringify([...newSet]));
-                    return newSet;
-                  });
-                }}
-                className={`p-1.5 sm:p-2 rounded-xl transition-colors shrink-0 ${isRead ? 'text-emerald-600 bg-emerald-100' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'}`} title={t("Mark as read")}>
-                
-                  <CheckCircle size={18} className={isRead ? 'fill-emerald-200 sm:hidden' : 'sm:hidden'} />
-                  <CheckCircle size={20} className={isRead ? 'fill-emerald-200 hidden sm:block' : 'hidden sm:block'} />
-                </button>
               </div>);
+
 
         })
         }
@@ -366,7 +549,12 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
         onConfirm={() => {
           clearAllLocal();
           clearNotification('ALL');
-          clearAllBroadcasts();
+          // Only Admin & Manager can clear shared broadcast notifications
+          // Chef, Captain, Cashier clearing does NOT remove broadcasts from other roles
+          const isAdminOrManager = userRole === 'Admin' || userRole === 'Manager';
+          if (isAdminOrManager) {
+            clearAllBroadcasts();
+          }
         }}
         title={t("Clear All Notifications")}
         message={t("Are you sure you want to delete these notifications permanently?")}
