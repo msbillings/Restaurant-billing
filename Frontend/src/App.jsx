@@ -877,7 +877,7 @@ function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background text-text-main font-sans overflow-hidden relative">
+    <div className={`h-screen flex flex-col font-sans overflow-hidden relative ${view === 'kds' ? 'bg-slate-950 text-slate-100' : 'bg-background text-text-main'}`}>
 
       {/* Broadcast Toast Notification */}
       <AnimatePresence>
@@ -938,12 +938,16 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className="min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b border-border/40 bg-surface shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative">
+      <header className={`min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative ${
+        view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
+      }`}>
         {/* Left: Hamburger & Logo */}
         <div className="flex items-center min-w-0 shrink-0 gap-1">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1 rounded-lg text-text-main hover:bg-surface-hover transition-colors shrink-0 flex items-center justify-center">
+            className={`p-1 rounded-lg transition-colors shrink-0 flex items-center justify-center ${
+              view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-text-main hover:bg-surface-hover'
+            }`}>
             <Menu size={22} className="sm:w-6 sm:h-6" />
           </button>
           <button
@@ -1009,19 +1013,21 @@ function App() {
             </div>
           </div>
 
-          {/* Hold Bills Badge Button (Always visible on mobile & desktop) */}
-          <button
-            onClick={() => handleViewChange('orders')}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0"
-            title={t("View Hold Bills (Active Orders)")}>
-            <ClipboardList size={16} />
-            <span className="hidden sm:inline">{t('Hold Bills')}</span>
-            {activeOrdersCount > 0 && (
-              <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
-                {activeOrdersCount}
-              </span>
-            )}
-          </button>
+          {/* Hold Bills Badge Button (Visible on mobile & desktop except KDS) */}
+          {view !== 'kds' && (
+            <button
+              onClick={() => handleViewChange('orders')}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0"
+              title={t("View Hold Bills (Active Orders)")}>
+              <ClipboardList size={16} />
+              <span className="hidden sm:inline">{t('Hold Bills')}</span>
+              {activeOrdersCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
+                  {activeOrdersCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Notifications Bell */}
           <div className="relative">
@@ -1033,7 +1039,9 @@ function App() {
                   rtMarkAllAsRead();
                 }
               }}
-              className="p-1.5 text-gray-600 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors relative touch-target flex items-center justify-center">
+              className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${
+                view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
+              }`}>
               <Bell size={20} />
               {totalUnreadCount > 0 && (
                 <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
@@ -1133,7 +1141,9 @@ function App() {
           {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}
           <button
             onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
-            className="md:hidden p-1.5 text-gray-700 hover:bg-surface-hover rounded-lg transition-colors touch-target flex items-center justify-center border border-border/60"
+            className={`md:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border ${
+              view === 'kds' ? 'text-slate-300 border-slate-800 hover:bg-slate-800' : 'text-gray-700 hover:bg-surface-hover border-border/60'
+            }`}
             title="More Actions">
             <MoreVertical size={20} />
           </button>
@@ -1623,7 +1633,7 @@ function App() {
             <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           </Suspense>
 
-          <main className={`flex-1 overflow-y-auto overflow-x-hidden ${['floor', 'billing', 'dashboard', 'analytics'].includes(view) ? 'p-0' : 'p-2 sm:p-4 md:p-6'}`}>
+          <main className={`flex-1 overflow-y-auto overflow-x-hidden ${['floor', 'billing', 'dashboard', 'analytics', 'kds'].includes(view) ? 'p-0' : 'p-2 sm:p-4 md:p-6'} ${view === 'kds' ? 'bg-slate-950' : ''}`}>
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-4">

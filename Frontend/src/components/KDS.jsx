@@ -12,6 +12,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [customPrepInputs, setCustomPrepInputs] = useState({});
+  const [settingPrepKey, setSettingPrepKey] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [toast, setToast] = useState(null);
   const [activeTableIndex, setActiveTableIndex] = useState(0);
@@ -283,18 +284,50 @@ const KDS = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  const updateItemPrepTime = async (orderId, kotId, itemId, prepTimeMinutes, itemName) => {
+  const updateItemPrepTime = async (orderId, kotId, itemId, prepTimeMinutes, itemName, keySuffix = '') => {
+    const activeKey = `${itemId}-${keySuffix || prepTimeMinutes}`;
+    setSettingPrepKey(activeKey);
+
+    const numMins = Number(prepTimeMinutes);
+    const nowIso = new Date().toISOString();
+
+    // 1. Instant 0ms Local State Optimistic Update
+    setKots((prevKots) =>
+      prevKots.map((kot) => {
+        if (kot.kotId?.toString() === kotId?.toString() || kot.orderId?.toString() === orderId?.toString()) {
+          const updatedItems = (kot.items || []).map((item) => {
+            if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
+              return {
+                ...item,
+                prepTimeMinutes: numMins,
+                prepStartTime: nowIso
+              };
+            }
+            return item;
+          });
+          return { ...kot, items: updatedItems };
+        }
+        return kot;
+      })
+    );
+
+    // 2. Instant Toast Feedback
+    const displayName = itemName || 'Dish';
+    setToast({ message: `⏱️ ${displayName} timer set to ${numMins}m!`, type: 'success' });
+
     try {
       await api.post('/bills/kot/item/prep-time', {
         orderId,
         kotId,
         itemId,
-        prepTimeMinutes: Number(prepTimeMinutes),
+        prepTimeMinutes: numMins,
         itemName
       });
-      fetchKOTs();
     } catch (error) {
       console.error('Error setting prep time:', error);
+      fetchKOTs();
+    } finally {
+      setTimeout(() => setSettingPrepKey(null), 500);
     }
   };
 
@@ -629,23 +662,31 @@ const KDS = ({ onNavigate, onGoBack }) => {
                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
                                 {[5, 10, 15, 20].map(mins => {
                                   const isSelected = Number(item.prepTimeMinutes) === mins;
+                                  const isSettingThis = settingPrepKey === `${item._id}-${mins}`;
                                   return (
                                     <button
                                       key={mins}
-                                      onClick={() => updateItemPrepTime(item.originalOrderId, item.kotId, item._id, mins, item.name)}
-                                      className={`px-2.5 py-1.5 text-[11px] sm:text-xs font-black rounded-lg border transition-all touch-target ${
-                                        isSelected
-                                          ? 'bg-amber-500 text-slate-950 border-amber-300 font-black shadow-lg shadow-amber-500/50 scale-105 ring-2 ring-amber-400'
-                                          : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                      onClick={() => updateItemPrepTime(item.originalOrderId, item.kotId, item._id, mins, item.name, String(mins))}
+                                      disabled={isSettingThis}
+                                      className={`px-2.5 py-1.5 text-[11px] sm:text-xs font-black rounded-lg border transition-all duration-150 touch-target cursor-pointer flex items-center justify-center gap-1 active:scale-90 ${
+                                        isSettingThis
+                                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-500/50 scale-105 ring-2 ring-amber-400 animate-pulse'
+                                          : isSelected
+                                          ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border-amber-300 font-black shadow-md shadow-amber-500/40 scale-105 ring-2 ring-amber-400'
+                                          : 'bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
                                       }`}
                                     >
-                                      {mins}m
+                                      {isSettingThis ? (
+                                        <Loader2 size={11} className="animate-spin text-slate-950" />
+                                      ) : null}
+                                      <span>{mins}m</span>
                                     </button>
                                   );
                                 })}
                                 <div className="flex items-center gap-1 ml-auto">
                                   {(() => {
                                     const isCustomSelected = item.prepTimeMinutes > 0 && ![5, 10, 15, 20].includes(Number(item.prepTimeMinutes));
+                                    const isSettingCustom = settingPrepKey === `${item._id}-custom`;
                                     return (
                                       <>
                                         <input
@@ -653,7 +694,16 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                           placeholder={isCustomSelected ? item.prepTimeMinutes : "13"}
                                           value={customPrepInputs[prepKey] || ''}
                                           onChange={(e) => setCustomPrepInputs({ ...customPrepInputs, [prepKey]: e.target.value })}
-                                          className={`w-12 px-1.5 py-1 text-[11px] border rounded-lg font-mono text-center focus:outline-none ${
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              const val = parseInt(customPrepInputs[prepKey]);
+                                              if (val && val > 0) {
+                                                updateItemPrepTime(item.originalOrderId, item.kotId, item._id, val, item.name, 'custom');
+                                                setCustomPrepInputs({ ...customPrepInputs, [prepKey]: '' });
+                                              }
+                                            }
+                                          }}
+                                          className={`w-12 px-1.5 py-1 text-[11px] border rounded-lg font-mono text-center focus:outline-none transition-all ${
                                             isCustomSelected
                                               ? 'bg-amber-500/20 text-amber-300 border-amber-400 font-black ring-2 ring-amber-400'
                                               : 'bg-slate-950 text-amber-300 border-slate-700 focus:border-amber-500'
@@ -663,17 +713,23 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                           onClick={() => {
                                             const val = parseInt(customPrepInputs[prepKey]);
                                             if (val && val > 0) {
-                                              updateItemPrepTime(item.originalOrderId, item.kotId, item._id, val, item.name);
+                                              updateItemPrepTime(item.originalOrderId, item.kotId, item._id, val, item.name, 'custom');
                                               setCustomPrepInputs({ ...customPrepInputs, [prepKey]: '' });
                                             }
                                           }}
-                                          className={`px-2.5 py-1 text-[11px] font-black rounded-lg transition-all touch-target ${
-                                            isCustomSelected
-                                              ? 'bg-amber-500 text-slate-950 font-black shadow-lg ring-2 ring-amber-400'
+                                          disabled={isSettingCustom}
+                                          className={`px-2.5 py-1 text-[11px] font-black rounded-lg transition-all duration-150 touch-target cursor-pointer flex items-center justify-center gap-1 active:scale-90 ${
+                                            isSettingCustom
+                                              ? 'bg-amber-400 text-slate-950 font-black shadow-lg ring-2 ring-amber-400 animate-pulse'
+                                              : isCustomSelected
+                                              ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-md ring-2 ring-amber-400'
                                               : 'bg-amber-600 hover:bg-amber-500 text-slate-950'
                                           }`}
                                         >
-                                          {isCustomSelected ? `${item.prepTimeMinutes}m` : 'Set'}
+                                          {isSettingCustom ? (
+                                            <Loader2 size={11} className="animate-spin text-slate-950" />
+                                          ) : null}
+                                          <span>{isCustomSelected ? `${item.prepTimeMinutes}m` : 'Set'}</span>
                                         </button>
                                       </>
                                     );

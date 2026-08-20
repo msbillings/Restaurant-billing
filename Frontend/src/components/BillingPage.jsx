@@ -297,6 +297,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   // the 3s poll or socket orderUpdated from reverting local-first cart state.
   const lastLocalEditTime = useRef(0);
   const LOCAL_EDIT_LOCK_MS = 8000; // 8 seconds of protection after any cart edit
+  // Tracks whether the cart has locally-added items that haven't been saved to DB yet.
+  // When true, background polls and socket events will NEVER clear or overwrite the cart.
+  // Only resets to false when the order is explicitly saved, KOT'd, billed, or table is changed.
+  const hasPendingLocalChanges = useRef(false);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -396,6 +400,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, [billType, openOrdersList]);
 
   useEffect(() => {
+    // Reset pending local changes flag whenever the table changes.
+    // This ensures that switching tables doesn't carry over the protection from the previous table.
+    hasPendingLocalChanges.current = false;
+
     if (activeTable && !newlyGeneratedTables.current.has(activeTable)) {
       fetchActiveOrder(activeTable, true);
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
@@ -530,8 +538,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, [customerPhone]);
 
   async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false, isBackground = false) {
-    if (!tableToFetch) return;
-    if (!isBackground) setLoading(true);
+    if (!tableToFetch) {
+      setLoading(false);
+      return;
+    }
 
     const msSinceEdit = Date.now() - lastLocalEditTime.current;
     const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
@@ -582,7 +592,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setBillType(cached.billType || 'Dine-In');
           setCustomerPhone(cached.customerPhone || '');
           setCustomerName(cached.customerName || '');
-          if (!isBackground) setLoading(false);
+          setLoading(false);
           return true;
         }
       }
@@ -597,6 +607,92 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         hasInstantCache = checkAndApplyCache(idbOrders);
       } catch (e) {}
     }
+
+    if (hasInstantCache) {
+      setLoading(false);
+      return;
+    }
+
+    // Check if this table has an active order in open orders list
+    const hasOrderInList = openOrdersList && Array.isArray(openOrdersList) && openOrdersList.some(o => 
+      o.tableNo && (o.status === 'Open' || o.status === 'Billed') && isTableMatching(o.tableNo, tableToFetch)
+    );
+
+    // If it's an empty table (no open order in list), never show loading spinner
+    if (!hasOrderInList) {
+      setLoading(false);
+
+      // If the user has pending local changes (items added but not yet saved),
+      // NEVER clear the cart from any background/poll fetch. The cart is protected
+      // until the user explicitly saves, KOTs, or switches table.
+      if (hasPendingLocalChanges.current && !forceReset) {
+        return;
+      }
+
+      if (!isEditLocked || forceReset) {
+        setCart([]);
+        setOrderId(null);
+        setOrderStatus('Open');
+        setBillNumber(null);
+        setCompletedBill(null);
+        if (billType !== 'Delivery') {
+          setOrderSource('Direct');
+        }
+        setCustomerPhone('');
+        setCustomerName('');
+        setCustomerInfo(null);
+        setDiscount({ type: 'percentage', value: '' });
+        setDeliveryCharge('');
+        setContainerCharge('');
+      }
+
+      // Silent background fetch to check backend without showing spinner
+      try {
+        const order = await getActiveOrder(tableToFetch);
+        if (order && order.items && order.items.length > 0) {
+          const kotStatusMap = {};
+          if (order.kots && Array.isArray(order.kots)) {
+            order.kots.forEach(kot => {
+              (kot.items || []).forEach(kItem => {
+                if (kItem.name) {
+                  kotStatusMap[kItem.name] = kItem.status;
+                  if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+                }
+              });
+            });
+          }
+
+          const backendItems = (order.items || [])
+            .filter(i => (Number(i.quantity || 0) > 0 || (i.isCancelled && (i.printedQuantity || 0) > 0)))
+            .map(i => ({
+              ...i,
+              specialNote: i.specialNote || '',
+              printedQuantity: i.printedQuantity !== undefined ? i.printedQuantity : (order.status === 'Open' ? (i.quantity || 0) : 0),
+              lastPrintedNote: i.lastPrintedNote !== undefined ? i.lastPrintedNote : (i.specialNote || ''),
+              status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status
+            }));
+
+          if (backendItems.length > 0) {
+            setCart(backendItems);
+            setOrderId(order._id);
+            setOrderStatus(order.status);
+            setBillNumber(order.billNumber);
+            setBillType(order.billType || 'Dine-In');
+            if (order.billType === 'Delivery') {
+              setOrderSource(order.orderSource || 'Direct');
+            }
+            setCustomerPhone(order.customerPhone || '');
+            setCustomerName(order.customerName || '');
+          }
+        }
+      } catch (err) {
+        // Ignore background fetch error for empty tables
+      }
+      return;
+    }
+
+    // Only set loading for occupied tables that are actively fetching their order items
+    if (!isBackground) setLoading(true);
 
     try {
       let order = await getActiveOrder(tableToFetch);
@@ -669,9 +765,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         const msSinceEdit = Date.now() - lastLocalEditTime.current;
         const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
         
+        // If user has pending local changes and this is a background fetch,
+        // NEVER clear the cart — the user may have added items not yet saved.
+        if (hasPendingLocalChanges.current && !forceReset) {
+          return;
+        }
+
         if (isEditLocked && !forceReset) {
-          // If the user just edited the cart for THIS table, the backend might not have saved it yet.
-          // DO NOT clear the cart, otherwise the UI will blink empty!
           return;
         }
 
@@ -836,6 +936,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
+    // Mark that user has pending local changes — prevents any background poll
+    // from clearing the cart until the user explicitly saves/KOTs/cancels.
+    hasPendingLocalChanges.current = true;
+    // Clear any stale loading state immediately so items appear without any spinner delay
+    setLoading(false);
   };
 
   const updateQuantity = (id, delta) => {
@@ -883,7 +988,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
-    if (newCart.length === 0) {
+    // Mark pending local changes if cart still has items
+    if (newCart.length > 0) {
+      hasPendingLocalChanges.current = true;
+    } else {
+      // Cart emptied — no longer pending
+      hasPendingLocalChanges.current = false;
       autoSyncOrder(currentTable, [], orderId);
     }
   };
@@ -897,6 +1007,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const cleanNote = (specialNote || '').trim();
     
     lastLocalEditTime.current = Date.now();
+    hasPendingLocalChanges.current = true;
     setCart((prev) => {
       return prev.map((i) => {
         const iIdStr = String(i._id || '').trim().toLowerCase();
@@ -934,7 +1045,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setActionLoading(null);
       return;
     }
-    setLoading(true);
     setActionLoading(prev => prev === 'hold' ? 'hold' : 'save');
     lastLocalEditTime.current = Date.now(); // Lock out background fetches during save
     try {
@@ -975,13 +1085,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(orderId ? t('orderUpdated', { defaultValue: 'Order updated successfully' }) : t('orderSaved'), 'success');
       // Extend edit lock after save completes so poll doesn't overwrite confirmed state
       lastLocalEditTime.current = Date.now();
+      // Order is now saved to DB — clear pending local changes flag
+      hasPendingLocalChanges.current = false;
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error saving order:', error);
       const errorMessage = error.response?.data?.message || error.message;
       showToast(`${t('failedToSave')}: ${errorMessage}`, 'error');
     } finally {
-      setLoading(false);
       setActionLoading(null);
     }
   };
@@ -1236,6 +1347,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       setCompletedBill(finalBill);
       showToast(t('billSettled'), 'success');
+      // Bill settled = order fully completed, clear pending local changes
+      hasPendingLocalChanges.current = false;
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
       setShowInvoice(true);
@@ -1338,6 +1451,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       });
       setShowKOT(true);
       showToast(t('kotGeneratedSuccess', { defaultValue: 'KOT printed successfully' }), 'success');
+      // KOT printed = order is now in DB, clear pending local changes
+      hasPendingLocalChanges.current = false;
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
 
