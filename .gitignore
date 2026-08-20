@@ -17,3 +17,5 @@ android/.gradle/
 *.zip
 coverage/
 .nyc_output/
+tools/
+Backend/backups/

@@ -1461,15 +1461,28 @@ export const generateKOT = async (req, res) => {
       const lastNote = (item.lastPrintedNote || '').trim();
       const noteChanged = currentNote !== lastNote;
       if (newQty !== 0 || noteChanged) {
+        const kotQty = Math.max(0, parseInt(newQty !== 0 ? newQty : currentQty, 10) || 0);
+        const safeCurrentQty = Math.max(0, parseInt(currentQty, 10) || 0);
         kotItems.push({
           name: item.name,
-          quantity: newQty !== 0 ? newQty : currentQty,
+          quantity: kotQty,
           specialNote: currentNote,
-          isNoteUpdateOnly: newQty === 0 && Boolean(noteChanged)
+          isNoteUpdateOnly: newQty === 0 && Boolean(noteChanged),
+          status: 'Pending',
+          preparedQuantity: 0,
+          preparingQuantity: 0,
+          pendingQuantity: kotQty,
+          unitStatuses: Array.from({ length: kotQty }, () => 'Pending')
         });
         // Update printed quantity & last printed note
         item.printedQuantity = currentQty;
         item.lastPrintedNote = currentNote;
+        if (!item.unitStatuses || item.unitStatuses.length !== safeCurrentQty) {
+          item.unitStatuses = Array.from({ length: safeCurrentQty }, () => item.status || 'Pending');
+          item.pendingQuantity = safeCurrentQty;
+          item.preparingQuantity = 0;
+          item.preparedQuantity = 0;
+        }
       }
     }
 
@@ -1611,12 +1624,27 @@ export const getTodayKOTs = async (req, res) => {
             const itemStatus = itemCancelMap[kItem.name];
             const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
             const orderItem = (bill.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
+            
+            const qty = Math.max(0, parseInt(kItem.quantity || 0, 10) || 1);
+            let unitStatuses = kItem.unitStatuses;
+            if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
+              unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
+            }
+
+            const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+            const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+            const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
             return {
               ...kItem,
               specialNote: kItem.specialNote || orderItem?.specialNote || '',
               isCancelled: isCancelled,
               status: isCancelled ? 'Cancelled' : (kItem.status || 'Pending'),
-              cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
+              cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
+              unitStatuses,
+              preparedQuantity: preparedQty,
+              preparingQuantity: preparingQty,
+              pendingQuantity: pendingQty
             };
           });
 
@@ -1813,17 +1841,32 @@ export const getActiveKOTs = async (req, res) => {
           const itemStatus = itemCancelMap[kItem.name];
           const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
           const orderItem = (order.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
+          
+          const qty = Math.max(0, parseInt(kItem.quantity || 0, 10) || 1);
+          let unitStatuses = kItem.unitStatuses;
+          if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
+            unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
+          }
+
+          const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+          const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+          const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
           return {
             ...kItem,
             specialNote: kItem.specialNote || orderItem?.specialNote || '',
             isCancelled: isCancelled,
             status: isCancelled ? 'Cancelled' : kItem.status,
-            cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0)
+            cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
+            unitStatuses,
+            preparedQuantity: preparedQty,
+            preparingQuantity: preparingQty,
+            pendingQuantity: pendingQty
           };
         });
 
         // Include KOTs that have active items needing kitchen preparation (Pending or Preparing)
-        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing') && !item.isCancelled);
+        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing' || (item.pendingQuantity > 0 || item.preparingQuantity > 0)) && !item.isCancelled);
         if (hasActiveKitchenItems) {
           allKots.push({
             orderId: order._id,
@@ -1849,7 +1892,7 @@ export const getActiveKOTs = async (req, res) => {
 export const updateKOTItemStatus = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const { orderId, kotId, itemId, status } = req.body;
+    const { orderId, kotId, itemId, status, unitIndex, unitStatuses: customUnitStatuses } = req.body;
 
     const order = await Bill.findById(orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -1875,13 +1918,52 @@ export const updateKOTItemStatus = async (req, res) => {
     }
     if (!item) return res.status(404).json({ message: 'Item not found in KOT' });
 
-    item.status = status;
+    const qty = Math.max(0, parseInt(item.quantity || 0, 10) || 1);
+    if (!item.unitStatuses || !Array.isArray(item.unitStatuses) || item.unitStatuses.length !== qty) {
+      item.unitStatuses = Array.from({ length: qty }, () => item.status || 'Pending');
+    }
 
-    // Sync status to bill.items
+    if (customUnitStatuses && Array.isArray(customUnitStatuses)) {
+      item.unitStatuses = customUnitStatuses;
+    } else if (unitIndex !== undefined && unitIndex !== null && unitIndex !== 'all') {
+      const idx = Number(unitIndex);
+      if (idx >= 0 && idx < item.unitStatuses.length) {
+        item.unitStatuses[idx] = status;
+      }
+    } else if (status) {
+      // Set all units
+      item.unitStatuses = Array.from({ length: qty }, () => status);
+    }
+
+    // Recalculate portion counts
+    const preparedCount = item.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+    const preparingCount = item.unitStatuses.filter(s => s === 'Preparing').length;
+    const pendingCount = item.unitStatuses.filter(s => s === 'Pending').length;
+
+    item.preparedQuantity = preparedCount;
+    item.preparingQuantity = preparingCount;
+    item.pendingQuantity = pendingCount;
+
+    // Determine overall item status
+    let computedItemStatus = 'Pending';
+    if (preparedCount === qty) {
+      computedItemStatus = 'Ready';
+    } else if (preparingCount > 0 || preparedCount > 0) {
+      computedItemStatus = 'Preparing';
+    } else {
+      computedItemStatus = 'Pending';
+    }
+    item.status = computedItemStatus;
+
+    // Sync to order.items
     if (order.items && Array.isArray(order.items)) {
       const orderItem = order.items.find(i => i._id?.toString() === itemId?.toString() || i.name === item.name);
       if (orderItem) {
-        orderItem.status = status;
+        orderItem.status = computedItemStatus;
+        orderItem.unitStatuses = [...item.unitStatuses];
+        orderItem.preparedQuantity = preparedCount;
+        orderItem.preparingQuantity = preparingCount;
+        orderItem.pendingQuantity = pendingCount;
         order.markModified('items');
       }
     }
@@ -1893,7 +1975,11 @@ export const updateKOTItemStatus = async (req, res) => {
       orderId, 
       kotId, 
       itemId, 
-      status, 
+      status: computedItemStatus, 
+      unitStatuses: item.unitStatuses,
+      preparedQuantity: preparedCount,
+      preparingQuantity: preparingCount,
+      pendingQuantity: pendingCount,
       tableNo: order.tableNo, 
       itemName: item.name 
     });
@@ -1904,10 +1990,10 @@ export const updateKOTItemStatus = async (req, res) => {
       order
     });
     
-    if (status === 'Preparing') {
+    if (computedItemStatus === 'Preparing') {
       const cleanTable = order.tableNo.replace('Table ', '');
       emitNotification(req, 'KOT Accepted', `Chef accepted KOT for Table ${cleanTable} - ${item.name}`, 'info', ['Captain', 'Manager', 'Admin']);
-    } else if (status === 'Ready') {
+    } else if (computedItemStatus === 'Ready') {
       const cleanTable = order.tableNo.replace('Table ', '');
       emitSocketEvent(req, 'foodReady', {
         orderId,
@@ -1919,7 +2005,7 @@ export const updateKOTItemStatus = async (req, res) => {
       emitNotification(req, 'Food Ready', `${item.name} is ready for Table ${cleanTable}`, 'success', ['Captain', 'Manager', 'Admin']);
     }
 
-    res.json({ message: 'Item status updated successfully', kot });
+    res.json({ message: 'Item status updated successfully', kot, item });
   } catch (error) {
     console.error('Error updating KOT item status:', error);
     res.status(500).json({ message: 'Server error' });

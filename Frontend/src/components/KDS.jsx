@@ -1,7 +1,6 @@
-import { getApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer } from 'lucide-react';
+import { useLanguage } from "../context/LanguageContext";
+import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer, Loader2 } from 'lucide-react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
 import Toast from './Toast';
@@ -76,19 +75,18 @@ const KDS = ({ onNavigate, onGoBack }) => {
         );
         if (activeCached.length > 0) {
           setKots(activeCached);
+          setLoading(false);
         }
       }
-      setLoading(false);
-    }).catch(() => { setLoading(false); });
-
+    }).catch(() => {});
 
     // 2. Background network fetch to confirm freshness
     fetchKOTs();
 
-    // 3. 3-Second real-time auto-polling for guaranteed freshness
+    // 3. Fast 1.5-Second real-time auto-polling for high-speed kitchen updates
     const pollTimer = setInterval(() => {
       fetchKOTs();
-    }, 3000);
+    }, 1500);
 
     // 4. Connect to singleton RealtimeService
     const handleNewKOT = (data) => {
@@ -115,7 +113,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
     };
 
     const handleKotUpdated = (data) => {
-      if (data && (data.itemId || data.itemName) && data.status) {
+      if (data && (data.itemId || data.itemName)) {
         setKots(prev => prev.map(kot => {
           if (
             (data.kotId && kot.kotId?.toString() === data.kotId?.toString()) ||
@@ -129,7 +127,14 @@ const KDS = ({ onNavigate, onGoBack }) => {
                   (data.itemId && item._id?.toString() === data.itemId?.toString()) ||
                   (data.itemName && item.name === data.itemName)
                 ) {
-                  return { ...item, status: data.status };
+                  return { 
+                    ...item, 
+                    status: data.status || item.status,
+                    unitStatuses: data.unitStatuses || item.unitStatuses,
+                    preparedQuantity: data.preparedQuantity !== undefined ? data.preparedQuantity : item.preparedQuantity,
+                    preparingQuantity: data.preparingQuantity !== undefined ? data.preparingQuantity : item.preparingQuantity,
+                    pendingQuantity: data.pendingQuantity !== undefined ? data.pendingQuantity : item.pendingQuantity
+                  };
                 }
                 return item;
               })
@@ -153,6 +158,64 @@ const KDS = ({ onNavigate, onGoBack }) => {
     };
   }, [fetchKOTs]);
 
+  const updateUnitStatus = async (orderId, kotId, itemId, unitIndex, newStatus, itemName = '', tableNo = '') => {
+    // 1. Instant 0ms Local State Update
+    setKots((prevKots) =>
+      prevKots.map((kot) => {
+        if (kot.kotId?.toString() === kotId?.toString() || kot.orderId?.toString() === orderId?.toString()) {
+          const updatedItems = (kot.items || []).map((item) => {
+            if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
+              const qty = Math.max(0, parseInt(item.quantity || 0, 10));
+              let currentUnits = item.unitStatuses && Array.isArray(item.unitStatuses) && item.unitStatuses.length === qty && qty > 0
+                ? [...item.unitStatuses]
+                : Array.from({ length: qty }, () => item.status || 'Pending');
+              
+              if (unitIndex >= 0 && unitIndex < currentUnits.length) {
+                currentUnits[unitIndex] = newStatus;
+              }
+              
+              const prepCount = currentUnits.filter(s => s === 'Ready' || s === 'Prepared').length;
+              const cookCount = currentUnits.filter(s => s === 'Preparing').length;
+              const computedStatus = (qty > 0 && prepCount === qty) ? 'Ready' : (cookCount > 0 || prepCount > 0 ? 'Preparing' : 'Pending');
+              
+              return { 
+                ...item, 
+                status: computedStatus,
+                unitStatuses: currentUnits,
+                preparedQuantity: prepCount,
+                preparingQuantity: cookCount,
+                pendingQuantity: Math.max(0, currentUnits.length - prepCount - cookCount)
+              };
+            }
+            return item;
+          });
+          return { ...kot, items: updatedItems };
+        }
+        return kot;
+      })
+    );
+
+    if (newStatus === 'Ready') {
+      const displayName = itemName || 'Portion';
+      const displayTable = tableNo ? ` for ${tableNo}` : '';
+      setToast({ message: `✅ ${displayName} (#${unitIndex + 1})${displayTable} is prepared & ready!`, type: 'success' });
+    }
+
+    try {
+      await api.post('/bills/kot/item/status', {
+        orderId,
+        kotId,
+        itemId,
+        unitIndex,
+        status: newStatus
+      });
+      fetchKOTs();
+    } catch (error) {
+      console.error('Error updating unit status:', error);
+      fetchKOTs();
+    }
+  };
+
   const updateItemStatus = async (orderId, kotId, itemId, newStatus, itemName = '', tableNo = '') => {
     // 1. Instant 0ms Local State Update
     setKots((prevKots) =>
@@ -160,7 +223,16 @@ const KDS = ({ onNavigate, onGoBack }) => {
         if (kot.kotId?.toString() === kotId?.toString() || kot.orderId?.toString() === orderId?.toString()) {
           const updatedItems = (kot.items || []).map((item) => {
             if (item._id?.toString() === itemId?.toString() || item.name === itemId) {
-              return { ...item, status: newStatus };
+              const qty = Math.max(0, parseInt(item.quantity || 0, 10));
+              const currentUnits = Array.from({ length: qty }, () => newStatus);
+              return { 
+                ...item, 
+                status: newStatus,
+                unitStatuses: currentUnits,
+                preparedQuantity: newStatus === 'Ready' ? qty : 0,
+                preparingQuantity: newStatus === 'Preparing' ? qty : 0,
+                pendingQuantity: newStatus === 'Pending' ? qty : 0
+              };
             }
             return item;
           });
@@ -175,7 +247,6 @@ const KDS = ({ onNavigate, onGoBack }) => {
       const notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
       const hasActiveNotifications = notifPermission === 'granted' && localStorage.getItem('realtime_notifications');
 
-      // Only show popup toast if no push notification system is active/handled
       if (!hasActiveNotifications || notifPermission !== 'granted') {
         const displayName = itemName || 'Item';
         const displayTable = tableNo ? ` for ${tableNo}` : '';
@@ -352,7 +423,23 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
       <div ref={scrollContainerRef} className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory scroll-smooth custom-scrollbar">
         <div className="flex gap-3.5 sm:gap-4 h-full">
-          {groupedKOTs.length === 0 ? (
+          {loading ? (
+            <div className="w-full flex flex-col items-center justify-center p-16 text-slate-400 gap-4">
+              <div className="relative flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full border-4 border-amber-500/20 border-t-amber-500 animate-spin"></div>
+                <ChefHat className="absolute text-amber-500 animate-pulse" size={26} />
+              </div>
+              <div className="flex flex-col items-center gap-1 text-center">
+                <span className="font-black text-white text-base tracking-wide flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin text-amber-400" />
+                  {t("Loading Kitchen Orders...")}
+                </span>
+                <span className="text-xs text-slate-500 font-mono">
+                  {t("Fetching active table tickets & live cooking queue...")}
+                </span>
+              </div>
+            </div>
+          ) : groupedKOTs.length === 0 ? (
             <div className="w-full flex flex-col items-center justify-center text-slate-500 font-bold text-lg sm:text-xl p-8">
               <ChefHat size={48} className="mb-3 opacity-30 text-amber-500" />
               <span>{t("No Active Tickets")}</span>
@@ -408,13 +495,15 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                     <Ban size={10} /> {t("Cancelled")}
                                   </span>
                                 ) : (
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider inline-flex items-center gap-1 ${
                                     item.status === 'Preparing'
                                       ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                                       : item.status === 'Ready'
                                       ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
                                       : 'bg-slate-800 text-slate-400 border-slate-700'
                                   }`}>
+                                    {item.status === 'Preparing' && <Loader2 size={10} className="animate-spin text-amber-400" />}
+                                    {item.status === 'Ready' && <CheckCircle size={10} className="text-emerald-400" />}
                                     {t(item.status)}
                                   </span>
                                 )}
@@ -430,17 +519,77 @@ const KDS = ({ onNavigate, onGoBack }) => {
                             {!isCancelled && (
                               <button
                                 onClick={() => updateItemStatus(item.originalOrderId, item.kotId, item._id, item.status === 'Pending' ? 'Preparing' : 'Ready', item.name, group.tableNo)}
-                                className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target ${
+                                className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target cursor-pointer ${
                                   item.status === 'Pending'
                                     ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700'
                                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40'
                                 }`}
-                                title={t(item.status === 'Pending' ? 'Start Preparing' : 'Mark Ready')}
+                                title={t(item.status === 'Pending' ? 'Start Preparing All' : 'Mark All Ready')}
                               >
                                 {item.status === 'Pending' ? <ChefHat size={20} /> : <CheckCircle size={20} />}
                               </button>
                             )}
                           </div>
+
+                          {/* Individual Quantity / Portion Status Chips for items with Qty > 1 */}
+                          {!isCancelled && Number(item.quantity || 1) > 1 && (
+                            <div className="pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                                <span>{t("Portion Breakdown")} ({item.quantity})</span>
+                                <span className="text-[9px] text-slate-500 font-normal">{t("Tap portion to change")}</span>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                {(() => {
+                                  const qty = Math.max(0, parseInt(item.quantity || 0, 10));
+                                  const units = item.unitStatuses && Array.isArray(item.unitStatuses) && item.unitStatuses.length === qty && qty > 0
+                                    ? item.unitStatuses
+                                    : Array.from({ length: qty }, () => item.status || 'Pending');
+                                  return units.map((uStatus, uIdx) => {
+                                    const nextStatus = uStatus === 'Pending' ? 'Preparing' : uStatus === 'Preparing' ? 'Ready' : 'Pending';
+                                    const isReady = uStatus === 'Ready' || uStatus === 'Prepared';
+                                    const isPrep = uStatus === 'Preparing';
+                                    return (
+                                      <button
+                                        key={`unit-${prepKey}-${uIdx}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateUnitStatus(item.originalOrderId, item.kotId, item._id, uIdx, nextStatus, item.name, group.tableNo);
+                                        }}
+                                        className={`px-2 py-1.5 rounded-lg text-[10px] font-black border transition-all flex items-center justify-between gap-1 shadow-xs active:scale-95 cursor-pointer ${
+                                          isReady
+                                            ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 hover:bg-emerald-600/40'
+                                            : isPrep
+                                            ? 'bg-amber-500/25 text-amber-300 border-amber-500/50 hover:bg-amber-500/35'
+                                            : 'bg-slate-800/90 text-blue-300 border-blue-500/30 hover:bg-slate-800'
+                                        }`}
+                                        title={`Portion #${uIdx + 1}: ${uStatus} (Click to set ${nextStatus})`}
+                                      >
+                                        <span className="opacity-75 font-mono">#{uIdx + 1}</span>
+                                        <span className="inline-flex items-center gap-1 truncate">
+                                          {isReady ? (
+                                            <>
+                                              <CheckCircle size={10} className="text-emerald-400" />
+                                              <span>{t("Prepared")}</span>
+                                            </>
+                                          ) : isPrep ? (
+                                            <>
+                                              <Loader2 size={10} className="animate-spin text-amber-400" />
+                                              <span>{t("Cooking")}</span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></span>
+                                              <span>{t("Pending")}</span>
+                                            </>
+                                          )}
+                                        </span>
+                                      </button>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          )}
 
                           {!isCancelled && (
                             <div className="pt-2 border-t border-slate-800/80 mt-1 flex flex-col gap-1.5">

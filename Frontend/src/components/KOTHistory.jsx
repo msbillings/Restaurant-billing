@@ -169,9 +169,26 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
     if (!items || items.length === 0) return 'No items';
     const summary = items.map((i) => {
       const isCancelled = i.status === 'Cancelled' || i.isCancelled;
-      return `${isCancelled ? '0' : i.quantity}x ${t(i.name)}${isCancelled ? ' (Cancelled)' : ''}`;
+      if (isCancelled) return `0x ${t(i.name)} (${t("Cancelled")})`;
+      const qty = Math.max(0, parseInt(i.quantity || 0, 10));
+      const units = i.unitStatuses && Array.isArray(i.unitStatuses) && i.unitStatuses.length === qty && qty > 0
+        ? i.unitStatuses
+        : Array.from({ length: qty }, () => i.status || 'Pending');
+
+      const prep = units.filter(s => s === 'Ready' || s === 'Prepared').length;
+      const cook = units.filter(s => s === 'Preparing').length;
+      const pend = units.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+      if (qty > 1 && (prep > 0 || cook > 0)) {
+        const parts = [];
+        if (prep > 0) parts.push(`${prep} Prepared`);
+        if (cook > 0) parts.push(`${cook} Cooking`);
+        if (pend > 0) parts.push(`${pend} Pending`);
+        return `${qty}x ${t(i.name)} (${parts.join(', ')})`;
+      }
+      return `${qty}x ${t(i.name)} [${t(i.status || 'Pending')}]`;
     }).join(', ');
-    return summary.length > 60 ? summary.substring(0, 57) + '...' : summary;
+    return summary.length > 90 ? summary.substring(0, 87) + '...' : summary;
   };
 
   const getKOTStatus = (items) => {

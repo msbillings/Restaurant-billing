@@ -38,12 +38,12 @@ const GlobalHeader = ({
         )}
         <button
           onClick={() => onNavigate && onNavigate(userRole === 'Chef' ? 'kds' : 'floor')}
-          className="flex items-center cursor-pointer select-none py-1 px-1 min-w-[150px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity focus:outline-none shrink-0 overflow-visible"
+          className="flex items-center cursor-pointer select-none py-1 px-1 min-w-[165px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity focus:outline-none shrink-0 overflow-visible"
           title={t(userRole === 'Chef' ? "Go to Kitchen Display" : "Go to Table View / Floor Management")}>
           <img
             src={logoImg}
             alt="msbillings"
-            className="h-10 sm:h-13 md:h-15 w-auto object-contain block transform scale-140 sm:scale-170 md:scale-190 origin-left"
+            className="h-11 sm:h-13 md:h-15 w-auto object-contain block transform scale-165 sm:scale-170 md:scale-190 origin-left"
             style={{ objectFit: 'contain' }}
           />
         </button>

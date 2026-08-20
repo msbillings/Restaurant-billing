@@ -470,7 +470,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 (data.itemId && i._id?.toString() === data.itemId?.toString()) ||
                 (data.itemName && i.name === data.itemName)
               ) {
-                return { ...i, status: data.status };
+                return { 
+                  ...i, 
+                  status: data.status || i.status,
+                  unitStatuses: data.unitStatuses || i.unitStatuses,
+                  preparedQuantity: data.preparedQuantity !== undefined ? data.preparedQuantity : i.preparedQuantity,
+                  preparingQuantity: data.preparingQuantity !== undefined ? data.preparingQuantity : i.preparingQuantity,
+                  pendingQuantity: data.pendingQuantity !== undefined ? data.pendingQuantity : i.pendingQuantity
+                };
               }
               return i;
             })

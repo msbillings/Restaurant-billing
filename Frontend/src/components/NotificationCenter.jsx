@@ -51,20 +51,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
         bg: 'bg-amber-50'
       }));
 
-      const systemAlerts = [
-      {
-        id: 'sys-1',
-        type: 'info',
-        title: 'System Update Completed',
-        message: 'The billing system was successfully updated to v1.2.4. New features include Language Profiles and Admin Controls.',
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-        icon: Info,
-        color: 'text-blue-500',
-        bg: 'bg-blue-50'
-      }];
-
-
-      setLocalNotifications([...lowStockAlerts, ...systemAlerts].sort((a, b) => b.timestamp - a.timestamp));
+      setLocalNotifications(lowStockAlerts.sort((a, b) => b.timestamp - a.timestamp));
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {

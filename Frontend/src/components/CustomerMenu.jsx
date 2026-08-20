@@ -2,7 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin, RefreshCw, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
@@ -12,7 +12,9 @@ const getPublicApiUrl = () => {
 
 const API_BASE_URL = getPublicApiUrl();
 const apiClient = axios.create({
-  timeout: 35000
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
 const CustomerMenu = () => {
@@ -218,7 +220,7 @@ const CustomerMenu = () => {
     }
   }, [tenant]);
 
-  // Geolocation verification with mobile/iOS indoor tolerance (min 500m buffer)
+  // Geolocation verification with dynamic radius from settings & GPS accuracy compensation
   const verifyLocation = useCallback((settings) => {
     // If running on local IP / LAN (http://192.168.x.x), localhost, or non-HTTPS origin, skip location check
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
@@ -262,8 +264,8 @@ const CustomerMenu = () => {
       return R * c;
     };
 
-    // Ensure at least 500m buffer for indoor mobile/iOS GPS drift
-    const allowedRadius = Math.max(Number(geoFencingRadius) || 100, 500);
+    // Use the dynamic radius configured in restaurant settings
+    const allowedRadius = Number(geoFencingRadius) > 0 ? Number(geoFencingRadius) : 100;
 
     const checkPosition = (position) => {
       try {
@@ -274,12 +276,13 @@ const CustomerMenu = () => {
           Number(longitude)
         );
         const accuracy = position.coords.accuracy || 0;
-        const effectiveDistance = Math.max(0, rawDist - Math.min(accuracy, 250));
+        // Compensate for mobile indoor GPS inaccuracy (up to 40% of allowed radius or accuracy)
+        const effectiveDistance = Math.max(0, rawDist - Math.min(accuracy, allowedRadius * 0.4));
 
         if (effectiveDistance > allowedRadius) {
-          setGeoError(t("You appear to be away from the restaurant. Please verify your location to place an order."));
+          setGeoError(t("You appear to be away from the restaurant. Please ensure you are physically at the table to place an order."));
         } else {
-          setGeoError(null); // Location verified!
+          setGeoError(null); // Location verified successfully!
         }
       } catch (err) {
         console.warn("Distance check error:", err);
@@ -291,26 +294,74 @@ const CustomerMenu = () => {
     const handleGeoError = (err) => {
       console.warn("Geolocation notice:", err);
       setVerifyingLocation(false);
-      // Only set error if user explicitly denied permission
       if (err.code === 1) { // PERMISSION_DENIED
         setGeoError(t("Please allow location access to verify you are at Table ") + table);
       }
-      // If code 2 (POSITION_UNAVAILABLE) or 3 (TIMEOUT), do not block indoor customers
     };
 
-    // Fast low-accuracy first (instant <300ms on mobile)
+    // Request fresh location with high accuracy
     navigator.geolocation.getCurrentPosition(
       checkPosition,
       () => {
         navigator.geolocation.getCurrentPosition(
           checkPosition,
           handleGeoError,
-          { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
         );
       },
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 600000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, [table, t]);
+
+  const hasLoadedInitialOrderRef = useRef(false);
+
+  const checkOrderStatus = useCallback(async (isInitial = false) => {
+    if (!table || !tenant) {
+      setIsCheckingOrder(false);
+      return;
+    }
+
+    if (isInitial && !hasLoadedInitialOrderRef.current) {
+      setIsCheckingOrder(true);
+    }
+
+    try {
+      const response = await apiClient.get(
+        `${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(table)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`,
+        {
+          headers: { 
+            'X-Tenant-DB': tenant,
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        }
+      );
+
+      if (response.data && response.data.items && Array.isArray(response.data.items)) {
+        const validItems = response.data.items.filter(i => !i.isCancelled);
+        if (validItems.length > 0) {
+          hasLoadedInitialOrderRef.current = true;
+          setActiveOrderData(response.data);
+        } else {
+          hasLoadedInitialOrderRef.current = true;
+          setActiveOrderData(null);
+        }
+      } else {
+        hasLoadedInitialOrderRef.current = true;
+        setActiveOrderData(null);
+      }
+    } catch (err) {
+      // If 404, the table is legitimately empty (no open bill)
+      if (err.response?.status === 404) {
+        hasLoadedInitialOrderRef.current = true;
+        setActiveOrderData(null);
+      } else {
+        console.warn("Table order status notice:", err?.message);
+      }
+    } finally {
+      setIsCheckingOrder(false);
+    }
+  }, [table, tenant]);
 
   useEffect(() => {
     if (!tenant || !table) {
@@ -361,97 +412,6 @@ const CustomerMenu = () => {
       }
     };
 
-    let hasLoadedInitialOrder = false;
-
-    const checkOrderStatus = async (isInitial = false) => {
-      if (!table || !tenant) {
-        setIsCheckingOrder(false);
-        return;
-      }
-
-      if (isInitial && !hasLoadedInitialOrder) {
-        setIsCheckingOrder(true);
-      }
-
-      const candidateTableNames = [table];
-      if (!table.includes(' - ')) {
-        const floorPrefixes = ['Ground Floor', 'First Floor', 'Second Floor', 'Floor 1', 'Floor 2', 'Floor 3', 'Main Hall', 'AC Hall', 'Outdoor', 'Rooftop', 'Garden', 'Terrace', 'VIP Lounge', 'Dining'];
-        floorPrefixes.forEach(floor => {
-          candidateTableNames.push(`${floor} - ${table}`);
-        });
-      }
-
-      try {
-        const results = await Promise.allSettled(
-          candidateTableNames.map(candidate =>
-            apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
-              headers: { 
-                'X-Tenant-DB': tenant,
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache'
-              },
-              timeout: 12000
-            })
-          )
-        );
-
-        let foundOrder = null;
-        for (const res of results) {
-          if (res.status === 'fulfilled' && res.value?.data && res.value.data.items && Array.isArray(res.value.data.items)) {
-            const validItems = res.value.data.items.filter(i => !i.isCancelled);
-            if (validItems.length > 0) {
-              foundOrder = res.value.data;
-              break;
-            }
-          }
-        }
-
-        if (foundOrder) {
-          hasLoadedInitialOrder = true;
-          setActiveOrderData(foundOrder);
-          setIsCheckingOrder(false);
-        } else {
-          // If initial check returned empty, do a fast 1.2s retry to ensure network certainty
-          if (isInitial && !hasLoadedInitialOrder) {
-            setTimeout(async () => {
-              try {
-                const retryResults = await Promise.allSettled(
-                  candidateTableNames.map(candidate =>
-                    apiClient.get(`${API_BASE_URL}/public/order-status?tableNo=${encodeURIComponent(candidate)}&tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
-                      headers: { 'X-Tenant-DB': tenant, 'Cache-Control': 'no-cache' },
-                      timeout: 8000
-                    })
-                  )
-                );
-                let retryOrder = null;
-                for (const r of retryResults) {
-                  if (r.status === 'fulfilled' && r.value?.data?.items && Array.isArray(r.value.data.items)) {
-                    if (r.value.data.items.filter(i => !i.isCancelled).length > 0) {
-                      retryOrder = r.value.data;
-                      break;
-                    }
-                  }
-                }
-                hasLoadedInitialOrder = true;
-                setActiveOrderData(retryOrder);
-              } catch (e) {
-                setActiveOrderData(null);
-              } finally {
-                setIsCheckingOrder(false);
-              }
-            }, 1200);
-          } else {
-            setActiveOrderData(null);
-            setIsCheckingOrder(false);
-          }
-        }
-      } catch (err) {
-        console.warn("Error checking table order status:", err);
-        setActiveOrderData(null);
-        setIsCheckingOrder(false);
-      }
-    };
-
     fetchMenu();
     checkOrderStatus(true);
 
@@ -496,7 +456,7 @@ const CustomerMenu = () => {
       if (socket) socket.disconnect();
       clearInterval(interval);
     };
-  }, [tenant, table]);
+  }, [tenant, table, checkOrderStatus, verifyLocation]);
 
   const addToCart = (item, variant = null, note = '') => {
     const variantName = variant ? variant.name : null;
@@ -544,7 +504,7 @@ const CustomerMenu = () => {
   };
 
   const placeOrder = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || orderStatus === 'placing') return;
     setOrderStatus('placing');
     try {
       const total = calculateTotal();
@@ -560,7 +520,7 @@ const CustomerMenu = () => {
 
       const effectiveTableNo = activeOrderData?.tableNo || table;
 
-      await apiClient.post(`${API_BASE_URL}/public/order`, {
+      const response = await apiClient.post(`${API_BASE_URL}/public/order`, {
         tableNo: effectiveTableNo,
         items: sanitizedCart,
         subTotal: total,
@@ -574,15 +534,20 @@ const CustomerMenu = () => {
       });
       setCart([]);
       setIsCartOpen(false);
+      if (response.data && response.data.items) {
+        hasLoadedInitialOrderRef.current = true;
+        setActiveOrderData(response.data);
+      }
       setOrderStatus('success');
-      setTimeout(() => setOrderStatus('menu'), 5000);
+      setTimeout(() => setOrderStatus('menu'), 3500);
       
-      // Instantly trigger an order status check to show the tracking banner
+      // Instantly trigger an order status check to ensure background sync
       checkOrderStatus();
     } catch (err) {
-      console.error("Order failed", err);
-      const errorMsg = err.response?.data?.message || err.message || "Please try again or call a waiter.";
-      alert(`Failed to place order: ${errorMsg}`);
+      console.error("Order placement notice:", err);
+      const errorMsg = err.response?.data?.message || (err.message && !err.message.includes('timeout') ? err.message : null) || t("Order could not be placed right now. Please check your connection or ask a staff member.");
+      setServiceMessage(`⚠️ ${errorMsg}`);
+      setTimeout(() => setServiceMessage(null), 5000);
       setOrderStatus('menu');
     }
   };
@@ -597,11 +562,12 @@ const CustomerMenu = () => {
       }, {
         headers: { 'X-Tenant-DB': tenant }
       });
-      setServiceMessage(`Your request for "${type}" was sent!`);
+      setServiceMessage(`🔔 ${t("Your request for")} "${t(type)}" ${t("was sent to staff!")}`);
       setTimeout(() => setServiceMessage(null), 4000);
     } catch (err) {
       console.error("Service request failed", err);
-      alert("Failed to send request. Please try again.");
+      setServiceMessage(`⚠️ ${t("Failed to send request. Please try again.")}`);
+      setTimeout(() => setServiceMessage(null), 4000);
     }
   };
 
@@ -736,7 +702,10 @@ const CustomerMenu = () => {
         <h1 className="text-3xl font-black text-center tracking-tight mb-2 mt-2">{t("Digital Menu")}</h1>
         <div className="flex items-center justify-center gap-2 bg-white/20 w-max mx-auto px-4 py-1.5 rounded-full backdrop-blur-sm">
           <Navigation size={16} />
-          <span className="font-bold text-sm">{t("You are at")} {table}</span>
+          <span className="font-bold text-sm">
+            {t("You are at")} {table ? (table.includes(' - ') ? table.split(' - ').slice(1).join(' - ') : table) : ''}
+            {table && table.includes(' - ') ? ` (${table.split(' - ')[0]})` : ''}
+          </span>
         </div>
       </header>
 
@@ -825,7 +794,7 @@ const CustomerMenu = () => {
       )}
 
       {/* ── EMPTY TABLE / READY TO ORDER BADGE ── shown when table is empty and no active order */}
-      {!isCheckingOrder && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
+      {!isCheckingOrder && orderStatus !== 'placing' && orderStatus !== 'success' && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
         <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
           <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -903,30 +872,87 @@ const CustomerMenu = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {item.cancellationRequested ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
-                            className="text-[9px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-all shadow-xs cursor-pointer"
-                            title={t("Withdraw Cancel Request")}
-                          >
-                            ↩️ {t("Withdraw")}
-                          </button>
-                        </div>
-                      ) : isPrepared ? (
-                        <span className="text-[9px] bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
-                          <Check size={10} strokeWidth={3} /> {t("Prepared")}
-                        </span>
-                      ) : isPreparing ? (
-                        <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                          👨‍🍳 {t("Preparing")}
-                        </span>
-                      ) : (
-                        <span className="text-[9px] bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full font-bold">
-                          ⏳ {t("Received")}
-                        </span>
-                      )}
+                      {(() => {
+                        const rawEffective = parseInt(effectiveQty || 0, 10) || 0;
+                        const safeEffectiveQty = Math.max(0, rawEffective);
+                        const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === safeEffectiveQty && safeEffectiveQty > 0
+                          ? item.unitStatuses
+                          : Array.from({ length: safeEffectiveQty }, () => item.kdsStatus || item.status || 'Pending');
+
+                        const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+                        const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
+                        const pendingCount = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+                        const hasMixedStatus = safeEffectiveQty > 1 && (
+                          (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
+                          (preparingCount > 0 && pendingCount > 0)
+                        );
+
+                        if (item.cancellationRequested) {
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
+                                className="text-[9px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-all shadow-xs cursor-pointer"
+                                title={t("Withdraw Cancel Request")}
+                              >
+                                ↩️ {t("Withdraw")}
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        if (hasMixedStatus) {
+                          return (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {preparedCount > 0 && (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                                  <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                                  <span>{preparedCount}x {t("Prepared")}</span>
+                                </span>
+                              )}
+                              {preparingCount > 0 && (
+                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                                  <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                                  <span>{preparingCount}x 👨‍🍳 {t("Preparing")}</span>
+                                </span>
+                              )}
+                              {pendingCount > 0 && (
+                                <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+                                  <span>{pendingCount}x ⏳ {t("Pending")}</span>
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        if (isPrepared) {
+                          return (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                              <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                              <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}{t("Prepared")}</span>
+                            </span>
+                          );
+                        }
+
+                        if (isPreparing) {
+                          return (
+                            <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                              <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                              <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+                            <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                          </span>
+                        );
+                      })()}
                       <span className="text-xs font-black text-orange-600">₹{itemTotal}</span>
                     </div>
                   </div>
@@ -942,9 +968,21 @@ const CustomerMenu = () => {
                 </div>
                 <div className="flex justify-between text-xs text-slate-600">
                   <span>{t("Subtotal")}</span>
-                  <span>₹{activeOrderData.subTotal || activeOrderData.total}</span>
+                  <span>₹{activeOrderData.subtotal !== undefined ? activeOrderData.subtotal : (activeOrderData.subTotal || activeOrderData.total)}</span>
                 </div>
-                {activeOrderData.tax > 0 && (
+                {activeOrderData.taxBreakdown?.cgst > 0 && (
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>{t("CGST")} ({((activeOrderData.tax || 5) / 2).toFixed(1)}%)</span>
+                    <span>₹{activeOrderData.taxBreakdown.cgst}</span>
+                  </div>
+                )}
+                {activeOrderData.taxBreakdown?.sgst > 0 && (
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>{t("SGST")} ({((activeOrderData.tax || 5) / 2).toFixed(1)}%)</span>
+                    <span>₹{activeOrderData.taxBreakdown.sgst}</span>
+                  </div>
+                )}
+                {(!activeOrderData.taxBreakdown || (!activeOrderData.taxBreakdown.cgst && !activeOrderData.taxBreakdown.sgst)) && activeOrderData.tax > 0 && (
                   <div className="flex justify-between text-xs text-slate-600">
                     <span>{t("Taxes (GST)")}</span>
                     <span>₹{activeOrderData.tax}</span>
@@ -1221,22 +1259,82 @@ const CustomerMenu = () => {
                                   ↩️ {t("Withdraw")}
                                 </button>
                               </div>
-                            ) : (item.kdsStatus === 'Ready' || item.status === 'Ready') ? (
-                              <span className="text-[10px] font-bold bg-emerald-500/60 text-white border border-emerald-400/40 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                                <Check size={11} strokeWidth={3} /> {t("Prepared")}
-                              </span>
-                            ) : (item.kdsStatus === 'Preparing' || item.status === 'Preparing') ? (
-                              <span className="text-[10px] font-bold bg-amber-500/50 text-white border border-amber-400/30 px-2.5 py-1 rounded-full flex items-center gap-1">
-                                👨‍🍳 {t("Preparing...")}
-                              </span>
-                            ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
-                                className="text-[10px] font-bold bg-red-500/80 hover:bg-red-500 px-2 py-1 rounded-full transition-colors"
-                              >
-                                {t("Cancel")}
-                              </button>
-                            )}
+                            ) : (() => {
+                              const rawQty = parseInt(item.quantity || 0, 10) || 0;
+                              const cancelledQty = parseInt(item.cancelledQuantity || 0, 10) || 0;
+                              const safeEffectiveQty = Math.max(0, rawQty - cancelledQty);
+
+                              const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === safeEffectiveQty && safeEffectiveQty > 0
+                                ? item.unitStatuses
+                                : Array.from({ length: safeEffectiveQty }, () => item.kdsStatus || item.status || 'Pending');
+
+                              const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+                              const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
+                              const pendingCount = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+                              const hasMixedStatus = safeEffectiveQty > 1 && (
+                                (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
+                                (preparingCount > 0 && pendingCount > 0)
+                              );
+
+                              if (hasMixedStatus) {
+                                return (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {preparedCount > 0 && (
+                                      <span className="text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                                        <Check size={11} strokeWidth={3} className="shrink-0" />
+                                        <span>{preparedCount}x {t("Prepared")}</span>
+                                      </span>
+                                    )}
+                                    {preparingCount > 0 && (
+                                      <span className="text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                                        <Loader2 size={11} className="animate-spin text-amber-200 shrink-0" />
+                                        <span>{preparingCount}x 👨‍🍳 {t("Preparing...")}</span>
+                                      </span>
+                                    )}
+                                    {pendingCount > 0 && (
+                                      <span className="text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
+                                        <span>{pendingCount}x ⏳ {t("Pending")}</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (item.kdsStatus === 'Ready' || item.status === 'Ready' || item.kdsStatus === 'Prepared' || item.status === 'Prepared') {
+                                return (
+                                  <span className="text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                                    <Check size={11} strokeWidth={3} className="shrink-0" />
+                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}{t("Prepared")}</span>
+                                  </span>
+                                );
+                              }
+
+                              if (item.kdsStatus === 'Preparing' || item.status === 'Preparing') {
+                                return (
+                                  <span className="text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                                    <Loader2 size={11} className="animate-spin text-amber-200 shrink-0" />
+                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}👨‍🍳 {t("Preparing...")}</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
+                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                                  </span>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
+                                    className="text-[10px] font-bold bg-red-500/80 hover:bg-red-500 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                                  >
+                                    {t("Cancel")}
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       ))}
@@ -1244,16 +1342,28 @@ const CustomerMenu = () => {
                       <div className="border-t border-white/20 pt-2 mt-1 space-y-1">
                         <div className="flex justify-between text-xs">
                           <span>{t("Subtotal")}</span>
-                          <span>₹{activeOrderData.subTotal || activeOrderData.total}</span>
+                          <span>₹{activeOrderData.subtotal !== undefined ? activeOrderData.subtotal : (activeOrderData.subTotal || activeOrderData.total)}</span>
                         </div>
-                        {activeOrderData.tax > 0 && (
+                        {activeOrderData.taxBreakdown?.cgst > 0 && (
                           <div className="flex justify-between text-xs text-white/80">
-                            <span>{t("Taxes (CGST/SGST)")}</span>
+                            <span>{t("CGST")} ({((activeOrderData.tax || 5) / 2).toFixed(1)}%)</span>
+                            <span>₹{activeOrderData.taxBreakdown.cgst}</span>
+                          </div>
+                        )}
+                        {activeOrderData.taxBreakdown?.sgst > 0 && (
+                          <div className="flex justify-between text-xs text-white/80">
+                            <span>{t("SGST")} ({((activeOrderData.tax || 5) / 2).toFixed(1)}%)</span>
+                            <span>₹{activeOrderData.taxBreakdown.sgst}</span>
+                          </div>
+                        )}
+                        {(!activeOrderData.taxBreakdown || (!activeOrderData.taxBreakdown.cgst && !activeOrderData.taxBreakdown.sgst)) && activeOrderData.tax > 0 && (
+                          <div className="flex justify-between text-xs text-white/80">
+                            <span>{t("Taxes (GST)")}</span>
                             <span>₹{activeOrderData.tax}</span>
                           </div>
                         )}
-                        <div className="flex justify-between font-black text-sm pt-1">
-                          <span>{t("Total")}</span>
+                        <div className="flex justify-between font-black text-sm pt-1 border-t border-white/10">
+                          <span>{t("Grand Total")}</span>
                           <span>₹{activeOrderData.total}</span>
                         </div>
                       </div>
@@ -1568,16 +1678,52 @@ const CustomerMenu = () => {
                   <span className="text-2xl font-black text-slate-800">₹{calculateTotal()}</span>
                 </div>
                 <button
-                onClick={placeOrder}
-                disabled={orderStatus === 'placing'}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-4 font-black text-lg shadow-xl shadow-orange-500/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                
-                  {orderStatus === 'placing' ? 'Sending to Kitchen...' : 'Place Order Now'}
+                  onClick={placeOrder}
+                  disabled={orderStatus === 'placing'}
+                  className="w-full bg-orange-500 hover:bg-orange-600 active:scale-[0.99] text-white rounded-2xl py-4 font-black text-lg shadow-xl shadow-orange-500/30 transition-all disabled:opacity-75 flex items-center justify-center gap-2.5 cursor-pointer">
+                  {orderStatus === 'placing' ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={20} />
+                      <span>{t("Sending to Kitchen...")}</span>
+                    </>
+                  ) : (
+                    <span>{t("Place Order Now")}</span>
+                  )}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         }
+      </AnimatePresence>
+
+      {/* Placing Order Full Overlay Spinner */}
+      <AnimatePresence>
+        {orderStatus === 'placing' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex flex-col items-center justify-center p-6 text-center"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-3xl p-8 max-w-xs w-full shadow-2xl flex flex-col items-center gap-4"
+            >
+              <div className="w-16 h-16 rounded-full bg-orange-500/15 text-orange-600 flex items-center justify-center">
+                <RefreshCw className="animate-spin text-orange-500" size={32} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-800">{t("Sending to Kitchen...")}</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">{t("Please wait while your table order is registered with the chef.")}</p>
+              </div>
+              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1">
+                <div className="bg-orange-500 h-full w-full animate-progress rounded-full"></div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* Success Screen */}

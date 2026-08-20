@@ -5,11 +5,11 @@ import MenuDefault from '../models/Menu.js';
 import CategoryDefault from '../models/Category.js';
 import BillDefault from '../models/Bill.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
-import { getTenantModel } from '../utils/tenantHelper.js';
 import SettingDefault from '../models/Setting.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
-import { emitNotification } from '../utils/notificationHelper.js';
+import { emitNotification, getTenantDbFromReq } from '../utils/notificationHelper.js';
 
 // Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1" vs "Table 1")
 export const getTableMatchCondition = (tblStr) => {
@@ -259,68 +259,57 @@ router.post('/order', async (req, res) => {
       await bill.save();
     }
 
-    // ⚡ INSTANT RESPONSE: Return success to customer immediately
+    // ⚡ INSTANT REAL-TIME SOCKET BROADCAST (0ms latency to POS, KDS, Floor, Kitchen)
+    const io = req.app?.locals?.io;
+    const tenantDb = getTenantDbFromReq(req);
+    if (io) {
+      const payloadOrder = { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}`, orderId: bill._id, order: bill };
+      const payloadKot = { tableNo, kotNumber, items: sanitizedItems, orderId: bill._id, kot: newKotTicket };
+      if (tenantDb) {
+        io.to(tenantDb).emit('orderUpdated', payloadOrder);
+        io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
+        io.to(tenantDb).emit('newKOT', payloadKot);
+        io.to(tenantDb).emit('kotUpdated', payloadKot);
+      } else {
+        io.emit('orderUpdated', payloadOrder);
+        io.emit('tableUpdated', { tableNo, status: 'Open' });
+        io.emit('newKOT', payloadKot);
+        io.emit('kotUpdated', payloadKot);
+      }
+    }
+
+    // ⚡ INSTANT NOTIFICATION BROADCAST FOR POS & MANAGERS
+    try {
+      const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+      const cleanTable = tableNo.replace(/^Table\s*/i, '');
+      emitNotification(
+        req, 
+        `Table ${cleanTable} Order`, 
+        `${itemNames}`, 
+        'success', 
+        ['Admin', 'Manager', 'Captain', 'Chef']
+      );
+    } catch (notifErr) {
+      console.warn("Notification error on public order:", notifErr.message);
+    }
+
+    // ⚡ RETURN SUCCESS TO CUSTOMER IMMEDIATELY
     res.status(201).json(bill);
 
-    // Asynchronous background processing (Floor status, WebSockets, Printing, Notifications)
+    // Background printing and floor status DB update
     setImmediate(async () => {
-      // Update table occupied status on Floor Management
       try {
         await updateTableStatusHelper(req, tableNo, 'Open', bill._id);
       } catch (e) {
         console.warn("Could not update floor status for table", tableNo, e.message);
       }
 
-      // Emit socket events to notify POS, Floor, KDS, and Kitchen Screens
-      try {
-        const io = req.app?.locals?.io;
-        const tenantDb = req.headers['x-tenant-db'];
-        if (io && tenantDb) {
-          io.to(tenantDb).emit('orderUpdated', { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}` });
-          io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
-          io.to(tenantDb).emit('newKOT', { tableNo, kotNumber, items: sanitizedItems });
-          io.to(tenantDb).emit('kotUpdated', { tableNo, kotNumber });
-        }
-      } catch (sockErr) {
-        console.warn("Socket broadcast warning on public order:", sockErr.message);
-      }
-
-      // Trigger physical network thermal printing for new digital QR menu order
       try {
         printKOTToPrinters(req, bill, kotNumber, sanitizedItems).catch(err => {
           console.error('[QR KOT Print Error]:', err.message);
         });
       } catch (printErr) {
         console.warn('[QR KOT Print Trigger Failed]:', printErr.message);
-      }
-
-      // Emit persistent notification for Navbar Panel (including items)
-      try {
-        const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-        const Setting = getTenantModel(req, 'Setting', SettingDefault);
-        const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).catch(() => null);
-        let shopName = 'Unknown Shop';
-        if (settingsDoc?.value) {
-          if (typeof settingsDoc.value === 'string') {
-            try {
-              const parsed = JSON.parse(settingsDoc.value);
-              shopName = parsed.restaurantName || 'Unknown Shop';
-            } catch (e) {}
-          } else {
-            shopName = settingsDoc.value.restaurantName || 'Unknown Shop';
-          }
-        }
-        
-        const cleanTable = tableNo.replace(/^Table\s*/i, '');
-        emitNotification(
-          req, 
-          `${shopName} | Table ${cleanTable} Order`, 
-          `${itemNames}`, 
-          'success', 
-          ['Admin', 'Manager', 'Captain', 'Chef']
-        );
-      } catch (notifErr) {
-        console.warn("Notification error on public order:", notifErr.message);
       }
     });
   } catch (error) {
@@ -436,37 +425,58 @@ router.get('/order-status', async (req, res) => {
     }
 
     const processedItems = (bill.items || []).map(item => {
-      let prepMins = item.prepTimeMinutes;
-      let prepStart = item.prepStartTime;
-      let kdsStatus = item.status || 'Pending'; // default to item.status if present
+      let prepMins = item.prepTimeMinutes || 0;
+      let prepStart = item.prepStartTime || null;
+      let kdsStatus = item.status || 'Pending';
+      const qty = Number(item.quantity || 1);
+      let unitStatuses = item.unitStatuses;
 
-      if (bill.kots) {
-        bill.kots.forEach(k => {
-          (k.items || []).forEach(ki => {
-            if (ki.name === item.name || (ki._id && ki._id.toString() === item._id?.toString())) {
-              if (ki.prepTimeMinutes) {
-                prepMins = ki.prepTimeMinutes;
-                prepStart = ki.prepStartTime;
-              }
-              // Prioritize Ready, then Preparing, then others
-              if (ki.status === 'Ready') {
-                kdsStatus = 'Ready';
-              } else if (ki.status === 'Preparing' && kdsStatus !== 'Ready') {
-                kdsStatus = 'Preparing';
-              } else if (ki.status && kdsStatus === 'Pending') {
-                kdsStatus = ki.status;
-              }
+      if (bill.kots && Array.isArray(bill.kots) && bill.kots.length > 0) {
+        // Find the most recent KOT item status for this specific item
+        for (let i = bill.kots.length - 1; i >= 0; i--) {
+          const k = bill.kots[i];
+          const matchingKi = (k.items || []).find(ki => 
+            (ki._id && item._id && ki._id.toString() === item._id.toString()) ||
+            (ki.name && item.name && ki.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+          );
+          if (matchingKi) {
+            if (matchingKi.status) {
+              kdsStatus = matchingKi.status;
             }
-          });
-        });
+            if (matchingKi.unitStatuses && Array.isArray(matchingKi.unitStatuses)) {
+              unitStatuses = matchingKi.unitStatuses;
+            }
+            if (matchingKi.prepTimeMinutes) {
+              prepMins = matchingKi.prepTimeMinutes;
+              prepStart = matchingKi.prepStartTime;
+            }
+            break;
+          }
+        }
       }
+
+      if (kdsStatus === 'Prepared') kdsStatus = 'Ready';
+
+      const safeQty = Math.max(0, parseInt(qty || 0, 10) || 1);
+      if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== safeQty) {
+        unitStatuses = Array.from({ length: safeQty }, () => kdsStatus);
+      }
+
+      const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+      const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+      const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
 
       const itemObj = item.toObject ? item.toObject() : item;
       return {
         ...itemObj,
-        prepTimeMinutes: prepMins || 0,
-        prepStartTime: prepStart || null,
-        kdsStatus // 'Pending' | 'Preparing' | 'Ready'
+        status: kdsStatus,
+        kdsStatus: kdsStatus,
+        unitStatuses,
+        preparedQuantity: preparedQty,
+        preparingQuantity: preparingQty,
+        pendingQuantity: pendingQty,
+        prepTimeMinutes: prepMins,
+        prepStartTime: prepStart
       };
     });
 

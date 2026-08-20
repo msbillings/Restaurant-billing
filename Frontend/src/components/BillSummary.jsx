@@ -303,14 +303,92 @@ const BillSummary = ({
               <div className="flex-1 min-w-0 pr-1">
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className={`text-[11px] text-gray-700 font-medium leading-tight ${item.isCancelled ? 'line-through' : ''}`}>{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
-                  {item.isCancelled ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>
-                  : item.cancellationRejected ? <span className="text-[9px] bg-gray-200 text-gray-700 px-1 py-0.5 rounded font-bold">{t("Rejected")}</span>
-                  : item.cancellationRequested ? <span className="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-bold">{t("Pending")}</span>
-                  : item.cancelledQuantity > 0 ? <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span>
-                  : item.status === 'Preparing' ? <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-200 shadow-2xs flex items-center gap-1">👨‍🍳 {t("Preparing")}</span>
-                  : item.status === 'Ready' || item.status === 'Prepared' ? <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs flex items-center gap-1">✅ {t("Prepared")}</span>
-                  : item.status === 'Pending' || ((item.printedQuantity || 0) > 0 && !item.status) ? <span className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold border border-blue-100 flex items-center gap-1">⏳ {t("Pending")}</span>
-                  : null}
+                  {(() => {
+                    const rawQty = parseInt(item.quantity || 0, 10) || 0;
+                    const cancelledQty = parseInt(item.cancelledQuantity || 0, 10) || 0;
+                    const effectiveQty = Math.max(0, rawQty - cancelledQty);
+                    const totalQty = Math.max(0, rawQty);
+
+                    const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === totalQty && totalQty > 0
+                      ? item.unitStatuses
+                      : Array.from({ length: effectiveQty }, () => item.status || 'Pending');
+
+                    const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+                    const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
+                    const pendingCount = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+                    const hasMixedStatus = effectiveQty > 1 && (
+                      (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
+                      (preparingCount > 0 && pendingCount > 0)
+                    );
+
+                    if (item.isCancelled) {
+                      return <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>;
+                    }
+                    if (item.cancellationRejected) {
+                      return <span className="text-[9px] bg-gray-200 text-gray-700 px-1 py-0.5 rounded font-bold">{t("Rejected")}</span>;
+                    }
+                    if (item.cancellationRequested) {
+                      return <span className="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-bold">{t("Pending")}</span>;
+                    }
+                    if (item.cancelledQuantity > 0) {
+                      return <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span>;
+                    }
+
+                    if (hasMixedStatus) {
+                      return (
+                        <span className="inline-flex items-center gap-1 flex-wrap">
+                          {preparedCount > 0 && (
+                            <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
+                              <CheckCircle size={10} className="text-emerald-600 shrink-0" />
+                              <span>{preparedCount}x {t("Prepared")}</span>
+                            </span>
+                          )}
+                          {preparingCount > 0 && (
+                            <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-200 shadow-2xs inline-flex items-center gap-1">
+                              <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                              <span>{preparingCount}x 👨‍🍳 {t("Preparing")}</span>
+                            </span>
+                          )}
+                          {pendingCount > 0 && (
+                            <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-100 inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+                              <span>{pendingCount}x ⏳ {t("Pending")}</span>
+                            </span>
+                          )}
+                        </span>
+                      );
+                    }
+
+                    if (item.status === 'Preparing') {
+                      return (
+                        <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-200 shadow-2xs inline-flex items-center gap-1">
+                          <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                          <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
+                        </span>
+                      );
+                    }
+
+                    if (item.status === 'Ready' || item.status === 'Prepared') {
+                      return (
+                        <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
+                          <CheckCircle size={10} className="text-emerald-600 shrink-0" />
+                          <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}✅ {t("Prepared")}</span>
+                        </span>
+                      );
+                    }
+
+                    if (item.status === 'Pending' || ((item.printedQuantity || 0) > 0 && !item.status)) {
+                      return (
+                        <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-100 inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
+                          <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                        </span>
+                      );
+                    }
+
+                    return null;
+                  })()}
                   <button
                     onClick={() => handleItemNoteClick(item)}
                     disabled={isLocked || item.isCancelled}
