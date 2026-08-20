@@ -5,6 +5,29 @@ import { Capacitor } from '@capacitor/core';
  */
 export const isCapacitorApp = () => Capacitor.isNativePlatform();
 
+/**
+ * Normalize and clean API URLs so there are never trailing slashes or duplicate /api/api
+ */
+export const cleanApiUrl = (url) => {
+    if (!url || typeof url !== 'string') return '';
+    let trimmed = url.trim().replace(/\/+$/, ''); // Remove trailing slashes
+    // Ensure single /api suffix
+    if (!trimmed.endsWith('/api')) {
+        trimmed = `${trimmed}/api`;
+    }
+    // Safety check: eliminate any accidental double '/api/api'
+    trimmed = trimmed.replace(/\/api\/api(?:\/api)*/g, '/api');
+    return trimmed;
+};
+
+export const cleanSuperadminUrl = (url) => {
+    if (!url || typeof url !== 'string') return '';
+    let trimmed = url.trim().replace(/\/+$/, '');
+    // SuperAdmin backend runs on root without /api prefix
+    trimmed = trimmed.replace(/\/api(?:\/api)*$/, '');
+    return trimmed;
+};
+
 export const getApiUrl = () => {
     // 1. Electron Desktop EXE — always use localhost backend
     if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')) {
@@ -18,7 +41,7 @@ export const getApiUrl = () => {
     if (host && (host.includes('vercel.app') || isHttps)) {
         let envUrl = import.meta.env.VITE_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
-            return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+            return cleanApiUrl(envUrl);
         }
         return 'https://restaurant-billing-apk.vercel.app/api';
     }
@@ -28,16 +51,16 @@ export const getApiUrl = () => {
     if (storedIp && storedIp.trim()) {
         const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
         if (cleanIp.includes(':')) {
-            return `http://${cleanIp}/api`;
+            return cleanApiUrl(`http://${cleanIp}`);
         }
-        return `http://${cleanIp}:5002/api`;
+        return cleanApiUrl(`http://${cleanIp}:5002`);
     }
 
     // 4. Capacitor APK without a stored IP — use cloud production URL
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
-            return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+            return cleanApiUrl(envUrl);
         }
         return 'https://restaurant-billing-apk.vercel.app/api';
     }
@@ -47,38 +70,41 @@ export const getApiUrl = () => {
     if (envUrl) {
         if (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
             if (host && host !== 'localhost' && host !== '127.0.0.1') {
-                return envUrl.replace(/localhost|127\.0\.0\.1/, host);
+                return cleanApiUrl(envUrl.replace(/localhost|127\.0\.0\.1/, host));
             }
-        } else {
-            return envUrl;
         }
+        return cleanApiUrl(envUrl);
     }
 
     if (host && host !== 'localhost' && host !== '127.0.0.1') {
-        return `http://${host}:5002/api`;
+        return cleanApiUrl(`http://${host}:5002`);
     }
 
-    return `http://${host || 'localhost'}:5002/api`;
+    return 'http://localhost:5002/api';
 };
 
 export const getSuperadminApiUrl = () => {
-    const storedIp = localStorage.getItem('resto_superadmin_ip');
+    const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_superadmin_ip') : null;
     if (storedIp && storedIp.trim()) {
-        return `http://${storedIp.trim()}:4001`;
+        return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
     // If running on Vercel or any cloud HTTPS deployment
     if (host && (host.includes('vercel.app') || (typeof window !== 'undefined' && window.location.protocol === 'https:'))) {
+        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
+        if (envUrl && envUrl.startsWith('https://')) {
+            return cleanSuperadminUrl(envUrl);
+        }
         return 'https://restaurant-superadmin-api-maheer.vercel.app';
     }
 
     let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
     if (envUrl) {
         if (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
-             return envUrl.replace(/localhost|127\.0\.0\.1/, host || '127.0.0.1');
+             return cleanSuperadminUrl(envUrl.replace(/localhost|127\.0\.0\.1/, host || '127.0.0.1'));
         }
-        return envUrl;
+        return cleanSuperadminUrl(envUrl);
     }
 
     // Default to the production Superadmin API
@@ -87,5 +113,5 @@ export const getSuperadminApiUrl = () => {
 
 export const getSocketUrl = () => {
     const apiUrl = getApiUrl();
-    return apiUrl.replace('/api', '');
+    return apiUrl.replace(/\/api\/?$/, '');
 };
