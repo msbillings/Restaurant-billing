@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import realtimeService from '../services/realtimeService';
 import api from '../api/axios';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { App } from '@capacitor/app';
 
 // ── 1. BULLETPROOF OFFLINE WEB AUDIO CHIME ENGINE ────────────────────────────
 // Works 100% offline, on Android APK, iOS IPA, macOS DMG, Windows EXE, and Vercel
@@ -340,8 +343,25 @@ const useNotifications = (userRole = 'Admin') => {
     fetchActiveNotifications();
     const handleLogin = () => fetchActiveNotifications();
     window.addEventListener('loginSuccess', handleLogin);
+    
+    // Capacitor specific: fetch notifications when app resumes from background
+    let appStateListener;
+    if (Capacitor.isNativePlatform()) {
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          console.log('[useNotifications] App returned to foreground. Syncing notifications...');
+          // Reconnect socket just in case it died
+          realtimeService.rejoinTenant();
+          fetchActiveNotifications();
+        }
+      }).then(listener => {
+        appStateListener = listener;
+      }).catch(err => console.warn('App state listener failed', err));
+    }
+
     return () => {
       window.removeEventListener('loginSuccess', handleLogin);
+      if (appStateListener) appStateListener.remove();
     };
   }, [userRole]);
 
@@ -384,6 +404,28 @@ const useNotifications = (userRole = 'Admin') => {
       setUnreadCount((prev) => prev + 1);
       // Play sound only for notifications meant for this role
       playNotificationSound();
+
+      // Trigger native system notification on Mobile (APK/IPA)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          LocalNotifications.schedule({
+            notifications: [
+              {
+                title: notification.title || 'New Notification',
+                body: notification.message || '',
+                id: Math.floor(Math.random() * 1000000), // Random ID for the notification
+                schedule: { at: new Date(Date.now() + 100) },
+                sound: null,
+                attachments: null,
+                actionTypeId: '',
+                extra: null
+              }
+            ]
+          }).catch(e => console.warn('Failed to schedule native notification', e));
+        } catch (e) {
+          console.warn('LocalNotifications plugin error', e);
+        }
+      }
     };
 
     const handleDismissNotification = (criteria) => {

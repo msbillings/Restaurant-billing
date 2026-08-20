@@ -43,6 +43,14 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
   const [isListening, setIsListening] = useState(false);
   const [copied, setCopied] = useState(false);
   const [micLang, setMicLang] = useState('en-IN'); // Default to Indian English
+  
+  // Local Whisper state
+  const [worker, setWorker] = useState(null);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelProgress, setModelProgress] = useState('');
+  const mediaRecorderRef = React.useRef(null);
+  const audioChunksRef = React.useRef([]);
+  const audioContextRef = React.useRef(null);
 
   const handleNumber = (num) => {
     setDisplay((prev) => prev === '0' ? num : prev + num);
@@ -261,24 +269,104 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     setAiResult(resultText);
   };
 
+  const initWorker = () => {
+    let currentWorker = worker;
+    if (!currentWorker) {
+      currentWorker = new Worker(new URL('../workers/whisperWorker.js', import.meta.url), { type: 'module' });
+      currentWorker.onmessage = (e) => {
+        const { status, data, output } = e.data;
+        if (status === 'progress') {
+          setModelProgress(data.status === 'downloading' ? `Downloading model... ${Math.round(data.progress || 0)}%` : `Loading model...`);
+        } else if (status === 'ready') {
+          setModelLoading(false);
+          setModelProgress('');
+        } else if (status === 'complete') {
+          setIsListening(false);
+          const transcript = output.text;
+          setAiInput(transcript);
+          transcriptRef.current = transcript;
+          setTimeout(() => {
+            handleAiCalculate(null, transcript);
+          }, 300);
+        } else if (status === 'error') {
+          setIsListening(false);
+          setAiResult("Local voice processing error: " + data);
+        }
+      };
+      setWorker(currentWorker);
+      setModelLoading(true);
+      currentWorker.postMessage({ type: 'load' });
+    }
+    return currentWorker;
+  };
+
+  const startLocalRecording = async (activeWorker) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorderRef.current.onstop = async () => {
+        setIsListening(false);
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Convert to Float32Array PCM for Transformers.js
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+        const pcmData = audioBuffer.getChannelData(0);
+
+        setAiResult("Processing voice...");
+        activeWorker.postMessage({ type: 'transcribe', audio: pcmData });
+        
+        // Cleanup stream
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current.start();
+      setIsListening(true);
+      setAiResult("Listening (Offline Mode)... Tap Mic to stop");
+    } catch (err) {
+      console.error("Local recording error:", err);
+      setIsListening(false);
+      setAiResult("Microphone permission required for offline voice.");
+    }
+  };
+
   const toggleListening = () => {
-    if (isListening) return; // Prevent multiple starts
+    if (isListening) {
+      // If using fallback offline recording, stop it
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      return;
+    }
+
+    setAiInput('');
+    transcriptRef.current = '';
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
+    // Determine if we are in an environment that probably doesn't support the cloud API (e.g., .exe wrapper)
+    // One way is if SpeechRecognition doesn't exist, OR we can just try it, and if it fails immediately, we fallback.
     if (!SpeechRecognition) {
-      alert("Your browser does not support voice input. Please try Chrome or Edge.");
+      // Fallback natively missing
+      const w = initWorker();
+      startLocalRecording(w);
       return;
     }
 
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = micLang; // Use the selected language
+    recognition.lang = micLang;
 
     recognition.onstart = () => {
       setIsListening(true);
-      setAiInput('');
-      transcriptRef.current = '';
     };
 
     recognition.onresult = (event) => {
@@ -291,30 +379,40 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
-      setIsListening(false);
-      let errMsg = "Voice input error. You can type commands like '500 + 1000 - 5%'";
-      if (event.error === 'not-allowed' || event.error === 'audio-capture') {
-        errMsg = "Microphone permission required. Please allow microphone access.";
-      } else if (event.error === 'no-speech') {
-        errMsg = "No speech detected. Please speak clearly into the microphone.";
+      // Fallback for network/not-allowed (common in Electron/WebView2 without API keys)
+      if (event.error === 'network' || event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        console.log("Native speech API failed, falling back to local offline model...");
+        const w = initWorker();
+        startLocalRecording(w);
+      } else {
+        setIsListening(false);
+        let errMsg = "Voice input error. You can type commands like '500 + 1000 - 5%'";
+        if (event.error === 'no-speech') {
+          errMsg = "No speech detected. Please speak clearly into the microphone.";
+        }
+        setAiResult(errMsg);
       }
-      setAiResult(errMsg);
     };
 
     recognition.onend = () => {
-      setIsListening(false);
-      // Wait a tiny bit for state to settle, then calculate using the ref
-      setTimeout(() => {
-        handleAiCalculate(null, transcriptRef.current);
-      }, 300);
+      // Only handle end if we actually listened and didn't fall back
+      if (isListening && transcriptRef.current) {
+        setIsListening(false);
+        setTimeout(() => {
+          handleAiCalculate(null, transcriptRef.current);
+        }, 300);
+      } else if (isListening && !transcriptRef.current && !mediaRecorderRef.current) {
+        setIsListening(false);
+      }
     };
 
     try {
       recognition.start();
     } catch (err) {
       console.error("Failed to start speech recognition:", err);
-      setIsListening(false);
-      setAiResult("Voice recognition unavailable. Type calculations above.");
+      // Fallback
+      const w = initWorker();
+      startLocalRecording(w);
     }
   };
 
@@ -418,9 +516,14 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
               </div>
             </form>
 
-            {aiResult &&
+            {aiResult && !modelLoading &&
               <div className="mt-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/20 flex items-start gap-1.5">
                 <span className="leading-tight">{aiResult}</span>
+              </div>
+            }
+            {modelLoading &&
+              <div className="mt-2 text-[11px] font-medium text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 flex items-start gap-1.5">
+                <span className="leading-tight animate-pulse">{modelProgress || "Initializing offline voice model..."}</span>
               </div>
             }
           </div>
