@@ -1750,9 +1750,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
           <div
             style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { width: isCartCollapsed ? 0 : rightPanelWidth } : { width: '100%', maxWidth: '100vw' }}
-            className={`flex flex-col bg-surface ${
+            className={`flex flex-col bg-surface h-full ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'} ${
-            isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-visible' : 'border-l border-border/50 overflow-visible'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
+            isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-hidden' : 'border-l border-border/50 overflow-hidden'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
             
             
             {/* Drag Handle */}

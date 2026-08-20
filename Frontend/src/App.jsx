@@ -979,7 +979,7 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className={`min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-2 sm:gap-4 w-full z-40 relative ${
+      <header className={`min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-1 sm:gap-4 w-full z-40 relative overflow-hidden ${
         view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
       }`}>
         {/* Left: Hamburger & Logo */}
@@ -993,7 +993,7 @@ function App() {
           </button>
           <button
             onClick={() => handleViewChange('floor')}
-            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-1 px-1 min-w-[165px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity overflow-visible"
+            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-1 px-1 min-w-[100px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity overflow-visible"
             title={t("Go to Table View / Floor Management")}>
             <img
               src={logoImg}
@@ -1045,7 +1045,7 @@ function App() {
         </div>
 
         {/* Right Section Header Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
             <PhoneCall size={16} className="text-red-500" />
             <div className="flex flex-col leading-none">
@@ -1058,13 +1058,13 @@ function App() {
           {view !== 'kds' && !isChef && (
             <button
               onClick={() => handleViewChange('orders')}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0"
+              className="flex items-center gap-1 px-2 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0 max-w-[80px] sm:max-w-none"
               title={t("View Hold Bills (Active Orders)")}>
-              <ClipboardList size={16} />
-              <span className="hidden sm:inline">{t('Hold Bills')}</span>
+              <ClipboardList size={16} className="shrink-0" />
+              <span className="hidden sm:inline truncate">{t('Hold Bills')}</span>
               {activeOrdersCount > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5">
-                  {activeOrdersCount}
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black ml-0.5 shrink-0 leading-none">
+                  {activeOrdersCount > 99 ? '99+' : activeOrdersCount}
                 </span>
               )}
             </button>
