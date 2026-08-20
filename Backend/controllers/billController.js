@@ -2205,7 +2205,9 @@ export const resolveItemCancel = async (req, res) => {
     emitDismissNotification(req, {
       type: 'cancel_item_request',
       orderId,
-      itemId
+      itemId,
+      itemName: item.name,
+      tableNo: bill.tableNo
     });
 
     res.status(200).json({ message: `Cancellation ${action}ed successfully`, bill });
@@ -2214,3 +2216,55 @@ export const resolveItemCancel = async (req, res) => {
     res.status(500).json({ message: 'Server error while resolving item cancellation' });
   }
 };
+
+/**
+ * Fetch currently active/pending notifications from the database for instant sync on all devices (APK, Desktop, Web)
+ */
+export const getActiveNotifications = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const Settings = getTenantModel(req, 'Settings', SettingsDefault);
+    const settings = await Settings.findOne().lean();
+    const shopName = settings?.restaurantName || 'Restaurant';
+
+    // 1. Query open and billed orders that have pending cancellation requests
+    const activeCancelBills = await Bill.find({
+      status: { $in: ['Open', 'Billed'] },
+      'items.cancellationRequested': true
+    }).select('tableNo items createdAt updatedAt').lean();
+
+    const notifications = [];
+    activeCancelBills.forEach(bill => {
+      const cleanTable = (bill.tableNo || '').replace('Table ', '');
+      if (Array.isArray(bill.items)) {
+        bill.items.forEach(item => {
+          if (item.cancellationRequested) {
+            notifications.push({
+              id: `cancel-${bill._id}-${item._id}`,
+              type: 'error',
+              title: `${shopName} | Table ${cleanTable} Cancel Req`,
+              message: `${item.cancellationRequestedQty || item.quantity}x ${item.name}`,
+              time: item.updatedAt || bill.updatedAt || bill.createdAt || new Date(),
+              timestamp: new Date(item.updatedAt || bill.updatedAt || bill.createdAt || Date.now()),
+              targetRoles: ['Admin', 'Manager', 'Captain'],
+              data: {
+                orderId: bill._id,
+                itemId: item._id,
+                type: 'cancel_item_request',
+                itemName: item.name,
+                cancelQty: item.cancellationRequestedQty || item.quantity,
+                tableNo: bill.tableNo
+              }
+            });
+          }
+        });
+      }
+    });
+
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching active notifications:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+

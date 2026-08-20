@@ -1,13 +1,16 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import api from '../api/axios';
 import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2 } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
 import BackButton from './common/BackButton';
 import ConfirmationModal from './ConfirmationModal';
 
-const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {const { t } = useLanguage();
+const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
+  const { t } = useLanguage();
   const [localNotifications, setLocalNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
@@ -36,23 +39,39 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {co
   const fetchLocalNotifications = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${getApiUrl()}/inventory`);
-      const inventory = res.data;
+      // 1. Fetch low-stock inventory alerts with auth & tenant headers
+      const res = await api.get('/inventory');
+      const inventory = Array.isArray(res.data) ? res.data : [];
 
-      const lowStockAlerts = inventory.
-      filter((item) => item.currentStock <= item.minStockAlert).
-      map((item) => ({
-        id: `inv-${item._id}`,
-        type: 'warning',
-        title: 'Low Stock Alert',
-        message: `${item.name} is running low (${item.currentStock} ${item.unit} remaining). Minimum required is ${item.minStockAlert} ${item.unit}.`,
-        timestamp: new Date(),
-        icon: Package,
-        color: 'text-amber-500',
-        bg: 'bg-amber-50'
-      }));
+      const lowStockAlerts = inventory
+        .filter((item) => item.currentStock <= item.minStockAlert)
+        .map((item) => ({
+          id: `inv-${item._id}`,
+          type: 'warning',
+          title: 'Low Stock Alert',
+          message: `${item.name} is running low (${item.currentStock} ${item.unit} remaining). Minimum required is ${item.minStockAlert} ${item.unit}.`,
+          timestamp: new Date(),
+          icon: Package,
+          color: 'text-amber-500',
+          bg: 'bg-amber-50'
+        }));
 
-      setLocalNotifications(lowStockAlerts.sort((a, b) => b.timestamp - a.timestamp));
+      // 2. Fetch active server cancellation notifications
+      let activeServerNotifs = [];
+      try {
+        const notifRes = await api.get('/bills/active-notifications');
+        if (Array.isArray(notifRes.data)) {
+          activeServerNotifs = notifRes.data.map(n => ({
+            ...n,
+            icon: AlertTriangle,
+            color: 'text-red-500',
+            bg: 'bg-red-50'
+          }));
+        }
+      } catch (e) {}
+
+      const combined = [...lowStockAlerts, ...activeServerNotifs];
+      setLocalNotifications(combined.sort((a, b) => (new Date(b.timestamp || b.time || 0)) - (new Date(a.timestamp || a.time || 0))));
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {

@@ -94,6 +94,10 @@ class RealtimeService {
       'foodReady',
       'prepTimeUpdated',
       'new_notification',
+      'dismiss_notification',
+      'itemCancellationWithdrawn',
+      'itemCancellationRequested',
+      'cancellationResolved',
       'settingsUpdated',
       'securitySettingsUpdated',
       'spacesUpdated',
@@ -101,22 +105,33 @@ class RealtimeService {
     ];
 
     events.forEach(eventName => {
-      this.socket.on(eventName, (data) => {
-        // Client-side tenant filtering: ignore events belonging to other tenants
-        const currentTenant = localStorage.getItem('resto_db_name');
-        if (data && data.tenantDb && currentTenant && data.tenantDb !== currentTenant) {
-          return;
-        }
+      this.attachSocketListener(eventName);
+    });
 
-        // Cache synchronization in background
-        this.handleAutoCacheSync(eventName, data);
+    // Re-attach any dynamically registered listeners on connect/reconnect
+    this.listeners.forEach((_, eventName) => {
+      this.attachSocketListener(eventName);
+    });
+  }
 
-        // Internal subscribers
-        this.dispatchInternal(eventName, data);
+  attachSocketListener(eventName) {
+    if (!this.socket) return;
+    this.socket.off(eventName);
+    this.socket.on(eventName, (data) => {
+      // Client-side tenant filtering: ignore events belonging to other tenants
+      const currentTenant = localStorage.getItem('resto_db_name');
+      if (data && data.tenantDb && currentTenant && data.tenantDb !== currentTenant) {
+        return;
+      }
 
-        // Global DOM window event for loose coupling
-        window.dispatchEvent(new CustomEvent(`realtime:${eventName}`, { detail: data }));
-      });
+      // Cache synchronization in background
+      this.handleAutoCacheSync(eventName, data);
+
+      // Internal subscribers
+      this.dispatchInternal(eventName, data);
+
+      // Global DOM window event for loose coupling
+      window.dispatchEvent(new CustomEvent(`realtime:${eventName}`, { detail: data }));
     });
   }
 
@@ -158,6 +173,7 @@ class RealtimeService {
     const tenantDb = localStorage.getItem('resto_db_name');
     const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     if (this.socket && this.socket.connected && tenantDb) {
+      console.log(`[RealtimeService] Rejoining tenant room: ${tenantDb}`);
       this.socket.emit('joinTenant', { tenantDb, token });
     }
   }
@@ -172,6 +188,7 @@ class RealtimeService {
     this.init();
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
+      this.attachSocketListener(event);
     }
     this.listeners.get(event).add(callback);
 

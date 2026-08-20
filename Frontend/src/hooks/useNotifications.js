@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import realtimeService from '../services/realtimeService';
+import api from '../api/axios';
 
 let lastAudioPlayTime = 0;
-// Pre-load notification audio object once globally so audio plays instantly without network fetch lag
 let notificationAudio = null;
 try {
   notificationAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -10,6 +10,25 @@ try {
 } catch (e) {
   console.warn('Audio pre-load error:', e);
 }
+
+const playNotificationSound = () => {
+  const now = Date.now();
+  if (now - lastAudioPlayTime > 3000) {
+    lastAudioPlayTime = now;
+    try {
+      if (!notificationAudio) {
+        notificationAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      }
+      notificationAudio.currentTime = 0;
+      const p = notificationAudio.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {});
+      }
+    } catch (err) {
+      console.warn('[Notification Audio] suppressed:', err);
+    }
+  }
+};
 
 export const getNotificationSocket = () => {
   return realtimeService.getSocket();
@@ -121,6 +140,43 @@ const useNotifications = (userRole = 'Admin') => {
     localStorage.setItem(`realtime_unread_count_${tenantKey}`, unreadCount.toString());
   }, [unreadCount]);
 
+  // Fetch active notifications from backend database on app launch / login
+  const fetchActiveNotifications = async () => {
+    try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await api.get('/bills/active-notifications');
+      if (Array.isArray(res.data) && res.data.length > 0) {
+        setNotifications(prev => {
+          const newMap = new Map();
+          res.data.forEach(n => newMap.set(n.id, n));
+          prev.forEach(n => {
+            if (!newMap.has(n.id)) {
+              newMap.set(n.id, n);
+            }
+          });
+          return Array.from(newMap.values()).sort((a, b) => {
+            const timeA = new Date(a.time || a.timestamp || 0);
+            const timeB = new Date(b.time || b.timestamp || 0);
+            return timeB - timeA;
+          });
+        });
+      }
+    } catch (err) {
+      console.warn('[useNotifications] Active notifications fetch:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveNotifications();
+    const handleLogin = () => fetchActiveNotifications();
+    window.addEventListener('loginSuccess', handleLogin);
+    return () => {
+      window.removeEventListener('loginSuccess', handleLogin);
+    };
+  }, []);
+
   useEffect(() => {
     const handleNewNotification = (notification) => {
       if (!notification) return;
@@ -134,7 +190,7 @@ const useNotifications = (userRole = 'Admin') => {
 
       // Role-Based Filtering
       if (notification.targetRoles && !notification.targetRoles.includes(userRole) && userRole !== 'Admin') {
-        return; // Ignore if user doesn't have the required role
+        return;
       }
 
       setNotifications((prev) => {
@@ -158,20 +214,7 @@ const useNotifications = (userRole = 'Admin') => {
       });
       
       setUnreadCount((prev) => prev + 1);
-
-      // Play sound instantly using pre-loaded audio instance (0ms latency)
-      const now = Date.now();
-      if (now - lastAudioPlayTime > 3000) {
-        lastAudioPlayTime = now;
-        try {
-          if (notificationAudio) {
-            notificationAudio.currentTime = 0;
-            notificationAudio.play().catch((e) => console.log('Audio play error (user interaction required):', e));
-          }
-        } catch (err) {
-          console.error('Failed to play notification sound', err);
-        }
-      }
+      playNotificationSound();
     };
 
     const handleDismissNotification = (criteria) => {

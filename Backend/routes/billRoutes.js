@@ -21,12 +21,14 @@ import {
   mergeTableOrders,
   getEditedBills,
   resolveItemCancel,
-  updateItemPrepTime
+  updateItemPrepTime,
+  getActiveNotifications
 } from '../controllers/billController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // GET routes - authenticated users only
 // Order matters: specific routes before parameterized routes
+router.get('/active-notifications', authenticateToken, getActiveNotifications);
 router.get('/active/:tableNo', authenticateToken, getActiveOrder);
 router.get('/open', authenticateToken, getOpenOrders);
 router.get('/edited', authenticateToken, getEditedBills);

@@ -220,11 +220,17 @@ function App() {
     setResolvingCancelIds(prev => ({ ...prev, [n.id]: action }));
     try {
       const token = localStorage.getItem('accessToken');
+      const tenantDb = localStorage.getItem('resto_db_name') || '';
       await axios.post(`${getApiUrl()}/bills/resolve-item-cancel`, {
         orderId: n.data?.orderId,
         itemId: n.data?.itemId,
         action
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      }, { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-DB': tenantDb
+        } 
+      });
       
       setResolvingCancelIds(prev => ({ ...prev, [n.id]: `${action}_done` }));
       window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data?.orderId, itemId: n.data?.itemId, action } }));
