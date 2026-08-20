@@ -48,16 +48,31 @@ const isTableMatching = (tableA, tableB) => {
 
   if (spaceA === spaceB) return true;
 
-  const typeA = getSpaceType(spaceA);
-  const typeB = getSpaceType(spaceB);
-  if (typeA !== typeB) {
-    return false;
+  const normA = spaceA.replace(/[^a-z0-9]/g, '');
+  const normB = spaceB.replace(/[^a-z0-9]/g, '');
+  if (normA && normB && normA === normB) return true;
+
+  const stdMatchA = spaceA.match(/^(table|cabin|sofa|room|bar)\s*0*(\d+)$/i);
+  const stdMatchB = spaceB.match(/^(table|cabin|sofa|room|bar)\s*0*(\d+)$/i);
+
+  if (stdMatchA && stdMatchB) {
+    const typeA = stdMatchA[1];
+    const typeB = stdMatchB[1];
+    const numA = parseInt(stdMatchA[2], 10);
+    const numB = parseInt(stdMatchB[2], 10);
+    return typeA === typeB && numA === numB;
   }
 
-  const numA = extractNumber(spaceA);
-  const numB = extractNumber(spaceB);
-  if (numA !== null && numB !== null && numA === numB) {
-    return true;
+  if (stdMatchA && !stdMatchB) {
+    const letterA = stdMatchA[1].charAt(0);
+    const numA = parseInt(stdMatchA[2], 10);
+    const shortB = spaceB.match(/^([a-z]+)-?0*(\d+)$/);
+    if (shortB && shortB[1] === letterA && parseInt(shortB[2], 10) === numA) return true;
+  } else if (!stdMatchA && stdMatchB) {
+    const letterB = stdMatchB[1].charAt(0);
+    const numB = parseInt(stdMatchB[2], 10);
+    const shortA = spaceA.match(/^([a-z]+)-?0*(\d+)$/);
+    if (shortA && shortA[1] === letterB && parseInt(shortA[2], 10) === numB) return true;
   }
 
   return false;

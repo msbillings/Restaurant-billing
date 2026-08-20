@@ -89,6 +89,32 @@ const KDS = ({ onNavigate, onGoBack }) => {
       fetchKOTs();
     }, 1500);
 
+    const playKitchenAlertSound = () => {
+      try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.volume = 0.8;
+        audio.play().catch(() => {
+          try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+              const ctx = new AudioContext();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+              osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15);
+              gain.gain.setValueAtTime(0.3, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.35);
+            }
+          } catch (e) {}
+        });
+      } catch (e) {}
+    };
+
     // 4. Connect to singleton RealtimeService
     const handleNewKOT = (data) => {
       if (data && data.kot) {
@@ -109,6 +135,24 @@ const KDS = ({ onNavigate, onGoBack }) => {
           };
           return [...prev, newEntry];
         });
+
+        playKitchenAlertSound();
+        if (data.isUpdate) {
+          setToast({ message: `🔔 Table ${data.tableNo || ''}: KOT item quantity updated!`, type: 'warning' });
+        } else {
+          setToast({ message: `🍳 New KOT fired for Table ${data.tableNo || ''} (${data.kot?.kotNumber || ''})`, type: 'info' });
+        }
+      }
+      fetchKOTs();
+    };
+
+    const handleKotQuantityUpdated = (data) => {
+      if (data && data.tableNo) {
+        playKitchenAlertSound();
+        const msg = data.isReduction
+          ? `⚠️ Table ${data.tableNo}: Item quantity reduced by Admin!`
+          : `🔔 Table ${data.tableNo}: KOT item quantity updated in Kitchen!`;
+        setToast({ message: msg, type: 'warning' });
       }
       fetchKOTs();
     };
@@ -148,12 +192,14 @@ const KDS = ({ onNavigate, onGoBack }) => {
     };
 
     const unsubNewKOT = realtimeService.subscribe('newKOT', handleNewKOT);
+    const unsubKotQuantityUpdated = realtimeService.subscribe('kotQuantityUpdated', handleKotQuantityUpdated);
     const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleKotUpdated);
     const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', fetchKOTs);
 
     return () => {
       clearInterval(pollTimer);
       unsubNewKOT();
+      unsubKotQuantityUpdated();
       unsubKotUpdated();
       unsubOrderUpdated();
     };
@@ -468,6 +514,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
             _id: item._id,
             name: item.name,
             quantity: 0,
+            reducedQuantity: 0,
             specialNote: item.specialNote || '',
             isCancelled: false,
             status: item.status || 'Pending',
@@ -486,6 +533,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
           aggItem.isCancelled = true;
         } else {
           aggItem.quantity += qty;
+          const itemReduced = Math.max(0, parseInt(item.reducedQuantity || item.cancelledQuantity || 0, 10));
+          if (itemReduced > 0) {
+            aggItem.reducedQuantity = (aggItem.reducedQuantity || 0) + itemReduced;
+          }
           if (item.specialNote) {
             aggItem.specialNote = item.specialNote;
           }
@@ -698,9 +749,17 @@ const KDS = ({ onNavigate, onGoBack }) => {
                         >
                           <div className="flex justify-between items-start gap-2">
                             <div className="flex-1">
-                              <p className={`font-black text-sm sm:text-base leading-snug ${isCancelled ? 'line-through text-red-400' : 'text-white'}`}>
-                                {item.quantity}x {item.name}
-                              </p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className={`font-black text-sm sm:text-base leading-snug ${isCancelled ? 'line-through text-red-400' : 'text-white'}`}>
+                                  {item.quantity}x {item.name}
+                                </p>
+                                {item.reducedQuantity > 0 && !isCancelled && (
+                                  <span className="text-[11px] font-black bg-red-500/25 text-red-300 border border-red-500/50 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-sm animate-pulse">
+                                    <span>🔻</span>
+                                    <span>-{item.reducedQuantity}x {t("Reduced")}</span>
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
                                 <span className="text-[10px] font-mono text-slate-400 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-800 flex items-center gap-1">
                                   <Clock size={10} /> {itemMinutesOld}{t("m")}

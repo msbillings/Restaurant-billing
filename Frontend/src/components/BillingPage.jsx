@@ -16,25 +16,7 @@ import TransferTableModal from './TransferTableModal';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 
-// Helper to extract space type (e.g. "cabin", "table", "sofa", "room", "bar")
-const getSpaceType = (str) => {
-  if (!str) return 'table';
-  const s = str.toLowerCase();
-  if (s.includes('cabin') || s.startsWith('c')) return 'cabin';
-  if (s.includes('sofa') || s.startsWith('s')) return 'sofa';
-  if (s.includes('room') || s.startsWith('r')) return 'room';
-  if (s.includes('bar') || s.startsWith('b')) return 'bar';
-  if (s.includes('table') || s.startsWith('t')) return 'table';
-  return 'table';
-};
-
-const extractNumber = (str) => {
-  if (!str) return null;
-  const match = str.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-};
-
-// Helper to match tables bidirectionally (e.g. "Ground Floor - Table 8" vs "Table 8" vs "T8")
+// Helper to match tables bidirectionally (e.g. "Ground Floor - Table 8" vs "Table 8" vs "T8", "Ground Floor - H-1" vs "H-1")
 const isTableMatching = (tableA, tableB) => {
   if (!tableA || !tableB) return false;
   const cleanA = tableA.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -59,18 +41,34 @@ const isTableMatching = (tableA, tableB) => {
 
   if (spaceA === spaceB) return true;
 
-  // 3. Compare space types (Cabin vs Table vs Sofa vs Room)
-  const typeA = getSpaceType(spaceA);
-  const typeB = getSpaceType(spaceB);
-  if (typeA !== typeB) {
-    return false; // Cabin cannot match Table, Sofa cannot match Table!
+  // 3. Compare alphanumeric normalization (e.g. "H-1" <-> "h1", "T-8" <-> "t8")
+  const normA = spaceA.replace(/[^a-z0-9]/g, '');
+  const normB = spaceB.replace(/[^a-z0-9]/g, '');
+  if (normA && normB && normA === normB) return true;
+
+  // 4. Standard space types (table, cabin, sofa, room, bar)
+  const stdMatchA = spaceA.match(/^(table|cabin|sofa|room|bar)\s*0*(\d+)$/i);
+  const stdMatchB = spaceB.match(/^(table|cabin|sofa|room|bar)\s*0*(\d+)$/i);
+
+  if (stdMatchA && stdMatchB) {
+    const typeA = stdMatchA[1];
+    const typeB = stdMatchB[1];
+    const numA = parseInt(stdMatchA[2], 10);
+    const numB = parseInt(stdMatchB[2], 10);
+    return typeA === typeB && numA === numB;
   }
 
-  // 4. Compare numbers
-  const numA = extractNumber(spaceA);
-  const numB = extractNumber(spaceB);
-  if (numA !== null && numB !== null && numA === numB) {
-    return true;
+  // 5. Short code vs Full standard type (e.g. "t1" vs "table 1", "c2" vs "cabin 2")
+  if (stdMatchA && !stdMatchB) {
+    const letterA = stdMatchA[1].charAt(0);
+    const numA = parseInt(stdMatchA[2], 10);
+    const shortB = spaceB.match(/^([a-z]+)-?0*(\d+)$/);
+    if (shortB && shortB[1] === letterA && parseInt(shortB[2], 10) === numA) return true;
+  } else if (!stdMatchA && stdMatchB) {
+    const letterB = stdMatchB[1].charAt(0);
+    const numB = parseInt(stdMatchB[2], 10);
+    const shortA = spaceA.match(/^([a-z]+)-?0*(\d+)$/);
+    if (shortA && shortA[1] === letterB && parseInt(shortA[2], 10) === numB) return true;
   }
 
   return false;
@@ -649,7 +647,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       // Silent background fetch to check backend without showing spinner
       try {
         const order = await getActiveOrder(tableToFetch);
-        if (order && order.items && order.items.length > 0) {
+        if (order && order.tableNo && isTableMatching(order.tableNo, tableToFetch) && order.items && order.items.length > 0) {
           const kotStatusMap = {};
           if (order.kots && Array.isArray(order.kots)) {
             order.kots.forEach(kot => {
@@ -696,6 +694,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     try {
       let order = await getActiveOrder(tableToFetch);
+      if (order && (!order.tableNo || !isTableMatching(order.tableNo, tableToFetch))) {
+        order = null;
+      }
       if (!order && openOrdersList && openOrdersList.length > 0) {
         order = openOrdersList.find(o => {
           if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
@@ -703,7 +704,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         });
       }
 
-      if (order) {
+      if (order && order.tableNo && isTableMatching(order.tableNo, tableToFetch)) {
         const kotStatusMap = {};
         if (order.kots && Array.isArray(order.kots)) {
           order.kots.forEach(kot => {

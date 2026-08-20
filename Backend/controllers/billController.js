@@ -16,7 +16,7 @@ const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
   
-  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - Sofa 3")
+  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - H-1")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
@@ -26,54 +26,53 @@ const getTableMatchCondition = (tblStr) => {
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     const patterns = [];
-    // Exact match with floor: "Ground Floor - Table 8"
+    // 1. Exact match with floor: "Ground Floor - H-1"
     patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
-    // Bare match without floor: "Table 8" (from QR code public orders)
+    // 2. Bare match without floor: "H-1"
     patterns.push(`^${escapedTable}$`);
     
-    // Check if tablePart has a space type word and number (e.g. "Cabin 1", "Sofa 2", "Table 3", "Room 4")
-    const spaceMatch = tablePart.match(/^([A-Za-z]+)\s*0*(\d+)$/);
-    if (spaceMatch) {
-      const type = spaceMatch[1]; // e.g. "Cabin", "Table", "Sofa"
-      const num = parseInt(spaceMatch[2], 10);
-      const firstLetter = type.charAt(0);
-      // Matches "Ground Floor - Table 8", "Ground Floor - Table 08", "Ground Floor - T8", "Ground Floor - T-8"
+    // 3. If standard space type (e.g. "Table 1", "Cabin 2", "Sofa 3", "Room 4", "Bar 5")
+    const standardMatch = tablePart.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
+    if (standardMatch) {
+      const type = standardMatch[1];
+      const num = parseInt(standardMatch[2], 10);
+      const firstLetter = type.charAt(0).toUpperCase();
       patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
-      // Matches bare "Table 8", "Table 08", "T8", "T-8"
       patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
     } else {
-      const numOnly = tablePart.match(/^0*(\d+)$/);
-      if (numOnly) {
-        const num = parseInt(numOnly[1], 10);
-        // Matches "Ground Floor - 1", "Ground Floor - 01"
-        patterns.push(`^${escapedFloor}\\s*-\\s*0*${num}$`);
-        patterns.push(`^0*${num}$`);
+      // If tablePart is a custom letter/prefix and number (e.g. "H-1", "H1", "M-2")
+      const letterNumMatch = tablePart.match(/^([A-Za-z]+)-?0*(\d+)$/);
+      if (letterNumMatch) {
+        const letter = letterNumMatch[1];
+        const num = parseInt(letterNumMatch[2], 10);
+        patterns.push(`^${escapedFloor}\\s*-\\s*${letter}-?0*${num}$`);
+        patterns.push(`^${letter}-?0*${num}$`);
       }
     }
     
     return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "8"):
+  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "H-1"):
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
-  // Match any floor prefix in DB: "Ground Floor - Table 8", "First Floor - Table 8"
   patterns.push(`^.*?\\s*-\\s*${escapedTrimmed}$`);
   
-  const spaceMatch = trimmed.match(/^([A-Za-z]+)\s*0*(\d+)$/);
-  if (spaceMatch) {
-    const type = spaceMatch[1];
-    const num = parseInt(spaceMatch[2], 10);
-    const firstLetter = type.charAt(0);
+  const standardMatch = trimmed.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
+  if (standardMatch) {
+    const type = standardMatch[1];
+    const num = parseInt(standardMatch[2], 10);
+    const firstLetter = type.charAt(0).toUpperCase();
     patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
     patterns.push(`^.*?\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
   } else {
-    const numOnly = trimmed.match(/^0*(\d+)$/);
-    if (numOnly) {
-      const num = parseInt(numOnly[1], 10);
-      patterns.push(`^0*${num}$`);
-      patterns.push(`^.*?\\s*-\\s*0*${num}$`);
+    const letterNumMatch = trimmed.match(/^([A-Za-z]+)-?0*(\d+)$/);
+    if (letterNumMatch) {
+      const letter = letterNumMatch[1];
+      const num = parseInt(letterNumMatch[2], 10);
+      patterns.push(`^${letter}-?0*${num}$`);
+      patterns.push(`^.*?\\s*-\\s*${letter}-?0*${num}$`);
     }
   }
   
@@ -172,6 +171,61 @@ export const getActiveOrder = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Helper to keep KOTs and order.items unit statuses / quantities in 100% sync
+export const syncOrderKotsWithItems = (order) => {
+  if (!order || !order.kots || !Array.isArray(order.kots) || order.kots.length === 0) return;
+
+  (order.items || []).forEach(item => {
+    const currentQty = item.isCancelled ? 0 : Math.max(0, parseInt(item.quantity || 0, 10) - parseInt(item.cancelledQuantity || 0, 10));
+    let targetRemaining = currentQty;
+
+    for (let k = order.kots.length - 1; k >= 0; k--) {
+      const kot = order.kots[k];
+      const kItem = (kot.items || []).find(i => 
+        (item._id && i._id && i._id.toString() === item._id.toString()) ||
+        (i.name && item.name && i.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+      );
+      if (kItem) {
+        if (targetRemaining <= 0) {
+          kItem.quantity = 0;
+          kItem.status = 'Cancelled';
+          kItem.isCancelled = true;
+          kItem.unitStatuses = [];
+          kItem.pendingQuantity = 0;
+          kItem.preparingQuantity = 0;
+          kItem.preparedQuantity = 0;
+        } else {
+          const kQty = Math.min(kItem.quantity, targetRemaining);
+          kItem.quantity = kQty;
+          targetRemaining -= kQty;
+          kItem.unitStatuses = (kItem.unitStatuses || []).slice(0, kQty);
+          while (kItem.unitStatuses.length < kQty) {
+            kItem.unitStatuses.push(kItem.status || 'Pending');
+          }
+          kItem.preparedQuantity = kItem.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+          kItem.preparingQuantity = kItem.unitStatuses.filter(s => s === 'Preparing').length;
+          kItem.pendingQuantity = kItem.unitStatuses.filter(s => s === 'Pending').length;
+        }
+      }
+    }
+  });
+
+  order.kots.forEach(kot => {
+    (kot.items || []).forEach(kItem => {
+      const exists = (order.items || []).some(i => 
+        (kItem._id && i._id && i._id.toString() === kItem._id.toString()) ||
+        (i.name && kItem.name && i.name.trim().toLowerCase() === kItem.name.trim().toLowerCase())
+      );
+      if (!exists) {
+        kItem.quantity = 0;
+        kItem.status = 'Cancelled';
+        kItem.isCancelled = true;
+        kItem.unitStatuses = [];
+      }
+    });
+  });
 };
 
 // Create or Update Order (Open Status)
@@ -463,6 +517,8 @@ export const saveOrder = async (req, res) => {
         order.deliveryStatus = undefined;
       }
       
+      syncOrderKotsWithItems(order);
+
       order.subtotal = subtotal;
       order.tax = tRate;
       order.taxBreakdown = {
@@ -472,6 +528,8 @@ export const saveOrder = async (req, res) => {
       };
       order.total = calculatedTotal;
       order.status = 'Open';
+      order.markModified('items');
+      order.markModified('kots');
       try {
         await order.save();
       } catch (saveErr) {
@@ -1436,18 +1494,57 @@ export const generateKOT = async (req, res) => {
       return res.status(404).json({ message: 'Bill not found' });
     }
 
-    // If currentCart provided, ensure any latest item notes are preserved
+    // Accurately synchronize bill.items with currentCart if provided
     if (currentCart && Array.isArray(currentCart)) {
       currentCart.forEach(cItem => {
-        const bItem = bill.items.find(i => i.name === cItem.name || (cItem._id && i._id?.toString() === cItem._id?.toString()));
-        if (bItem && cItem.specialNote !== undefined) {
-          bItem.specialNote = cItem.specialNote;
+        const cQty = Math.max(0, parseInt(cItem.quantity !== undefined ? cItem.quantity : 0, 10));
+        const bItem = bill.items.find(i => 
+          (cItem._id && i._id && i._id.toString() === cItem._id.toString()) ||
+          (i.name && cItem.name && i.name.trim().toLowerCase() === cItem.name.trim().toLowerCase())
+        );
+
+        if (bItem) {
+          bItem.quantity = cQty;
+          if (cItem.price !== undefined) bItem.price = Number(cItem.price || 0);
+          bItem.total = (bItem.price || 0) * cQty;
+          if (cItem.specialNote !== undefined) bItem.specialNote = cItem.specialNote;
+        } else if (cQty > 0) {
+          bill.items.push({
+            name: cItem.name,
+            price: Number(cItem.price || 0),
+            quantity: cQty,
+            total: Number(cItem.price || 0) * cQty,
+            specialNote: cItem.specialNote || '',
+            printedQuantity: 0,
+            status: 'Pending',
+            unitStatuses: Array.from({ length: cQty }, () => 'Pending')
+          });
         }
+      });
+
+      // Any item in bill.items NOT in currentCart:
+      // If already printed, set quantity to 0 so reduction logic can scale down KOTs
+      // If never printed, remove from bill.items
+      bill.items = bill.items.filter(bItem => {
+        const stillInCart = currentCart.find(c =>
+          (c._id && bItem._id && bItem._id.toString() === c._id.toString()) ||
+          (c.name && bItem.name && c.name.trim().toLowerCase() === bItem.name.trim().toLowerCase())
+        );
+        if (!stillInCart) {
+          if ((bItem.printedQuantity || 0) > 0) {
+            bItem.quantity = 0;
+            bItem.total = 0;
+            return true;
+          }
+          return false;
+        }
+        return true;
       });
     }
 
     // Calculate delta and update printed quantities
     const kotItems = [];
+    const itemChanges = [];
     let hadQuantityReductions = false;
 
     for (const item of bill.items) {
@@ -1473,6 +1570,15 @@ export const generateKOT = async (req, res) => {
             unitStatuses: Array.from({ length: kotQty }, () => 'Pending')
           });
         }
+        if (newQty > 0) {
+          itemChanges.push({
+            name: item.name,
+            type: 'added',
+            delta: newQty,
+            currentQty,
+            previousQty: printedQty
+          });
+        }
         // Update printed quantity & last printed note
         item.printedQuantity = currentQty;
         item.lastPrintedNote = currentNote;
@@ -1486,8 +1592,24 @@ export const generateKOT = async (req, res) => {
       } else if (newQty < 0) {
         // Quantity was reduced (e.g. from 5 to 4 or 5 to 0)
         hadQuantityReductions = true;
+        const reducedCount = Math.abs(newQty);
+        itemChanges.push({
+          name: item.name,
+          type: 'reduced',
+          reducedQty: reducedCount,
+          currentQty,
+          previousQty: printedQty
+        });
+
         item.printedQuantity = currentQty;
         item.lastPrintedNote = currentNote;
+        item.reducedQuantity = (item.reducedQuantity || 0) + reducedCount;
+        item.cancelledQuantity = (item.cancelledQuantity || 0) + reducedCount;
+
+        if (currentQty === 0) {
+          item.status = 'Cancelled';
+          item.isCancelled = true;
+        }
 
         // Scale down bill item unitStatuses
         if (item.unitStatuses && item.unitStatuses.length > currentQty) {
@@ -1508,12 +1630,14 @@ export const generateKOT = async (req, res) => {
                 kItem.quantity = 0;
                 kItem.status = 'Cancelled';
                 kItem.isCancelled = true;
+                kItem.reducedQuantity = (kItem.reducedQuantity || 0) + reducedCount;
                 kItem.unitStatuses = [];
                 kItem.pendingQuantity = 0;
                 kItem.preparingQuantity = 0;
                 kItem.preparedQuantity = 0;
               } else {
                 const kQty = Math.min(kItem.quantity, targetRemaining);
+                kItem.reducedQuantity = (kItem.reducedQuantity || 0) + (kItem.quantity - kQty);
                 kItem.quantity = kQty;
                 targetRemaining -= kQty;
                 kItem.unitStatuses = (kItem.unitStatuses || []).slice(0, kQty);
@@ -1559,21 +1683,96 @@ export const generateKOT = async (req, res) => {
       };
     }
 
+    // Recalculate bill financial totals accurately
+    const subtotal = bill.items.reduce((sum, item) => {
+      if (item.isCancelled || item.status === 'Cancelled') return sum;
+      const activeQty = Math.max(0, Number(item.quantity || 0) - (item.cancelledQuantity || 0));
+      return sum + (Number(item.price || 0) * activeQty);
+    }, 0);
+
+    const dType = bill.discountType || 'flat';
+    const dValue = bill.discountValue || 0;
+    let calculatedDiscount = 0;
+    if (dType === 'percentage') {
+      calculatedDiscount = (subtotal * dValue) / 100;
+    } else if (dType === 'complimentary') {
+      calculatedDiscount = subtotal;
+    } else {
+      calculatedDiscount = dValue;
+    }
+
+    const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
+    const tRate = (bill.tax !== undefined && bill.tax !== null && Number(bill.tax) >= 0) 
+      ? Number(bill.tax) 
+      : await getDynamicTaxRate(req);
+    const calculatedTax = (taxableAmount * tRate) / 100;
+    const calculatedTotal = Math.round(taxableAmount + calculatedTax);
+
+    bill.subtotal = subtotal;
+    bill.discount = calculatedDiscount;
+    bill.tax = tRate;
+    bill.taxBreakdown = {
+      cgst: Number(((subtotal * (tRate / 2)) / 100).toFixed(2)),
+      sgst: Number(((subtotal * (tRate / 2)) / 100).toFixed(2)),
+      igst: 0
+    };
+    bill.total = calculatedTotal;
+
     bill.markModified('items');
     bill.markModified('kots');
     await bill.save();
 
+    // Clear caches for instant multi-page accuracy
+    cache.clear('dailyStats');
+    cache.clear('openOrders');
+
+    if (bill.billType === 'Dine-In') {
+      updateTableStatusHelper(req, bill.tableNo, 'Occupied', bill._id).catch(() => {});
+    }
+
+    const isUpdate = (bill.kots ? bill.kots.length : 0) > 1 || hadQuantityReductions;
+    const reducedItems = itemChanges.filter(c => c.type === 'reduced');
+    const addedItems = itemChanges.filter(c => c.type === 'added');
+
+    let dynamicMessage = `KOT updated for Table ${bill.tableNo}`;
+    if (reducedItems.length > 0) {
+      const reducedText = reducedItems.map(c => `${c.name} reduced by ${c.reducedQty}x (Now ${c.currentQty}x)`).join(', ');
+      dynamicMessage = `Table ${bill.tableNo}: ${reducedText}`;
+    } else if (addedItems.length > 0) {
+      const addedText = addedItems.map(c => `${c.name} +${c.delta}x (Now ${c.currentQty}x)`).join(', ');
+      dynamicMessage = `Table ${bill.tableNo}: ${addedText}`;
+    }
+
     if (kotPayload) {
-      emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: kotPayload, billId: bill._id, order: bill });
-      emitNotification(req, 'New KOT Fired', `KOT fired for ${bill.tableNo} (${kotPayload.kotNumber})`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+      emitSocketEvent(req, 'newKOT', { tableNo: bill.tableNo, kot: kotPayload, billId: bill._id, order: bill, isUpdate });
+      emitSocketEvent(req, 'kotQuantityUpdated', { 
+        tableNo: bill.tableNo, 
+        orderId: bill._id, 
+        kot: kotPayload, 
+        isUpdate, 
+        changes: itemChanges,
+        message: dynamicMessage 
+      });
+      
+      const notifTitle = isUpdate ? (reducedItems.length > 0 ? 'Item Quantity Reduced' : 'KOT Quantity Updated') : 'New KOT Fired';
+      emitNotification(req, notifTitle, dynamicMessage, isUpdate ? 'warning' : 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
 
       // Trigger physical network thermal printing to configured IP printers
       printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems).catch(err => {
         console.error('[KOT Print Error]:', err.message);
       });
+    } else if (hadQuantityReductions) {
+      emitSocketEvent(req, 'kotQuantityUpdated', { 
+        tableNo: bill.tableNo, 
+        orderId: bill._id, 
+        isReduction: true, 
+        changes: itemChanges,
+        message: dynamicMessage 
+      });
+      emitNotification(req, 'Item Quantity Reduced', dynamicMessage, 'warning', ['Chef', 'Manager', 'Admin', 'Captain']);
     }
 
-    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: bill.status, order: bill });
+    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: bill.status, order: bill, total: bill.total });
 
     res.status(200).json({
       message: kotPayload ? 'KOT generated successfully' : 'KOT updated successfully',
@@ -1672,33 +1871,36 @@ export const getTodayKOTs = async (req, res) => {
             }
           }
 
-          const processedItems = (kot.items || []).map(kItem => {
-            const itemStatus = itemCancelMap[kItem.name];
-            const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
-            const orderItem = (bill.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
-            
-            const qty = Math.max(0, parseInt(kItem.quantity || 0, 10) || 1);
-            let unitStatuses = kItem.unitStatuses;
-            if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
-              unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
-            }
+          const processedItems = (kot.items || [])
+            .map(kItem => {
+              const itemStatus = itemCancelMap[kItem.name];
+              const isCancelled = kItem.status === 'Cancelled' || kItem.isCancelled || (itemStatus && itemStatus.isCancelled);
+              const orderItem = (bill.items || []).find(i => i.name === kItem.name || (kItem._id && i._id?.toString() === kItem._id?.toString()));
+              
+              const qty = Math.max(0, parseInt(kItem.quantity !== undefined ? kItem.quantity : 0, 10));
+              let unitStatuses = kItem.unitStatuses;
+              if (!unitStatuses || !Array.isArray(unitStatuses) || unitStatuses.length !== qty) {
+                unitStatuses = Array.from({ length: qty }, () => kItem.status || 'Pending');
+              }
 
-            const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
-            const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
-            const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+              const preparedQty = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+              const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
+              const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
 
-            return {
-              ...kItem,
-              specialNote: kItem.specialNote || orderItem?.specialNote || '',
-              isCancelled: isCancelled,
-              status: isCancelled ? 'Cancelled' : (kItem.status || 'Pending'),
-              cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
-              unitStatuses,
-              preparedQuantity: preparedQty,
-              preparingQuantity: preparingQty,
-              pendingQuantity: pendingQty
-            };
-          });
+              return {
+                ...kItem,
+                quantity: qty,
+                specialNote: kItem.specialNote || orderItem?.specialNote || '',
+                isCancelled: isCancelled,
+                status: isCancelled ? 'Cancelled' : (kItem.status || 'Pending'),
+                cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
+                unitStatuses,
+                preparedQuantity: preparedQty,
+                preparingQuantity: preparingQty,
+                pendingQuantity: pendingQty
+              };
+            })
+            .filter(item => item.quantity > 0 && !item.isCancelled);
 
           allKOTs.push({
             ...kot,
@@ -1908,9 +2110,12 @@ export const getActiveKOTs = async (req, res) => {
             const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
             const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
 
+            const reducedQty = Math.max(0, parseInt(orderItem?.reducedQuantity || orderItem?.cancelledQuantity || kItem.reducedQuantity || kItem.cancelledQuantity || 0, 10));
+
             return {
               ...kItem,
               quantity: qty,
+              reducedQuantity: reducedQty,
               specialNote: kItem.specialNote || orderItem?.specialNote || '',
               isCancelled: false,
               status: kItem.status || 'Pending',

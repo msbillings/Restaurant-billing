@@ -223,16 +223,56 @@ const BillSummary = ({
       {/* Info Bar */}
       <div className="flex items-center gap-1 px-3 py-1 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-0.5">
-          <div onClick={handleTableClick} className="flex flex-col items-center justify-center w-8 h-8 bg-red-50 border border-red-100 rounded-lg text-red-600 overflow-hidden px-0.5 shadow-sm cursor-pointer hover:bg-red-100 transition-colors">
-            <span className="text-[6px] font-bold opacity-80 leading-tight">{t("TABLE")}</span>
-            <span className="text-[10px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
-              {activeTable ? (() => {
-                const p = activeTable.includes('-') ? activeTable.split('-').pop().trim() : activeTable;
-                const m = p.match(/^([a-zA-Z]+).*?(\d+)$/);
-                return m ? `${m[1][0].toUpperCase()}${m[2]}` : p.substring(0, 3);
-              })() : '--'}
-            </span>
-          </div>
+          {(() => {
+            let catName = 'TABLE';
+            let displayVal = activeTable || '--';
+
+            if (activeTable) {
+              const tablePart = activeTable.includes(' - ') ? activeTable.split(' - ').slice(1).join(' - ').trim() : activeTable.trim();
+              displayVal = tablePart;
+
+              let foundType = null;
+              if (floors && Array.isArray(floors)) {
+                for (const floor of floors) {
+                  for (const key of ['tables', 'cabins', 'sofas', 'spaces']) {
+                    const matched = (floor[key] || []).find(item => 
+                      item.name?.trim().toLowerCase() === tablePart.toLowerCase() ||
+                      `${floor.name} - ${item.name}`.trim().toLowerCase() === activeTable.trim().toLowerCase()
+                    );
+                    if (matched) {
+                      foundType = matched.type || key.replace(/s$/, '');
+                      break;
+                    }
+                  }
+                  if (foundType) break;
+                }
+              }
+
+              if (foundType) {
+                catName = foundType;
+              } else {
+                const wordMatch = tablePart.match(/^([A-Za-z]+)/);
+                if (wordMatch) {
+                  catName = wordMatch[1];
+                }
+              }
+            }
+
+            return (
+              <div 
+                onClick={handleTableClick} 
+                title={`${catName} - ${displayVal}`} 
+                className="flex flex-col items-center justify-center min-w-[34px] max-w-[56px] h-8 bg-red-50 border border-red-100 rounded-lg text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors"
+              >
+                <span className="text-[6px] font-bold opacity-80 leading-tight uppercase truncate max-w-full text-center">
+                  {t(catName)}
+                </span>
+                <span className="text-[10px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
+                  {displayVal}
+                </span>
+              </div>
+            );
+          })()}
           <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
             <Users size={11} className="mb-0.5 opacity-80" />
             <span className="text-[8px] font-bold leading-none">{pax}</span>
@@ -331,12 +371,17 @@ const BillSummary = ({
                     if (item.cancellationRequested) {
                       return <span className="text-[9px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded font-bold">{t("Pending")}</span>;
                     }
-                    if (item.cancelledQuantity > 0) {
-                      return <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">(-{item.cancelledQuantity})</span>;
-                    }
+
+                    const reducedBadge = (item.cancelledQuantity > 0 || item.reducedQuantity > 0) ? (
+                      <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold whitespace-nowrap">
+                        (-{item.cancelledQuantity || item.reducedQuantity})
+                      </span>
+                    ) : null;
+
+                    let statusNode = null;
 
                     if (hasMixedStatus) {
-                      return (
+                      statusNode = (
                         <span className="inline-flex items-center gap-1 flex-wrap">
                           {preparedCount > 0 && (
                             <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
@@ -358,31 +403,34 @@ const BillSummary = ({
                           )}
                         </span>
                       );
-                    }
-
-                    if (item.status === 'Preparing') {
-                      return (
+                    } else if (item.status === 'Preparing' || preparingCount > 0) {
+                      statusNode = (
                         <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold border border-amber-200 shadow-2xs inline-flex items-center gap-1">
                           <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
                           <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
                         </span>
                       );
-                    }
-
-                    if (item.status === 'Ready' || item.status === 'Prepared') {
-                      return (
+                    } else if (item.status === 'Ready' || item.status === 'Prepared' || preparedCount === effectiveQty) {
+                      statusNode = (
                         <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
                           <CheckCircle size={10} className="text-emerald-600 shrink-0" />
                           <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}✅ {t("Prepared")}</span>
                         </span>
                       );
-                    }
-
-                    if (item.status === 'Pending' || ((item.printedQuantity || 0) > 0 && !item.status)) {
-                      return (
+                    } else if (item.status === 'Pending' || ((item.printedQuantity || 0) > 0 && !item.status)) {
+                      statusNode = (
                         <span className="text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-bold border border-blue-100 inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                           <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                        </span>
+                      );
+                    }
+
+                    if (statusNode || reducedBadge) {
+                      return (
+                        <span className="inline-flex items-center gap-1">
+                          {statusNode}
+                          {reducedBadge}
                         </span>
                       );
                     }

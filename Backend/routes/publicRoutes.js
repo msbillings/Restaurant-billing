@@ -16,7 +16,7 @@ export const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
   
-  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - Sofa 3")
+  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - H-1")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
@@ -26,54 +26,53 @@ export const getTableMatchCondition = (tblStr) => {
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     const patterns = [];
-    // Exact match with floor: "Ground Floor - Table 8"
+    // 1. Exact match with floor: "Ground Floor - H-1"
     patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
-    // Bare match without floor: "Table 8" (from QR code public orders)
+    // 2. Bare match without floor: "H-1"
     patterns.push(`^${escapedTable}$`);
     
-    // Check if tablePart has a space type word and number (e.g. "Cabin 1", "Sofa 2", "Table 3", "Room 4")
-    const spaceMatch = tablePart.match(/^([A-Za-z]+)\s*0*(\d+)$/);
-    if (spaceMatch) {
-      const type = spaceMatch[1]; // e.g. "Cabin", "Table", "Sofa"
-      const num = parseInt(spaceMatch[2], 10);
-      const firstLetter = type.charAt(0);
-      // Matches "Ground Floor - Table 8", "Ground Floor - Table 08", "Ground Floor - T8", "Ground Floor - T-8"
+    // 3. If standard space type (e.g. "Table 1", "Cabin 2", "Sofa 3", "Room 4", "Bar 5")
+    const standardMatch = tablePart.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
+    if (standardMatch) {
+      const type = standardMatch[1];
+      const num = parseInt(standardMatch[2], 10);
+      const firstLetter = type.charAt(0).toUpperCase();
       patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
-      // Matches bare "Table 8", "Table 08", "T8", "T-8"
       patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
     } else {
-      const numOnly = tablePart.match(/^0*(\d+)$/);
-      if (numOnly) {
-        const num = parseInt(numOnly[1], 10);
-        // Matches "Ground Floor - 1", "Ground Floor - 01"
-        patterns.push(`^${escapedFloor}\\s*-\\s*0*${num}$`);
-        patterns.push(`^0*${num}$`);
+      // If tablePart is a custom letter/prefix and number (e.g. "H-1", "H1", "M-2")
+      const letterNumMatch = tablePart.match(/^([A-Za-z]+)-?0*(\d+)$/);
+      if (letterNumMatch) {
+        const letter = letterNumMatch[1];
+        const num = parseInt(letterNumMatch[2], 10);
+        patterns.push(`^${escapedFloor}\\s*-\\s*${letter}-?0*${num}$`);
+        patterns.push(`^${letter}-?0*${num}$`);
       }
     }
     
     return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
-  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "8"):
+  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "H-1"):
   const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
-  // Match any floor prefix in DB: "Ground Floor - Table 8", "First Floor - Table 8"
   patterns.push(`^.*?\\s*-\\s*${escapedTrimmed}$`);
   
-  const spaceMatch = trimmed.match(/^([A-Za-z]+)\s*0*(\d+)$/);
-  if (spaceMatch) {
-    const type = spaceMatch[1];
-    const num = parseInt(spaceMatch[2], 10);
-    const firstLetter = type.charAt(0);
+  const standardMatch = trimmed.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
+  if (standardMatch) {
+    const type = standardMatch[1];
+    const num = parseInt(standardMatch[2], 10);
+    const firstLetter = type.charAt(0).toUpperCase();
     patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
     patterns.push(`^.*?\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
   } else {
-    const numOnly = trimmed.match(/^0*(\d+)$/);
-    if (numOnly) {
-      const num = parseInt(numOnly[1], 10);
-      patterns.push(`^0*${num}$`);
-      patterns.push(`^.*?\\s*-\\s*0*${num}$`);
+    const letterNumMatch = trimmed.match(/^([A-Za-z]+)-?0*(\d+)$/);
+    if (letterNumMatch) {
+      const letter = letterNumMatch[1];
+      const num = parseInt(letterNumMatch[2], 10);
+      patterns.push(`^${letter}-?0*${num}$`);
+      patterns.push(`^.*?\\s*-\\s*${letter}-?0*${num}$`);
     }
   }
   
