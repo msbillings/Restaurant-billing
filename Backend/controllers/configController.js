@@ -5,9 +5,9 @@ import bcrypt from 'bcryptjs';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import FloorDefault from '../models/Floor.js';
-import { getTenantModels } from '../utils/tenantManager.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
+import { clearPublicMenuCache } from '../routes/publicRoutes.js';
 
 export let isSettingUpDB = false;
 
@@ -158,16 +158,27 @@ export const updateRestaurantInfo = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const { licenseExpiry, restaurantSettings, spaces } = req.body;
+    const updatePromises = [];
+
     if (licenseExpiry) {
-      await Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true });
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true }).maxTimeMS(4000));
     }
     if (restaurantSettings) {
-      await Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: restaurantSettings }, { upsert: true });
-      emitSocketEvent(req, 'settingsUpdated', restaurantSettings);
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: restaurantSettings }, { upsert: true }).maxTimeMS(4000));
     }
     if (spaces) {
-      await Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true });
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(4000));
     }
+
+    await Promise.all(updatePromises);
+
+    if (restaurantSettings) {
+      emitSocketEvent(req, 'settingsUpdated', restaurantSettings);
+      try {
+        clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
+      } catch (e) {}
+    }
+
     res.status(200).json({ message: 'Updated successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error updating config', error: error.message });

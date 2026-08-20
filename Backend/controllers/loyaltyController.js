@@ -1,11 +1,13 @@
-import LoyaltyConfig from '../models/LoyaltyConfig.js';
-import Customer from '../models/Customer.js';
+import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
+import CustomerDefault from '../models/Customer.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // @desc    Get loyalty configuration
 // @route   GET /api/loyalty/config
 // @access  Private
 export const getConfig = async (req, res) => {
   try {
+    const LoyaltyConfig = getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault);
     let config = await LoyaltyConfig.findOne();
     if (!config) {
       config = await LoyaltyConfig.create({});
@@ -22,6 +24,7 @@ export const getConfig = async (req, res) => {
 // @access  Private (Admin)
 export const updateConfig = async (req, res) => {
   try {
+    const LoyaltyConfig = getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault);
     const { enabled, conversionRate, redemptionValue, walletExpiry } = req.body;
     let config = await LoyaltyConfig.findOne();
     
@@ -52,6 +55,7 @@ export const updateConfig = async (req, res) => {
 // @access  Private
 export const getStats = async (req, res) => {
   try {
+    const Customer = getTenantModel(req, 'Customer', CustomerDefault);
     const stats = await Customer.aggregate([
       {
         $group: {

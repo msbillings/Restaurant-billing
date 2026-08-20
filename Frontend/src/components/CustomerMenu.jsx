@@ -280,7 +280,10 @@ const CustomerMenu = () => {
         const effectiveDistance = Math.max(0, rawDist - Math.min(accuracy, allowedRadius * 0.4));
 
         if (effectiveDistance > allowedRadius) {
-          setGeoError(t("You appear to be away from the restaurant. Please ensure you are physically at the table to place an order."));
+          const distM = Math.round(rawDist);
+          setGeoError(
+            `${t("You appear to be away from the restaurant. Please ensure you are physically at the table to place an order.")} (${t("Distance")}: ~${distM}m, ${t("Allowed")}: ${allowedRadius}m)`
+          );
         } else {
           setGeoError(null); // Location verified successfully!
         }
@@ -363,55 +366,54 @@ const CustomerMenu = () => {
     }
   }, [table, tenant]);
 
-  useEffect(() => {
+  const fetchMenu = useCallback(async (retryAttempt = 0) => {
     if (!tenant || !table) {
       setError("Invalid QR Code. Please scan the QR code on your table again.");
       setLoading(false);
       return;
     }
 
-    const fetchMenu = async (retryAttempt = 0) => {
-      try {
-        const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
-          headers: {
-            'X-Tenant-DB': tenant
-          }
-        });
-        if (menuRes.data) {
-          setCategories(menuRes.data.categories || []);
-          setItems(menuRes.data.items || []);
-          if (menuRes.data.googleReviewLink) setGoogleReviewLink(menuRes.data.googleReviewLink);
-
-          // Update cache for instantaneous subsequent visits
-          try {
-            sessionStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
-            localStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
-          } catch (e) {}
-
-          // Never block menu viewing; verify location in parallel
-          setLoading(false);
-          verifyLocation(menuRes.data.restaurantSettings);
-          return;
+    try {
+      const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
+        headers: {
+          'X-Tenant-DB': tenant
         }
-      } catch (err) {
-        console.warn(`[PublicMenu] Attempt ${retryAttempt + 1} failed:`, err);
-        if (retryAttempt < 2) {
-          await new Promise(r => setTimeout(r, 1200));
-          return fetchMenu(retryAttempt + 1);
-        }
-        
-        // If we already have items from cache, don't show full error
-        setItems(prev => {
-          if (prev.length === 0) {
-            setError("Could not load the menu. Please ask a staff member for assistance.");
-          }
-          return prev;
-        });
-      } finally {
+      });
+      if (menuRes.data) {
+        setCategories(menuRes.data.categories || []);
+        setItems(menuRes.data.items || []);
+        if (menuRes.data.googleReviewLink) setGoogleReviewLink(menuRes.data.googleReviewLink);
+
+        // Update cache for subsequent visits
+        try {
+          sessionStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
+          localStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
+        } catch (e) {}
+
+        // Never block menu viewing; verify location in parallel
         setLoading(false);
+        verifyLocation(menuRes.data.restaurantSettings);
+        return;
       }
-    };
+    } catch (err) {
+      console.warn(`[PublicMenu] Attempt ${retryAttempt + 1} failed:`, err);
+      if (retryAttempt < 2) {
+        await new Promise(r => setTimeout(r, 1200));
+        return fetchMenu(retryAttempt + 1);
+      }
+      
+      setItems(prev => {
+        if (prev.length === 0) {
+          setError("Could not load the menu. Please ask a staff member for assistance.");
+        }
+        return prev;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant, table, verifyLocation]);
 
+  useEffect(() => {
     fetchMenu();
     checkOrderStatus(true);
 
@@ -593,15 +595,10 @@ const CustomerMenu = () => {
           <button
             onClick={() => {
               setGeoError(null);
-              const cached = sessionStorage.getItem(`customer_menu_${tenant}`);
-              if (cached) {
-                try {
-                  const data = JSON.parse(cached);
-                  verifyLocation(data.restaurantSettings);
-                } catch (e) {}
-              }
+              setLoading(true);
+              fetchMenu();
             }}
-            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <RefreshCw size={18} />
             <span>{t("Retry Location")}</span>
@@ -609,7 +606,7 @@ const CustomerMenu = () => {
 
           <button
             onClick={() => setGeoError(null)}
-            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <UtensilsCrossed size={18} className="text-orange-500" />
             <span>{t("Continue to Menu")}</span>

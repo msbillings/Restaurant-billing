@@ -1,8 +1,10 @@
-import Feedback from '../models/Feedback.js';
+import FeedbackDefault from '../models/Feedback.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get all feedback (with optional rating filter)
 export const getFeedback = async (req, res) => {
   try {
+    const Feedback = getTenantModel(req, 'Feedback', FeedbackDefault);
     const { rating } = req.query;
     let query = {};
     if (rating) {
@@ -19,6 +21,7 @@ export const getFeedback = async (req, res) => {
 // Get feedback statistics
 export const getFeedbackStats = async (req, res) => {
   try {
+    const Feedback = getTenantModel(req, 'Feedback', FeedbackDefault);
     const stats = await Feedback.aggregate([
       {
         $group: {
@@ -40,9 +43,10 @@ export const getFeedbackStats = async (req, res) => {
   }
 };
 
-// Create a new feedback entry (Public endpoint usually, but we'll protect it for now)
+// Create a new feedback entry
 export const createFeedback = async (req, res) => {
   try {
+    const Feedback = getTenantModel(req, 'Feedback', FeedbackDefault);
     const newFeedback = new Feedback(req.body);
     await newFeedback.save();
     res.status(201).json(newFeedback);

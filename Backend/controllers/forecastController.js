@@ -1,4 +1,5 @@
-import Bill from '../models/Bill.js';
+import BillDefault from '../models/Bill.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 import moment from 'moment';
 
 // @desc    Get Sales Forecast and Kitchen Prep Suggestions
@@ -6,6 +7,7 @@ import moment from 'moment';
 // @access  Private (Admin)
 export const getSalesForecast = async (req, res) => {
   try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
     // 1. Calculate historical sales for the last 5 days and predict next 2 days
     const today = moment().startOf('day');
     const forecastData = [];

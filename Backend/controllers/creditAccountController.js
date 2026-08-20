@@ -1,8 +1,10 @@
-import CreditAccount from '../models/CreditAccount.js';
+import CreditAccountDefault from '../models/CreditAccount.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get all credit accounts
 export const getCreditAccounts = async (req, res) => {
   try {
+    const CreditAccount = getTenantModel(req, 'CreditAccount', CreditAccountDefault);
     const accounts = await CreditAccount.find().sort({ updatedAt: -1 });
     res.status(200).json(accounts);
   } catch (error) {
@@ -13,6 +15,7 @@ export const getCreditAccounts = async (req, res) => {
 // Create a new credit account
 export const createCreditAccount = async (req, res) => {
   try {
+    const CreditAccount = getTenantModel(req, 'CreditAccount', CreditAccountDefault);
     const { customerName, phoneNumber, initialBalance = 0 } = req.body;
     
     // Check if account already exists for this phone number
@@ -38,6 +41,7 @@ export const createCreditAccount = async (req, res) => {
 // Add a transaction (payment or new credit)
 export const addTransaction = async (req, res) => {
   try {
+    const CreditAccount = getTenantModel(req, 'CreditAccount', CreditAccountDefault);
     const { id } = req.params;
     const { type, amount, note, billId } = req.body;
 

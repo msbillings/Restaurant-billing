@@ -7,6 +7,11 @@ let categoryCache = null;
 let categoryCacheTimestamp = 0;
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes for categories
 
+export const clearCategoryCache = () => {
+  categoryCache = null;
+  categoryCacheTimestamp = 0;
+};
+
 export const getCategories = async (forceRefresh = false) => {
   const now = Date.now();
 

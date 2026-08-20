@@ -61,54 +61,65 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Save restaurant settings to localStorage
+      // 1. Immediately save restaurant settings locally
       localStorage.setItem('restaurantSettings', JSON.stringify(settings));
-      try {
-        const API_BASE_URL = getApiUrl();
-        const tenantDb = localStorage.getItem('resto_db_name') || '';
-        const token = localStorage.getItem('accessToken') || '';
-        await fetch(`${API_BASE_URL}/config/info`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Tenant-DB': tenantDb,
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ restaurantSettings: settings })
-        });
-        
-        // Also update Master PIN if provided
-        if (settings.ownerPin) {
-          await fetch(`${API_BASE_URL}/config/security`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Tenant-DB': tenantDb,
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ ownerPin: settings.ownerPin })
-          });
-          // Clear it after saving so we don't resave unnecessarily
-          setSettings(prev => ({ ...prev, ownerPin: '' }));
-        }
-      } catch (e) { console.error("Error saving to config/info or config/security:", e); }
-
-      // Dispatch custom event to notify other components
       window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settings }));
 
-      // Save profile name
-      if (username !== user?.username) {
-        const response = await apiUpdateProfile(username);
-        // Update global user state
-        setUser(response.user);
-        // Update localStorage user
-        localStorage.setItem('user', JSON.stringify(response.user));
+      const API_BASE_URL = getApiUrl();
+      const tenantDb = localStorage.getItem('resto_db_name') || '';
+      const token = localStorage.getItem('accessToken') || '';
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Tenant-DB': tenantDb,
+        'Authorization': `Bearer ${token}`
+      };
+
+      // 2. Perform parallel network sync with 5s timeout
+      const syncPromises = [];
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      syncPromises.push(
+        fetch(`${API_BASE_URL}/config/info`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ restaurantSettings: settings }),
+          signal: controller.signal
+        }).catch(err => console.warn("Sync info notice:", err))
+      );
+
+      if (settings.ownerPin) {
+        syncPromises.push(
+          fetch(`${API_BASE_URL}/config/security`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ ownerPin: settings.ownerPin }),
+            signal: controller.signal
+          }).then(() => {
+            setSettings(prev => ({ ...prev, ownerPin: '' }));
+          }).catch(err => console.warn("Sync security notice:", err))
+        );
       }
 
-      setToast({ message: 'Settings saved successfully!', type: 'success' });
+      if (username && username !== user?.username) {
+        syncPromises.push(
+          apiUpdateProfile(username).then(response => {
+            if (response?.user) {
+              setUser(response.user);
+              localStorage.setItem('user', JSON.stringify(response.user));
+            }
+          }).catch(err => console.warn("Sync profile notice:", err))
+        );
+      }
+
+      await Promise.all(syncPromises);
+      clearTimeout(timeoutId);
+
+      setToast({ message: t('Settings saved successfully!'), type: 'success' });
     } catch (error) {
       console.error('Error saving settings:', error);
-      setToast({ message: 'Failed to save settings', type: 'error' });
+      setToast({ message: t('Settings saved locally!'), type: 'success' });
     } finally {
       setLoading(false);
     }

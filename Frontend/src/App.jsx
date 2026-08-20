@@ -64,11 +64,14 @@ const LandingPage = React.lazy(() => import('./landing/LandingPage'));
 import GlobalHeader from './components/GlobalHeader';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
+import { clearMenuCache } from './api/menu';
+import { clearCategoryCache } from './api/category';
+import { clearAllOfflineData } from './db/offlineDb';
+import { logoutUser } from './api/auth';
 
 import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
-import { logoutUser } from './api/auth';
 import { initSyncEngine } from './utils/syncEngine';
 import realtimeService from './services/realtimeService';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -597,8 +600,10 @@ function App() {
   }, [user]);
 
   const handleLoginSuccess = (data) => {
-    // Step 1: Clear ALL old restaurant-specific cached data FIRST
-    // This prevents stale data from a previously logged-in restaurant from showing up
+    // Step 1: Clear ALL old restaurant-specific cached data FIRST (Memory, Storage, IndexedDB)
+    clearMenuCache();
+    clearCategoryCache();
+    clearAllOfflineData().catch(() => {});
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
     localStorage.removeItem('resto_license_expiry');
@@ -619,7 +624,6 @@ function App() {
     }
 
     // Step 3: Sync React state without doing a hard page reload.
-    // Update license expiry in React state if available.
     if (data.licenseExpiry) {
       const expiryDate = new Date(data.licenseExpiry);
       if (!isNaN(expiryDate.getTime())) {
@@ -639,7 +643,6 @@ function App() {
         setActiveOrdersCount(0);
         window.history.replaceState(null, '', '/kds');
       } else {
-        // Reset to default view so the user lands on floor after login
         setView('floor');
         setActiveOrdersCount(0);
         window.history.replaceState(null, '', '/floor');
@@ -663,10 +666,9 @@ function App() {
       const unsubKOT = realtimeService.subscribe('newKOT', fetchActiveOrdersCount);
       const unsubSettings = realtimeService.subscribe('settingsUpdated', (newSettings) => {
         const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-        // Preserve security settings locally, only update restaurant info
         const updated = { ...newSettings, requireMasterPin: s.requireMasterPin, customLocks: s.customLocks };
         localStorage.setItem('restaurantSettings', JSON.stringify(updated));
-        setSettingsUpdateTicker(prev => prev + 1); // Trigger re-render to enforce locks instantly
+        setSettingsUpdateTicker(prev => prev + 1);
       });
       const unsubSecurity = realtimeService.subscribe('securitySettingsUpdated', (newSecurity) => {
         const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -691,9 +693,11 @@ function App() {
     // Fire and forget the logout API call so the UI doesn't hang if backend is down
     logoutUser().catch((error) => console.error('Logout API error:', error));
 
-    // Clear ALL local state — both auth AND restaurant-specific data IMMEDIATELY
-    // This is critical for multi-tenant: if an MM admin logs out and a Saif admin
-    // logs in on the same terminal, old MM restaurant name/settings must be gone!
+    // Clear ALL caches and state immediately across memory, localStorage, and IndexedDB
+    clearMenuCache();
+    clearCategoryCache();
+    clearAllOfflineData().catch(() => {});
+
     setUser(null);
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

@@ -82,24 +82,29 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-// Optional authentication - verifies token if provided, but doesn't fail if missing
-const optionalAuthenticateToken = (req, res, next) => {
+// Optional authentication - verifies token if provided and strictly resolves tenant models
+const optionalAuthenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    // No token provided, continue without setting req.user
     return next();
   }
 
-  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026', (err, user) => {
-    if (err) {
-      // Invalid token, continue without setting req.user
-      return next();
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026');
+    req.user = decoded;
+    if (decoded && decoded.db) {
+      const tenantModels = await getTenantModels(decoded.db);
+      if (tenantModels) {
+        req.models = tenantModels;
+        req.tenantDb = decoded.db;
+      }
     }
-    req.user = user;
-    next();
-  });
+  } catch (err) {
+    // Continue gracefully if token invalid/expired for optional routes
+  }
+  next();
 };
 
 export { authenticateToken, requireAdmin, optionalAuthenticateToken };

@@ -1,8 +1,10 @@
-import Tax from '../models/Tax.js';
+import TaxDefault from '../models/Tax.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get all taxes
 export const getTaxes = async (req, res) => {
   try {
+    const Tax = getTenantModel(req, 'Tax', TaxDefault);
     const taxes = await Tax.find().sort({ createdAt: -1 });
     res.status(200).json(taxes);
   } catch (error) {
@@ -13,6 +15,7 @@ export const getTaxes = async (req, res) => {
 // Create a new tax
 export const createTax = async (req, res) => {
   try {
+    const Tax = getTenantModel(req, 'Tax', TaxDefault);
     const { name, percentage, type, isActive } = req.body;
     const newTax = new Tax({ name, percentage, type, isActive });
     await newTax.save();
@@ -25,6 +28,7 @@ export const createTax = async (req, res) => {
 // Update a tax
 export const updateTax = async (req, res) => {
   try {
+    const Tax = getTenantModel(req, 'Tax', TaxDefault);
     const { id } = req.params;
     const updatedTax = await Tax.findByIdAndUpdate(id, req.body, { new: true });
     if (!updatedTax) {
@@ -39,6 +43,7 @@ export const updateTax = async (req, res) => {
 // Delete a tax
 export const deleteTax = async (req, res) => {
   try {
+    const Tax = getTenantModel(req, 'Tax', TaxDefault);
     const { id } = req.params;
     const deletedTax = await Tax.findByIdAndDelete(id);
     if (!deletedTax) {

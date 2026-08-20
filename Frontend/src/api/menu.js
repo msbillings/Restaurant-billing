@@ -7,6 +7,11 @@ let menuCache = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+export const clearMenuCache = () => {
+  menuCache = null;
+  cacheTimestamp = 0;
+};
+
 export const getMenuItems = async (forceRefresh = false) => {
   const now = Date.now();
 

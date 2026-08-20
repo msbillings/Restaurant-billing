@@ -9,45 +9,70 @@
  */
 import Dexie from 'dexie';
 
-const db = new Dexie('msbillings_offline');
+const tenantDbs = new Map();
 
-// Define the schema
-db.version(1).stores({
-  // Menu items cached from server
-  menuItems: '_id, name, category, price, isAvailable',
-  
-  // Categories cached from server
-  categories: '_id, name, displayOrder, isActive',
-  
-  // Active/open orders cached for instant rendering
-  openOrders: '_id, tableNo, status, billType, createdAt',
+/**
+ * Get or create a Dexie database isolated specifically to the currently logged-in tenant.
+ * Prevents cross-tenant data leakage in browser IndexedDB.
+ */
+export const getDb = () => {
+  const tenantDbName = localStorage.getItem('resto_db_name') || 'default';
+  const cleanName = `msbillings_offline_${tenantDbName.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 
-  // Bills history cached for instant rendering
-  billHistory: '_id, billNumber, tableNo, status, total, createdAt',
+  if (tenantDbs.has(cleanName)) {
+    return tenantDbs.get(cleanName);
+  }
 
-  // KOT history cached for instant rendering
-  kotHistory: '_id, kotNo, tableNo, status, createdAt',
+  const newDb = new Dexie(cleanName);
+  newDb.version(1).stores({
+    menuItems: '_id, name, category, price, isAvailable',
+    categories: '_id, name, displayOrder, isActive',
+    openOrders: '_id, tableNo, status, billType, createdAt',
+    billHistory: '_id, billNumber, tableNo, status, total, createdAt',
+    kotHistory: '_id, kotNo, tableNo, status, createdAt',
+    inventory: '_id, name, category, stockQuantity',
+    editedBills: '_id, billNumber, tableNo, status, total, updatedAt',
+    offlineOrders: '++localId, tableNo, status, billType, createdAt, synced',
+    syncQueue: '++id, endpoint, method, payload, createdAt, retries, status',
+    floors: '_id, name',
+    kdsActiveKots: '_id, kotId, tableNo, status, createdAt',
+    meta: 'key'
+  });
 
-  // Inventory items cached for instant rendering
-  inventory: '_id, name, category, stockQuantity',
+  tenantDbs.set(cleanName, newDb);
+  return newDb;
+};
 
-  // Edited bills cached for instant rendering
-  editedBills: '_id, billNumber, tableNo, status, total, updatedAt',
+/**
+ * Clear all offline IndexedDB data across all stores for current tenant on logout/login.
+ */
+export const clearAllOfflineData = async () => {
+  try {
+    const activeDb = getDb();
+    await Promise.all([
+      activeDb.menuItems?.clear().catch(() => {}),
+      activeDb.categories?.clear().catch(() => {}),
+      activeDb.openOrders?.clear().catch(() => {}),
+      activeDb.billHistory?.clear().catch(() => {}),
+      activeDb.kotHistory?.clear().catch(() => {}),
+      activeDb.inventory?.clear().catch(() => {}),
+      activeDb.editedBills?.clear().catch(() => {}),
+      activeDb.floors?.clear().catch(() => {}),
+      activeDb.kdsActiveKots?.clear().catch(() => {}),
+      activeDb.meta?.clear().catch(() => {})
+    ]);
+  } catch (err) {
+    console.warn('[OfflineDB] Error clearing offline data:', err);
+  }
+};
 
-  // Orders created while offline - queued for sync
-  offlineOrders: '++localId, tableNo, status, billType, createdAt, synced',
-  
-  // Sync queue - any API call that failed due to offline
-  syncQueue: '++id, endpoint, method, payload, createdAt, retries, status',
-  
-  // Floor/Table layout cache
-  floors: '_id, name',
-  
-  // KDS active KOTs store (isolated from historical KOTs)
-  kdsActiveKots: '_id, kotId, tableNo, status, createdAt',
-
-  // Metadata (last sync timestamps, etc.)
-  meta: 'key'
+// Dynamic proxy ensuring every database operation is routed to the active tenant's isolated IndexedDB
+const db = new Proxy({}, {
+  get: (_, prop) => {
+    const active = getDb();
+    const val = active[prop];
+    return typeof val === 'function' ? val.bind(active) : val;
+  }
 });
 
 

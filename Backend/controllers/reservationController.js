@@ -1,8 +1,10 @@
-import Reservation from '../models/Reservation.js';
+import ReservationDefault from '../models/Reservation.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get reservations (optional filters by date or status)
 export const getReservations = async (req, res) => {
   try {
+    const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
     const { date, status } = req.query;
     let query = {};
     
@@ -28,11 +30,11 @@ export const getReservations = async (req, res) => {
 // Create a new reservation
 export const createReservation = async (req, res) => {
   try {
+    const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
     const newReservation = new Reservation(req.body);
     await newReservation.save();
     res.status(201).json(newReservation);
   } catch (error) {
-    import('fs').then(fs => fs.appendFileSync('res_error.log', new Date().toISOString() + ': ' + error.message + '\n'));
     res.status(500).json({ message: 'Error creating reservation', error: error.message });
   }
 };
@@ -40,6 +42,7 @@ export const createReservation = async (req, res) => {
 // Update a reservation (e.g., status changes)
 export const updateReservation = async (req, res) => {
   try {
+    const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
     const { id } = req.params;
     const updatedReservation = await Reservation.findByIdAndUpdate(id, req.body, { new: true });
     if (!updatedReservation) {
@@ -54,6 +57,7 @@ export const updateReservation = async (req, res) => {
 // Delete a reservation
 export const deleteReservation = async (req, res) => {
   try {
+    const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
     const { id } = req.params;
     const deletedReservation = await Reservation.findByIdAndDelete(id);
     if (!deletedReservation) {

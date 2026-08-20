@@ -1,8 +1,10 @@
-import OnlineConfig from '../models/OnlineConfig.js';
+import OnlineConfigDefault from '../models/OnlineConfig.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get online configuration (creates a default one if none exists)
 export const getOnlineConfig = async (req, res) => {
   try {
+    const OnlineConfig = getTenantModel(req, 'OnlineConfig', OnlineConfigDefault);
     let config = await OnlineConfig.findOne();
     
     if (!config) {
@@ -19,6 +21,7 @@ export const getOnlineConfig = async (req, res) => {
 // Update online configuration
 export const updateOnlineConfig = async (req, res) => {
   try {
+    const OnlineConfig = getTenantModel(req, 'OnlineConfig', OnlineConfigDefault);
     let config = await OnlineConfig.findOne();
     
     if (!config) {

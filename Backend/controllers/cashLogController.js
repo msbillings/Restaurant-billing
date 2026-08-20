@@ -1,8 +1,10 @@
-import CashLog from '../models/CashLog.js';
+import CashLogDefault from '../models/CashLog.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 
 // Get all cash logs
 export const getCashLogs = async (req, res) => {
   try {
+    const CashLog = getTenantModel(req, 'CashLog', CashLogDefault);
     const logs = await CashLog.find().sort({ date: -1 });
     res.status(200).json(logs);
   } catch (error) {
@@ -13,6 +15,7 @@ export const getCashLogs = async (req, res) => {
 // Create a new cash log
 export const createCashLog = async (req, res) => {
   try {
+    const CashLog = getTenantModel(req, 'CashLog', CashLogDefault);
     const { type, amount, reason, performedBy } = req.body;
     const newLog = new CashLog({ type, amount, reason, performedBy });
     await newLog.save();
@@ -25,6 +28,7 @@ export const createCashLog = async (req, res) => {
 // Delete a cash log (for mistakes)
 export const deleteCashLog = async (req, res) => {
   try {
+    const CashLog = getTenantModel(req, 'CashLog', CashLogDefault);
     const { id } = req.params;
     const deletedLog = await CashLog.findByIdAndDelete(id);
     if (!deletedLog) {

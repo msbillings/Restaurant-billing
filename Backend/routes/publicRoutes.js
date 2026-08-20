@@ -80,16 +80,24 @@ export const getTableMatchCondition = (tblStr) => {
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
-// In-memory cache for public menu per tenant with 60s TTL
-const publicMenuCache = new Map();
+// In-memory cache for public menu per tenant with 5s TTL
+export const publicMenuCache = new Map();
+
+export const clearPublicMenuCache = (tenantKey) => {
+  if (tenantKey) {
+    publicMenuCache.delete(tenantKey);
+  } else {
+    publicMenuCache.clear();
+  }
+};
 
 // Public endpoint to fetch categories and active menu items
 router.get('/menu', async (req, res) => {
   try {
     const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
     const cached = publicMenuCache.get(tenantKey);
-    if (cached && (Date.now() - cached.timestamp < 60000)) {
-      res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+    if (cached && (Date.now() - cached.timestamp < 5000)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       return res.status(200).json(cached.data);
     }
 
@@ -98,9 +106,9 @@ router.get('/menu', async (req, res) => {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
 
     const [categories, items, settingDocs] = await Promise.all([
-      Category.find().sort({ order: 1, name: 1 }).maxTimeMS(8000).lean(),
-      Menu.find({ isAvailable: true }).populate('category', 'name').maxTimeMS(8000).lean(),
-      Setting.find({ key: { $in: ['googleReviewLink', 'restaurantSettings'] } }).maxTimeMS(8000).lean()
+      Category.find().sort({ order: 1, name: 1 }).maxTimeMS(6000).lean(),
+      Menu.find({ isAvailable: true }).populate('category', 'name').maxTimeMS(6000).lean(),
+      Setting.find({ key: { $in: ['googleReviewLink', 'restaurantSettings'] } }).maxTimeMS(6000).lean()
     ]);
 
     let googleReviewLink = null;
@@ -119,7 +127,7 @@ router.get('/menu', async (req, res) => {
     const responsePayload = { categories, items, googleReviewLink, restaurantSettings };
     publicMenuCache.set(tenantKey, { data: responsePayload, timestamp: Date.now() });
 
-    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching public menu:", error);

@@ -1,9 +1,11 @@
-import PushOrder from '../models/PushOrder.js';
+import PushOrderDefault from '../models/PushOrder.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 
 // Get all push orders (can filter by status)
 export const getPushOrders = async (req, res) => {
   try {
+    const PushOrder = getTenantModel(req, 'PushOrder', PushOrderDefault);
     const { status, platform } = req.query;
     let query = {};
     if (status) query.status = status;
@@ -19,6 +21,7 @@ export const getPushOrders = async (req, res) => {
 // Webhook endpoint to receive mock orders from aggregators
 export const receivePushOrder = async (req, res) => {
   try {
+    const PushOrder = getTenantModel(req, 'PushOrder', PushOrderDefault);
     const newOrder = new PushOrder(req.body);
     await newOrder.save();
     
@@ -42,6 +45,7 @@ export const receivePushOrder = async (req, res) => {
 // Update order status (accept, prepare, dispatch)
 export const updateOrderStatus = async (req, res) => {
   try {
+    const PushOrder = getTenantModel(req, 'PushOrder', PushOrderDefault);
     const { id } = req.params;
     const { status } = req.body;
     
