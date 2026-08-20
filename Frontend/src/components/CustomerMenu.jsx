@@ -79,6 +79,23 @@ const CustomerMenu = () => {
   const [selectedItemForAdd, setSelectedItemForAdd] = useState(null);
   const [specialNote, setSpecialNote] = useState('');
 
+  // Dynamic rotating loading tip state
+  const [loadingTipIndex, setLoadingTipIndex] = useState(0);
+  const loadingTips = [
+    { icon: "👨‍🍳", title: t("Crafting Chef's Specials"), subtitle: t("Preparing your table's digital experience...") },
+    { icon: "🥗", title: t("Fresh Dishes & Ingredients"), subtitle: t("Loading updated prices & specialties...") },
+    { icon: "🔥", title: t("Today's Bestsellers"), subtitle: t("Finding the most loved food choices...") },
+    { icon: "🍹", title: t("Beverages & Desserts"), subtitle: t("Organizing your personalized digital menu...") }
+  ];
+
+  useEffect(() => {
+    if (!loading && items.length > 0) return;
+    const interval = setInterval(() => {
+      setLoadingTipIndex(prev => (prev + 1) % 4);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, [loading, items.length]);
+
   // Draggable bell button
   const [bellPos, setBellPos] = useState({ x: window.innerWidth - 60, y: window.innerHeight - 80 });
   const isDragging = useRef(false);
@@ -611,15 +628,6 @@ const CustomerMenu = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <UtensilsCrossed className="w-12 h-12 text-orange-500 animate-bounce mb-4" />
-        <h2 className="text-xl font-bold text-slate-700">{t("Loading your menu...")}</h2>
-      </div>);
-
-  }
-
   if (geoError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
@@ -791,21 +799,27 @@ const CustomerMenu = () => {
           
           {/* Category Quick-Jump */}
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar border-t border-slate-100 pt-2 mt-1">
-            {visibleCategoriesData.map((category) => (
-              <button
-                key={`nav-${category._id}`}
-                onClick={() => {
-                  const el = document.getElementById(`category-${category._id}`);
-                  if (el) {
-                    const y = el.getBoundingClientRect().top + window.scrollY - 180;
-                    window.scrollTo({ top: y, behavior: 'smooth' });
-                  }
-                }}
-                className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold whitespace-nowrap border border-orange-100 transition-colors hover:bg-orange-100 active:bg-orange-200"
-              >
-                {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
-              </button>
-            ))}
+            {(loading || (items.length === 0 && !error)) ? (
+              [1, 2, 3, 4, 5].map((i) => (
+                <div key={`cat-skel-${i}`} className="h-7 w-20 rounded-xl bg-orange-100/70 animate-pulse shrink-0 border border-orange-100" />
+              ))
+            ) : (
+              visibleCategoriesData.map((category) => (
+                <button
+                  key={`nav-${category._id}`}
+                  onClick={() => {
+                    const el = document.getElementById(`category-${category._id}`);
+                    if (el) {
+                      const y = el.getBoundingClientRect().top + window.scrollY - 180;
+                      window.scrollTo({ top: y, behavior: 'smooth' });
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold whitespace-nowrap border border-orange-100 transition-colors hover:bg-orange-100 active:bg-orange-200"
+                >
+                  {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
+                </button>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -1067,56 +1081,194 @@ const CustomerMenu = () => {
 
       {/* Menu Categories & Items */}
       <main className="p-4 space-y-8 mt-2 max-w-2xl mx-auto">
-        {visibleCategoriesData.map((category) => {
-          const categoryItems = category.filteredItems;
+        {(loading || (items.length === 0 && !error)) ? (
+          /* ── DYNAMIC ANIMATED MENU LOADING SKELETON ── */
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {/* Attractive Chef Loading Banner with Floating Emojis */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-orange-500/10 via-amber-500/15 to-orange-500/10 border border-orange-200/80 rounded-3xl p-5 shadow-xs">
+              <div className="flex items-center gap-3.5">
+                <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+                  <motion.div
+                    animate={{ rotate: [0, 12, -12, 0], scale: [1, 1.08, 1] }}
+                    transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                  >
+                    <ChefHat size={24} />
+                  </motion.div>
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-slate-800 tracking-tight">
+                      {loadingTips[loadingTipIndex]?.title || t("Crafting Your Menu Experience")}
+                    </h3>
+                    <span className="text-xs animate-bounce">✨</span>
+                  </div>
+                  <p className="text-xs text-orange-600 font-bold mt-0.5 animate-pulse">
+                    {loadingTips[loadingTipIndex]?.subtitle || t("Fetching fresh dishes, seasonal specials & prices...")}
+                  </p>
+                </div>
+              </div>
 
-          return (
-            <div key={category._id} id={`category-${category._id}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500 scroll-mt-32">
-              <h2 className="text-xl font-black text-slate-800 mb-4 px-2 flex items-center gap-2">
-                {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
-                <div className="h-px bg-slate-200 flex-1 ml-4 mt-1"></div>
-              </h2>
+              {/* Shimmer glowing progress bar */}
+              <div className="mt-3.5 w-full bg-orange-100/80 rounded-full h-1.5 overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-orange-500 rounded-full"
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "120%" }}
+                  transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+                  style={{ width: "50%" }}
+                />
+              </div>
+
+              {/* Floating food icons */}
+              <div className="flex justify-around mt-3 pt-2.5 border-t border-orange-200/50 text-base">
+                {['🍕', '🍔', '🥗', '🍜', '🍹', '🥘', '🍨'].map((emoji, idx) => (
+                  <motion.span
+                    key={idx}
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{ repeat: Infinity, duration: 1.5, delay: idx * 0.18, ease: "easeInOut" }}
+                    className="cursor-default select-none"
+                  >
+                    {emoji}
+                  </motion.span>
+                ))}
+              </div>
+            </div>
+
+            {/* Section Header Shimmer */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 px-2">
+                <div className="h-6 w-36 bg-slate-200/80 rounded-lg animate-pulse"></div>
+                <div className="h-px bg-slate-200 flex-1"></div>
+              </div>
+
+              {/* Grid of Dish Card Skeletons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {categoryItems.map((item) =>
-                <div key={item._id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex gap-4">
-                    {item.image ?
-                  <img src={item.image} alt={item.name} className="w-24 h-24 object-cover rounded-xl shadow-sm" /> :
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div
+                    key={`dish-skel-${i}`}
+                    className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 flex gap-4 relative overflow-hidden"
+                  >
+                    {/* Image Skeleton with pulse icon */}
+                    <div className="w-24 h-24 rounded-xl bg-gradient-to-tr from-slate-100 to-orange-50/60 flex items-center justify-center text-slate-300 shrink-0 relative overflow-hidden border border-slate-100">
+                      <motion.div
+                        animate={{ scale: [0.95, 1.05, 0.95] }}
+                        transition={{ repeat: Infinity, duration: 1.8, delay: i * 0.15 }}
+                      >
+                        <UtensilsCrossed size={28} className="text-orange-300/50" />
+                      </motion.div>
+                    </div>
 
-                  <div className="w-24 h-24 bg-slate-100 rounded-xl flex items-center justify-center text-slate-300">
-                        <UtensilsCrossed size={32} />
-                      </div>
-                  }
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-start justify-between">
-                          <h3 className="font-bold text-slate-800 leading-tight pr-2">{(language !== 'en' && item.nameTranslations?.[language]) || t(item.name)}</h3>
-                          <span className={`w-3 h-3 rounded-full shrink-0 mt-1 ${item.type === 'veg' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                    {/* Info Skeleton */}
+                    <div className="flex-1 flex flex-col justify-between min-w-0 py-0.5">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="h-4 bg-slate-200 rounded-md w-3/4 animate-pulse"></div>
+                          <div className="w-3 h-3 rounded-full bg-slate-200 animate-pulse shrink-0"></div>
                         </div>
-                        {item.isFavorite && (
-                          <span className="inline-block bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded mt-1 uppercase tracking-wider">
-                            🔥 {t("Bestseller")}
-                          </span>
-                        )}
-                        {item.description && <p className="text-xs text-slate-500 mt-1.5 line-clamp-2">{(language !== 'en' && item.descriptionTranslations?.[language]) || t(item.description)}</p>}
+                        <div className="h-3 bg-slate-100 rounded-md w-full animate-pulse"></div>
+                        <div className="h-3 bg-slate-100 rounded-md w-1/2 animate-pulse"></div>
                       </div>
-                      <div className="flex items-center justify-between mt-3">
-                        <span className="font-black text-orange-600">
-                          {item.variants?.length > 0 ? `₹${Math.min(...item.variants.map((v) => v.price))} - ₹${Math.max(...item.variants.map((v) => v.price))}` : `₹${item.price}`}
-                        </span>
-                        <button
-                        onClick={() => handleAddClick(item)}
-                        className="bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white px-4 py-1.5 rounded-full font-bold text-sm transition-colors shadow-sm">{t("ADD")}
 
-
-                      </button>
+                      <div className="flex items-center justify-between mt-3 pt-2">
+                        <div className="h-5 w-16 bg-orange-100/70 rounded-md animate-pulse"></div>
+                        <div className="h-7 w-16 bg-orange-500/20 rounded-full animate-pulse"></div>
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
-            </div>);
+            </div>
+          </div>
+        ) : visibleCategoriesData.length === 0 ? (
+          /* ── NO DISHES MATCH FILTER / EMPTY MENU ── */
+          <div className="p-8 text-center max-w-md mx-auto my-8 bg-white rounded-3xl shadow-sm border border-slate-100">
+            <div className="w-16 h-16 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <UtensilsCrossed size={32} />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-1">
+              {searchQuery || dietaryFilter !== 'all' ? t("No dishes found") : t("Menu is being prepared")}
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              {searchQuery || dietaryFilter !== 'all'
+                ? t("Try clearing your search or dietary filter to see more dishes.")
+                : t("Our kitchen is currently updating the menu. Please check back in a moment!")}
+            </p>
+            {(searchQuery || dietaryFilter !== 'all') ? (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setDietaryFilter('all');
+                }}
+                className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                {t("Clear Filters")}
+              </button>
+            ) : (
+              <button
+                onClick={() => fetchMenu()}
+                className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                {t("Refresh Menu")}
+              </button>
+            )}
+          </div>
+        ) : (
+          /* ── REAL MENU ITEMS WITH STAGGERED REVEAL ── */
+          visibleCategoriesData.map((category) => {
+            const categoryItems = category.filteredItems;
 
-        })}
+            return (
+              <div key={category._id} id={`category-${category._id}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500 scroll-mt-32">
+                <h2 className="text-xl font-black text-slate-800 mb-4 px-2 flex items-center gap-2">
+                  {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
+                  <div className="h-px bg-slate-200 flex-1 ml-4 mt-1"></div>
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {categoryItems.map((item) => (
+                    <div key={item._id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex gap-4 transition-all hover:shadow-md hover:border-orange-100">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-24 h-24 object-cover rounded-xl shadow-xs" loading="lazy" />
+                      ) : (
+                        <div className="w-24 h-24 bg-slate-100 rounded-xl flex items-center justify-center text-slate-300">
+                          <UtensilsCrossed size={32} />
+                        </div>
+                      )}
+                      <div className="flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-start justify-between">
+                            <h3 className="font-bold text-slate-800 leading-tight pr-2">{(language !== 'en' && item.nameTranslations?.[language]) || t(item.name)}</h3>
+                            <span className={`w-3 h-3 rounded-full shrink-0 mt-1 ${item.type === 'veg' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                          </div>
+                          {item.isFavorite && (
+                            <span className="inline-block bg-orange-100 text-orange-600 text-[10px] font-black px-2 py-0.5 rounded mt-1 uppercase tracking-wider">
+                              🔥 {t("Bestseller")}
+                            </span>
+                          )}
+                          {item.description && <p className="text-xs text-slate-500 mt-1.5 line-clamp-2">{(language !== 'en' && item.descriptionTranslations?.[language]) || t(item.description)}</p>}
+                        </div>
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="font-black text-orange-600">
+                            {item.variants?.length > 0 ? `₹${Math.min(...item.variants.map((v) => v.price))} - ₹${Math.max(...item.variants.map((v) => v.price))}` : `₹${item.price}`}
+                          </span>
+                          <button
+                            onClick={() => handleAddClick(item)}
+                            className="bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white px-4 py-1.5 rounded-full font-bold text-sm transition-colors shadow-xs active:scale-95 cursor-pointer"
+                          >
+                            {t("ADD")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
       </main>
 
       {/* Live Order Tracking — Mini tappable bar + Full Modal */}
