@@ -4,7 +4,7 @@ import { getAllCategories, createCategory, updateCategory, deleteCategory } from
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 import { getInventory } from '../api/inventory';
 import Papa from 'papaparse';
-import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft, Loader2, RefreshCw } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
@@ -736,77 +736,112 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map((item) =>
-              <tr key={item._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
-                    <td className="p-4 font-medium text-text-main">
-                      <div className="flex items-center gap-3">
-                        {formatImageUrl(item.image) ?
-                    <img
-                      src={formatImageUrl(item.image)}
-                      alt={item.name}
-                      className="w-10 h-10 rounded-xl object-cover bg-background border border-border shrink-0 shadow-sm"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }} /> :
-
-
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                            {item.name.charAt(0).toUpperCase()}
-                          </div>
-                    }
-                        <span>{item.name}</span>
-                      </div>
-                    </td>
-                    <td className="p-4 text-text-muted">
-                      <span className="px-2 py-1 bg-background rounded-md border border-border text-xs">
-                        {item.category?.name || item.category}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`
-                  }>
-                        {item.type === 'veg' ? 'Veg' : 'Non-Veg'}
-                      </span>
-                    </td>
-                    <td className="p-4 font-bold text-text-main">₹{item.price}</td>
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2 items-center">
-                        {/* Toggle Availability Button */}
-                        <button
-                          onClick={() => handleToggleAvailability(item)}
-                          title={item.isAvailable ? t("Mark Unavailable") : t("Mark Available")}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none shrink-0 ${item.isAvailable ? 'bg-green-500' : 'bg-gray-300'}`}>
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.isAvailable ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
-                        <button
-                      onClick={() => handleOpenModal(item, true)}
-                      className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("View Details")}>
-
-                      
-                          <Eye size={18} />
-                        </button>
-                        {user?.role === 'Admin' &&
-                    <>
-                            <button
-                        onClick={() => handleOpenModal(item, false)}
-                        className="p-2 hover:bg-background rounded-lg text-primary transition-colors" title={t("Edit Item")}>
-
-                        
-                              <Edit2 size={18} />
-                            </button>
-                            <button
-                        onClick={() => handleDeleteClick(item._id)}
-                        className="p-2 hover:bg-background rounded-lg text-danger transition-colors" title={t("Delete Item")}>
-
-                        
-                              <Trash2 size={18} />
-                            </button>
-                          </>
-                    }
+                {loading && items.length === 0 ? (
+                  [...Array(6)].map((_, i) => (
+                    <tr key={i} className="border-b border-border animate-pulse">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-surface-hover shrink-0"></div>
+                          <div className="w-32 h-4 bg-surface-hover rounded"></div>
+                        </div>
+                      </td>
+                      <td className="p-4"><div className="w-20 h-4 bg-surface-hover rounded"></div></td>
+                      <td className="p-4"><div className="w-14 h-4 bg-surface-hover rounded-full"></div></td>
+                      <td className="p-4"><div className="w-12 h-4 bg-surface-hover rounded"></div></td>
+                      <td className="p-4 text-right"><div className="w-20 h-4 bg-surface-hover rounded ml-auto"></div></td>
+                    </tr>
+                  ))
+                ) : paginatedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-12 text-center text-text-muted">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Loader2 size={28} className={loading ? "animate-spin text-primary" : "hidden"} />
+                        <span className="font-medium text-sm">
+                          {loading ? t("Loading items...") : t("No menu items found")}
+                        </span>
+                        {!loading && (
+                          <button
+                            onClick={() => fetchItems(false)}
+                            className="mt-2 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5"
+                          >
+                            <RefreshCw size={14} /> {t("Refresh")}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-              )}
+                ) : (
+                  paginatedItems.map((item) => (
+                    <tr key={item._id} className="border-b border-border hover:bg-surface-hover transition-colors group">
+                      <td className="p-4 font-medium text-text-main">
+                        <div className="flex items-center gap-3">
+                          {formatImageUrl(item.image) ? (
+                            <img
+                              src={formatImageUrl(item.image)}
+                              alt={item.name}
+                              className="w-10 h-10 rounded-xl object-cover bg-background border border-border shrink-0 shadow-sm"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                              {item.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <span>{item.name}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-text-muted">
+                        <span className="px-2 py-1 bg-background rounded-md border border-border text-xs">
+                          {item.category?.name || item.category}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                          {item.type === 'veg' ? 'Veg' : 'Non-Veg'}
+                        </span>
+                      </td>
+                      <td className="p-4 font-bold text-text-main">₹{item.price}</td>
+                      <td className="p-4 text-right">
+                        <div className="flex justify-end gap-2 items-center">
+                          <button
+                            onClick={() => handleToggleAvailability(item)}
+                            title={item.isAvailable ? t("Mark Unavailable") : t("Mark Available")}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none shrink-0 ${item.isAvailable ? 'bg-green-500' : 'bg-gray-300'}`}
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${item.isAvailable ? 'translate-x-6' : 'translate-x-1'}`} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenModal(item, true)}
+                            className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
+                            title={t("View Details")}
+                          >
+                            <Eye size={18} />
+                          </button>
+                          {user?.role === 'Admin' && (
+                            <>
+                              <button
+                                onClick={() => handleOpenModal(item, false)}
+                                className="p-2 hover:bg-background rounded-lg text-primary transition-colors"
+                                title={t("Edit Item")}
+                              >
+                                <Edit2 size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteClick(item._id)}
+                                className="p-2 hover:bg-background rounded-lg text-danger transition-colors"
+                                title={t("Delete Item")}
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table> :
 

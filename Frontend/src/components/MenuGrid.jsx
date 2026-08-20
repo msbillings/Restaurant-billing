@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronLeft, ChevronRight, Star, X, ChevronDown, Image as ImageIcon,
 Pizza, Sandwich, UtensilsCrossed, Flame, Gift, Menu as MenuIcon, Utensils,
-Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus } from
+Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus, Loader2, RefreshCw } from
 'lucide-react';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
@@ -277,38 +277,6 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
     }
   });
 
-  if (loading) return (
-    <div className="flex flex-col h-full bg-surface overflow-hidden">
-      <div className="p-4 border-b border-border bg-surface z-10 flex flex-col gap-4 shrink-0">
-        <div className="flex items-center gap-4 overflow-x-auto pb-2">
-          {[...Array(6)].map((_, i) =>
-          <div key={i} className="px-6 py-2.5 rounded-full bg-surface-hover animate-pulse">
-              <div className="w-16 h-4 bg-text-muted/20 rounded"></div>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 bg-background/50">
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-6">
-          {[...Array(8)].map((_, i) =>
-          <div key={i} className="bg-surface rounded-2xl p-5 border border-border/50 animate-pulse">
-              <div className="flex justify-between items-start mb-3">
-                <div className="w-3/4 h-5 bg-text-muted/20 rounded"></div>
-                <div className="w-3 h-3 bg-text-muted/20 rounded-full"></div>
-              </div>
-              <div className="w-full h-4 bg-text-muted/20 rounded mb-2"></div>
-              <div className="w-2/3 h-4 bg-text-muted/20 rounded mb-4"></div>
-              <div className="flex items-center justify-between pt-4 border-t border-dashed border-border/50">
-                <div className="w-12 h-5 bg-text-muted/20 rounded"></div>
-                <div className="w-10 h-10 bg-text-muted/20 rounded-xl"></div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>);
-
-
   return (
     <div className="flex flex-col md:flex-row h-full bg-white overflow-hidden w-full">
       {/* Mobile Top Category Scrollbar (Visible on small screens) */}
@@ -413,133 +381,178 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 relative bg-gray-50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {filteredItems.map((item) => {
-              const isAvailable = item.isAvailable !== false; // default to true if undefined
+          {/* Dynamic Loading State with Animated Spinner & Pulse Skeletons */}
+          {loading && items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[360px] w-full">
+              <div className="flex flex-col items-center justify-center p-6 bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-red-100 mb-8 animate-pulse">
+                <div className="relative flex items-center justify-center mb-3">
+                  <div className="w-12 h-12 rounded-full border-4 border-red-100 border-t-red-600 animate-spin"></div>
+                  <UtensilsCrossed size={20} className="text-red-600 absolute" />
+                </div>
+                <h4 className="font-bold text-gray-800 text-sm tracking-wide">{t("Loading Menu Items...")}</h4>
+                <p className="text-xs text-gray-400 mt-1">{t("Fetching live dishes & prices")}</p>
+              </div>
 
-              // Nice color dot instead of full border
-              const dotColor = item.type === 'veg' ? 'bg-green-500 shadow-sm border border-green-200' : item.type === 'non-veg' ? 'bg-red-500 shadow-sm border border-red-200' : 'bg-gray-300';
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full opacity-60">
+                {[...Array(10)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm animate-pulse flex flex-col justify-between h-36">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+                      <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+                    </div>
+                    <div className="w-3/4 h-4 bg-gray-200 rounded-md mb-2"></div>
+                    <div className="w-1/2 h-3 bg-gray-100 rounded-md mb-4"></div>
+                    <div className="flex justify-center">
+                      <div className="w-16 h-6 bg-gray-200 rounded-full"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {filteredItems.map((item) => {
+                const isAvailable = item.isAvailable !== false; // default to true if undefined
+                const dotColor = item.type === 'veg' ? 'bg-green-500 shadow-sm border border-green-200' : item.type === 'non-veg' ? 'bg-red-500 shadow-sm border border-red-200' : 'bg-gray-300';
 
-              return (
-                <div
-                  key={item._id}
-                  className={`bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${
-                  isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${
-                  showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
-                  onClick={() => {
-                    if (!isAvailable) return;
-                    if (item.variants && item.variants.length > 0) {
-                      setSelectedItemVariants(item);
-                    } else {
-                      onSelectItem(item);
-                    }
-                  }}>
-                  
-              <div className={`flex items-start justify-between w-full h-4 z-10 absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
-                <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
-                
-                <div className="flex gap-1.5 items-center">
-                  {!isAvailable && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shadow-sm ${showImages ? 'text-white bg-red-500/90 backdrop-blur-sm' : 'text-red-500 bg-red-50'}`}>{t("Out of Stock")}</span>}
-                  
-                  <button
-                        onClick={(e) => handleToggleFavorite(e, item)}
-                        className={`p-1 rounded-full backdrop-blur-sm transition-all shadow-sm flex items-center justify-center ${
-                        item.isFavorite ?
-                        'bg-yellow-50 text-yellow-500 border border-yellow-200' :
-                        showImages ? 'bg-black/20 text-white hover:bg-black/40 border border-white/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'}`
-                        }>
+                return (
+                  <div
+                    key={item._id}
+                    className={`bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${
+                    isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${
+                    showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
+                    onClick={() => {
+                      if (!isAvailable) return;
+                      if (item.variants && item.variants.length > 0) {
+                        setSelectedItemVariants(item);
+                      } else {
+                        onSelectItem(item);
+                      }
+                    }}>
+                    
+                    <div className={`flex items-start justify-between w-full h-4 z-10 absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
+                      <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
+                      
+                      <div className="flex gap-1.5 items-center">
+                        {!isAvailable && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shadow-sm ${showImages ? 'text-white bg-red-500/90 backdrop-blur-sm' : 'text-red-500 bg-red-50'}`}>{t("Out of Stock")}</span>}
                         
-                    <Star size={12} className={item.isFavorite ? "fill-yellow-500" : ""} />
+                        <button
+                          onClick={(e) => handleToggleFavorite(e, item)}
+                          className={`p-1 rounded-full backdrop-blur-sm transition-all shadow-sm flex items-center justify-center ${
+                          item.isFavorite ?
+                          'bg-yellow-50 text-yellow-500 border border-yellow-200' :
+                          showImages ? 'bg-black/20 text-white hover:bg-black/40 border border-white/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'}`
+                          }>
+                          <Star size={12} className={item.isFavorite ? "fill-yellow-500" : ""} />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {showImages && item.image ?
+                      <div className="w-full h-22.5 shrink-0 bg-gray-100 relative">
+                        <img src={formatImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent"></div>
+                      </div> :
+                      showImages &&
+                      <div className="w-full h-22.5 bg-gray-50 flex flex-col items-center justify-center shrink-0 text-gray-400 border-b border-gray-100 border-dashed">
+                        <ImageIcon size={24} className="opacity-30 mb-1" />
+                        <span className="text-[10px] font-medium opacity-50">{t("No Image")}</span>
+                      </div>
+                    }
+                    
+                    <div className={`flex-1 flex flex-col justify-between ${showImages ? 'p-2.5' : ''}`}>
+                      <div className={`flex-1 flex items-center justify-center text-center mt-1 text-[14px] leading-tight ${isAvailable ? 'font-bold text-gray-800' : 'font-medium text-gray-500 line-through'}`}>
+                        <span className="line-clamp-2 leading-snug">{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
+                      </div>
+                      
+                      <div className={`flex justify-center w-full ${showImages ? 'mt-1.5' : 'mt-2 mb-0.5'}`}>
+                        <span className={`text-[13px] font-black px-3 py-1 rounded-full shadow-sm border ${showImages ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-gray-50 text-gray-800 border-gray-100'}`}>
+                          ₹{item.price ? `${item.price.toFixed(2)}` : '0.00'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Empty Category State */}
+              {!loading && filteredItems.length === 0 && category !== '⭐ Favourites' && (
+                <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-gray-200 shadow-xs p-8">
+                  <div className="w-16 h-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-3 shadow-inner">
+                    <UtensilsCrossed size={28} />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-800 mb-1">{t("No Items Found")}</h3>
+                  <p className="text-xs text-gray-400 max-w-xs">{t("No dishes available in this category. Click below to reload menu data.")}</p>
+                  <button
+                    onClick={() => fetchItems(false)}
+                    className="mt-4 px-4 py-2 bg-gradient-to-r from-red-600 to-orange-500 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw size={14} />
+                    <span>{t("Reload Menu")}</span>
                   </button>
                 </div>
-              </div>
-              
-              {showImages && item.image ?
-                  <div className="w-full h-22.5 shrink-0 bg-gray-100 relative">
-                  <img src={formatImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent"></div>
-                </div> :
-                  showImages &&
-                  <div className="w-full h-22.5 bg-gray-50 flex flex-col items-center justify-center shrink-0 text-gray-400 border-b border-gray-100 border-dashed">
-                  <ImageIcon size={24} className="opacity-30 mb-1" />
-                  <span className="text-[10px] font-medium opacity-50">{t("No Image")}</span>
-                </div>
-                  }
-              
-              <div className={`flex-1 flex flex-col justify-between ${showImages ? 'p-2.5' : ''}`}>
-                <div className={`flex-1 flex items-center justify-center text-center mt-1 text-[14px] leading-tight ${isAvailable ? 'font-bold text-gray-800' : 'font-medium text-gray-500 line-through'}`}>
-                  <span className="line-clamp-2 leading-snug">{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
-                </div>
-                
-                <div className={`flex justify-center w-full ${showImages ? 'mt-1.5' : 'mt-2 mb-0.5'}`}>
-                  <span className={`text-[13px] font-black px-3 py-1 rounded-full shadow-sm border ${showImages ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-gray-50 text-gray-800 border-gray-100'}`}>
-                    ₹{item.price ? `${item.price.toFixed(2)}` : '0.00'}
-                  </span>
-                </div>
-              </div>
-            </div>);
+              )}
 
-            })}
-
-          {category === '⭐ Favourites' && filteredItems.length === 0 &&
-            <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-surface rounded-2xl border border-dashed border-border/60">
-              <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 mb-4">
-                <Star size={32} className="fill-amber-500/20" />
-              </div>
-              <h3 className="text-lg font-bold text-text-main mb-1">{t("No Favourites Added Yet")}</h3>
-              <p className="text-text-muted text-sm max-w-md">{t("Hover over any menu item under \"All\" or other categories and click the")}
-                <Star size={14} className="inline text-amber-500 fill-amber-500 mx-0.5" />{t("star icon in the top right corner to add it right here for instant billing!")}
-              </p>
+              {/* Empty Favourites State */}
+              {category === '⭐ Favourites' && filteredItems.length === 0 && (
+                <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-yellow-200 shadow-xs p-8">
+                  <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 mb-4">
+                    <Star size={32} className="fill-amber-500/20" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-1">{t("No Favourites Added Yet")}</h3>
+                  <p className="text-gray-500 text-xs max-w-md">{t("Hover over any menu item under \"All\" or other categories and click the")}
+                    <Star size={14} className="inline text-amber-500 fill-amber-500 mx-0.5" />{t("star icon in the top right corner to add it right here for instant billing!")}
+                  </p>
+                </div>
+              )}
             </div>
-            }
+          )}
         </div>
       </div>
-    </div>
 
       {/* Variant Selection Modal */}
-      {selectedItemVariants &&
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      {selectedItemVariants && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-surface w-full max-w-sm rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-5 border-b border-border bg-linear-to-r from-primary/5 to-transparent">
               <h2 className="text-xl font-bold text-text-main pr-4 leading-tight">{t("Select Size")}<br /><span className="text-sm font-normal text-text-muted">{selectedItemVariants.name}</span></h2>
               <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedItemVariants(null);
-              }}
-              className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors">
-              
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedItemVariants(null);
+                }}
+                className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors"
+              >
                 <X size={24} />
-                
               </button>
             </div>
             <div className="p-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
-              {selectedItemVariants.variants.map((variant, idx) =>
-            <button
-              key={idx}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectItem({
-                  ...selectedItemVariants,
-                  _id: `${selectedItemVariants._id}-${variant.name}`,
-                  originalId: selectedItemVariants._id,
-                  name: `${selectedItemVariants.name} (${variant.name})`,
-                  price: variant.price
-                });
-                setSelectedItemVariants(null);
-              }}
-              className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md">
-              
+              {selectedItemVariants.variants.map((variant, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectItem({
+                      ...selectedItemVariants,
+                      _id: `${selectedItemVariants._id}-${variant.name}`,
+                      originalId: selectedItemVariants._id,
+                      name: `${selectedItemVariants.name} (${variant.name})`,
+                      price: variant.price
+                    });
+                    setSelectedItemVariants(null);
+                  }}
+                  className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md"
+                >
                   <span className="font-bold text-lg text-text-main group-hover:text-primary transition-colors">{variant.name}</span>
                   <span className="font-black text-xl text-text-main bg-background px-3 py-1 rounded-lg border border-border group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-colors">₹{variant.price}</span>
                 </button>
-            )}
+              ))}
             </div>
           </div>
         </div>
-      }
-    </div>);
-
+      )}
+    </div>
+  );
 };
 
 export default MenuGrid;

@@ -11,7 +11,7 @@ if (navigator.userAgent.toLowerCase().indexOf('electron') > -1) {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,7 +20,7 @@ const api = axios.create({
 // Create a separate axios instance for auth refresh to avoid interceptor recursion
 const authApi = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },

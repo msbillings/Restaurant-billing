@@ -8,9 +8,36 @@ import { emitSocketEvent } from '../utils/socket.js';
 export const getAllMenuItems = async (req, res) => {
   try {
     const Menu = getTenantModel(req, 'Menu', MenuDefault);
-    const items = await Menu.find({ isAvailable: { $ne: false } }).populate('category', 'name');
+    const Category = getTenantModel(req, 'Category', CategoryDefault);
+
+    // Fetch items and categories in parallel with lean() for maximum speed (<100ms)
+    const [rawItems, allCats] = await Promise.all([
+      Menu.find({ isAvailable: { $ne: false } }).lean(),
+      Category.find({}).lean()
+    ]);
+
+    const catMap = new Map();
+    (allCats || []).forEach(c => {
+      if (c && c._id) catMap.set(c._id.toString(), c.name);
+      if (c && c.name) catMap.set(c.name, c.name);
+    });
+
+    const items = (rawItems || []).map(item => {
+      let resolvedCategory = item.category;
+      if (item.category && catMap.has(item.category.toString())) {
+        resolvedCategory = { _id: item.category, name: catMap.get(item.category.toString()) };
+      } else if (typeof item.category === 'string') {
+        resolvedCategory = { name: item.category };
+      }
+      return {
+        ...item,
+        category: resolvedCategory || { name: 'General' }
+      };
+    });
+
     res.status(200).json(items);
   } catch (error) {
+    console.error('Error fetching menu items:', error);
     res.status(500).json({ message: error.message });
   }
 };
