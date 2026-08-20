@@ -7,12 +7,24 @@ export const isCapacitorApp = () => Capacitor.isNativePlatform();
 
 export const getApiUrl = () => {
     // 1. Electron Desktop EXE — always use localhost backend
-    if (navigator.userAgent.toLowerCase().includes('electron')) {
+    if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')) {
         return 'http://127.0.0.1:5002/api';
     }
 
-    // 2. If a server IP is stored (set from LicenseScreen or QRCodeGenerator), use it
-    const storedIp = localStorage.getItem('resto_server_ip');
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+    // 2. If running on Vercel or any HTTPS cloud deployment, ALWAYS use HTTPS API (prevent Mixed Content blocks)
+    if (host && (host.includes('vercel.app') || isHttps)) {
+        let envUrl = import.meta.env.VITE_API_URL;
+        if (envUrl && envUrl.startsWith('https://')) {
+            return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+        }
+        return 'https://restaurant-billing-apk.vercel.app/api';
+    }
+
+    // 3. If a local server IP is stored (for LAN / APK on Wi-Fi)
+    const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
     if (storedIp && storedIp.trim()) {
         const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
         if (cleanIp.includes(':')) {
@@ -21,19 +33,12 @@ export const getApiUrl = () => {
         return `http://${cleanIp}:5002/api`;
     }
 
-    // 3. Capacitor APK without a stored IP — use cloud/production URL
+    // 4. Capacitor APK without a stored IP — use cloud production URL
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_API_URL;
-        if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-            return envUrl;
+        if (envUrl && envUrl.startsWith('https://')) {
+            return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
         }
-        return 'https://restaurant-billing-apk.vercel.app/api';
-    }
-
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-
-    // 4. If running on Vercel or any cloud HTTPS deployment without a stored local IP
-    if (host && (host.includes('vercel.app') || (typeof window !== 'undefined' && window.location.protocol === 'https:'))) {
         return 'https://restaurant-billing-apk.vercel.app/api';
     }
 

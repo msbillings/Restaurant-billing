@@ -234,12 +234,14 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
   }, []);
 
   const validCategories = categories.filter((cat) => {
+    if (items.length === 0) return true;
     return items.some((item) => {
-      const itemCategory = item.category?.name || item.category;
-      return itemCategory === cat.name;
+      const itemCatName = item.category?.name || (typeof item.category === 'string' ? item.category : '');
+      const itemCatId = item.category?._id || item.category;
+      return itemCatName === cat.name || itemCatId === cat._id || itemCatId === cat.name;
     });
   });
-  const categoryOptions = ['All', '⭐ Favourites', ...validCategories.map((cat) => cat.name)];
+  const categoryOptions = ['All', '⭐ Favourites', ...(validCategories.length > 0 ? validCategories : categories).map((cat) => cat.name)];
 
   const filteredItems = items.filter((item) => {
     let matchesCategory = false;
@@ -248,11 +250,13 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
     } else if (category === '⭐ Favourites') {
       matchesCategory = item.isFavorite === true;
     } else {
-      const itemCategory = item.category?.name || item.category;
-      matchesCategory = itemCategory === category;
+      const itemCatName = item.category?.name || (typeof item.category === 'string' ? item.category : '');
+      const itemCatId = item.category?._id || item.category;
+      const matchedCat = categories.find(c => c.name === category);
+      matchesCategory = itemCatName === category || (matchedCat && (itemCatId === matchedCat._id || itemCatName === matchedCat.name));
     }
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase());
+    (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch;
   }).sort((a, b) => {
     switch (sortBy) {

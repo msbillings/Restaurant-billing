@@ -8,7 +8,7 @@ import { emitSocketEvent } from '../utils/socket.js';
 export const getAllMenuItems = async (req, res) => {
   try {
     const Menu = getTenantModel(req, 'Menu', MenuDefault);
-    const items = await Menu.find({ isAvailable: true }).populate('category', 'name');
+    const items = await Menu.find({ isAvailable: { $ne: false } }).populate('category', 'name');
     res.status(200).json(items);
   } catch (error) {
     res.status(500).json({ message: error.message });
