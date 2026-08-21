@@ -59,13 +59,16 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
 
   const fetchLocalNotifications = async () => {
     setLoading(true);
+    // Safety fallback: force loading to false after 5 seconds if API hangs
+    const timeoutId = setTimeout(() => setLoading(false), 5000);
+    
     try {
       const combined = [];
 
       // 1. Fetch low-stock inventory alerts (only for Admin & Manager)
       if (userRole === 'Admin' || userRole === 'Manager') {
         try {
-          const res = await api.get('/inventory');
+          const res = await api.get('/inventory', { timeout: 4000 });
           const inventory = Array.isArray(res.data) ? res.data : [];
           const lowStockAlerts = inventory
             .filter((item) => item.currentStock <= item.minStockAlert)
@@ -138,6 +141,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
