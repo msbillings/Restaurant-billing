@@ -1868,7 +1868,7 @@ function App() {
                   {view === 'renewal' && <ServiceRenewal onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'custom-status' && <CustomStatus onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} onGoBack={handleGoBack} />}
-                  {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} />}
+                  {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 </>
               }
             </Suspense>

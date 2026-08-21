@@ -90,6 +90,8 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
   const [withdrawDesignation, setWithdrawDesignation] = useState('Head Chef');
   const [withdrawNotes, setWithdrawNotes] = useState('');
 
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+
   // Form State for Add/Edit Stock Item
   const [formData, setFormData] = useState({
     name: '',
@@ -159,16 +161,24 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
     }
   };
 
-  const handleDeleteItem = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this inventory item?')) return;
+  const handleDeleteItem = (item) => {
+    setDeleteConfirmItem(item);
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!deleteConfirmItem) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/inventory/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/inventory/${deleteConfirmItem._id}`, {
         method: 'DELETE',
         headers: getHeaders()
       });
       if (res.ok) {
-        setToast({ message: 'Item deleted', type: 'success' });
+        setToast({ message: 'Item deleted successfully', type: 'success' });
+        setDeleteConfirmItem(null);
         fetchInventoryData();
+      } else {
+        const err = await res.json();
+        setToast({ message: err.message || 'Failed to delete item', type: 'error' });
       }
     } catch (err) {
       setToast({ message: 'Failed to delete item', type: 'error' });
@@ -340,75 +350,77 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
   const foodCostPercent = dishSellingPrice > 0 ? (totalRecipeCost / dishSellingPrice * 100).toFixed(1) : 0;
 
   return (
-    <div className="p-4 w-full mx-auto space-y-4">
+    <div className="p-2.5 sm:p-4 w-full mx-auto space-y-3 sm:space-y-4">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-4 rounded-xl text-white shadow-md">
-        <div className="flex items-start gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-3.5 sm:p-5 rounded-2xl text-white shadow-md">
+        <div className="flex items-start gap-2.5 sm:gap-3">
           <BackButton onClick={onGoBack} className="shrink-0 mt-0.5 invert" />
           <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <Package className="w-6 h-6" />{t("Inventory & Stock Management")}
+            <h1 className="text-base sm:text-2xl font-bold flex items-center gap-2">
+              <Package className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+              <span>{t("Inventory & Stock Management")}</span>
             </h1>
-            <p className="text-amber-100 mt-1">{t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
+            <p className="text-amber-100 text-[11px] sm:text-xs mt-0.5 line-clamp-2 sm:line-clamp-none">
+              {t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 w-full md:w-auto">
           <button
             onClick={fetchInventoryData}
-            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center gap-2 text-sm font-medium">
-            
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />{t("Refresh")}
+            className="flex-1 md:flex-none p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>{t("Refresh")}</span>
           </button>
           <button
             onClick={() => {resetForm();setEditingItem(null);setIsAddModalOpen(true);}}
-            className="px-4 py-2.5 bg-white text-amber-700 font-bold rounded-xl hover:bg-amber-50 transition shadow flex items-center gap-2">
-            
-            <Plus className="w-5 h-5" />{t("Add Raw Material")}
+            className="flex-1 md:flex-none px-3.5 py-2 sm:py-2.5 bg-white text-amber-700 font-bold rounded-xl hover:bg-amber-50 transition shadow-sm flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap">
+            <Plus className="w-4 h-4" />
+            <span>{t("Add Raw Material")}</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-gray-500">{t("Total Stock Items")}</p>
-            <h3 className="text-2xl font-bold text-gray-900 mt-0.5">{items.length}</h3>
+      {/* KPI Cards - 3 tiles on mobile */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Total Items")}</p>
+            <h3 className="text-base sm:text-2xl font-black text-gray-900 mt-0.5">{items.length}</h3>
           </div>
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <Layers className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-gray-500">{t("Low Stock Alerts")}</p>
-            <h3 className="text-2xl font-bold text-red-600 mt-0.5">{lowStockItems.length}</h3>
-          </div>
-          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-            <AlertTriangle className={`w-6 h-6 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
+          <div className="p-1.5 sm:p-3 bg-amber-50 text-amber-600 rounded-lg sm:rounded-xl shrink-0">
+            <Layers className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-gray-500">{t("Total Stock Value")}</p>
-            <h3 className="text-2xl font-bold text-emerald-600 mt-0.5">₹{totalStockValue.toLocaleString()}</h3>
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Low Stock")}</p>
+            <h3 className="text-base sm:text-2xl font-black text-red-600 mt-0.5">{lowStockItems.length}</h3>
           </div>
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <DollarSign className="w-6 h-6" />
+          <div className="p-1.5 sm:p-3 bg-red-50 text-red-600 rounded-lg sm:rounded-xl shrink-0">
+            <AlertTriangle className={`w-4 h-4 sm:w-6 sm:h-6 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
+          </div>
+        </div>
+
+        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Stock Value")}</p>
+            <h3 className="text-xs sm:text-2xl font-black text-emerald-600 mt-0.5 font-mono truncate">₹{totalStockValue.toLocaleString()}</h3>
+          </div>
+          <div className="p-1.5 sm:p-3 bg-emerald-50 text-emerald-600 rounded-lg sm:rounded-xl shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-6 sm:h-6" />
           </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-2 sm:px-4 rounded-t-2xl overflow-x-auto">
+      <div className="flex border-b border-gray-200 bg-white px-2 sm:px-4 rounded-t-2xl overflow-x-auto shrink-0 flex-nowrap">
         <button
           onClick={() => setActiveTab('stock')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'stock' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
@@ -417,7 +429,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
         </button>
         <button
           onClick={() => setActiveTab('recipes')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'recipes' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
@@ -426,7 +438,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'logs' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
@@ -435,7 +447,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
         </button>
         <button
           onClick={() => {setActiveTab('predictions');fetchPredictions();}}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap ${
+          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'predictions' ?
           'border-purple-600 text-purple-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
@@ -446,7 +458,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
 
       {/* TAB 1: STOCK ROOM */}
       {activeTab === 'stock' &&
-      <div className="bg-white p-6 rounded-b-2xl shadow-sm border border-gray-100 space-y-6">
+      <div className="bg-white p-3.5 sm:p-6 rounded-b-2xl shadow-sm border border-gray-100 space-y-4 sm:space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -568,9 +580,8 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
-                        onClick={() => handleDeleteItem(item._id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 transition">
-                        
+                            onClick={() => handleDeleteItem(item)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 transition cursor-pointer">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
@@ -887,53 +898,56 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
       }
 
       {/* MODAL 1: ADD/EDIT RAW MATERIAL */}
-      {isAddModalOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface rounded-3xl max-w-lg w-full shadow-2xl border border-border overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300 ease-out">
-            <div className="bg-gradient-to-r from-primary/10 to-transparent p-6 border-b border-border flex items-center gap-4">
-              <div className="p-3 bg-primary/20 rounded-2xl text-primary">
-                <Package size={24} strokeWidth={2.5} />
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-surface rounded-t-3xl sm:rounded-2xl max-w-lg w-full shadow-2xl border-t sm:border border-border max-h-[85vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-r from-primary/10 to-transparent p-4 sm:p-5 border-b border-border flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 sm:p-2.5 bg-primary/20 rounded-xl text-primary shrink-0">
+                  <Package size={20} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-xl font-black text-text-main">
+                    {editingItem ? t('Edit Raw Material') : t('Add Raw Material')}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-text-muted mt-0.5 font-medium">{t("Track your inventory precisely to manage costs.")}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-2xl font-black text-text-main">
-                  {editingItem ? 'Edit Raw Material' : 'Add Raw Material'}
-                </h3>
-                <p className="text-xs text-text-muted mt-1 font-medium">{t("Track your inventory precisely to manage costs.")}</p>
-              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-text-muted hover:text-text-main p-1 text-lg leading-none cursor-pointer">&times;</button>
             </div>
 
-            <form onSubmit={handleSaveItem} className="p-6 space-y-5">
+            <form onSubmit={handleSaveItem} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Item Name")}<span className="text-danger">*</span></label>
+                <label className="text-xs font-bold tracking-wide text-text-muted mb-1 block uppercase">{t("Item Name")}<span className="text-danger">*</span></label>
                 <input
-                type="text"
-                required placeholder={t("e.g., Basmati Rice, Chicken, Cooking Oil")}
-
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border" />
-              
+                  type="text"
+                  required
+                  placeholder={t("e.g., Basmati Rice, Chicken, Cooking Oil")}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-background border border-border/80 rounded-xl text-xs sm:text-sm font-semibold text-text-main placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                 <div>
-                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Category")}</label>
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-1 block uppercase">{t("Category")}</label>
                   {isCustomCategory ? (
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         autoFocus
-                        placeholder={t("Enter custom category")}
+                        placeholder={t("Custom category")}
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                        className="w-full px-3 py-2 bg-background border border-border/80 rounded-xl text-xs sm:text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
                       />
                       <button
                         type="button"
                         onClick={() => { setIsCustomCategory(false); setFormData({ ...formData, category: 'Other' }); }}
-                        className="p-3.5 text-gray-400 hover:text-red-500 bg-gray-50 border border-gray-200 rounded-xl transition flex items-center justify-center"
+                        className="p-2 text-gray-400 hover:text-red-500 bg-gray-50 border border-gray-200 rounded-xl transition flex items-center justify-center shrink-0 cursor-pointer"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (
@@ -947,224 +961,226 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
                           setFormData({ ...formData, category: e.target.value });
                         }
                       }}
-                      className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
+                      className="w-full px-3 py-2.5 bg-background border border-border/80 rounded-xl text-xs sm:text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
                     >
                       {categories.filter((c) => c !== 'All').map((c) =>
                         <option key={c} value={c}>{c}</option>
                       )}
-                      <option value="custom_add_new">+ {t("Add Custom Category...")}</option>
+                      <option value="custom_add_new">+ {t("Add Custom...")}</option>
                     </select>
                   )}
                 </div>
                 <div>
-                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Unit")}</label>
+                  <label className="text-xs font-bold tracking-wide text-text-muted mb-1 block uppercase">{t("Unit")}</label>
                   <select
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer">
-                  
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-background border border-border/80 rounded-xl text-xs sm:text-sm font-semibold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border appearance-none cursor-pointer"
+                  >
                     {units.map((u) =>
-                  <option key={u} value={u}>{u}</option>
-                  )}
+                      <option key={u} value={u}>{u}</option>
+                    )}
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div>
-                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block uppercase">{t("Initial Stock")}</label>
-                  <div className="relative">
-                    <input
+                  <label className="text-[10px] sm:text-xs font-bold tracking-wide text-text-muted mb-1 block uppercase truncate">{t("Initial Stock")}</label>
+                  <input
                     type="number"
                     step="0.01"
                     min="0"
                     placeholder="0"
                     value={formData.currentStock}
                     onChange={(e) => setFormData({ ...formData, currentStock: e.target.value })}
-                    className="w-full p-3.5 bg-background border border-border/80 rounded-xl text-sm font-bold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all hover:border-border" />
-                  
-                  </div>
+                    className="w-full px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-background border border-border/80 rounded-xl text-xs sm:text-sm font-bold text-text-main focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block flex items-center gap-1 uppercase">{t("Alert Lvl")}
-                  <AlertTriangle size={12} className="text-danger" />
+                  <label className="text-[10px] sm:text-xs font-bold tracking-wide text-text-muted mb-1 block flex items-center gap-0.5 uppercase truncate">
+                    <span>{t("Alert")}</span>
+                    <AlertTriangle size={11} className="text-danger shrink-0" />
                   </label>
-                  <div className="relative">
-                    <input
+                  <input
                     type="number"
                     step="0.01"
                     min="0"
                     placeholder="5"
                     value={formData.minStockAlert}
                     onChange={(e) => setFormData({ ...formData, minStockAlert: e.target.value })}
-                    className="w-full p-3.5 bg-danger/5 border border-danger/20 rounded-xl text-sm font-bold text-danger focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger transition-all hover:border-danger/50 placeholder-danger/30" />
-                  
-                  </div>
+                    className="w-full px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-danger/5 border border-danger/20 rounded-xl text-xs sm:text-sm font-bold text-danger focus:outline-none focus:ring-2 focus:ring-danger/40 focus:border-danger transition-all placeholder-danger/30"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs font-bold tracking-wide text-text-muted mb-2 block flex items-center gap-1 uppercase">{t("Unit Cost")}
-                  <DollarSign size={12} className="text-success" />
+                  <label className="text-[10px] sm:text-xs font-bold tracking-wide text-text-muted mb-1 block flex items-center gap-0.5 uppercase truncate">
+                    <span>{t("Cost")}</span>
+                    <DollarSign size={11} className="text-success shrink-0" />
                   </label>
-                  <div className="relative">
-                    <input
+                  <input
                     type="number"
                     step="0.01"
                     min="0"
                     placeholder="0.00"
                     value={formData.unitCost}
                     onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
-                    className="w-full p-3.5 bg-success/5 border border-success/20 rounded-xl text-sm font-bold text-success focus:outline-none focus:ring-2 focus:ring-success/40 focus:border-success transition-all hover:border-success/50 placeholder-success/30" />
-                  
-                  </div>
+                    className="w-full px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-success/5 border border-success/20 rounded-xl text-xs sm:text-sm font-bold text-success focus:outline-none focus:ring-2 focus:ring-success/40 focus:border-success transition-all placeholder-success/30"
+                  />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-6 mt-4">
+              <div className="shrink-0 flex justify-end gap-2.5 pt-4 mt-2 border-t border-border">
                 <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                className="px-6 py-3 bg-background hover:bg-surface-hover border border-border text-text-main font-bold text-sm rounded-xl transition-all">{t("Cancel")}
-
-
-              </button>
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 bg-background hover:bg-surface-hover border border-border text-text-main font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer">
+                  {t("Cancel")}
+                </button>
                 <button
-                type="submit"
-                className="px-8 py-3 bg-primary hover:bg-primary-hover text-white font-bold text-sm rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all hover:-translate-y-0.5 flex items-center gap-2">
-                
-                  <CheckCircle size={18} />
-                  {editingItem ? 'Update Material' : 'Save Material'}
+                  type="submit"
+                  className="flex-1 sm:flex-initial px-5 sm:px-8 py-2.5 bg-primary hover:bg-primary-hover text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-primary/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                  <CheckCircle size={16} />
+                  <span>{editingItem ? t('Update Material') : t('Save Material')}</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
-      }
+      )}
 
       {/* MODAL 2: QUICK RESTOCK (STOCK-IN) */}
-      {isRestockModalOpen && restockItem &&
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <ArrowUpRight className="w-6 h-6 text-emerald-600" />{t("Restock:")}{restockItem.name}
-            </h3>
-            <p className="text-xs text-gray-500">{t("Current Stock:")}
-            <strong className="text-gray-800">{restockItem.currentStock} {restockItem.unit}</strong>
-            </p>
-
-            <form onSubmit={handleRestockSubmit} className="space-y-4">
+      {isRestockModalOpen && restockItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full shadow-2xl border-t sm:border border-gray-100 max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Add Quantity (")}
-                {restockItem.unit}) *
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-1.5">
+                  <ArrowUpRight className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>{t("Restock:")} {restockItem.name}</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {t("Current Stock:")} <strong className="text-gray-800 font-mono">{restockItem.currentStock} {restockItem.unit}</strong>
+                </p>
+              </div>
+              <button onClick={() => setIsRestockModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 text-lg leading-none cursor-pointer">&times;</button>
+            </div>
+
+            <form onSubmit={handleRestockSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
+              <div>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">
+                  {t("Add Quantity (")} {restockItem.unit}) *
                 </label>
                 <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                required placeholder={t("e.g., 25")}
-
-                value={restockQty}
-                onChange={(e) => setRestockQty(e.target.value)}
-                className="w-full p-3 border rounded-xl text-lg font-extrabold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-              
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  required
+                  placeholder={t("e.g., 25")}
+                  value={restockQty}
+                  onChange={(e) => setRestockQty(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-base font-extrabold text-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Unit Cost (₹) /")}
-                {restockItem.unit}
+                <label className="text-xs font-bold text-gray-600 mb-1 block">
+                  {t("Unit Cost (₹) /")} {restockItem.unit}
                 </label>
                 <input
-                type="number"
-                step="0.01"
-                min="0" placeholder={t("Optional cost update")}
-
-                value={restockCost}
-                onChange={(e) => setRestockCost(e.target.value)}
-                className="w-full p-2.5 border rounded-xl text-sm font-bold" />
-              
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder={t("Optional cost update")}
+                  value={restockCost}
+                  onChange={(e) => setRestockCost(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Notes / Supplier Details")}</label>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">{t("Notes / Supplier Details")}</label>
                 <input
-                type="text" placeholder={t("e.g., Metro Cash & Carry Invoice #9821")}
-
-                value={restockNotes}
-                onChange={(e) => setRestockNotes(e.target.value)}
-                className="w-full p-2.5 border rounded-xl text-sm" />
-              
+                  type="text"
+                  placeholder={t("e.g., Invoice #9821")}
+                  value={restockNotes}
+                  onChange={(e) => setRestockNotes(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm"
+                />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 shrink-0">
                 <button
-                type="button"
-                onClick={() => setIsRestockModalOpen(false)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition">{t("Cancel")}
-
-
-              </button>
+                  type="button"
+                  onClick={() => setIsRestockModalOpen(false)}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm rounded-xl transition cursor-pointer">
+                  {t("Cancel")}
+                </button>
                 <button
-                type="submit"
-                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center gap-2">
-                
-                  <CheckCircle className="w-4 h-4" />{t("Confirm Restock")}
-              </button>
+                  type="submit"
+                  className="flex-1 sm:flex-initial px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{t("Confirm Restock")}</span>
+                </button>
               </div>
             </form>
           </div>
         </div>
-      }
-      {/* MODAL: WITHDRAW STOCK */}
-      {isWithdrawModalOpen && withdrawItem &&
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-bold text-gray-900">{t("Take / Withdraw Stock")}
+      )}
 
-          </h3>
-            <p className="text-xs text-gray-500">{t("Current Stock:")}
-            <strong className="text-gray-800">{withdrawItem.currentStock} {withdrawItem.unit}</strong>
-            </p>
-
-            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+      {/* MODAL 3: WITHDRAW STOCK */}
+      {isWithdrawModalOpen && withdrawItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-md w-full shadow-2xl border-t sm:border border-gray-100 max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0">
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Withdraw Quantity (")}
-                {withdrawItem.unit}) *
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-1.5">
+                  <ArrowDownRight className="w-5 h-5 text-rose-600 shrink-0" />
+                  <span>{t("Take / Withdraw Stock")}</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {t("Current Stock:")} <strong className="text-gray-800 font-mono">{withdrawItem.currentStock} {withdrawItem.unit}</strong>
+                </p>
+              </div>
+              <button onClick={() => setIsWithdrawModalOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 text-lg leading-none cursor-pointer">&times;</button>
+            </div>
+
+            <form onSubmit={handleWithdrawSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
+              <div>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">
+                  {t("Withdraw Quantity (")} {withdrawItem.unit}) *
                 </label>
                 <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={withdrawItem.currentStock}
-                required placeholder={t("e.g., 5")}
-
-                value={withdrawQty}
-                onChange={(e) => setWithdrawQty(e.target.value)}
-                className="w-full p-3 border rounded-xl text-lg font-extrabold text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500" />
-              
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={withdrawItem.currentStock}
+                  required
+                  placeholder={t("e.g., 5")}
+                  value={withdrawQty}
+                  onChange={(e) => setWithdrawQty(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-base font-extrabold text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Staff Name *")}
-
-              </label>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">{t("Staff Name *")}</label>
                 <input
-                type="text"
-                required placeholder={t("e.g., Anand")}
-
-                value={withdrawStaffName}
-                onChange={(e) => setWithdrawStaffName(e.target.value)}
-                className="w-full p-2.5 border rounded-xl text-sm font-bold" />
-              
+                  type="text"
+                  required
+                  placeholder={t("e.g., Anand")}
+                  value={withdrawStaffName}
+                  onChange={(e) => setWithdrawStaffName(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold"
+                />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Designation")}
-
-              </label>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">{t("Designation")}</label>
                 <select
-                value={withdrawDesignation}
-                onChange={(e) => setWithdrawDesignation(e.target.value)}
-                className="w-full p-2.5 border rounded-xl text-sm font-semibold bg-white">
-                
+                  value={withdrawDesignation}
+                  onChange={(e) => setWithdrawDesignation(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm font-semibold bg-white"
+                >
                   <option value="Head Chef">{t("Head Chef")}</option>
                   <option value="Sous Chef">{t("Sous Chef")}</option>
                   <option value="Kitchen Staff">{t("Kitchen Staff")}</option>
@@ -1174,39 +1190,75 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">{t("Notes / Reason")}</label>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">{t("Notes / Reason")}</label>
                 <input
-                type="text" placeholder={t("e.g., Taken for weekend prep")}
-
-                value={withdrawNotes}
-                onChange={(e) => setWithdrawNotes(e.target.value)}
-                className="w-full p-2.5 border rounded-xl text-sm" />
-              
+                  type="text"
+                  placeholder={t("e.g., Taken for weekend prep")}
+                  value={withdrawNotes}
+                  onChange={(e) => setWithdrawNotes(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-xs sm:text-sm"
+                />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100 shrink-0">
                 <button
-                type="button"
-                onClick={() => setIsWithdrawModalOpen(false)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm rounded-xl transition">{t("Cancel")}
-
-
-              </button>
+                  type="button"
+                  onClick={() => setIsWithdrawModalOpen(false)}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm rounded-xl transition cursor-pointer">
+                  {t("Cancel")}
+                </button>
                 <button
-                type="submit"
-                className="px-6 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center gap-2">
-                
-                  <CheckCircle className="w-4 h-4" />{t("Confirm Withdrawal")}
-              </button>
+                  type="submit"
+                  className="flex-1 sm:flex-initial px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{t("Confirm Withdrawal")}</span>
+                </button>
               </div>
             </form>
           </div>
         </div>
-      }
+      )}
+
+      {/* MODAL 4: DELETE CONFIRMATION */}
+      {deleteConfirmItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl max-w-sm w-full shadow-2xl border-t sm:border border-gray-100 p-4 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-red-100 text-red-600 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">{t("Delete Raw Material?")}</h3>
+                <p className="text-xs text-gray-500">{t("This cannot be undone.")}</p>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-gray-600">
+              {t("Are you sure you want to delete")} <strong className="text-gray-900">"{deleteConfirmItem.name}"</strong>? {t("This will remove it from inventory calculations and recipes.")}
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs sm:text-sm rounded-xl transition cursor-pointer">
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteItem}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
+                <Trash2 size={15} />
+                <span>{t("Delete")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>);
-
+    </div>
+  );
 };
 
 export default InventoryManagement;

@@ -43,11 +43,31 @@ export const getFeedbackStats = async (req, res) => {
   }
 };
 
-// Create a new feedback entry
 export const createFeedback = async (req, res) => {
   try {
     const Feedback = getTenantModel(req, 'Feedback', FeedbackDefault);
-    const newFeedback = new Feedback(req.body);
+    const { customerName, phoneNumber, rating, foodQuality, service, ambience, comments, billId } = req.body;
+
+    if (!customerName || !customerName.trim()) {
+      return res.status(400).json({ message: 'Customer name is required.' });
+    }
+
+    const cleanPhone = phoneNumber ? phoneNumber.trim().replace(/\D/g, '') : '';
+    if (cleanPhone && cleanPhone.length !== 10) {
+      return res.status(400).json({ message: 'Phone number must be exactly 10 digits.' });
+    }
+
+    const newFeedback = new Feedback({
+      customerName: customerName.trim(),
+      phoneNumber: cleanPhone || undefined,
+      rating: Number(rating) || 5,
+      foodQuality: Number(foodQuality) || 5,
+      service: Number(service) || 5,
+      ambience: Number(ambience) || 5,
+      comments: comments ? comments.trim() : undefined,
+      billId
+    });
+
     await newFeedback.save();
     res.status(201).json(newFeedback);
   } catch (error) {

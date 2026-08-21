@@ -40,45 +40,60 @@ const CRM = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   if (loading) return <div className="p-8 text-center text-text-muted">{t("Loading CRM...")}</div>;
 
   return (
-    <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4 shrink-0">
-        <div className="flex items-center gap-3">
+    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-y-auto w-full">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-5 gap-2.5 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           <BackButton onClick={onGoBack} className="shrink-0" />
-          <h1 className="text-lg sm:text-2xl font-black text-text-main flex items-center gap-2">
-            <Users className="text-primary" size={22} />{t("CUSTOMER DIRECTORY (CRM)")}
-          </h1>
+          <div>
+            <h1 className="text-base sm:text-2xl font-black text-text-main flex items-center gap-2">
+              <Users className="text-primary shrink-0" size={20} />
+              <span>{t("CUSTOMER DIRECTORY (CRM)")}</span>
+            </h1>
+            <p className="text-[11px] sm:text-xs text-text-muted">{t("View customer insights, visit history, and total spending")}</p>
+          </div>
         </div>
-        <div className="relative w-full sm:w-auto">
+        <div className="relative w-full sm:w-72">
           <input
             type="text" placeholder={t("Search by Name or Phone...")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:w-72 bg-surface border border-border rounded-xl px-4 py-2.5 pl-10 text-sm focus:outline-none focus:border-primary text-text-main" />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+            className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 pl-9 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main placeholder:text-text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={15} />
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 shrink-0">
-        <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border flex items-center gap-2 sm:gap-4">
-          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shrink-0"><Users size={18} /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-sm text-text-muted font-bold truncate">{t("Customers")}</p>
-            <p className="text-lg sm:text-2xl font-black text-text-main">{customers.length}</p>
+      {/* KPI Cards - Vertical icon on mobile, horizontal on desktop to prevent text clipping */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4 shrink-0">
+        <div className="bg-surface p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-4 shadow-xs">
+          <div className="w-7 h-7 sm:w-11 sm:h-11 bg-primary/10 text-primary rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+            <Users size={16} className="sm:hidden" />
+            <Users size={20} className="hidden sm:block" />
+          </div>
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs text-text-muted font-bold truncate">{t("Customers")}</p>
+            <p className="text-base sm:text-2xl font-black text-text-main leading-tight">{customers.length}</p>
           </div>
         </div>
-        <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border flex items-center gap-2 sm:gap-4">
-          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-purple-500/10 text-purple-500 rounded-xl flex items-center justify-center shrink-0"><Star size={18} /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-sm text-text-muted font-bold truncate">{t("VIP")}</p>
-            <p className="text-lg sm:text-2xl font-black text-text-main">{customers.filter((c) => c.isVIP).length}</p>
+
+        <div className="bg-surface p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-4 shadow-xs">
+          <div className="w-7 h-7 sm:w-11 sm:h-11 bg-purple-500/10 text-purple-500 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+            <Star size={16} className="sm:hidden" />
+            <Star size={20} className="hidden sm:block" />
+          </div>
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs text-text-muted font-bold truncate">{t("VIP")}</p>
+            <p className="text-base sm:text-2xl font-black text-text-main leading-tight">{customers.filter((c) => c.isVIP).length}</p>
           </div>
         </div>
-        <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border flex items-center gap-2 sm:gap-4">
-          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center shrink-0"><TrendingUp size={18} /></div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-sm text-text-muted font-bold truncate">{t("Revenue")}</p>
-            <p className="text-sm sm:text-2xl font-black text-text-main">₹{customers.reduce((acc, c) => acc + (c.totalSpend || 0), 0).toFixed(0)}</p>
+
+        <div className="bg-surface p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-border flex flex-col sm:flex-row items-start sm:items-center gap-1.5 sm:gap-4 shadow-xs">
+          <div className="w-7 h-7 sm:w-11 sm:h-11 bg-emerald-500/10 text-emerald-500 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
+            <TrendingUp size={16} className="sm:hidden" />
+            <TrendingUp size={20} className="hidden sm:block" />
+          </div>
+          <div className="min-w-0 w-full">
+            <p className="text-[10px] sm:text-xs text-text-muted font-bold truncate">{t("Revenue")}</p>
+            <p className="text-sm sm:text-2xl font-black text-text-main leading-tight truncate">₹{customers.reduce((acc, c) => acc + (c.totalSpend || 0), 0).toFixed(0)}</p>
           </div>
         </div>
       </div>
@@ -127,29 +142,32 @@ const CRM = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       </div>
 
       {/* Mobile Card List */}
-      <div className="md:hidden flex-1 overflow-y-auto space-y-3">
+      <div className="md:hidden flex-1 overflow-y-auto space-y-2.5">
         {filteredCustomers.length === 0 ? (
-          <div className="p-8 text-center text-text-muted font-medium bg-surface rounded-2xl border border-border">{t("No customers found.")}</div>
+          <div className="py-10 p-4 text-center text-text-muted font-medium bg-surface rounded-xl border border-border text-xs sm:text-sm">
+            <Users size={28} className="mx-auto text-text-muted/50 mb-2" />
+            <p>{t("No customers found.")}</p>
+          </div>
         ) : filteredCustomers.map((customer) => (
-          <div key={customer._id} className="bg-surface rounded-2xl border border-border p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-text-main">{t(customer.name || 'Guest')}</span>
-                  {customer.isVIP && <span className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">{t("VIP")}</span>}
+          <div key={customer._id} className="bg-surface rounded-xl border border-border p-3 shadow-xs">
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-bold text-text-main text-xs sm:text-sm truncate">{t(customer.name || 'Guest')}</span>
+                  {customer.isVIP && <span className="bg-purple-100 text-purple-700 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">{t("VIP")}</span>}
                 </div>
-                <p className="text-xs text-text-muted font-mono mt-0.5">{customer.phone}</p>
+                <p className="text-[11px] text-text-muted font-mono mt-0.5">{customer.phone}</p>
               </div>
-              <span className="text-base font-black text-success">₹{customer.totalSpend?.toFixed(0) || '0'}</span>
+              <span className="text-xs sm:text-sm font-black text-success shrink-0">₹{customer.totalSpend?.toFixed(0) || '0'}</span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-text-muted mt-2 pt-2 border-t border-border">
+            <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1.5 pt-1.5 border-t border-border">
               <span>{t("Visits:")} <strong className="text-text-main">{customer.totalVisits}</strong></span>
-              {customer.lastVisit && <span className="flex items-center gap-1"><Calendar size={12} />{new Date(customer.lastVisit).toLocaleDateString()}</span>}
+              {customer.lastVisit && <span className="flex items-center gap-1"><Calendar size={11} />{new Date(customer.lastVisit).toLocaleDateString()}</span>}
             </div>
             {customer.favoriteItems?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
+              <div className="flex flex-wrap gap-1 mt-1.5">
                 {customer.favoriteItems.slice(0, 3).map((item, i) => (
-                  <span key={i} className="text-[10px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted whitespace-nowrap">{t(item.itemName)}</span>
+                  <span key={i} className="text-[9px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted whitespace-nowrap">{t(item.itemName)}</span>
                 ))}
               </div>
             )}

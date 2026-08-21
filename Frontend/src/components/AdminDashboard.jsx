@@ -97,76 +97,78 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto w-full">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-8 gap-3 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-3 sm:gap-4">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <Shield className="text-primary" />{t("Admin Control Panel")}
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <Shield className="text-primary shrink-0" size={22} />
+              <span>{t("Admin Control Panel")}</span>
             </h1>
-            <p className="text-sm text-gray-500">{t("Manage login access (Cashiers, Captains, Admins)")}</p>
+            <p className="text-xs sm:text-sm text-gray-500">{t("Manage login access (Cashiers, Captains, Admins)")}</p>
           </div>
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm">
-          
-          <Plus size={18} />{t("Create User Login")}
-
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-primary hover:bg-primary-hover text-white px-4 py-2.5 rounded-xl font-bold transition-colors shadow-sm text-xs sm:text-sm shrink-0">
+          <Plus size={18} />
+          <span>{t("Create User Login")}</span>
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden w-full">
         {loading ?
-        <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
+          <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
 
-        <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500">
-                <th className="p-4 font-bold">{t("Username")}</th>
-                <th className="p-4 font-bold">{t("Role")}</th>
-                <th className="p-4 font-bold">{t("Created At")}</th>
-                <th className="p-4 font-bold text-right">{t("Actions")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {users.map((user) =>
-            <tr key={user._id} className="hover:bg-gray-50 transition-colors">
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-                        {user.username.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-bold text-gray-800">{user.username}</span>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                user.role === 'Admin' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
-                user.role === 'Captain' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                'bg-green-100 text-green-700 border border-green-200'}`
-                }>
-                      {t(user.role)}
-                    </span>
-                  </td>
-                  <td className="p-4 text-sm text-gray-500">
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => openEditModal(user)} className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                        <Edit2 size={16} />
-                      </button>
-                      <button onClick={() => handleDelete(user._id)} className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left min-w-[480px]">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500">
+                  <th className="p-3 sm:p-4 font-bold">{t("Username")}</th>
+                  <th className="p-3 sm:p-4 font-bold">{t("Role")}</th>
+                  <th className="p-3 sm:p-4 font-bold">{t("Created At")}</th>
+                  <th className="p-3 sm:p-4 font-bold text-right">{t("Actions")}</th>
                 </tr>
-            )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {users.map((user) =>
+                  <tr key={user._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-3 sm:p-4">
+                      <div className="flex items-center gap-2.5 sm:gap-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xs sm:text-sm shrink-0">
+                          {user.username.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-gray-800 text-xs sm:text-sm">{user.username}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <span className={`px-2 py-1 rounded text-[11px] sm:text-xs font-bold whitespace-nowrap ${
+                        user.role === 'Admin' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                        user.role === 'Captain' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                        'bg-green-100 text-green-700 border border-green-200'}`
+                      }>
+                        {t(user.role)}
+                      </span>
+                    </td>
+                    <td className="p-3 sm:p-4 text-xs sm:text-sm text-gray-500 whitespace-nowrap">
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="p-3 sm:p-4">
+                      <div className="flex justify-end gap-1 sm:gap-2">
+                        <button onClick={() => openEditModal(user)} className="p-1.5 sm:p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                          <Edit2 size={16} />
+                        </button>
+                        <button onClick={() => handleDelete(user._id)} className="p-1.5 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         }
       </div>
 

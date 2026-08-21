@@ -5,7 +5,7 @@ import axios from 'axios';
 import { ArrowLeft, LineChart as LineChartIcon, TrendingUp, Calendar, AlertTriangle, ChevronRight, BarChart } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-const SalesForecasting = ({ onNavigate }) => {const { t } = useLanguage();
+const SalesForecasting = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
 
   const [forecastData, setForecastData] = useState([]);
@@ -16,8 +16,9 @@ const SalesForecasting = ({ onNavigate }) => {const { t } = useLanguage();
   useEffect(() => {
     const fetchForecast = async () => {
       try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
         const response = await axios.get(`${getApiUrl()}/analytics/forecast`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
         
         if (response.data) {
@@ -37,15 +38,16 @@ const SalesForecasting = ({ onNavigate }) => {const { t } = useLanguage();
   }, []);
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-hidden">
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto w-full">
+      <div className="flex items-center justify-between mb-4 sm:mb-8 shrink-0">
+        <div className="flex items-center gap-3 sm:gap-4">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <LineChartIcon className="text-primary" />{t("Sales Forecasting")}
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <LineChartIcon className="text-primary shrink-0" size={22} />
+              <span>{t("Sales Forecasting")}</span>
             </h1>
-            <p className="text-sm text-gray-500">{t("Predictive analytics for sales and kitchen prep")}</p>
+            <p className="text-xs sm:text-sm text-gray-500">{t("Predictive analytics for sales and kitchen prep")}</p>
           </div>
         </div>
       </div>

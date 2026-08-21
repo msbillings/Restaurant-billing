@@ -66,11 +66,46 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
       } catch (dbErr) {
         console.error('[Notification] DB save setup error:', dbErr);
       }
+
+      // Dispatch optional FCM background push
+      sendFcmPushNotification(tenantDb, title, message, targetRoles, data);
     } else {
       console.warn(`[Notification] Blocked global emit for (${title}): No tenant database resolved`);
     }
   } catch (err) {
     console.error('Notification emit error:', err);
+  }
+};
+
+/**
+ * Optional FCM Push Notification Dispatcher (Free Google Firebase Cloud Messaging)
+ * Non-blocking: only executes if Firebase credentials are provided in environment
+ */
+export const sendFcmPushNotification = async (tenantDb, title, message, targetRoles = ['Admin'], data = {}) => {
+  try {
+    // If Firebase Admin is configured in environment
+    if (global.firebaseAdmin) {
+      const payload = {
+        notification: {
+          title,
+          body: message
+        },
+        data: {
+          tenantDb: String(tenantDb || ''),
+          targetRoles: JSON.stringify(targetRoles),
+          ...Object.keys(data).reduce((acc, key) => {
+            acc[key] = String(data[key]);
+            return acc;
+          }, {})
+        },
+        topic: `tenant_${tenantDb}`
+      };
+      await global.firebaseAdmin.messaging().send(payload);
+      console.log(`[FCM Push] Sent push notification to topic tenant_${tenantDb}`);
+    }
+  } catch (fcmErr) {
+    // Safe error suppression so server operation is NEVER disrupted
+    console.warn('[FCM Push] Optional push dispatch warning:', fcmErr.message);
   }
 };
 

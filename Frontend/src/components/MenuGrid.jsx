@@ -430,7 +430,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
                       }
                     }}>
                     
-                    <div className={`flex items-start justify-between w-full h-4 z-10 absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
+                    <div className={`flex items-start justify-between w-full h-4 z-[2] absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
                       <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
                       
                       <div className="flex gap-1.5 items-center">

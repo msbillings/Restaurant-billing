@@ -76,7 +76,8 @@ const authenticateToken = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-  if (req.user.role !== 'Admin') {
+  const role = req.user?.role?.toLowerCase();
+  if (!role || (role !== 'admin' && role !== 'superadmin')) {
     return res.status(403).json({ message: 'Admin access required' });
   }
   next();

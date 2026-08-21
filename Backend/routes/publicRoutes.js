@@ -6,6 +6,7 @@ import CategoryDefault from '../models/Category.js';
 import BillDefault from '../models/Bill.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
 import SettingDefault from '../models/Setting.js';
+import ReservationDefault from '../models/Reservation.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
@@ -338,10 +339,33 @@ router.get('/menu', async (req, res) => {
 router.post('/order', async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
     const { tableNo, items, total, subTotal, taxes } = req.body;
 
     if (!tableNo || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: 'Table number and items are required' });
+    }
+
+    // QR Code Locking Check: Check if table is currently reserved
+    const tableRegex = getTableMatchCondition(tableNo);
+    const activeReservations = await Reservation.find({
+      tableType: tableRegex,
+      status: { $in: ['pending', 'confirmed', 'seated'] }
+    });
+    
+    const now = new Date();
+    let isReserved = false;
+    for (const reservation of activeReservations) {
+      const resStart = new Date(`${new Date(reservation.date).toISOString().split('T')[0]}T${reservation.time}`);
+      const resEnd = new Date(`${new Date(reservation.endDate).toISOString().split('T')[0]}T${reservation.endTime}`);
+      if (now >= resStart && now <= resEnd) {
+        isReserved = true;
+        break;
+      }
+    }
+
+    if (isReserved) {
+      return res.status(409).json({ message: 'This table is currently reserved. Please speak to staff to order.' });
     }
 
     // Sanitize items format safely (handles item._id, item.menuItem, and item.name)

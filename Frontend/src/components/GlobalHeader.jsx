@@ -1,6 +1,7 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
 import { Menu, Search, Calculator, Bell, User, Power, Phone } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
+import useNotifications from '../hooks/useNotifications';
 import logoImg from '../assets/images/logo.png';
 
 const GlobalHeader = ({
@@ -13,8 +14,10 @@ const GlobalHeader = ({
 }) => {const { t } = useLanguage();
   const [searchBillNo, setSearchBillNo] = useState('');
 
-  // Fetch broadcasts and unread count
-  const { unreadCount } = useBroadcasts(userRole);
+  // Fetch broadcasts and real-time notifications unread count
+  const { unreadCount: broadcastUnread } = useBroadcasts(userRole);
+  const { unreadCount: notifUnread } = useNotifications(userRole);
+  const unreadCount = (broadcastUnread || 0) + (notifUnread || 0);
 
   const handleSearchKeyPress = (e) => {
     if (e.key === 'Enter' && searchBillNo.trim()) {

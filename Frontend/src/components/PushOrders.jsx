@@ -10,8 +10,9 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchOrders = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.get(`${getApiUrl()}/push-orders`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setOrders(response.data);
     } catch (error) {
@@ -48,7 +49,10 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     };
 
     try {
-      await axios.post(`${getApiUrl()}/push-orders`, mockOrder);
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      await axios.post(`${getApiUrl()}/push-orders`, mockOrder, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       fetchOrders();
     } catch (error) {
       console.error('Error simulating order', error);
@@ -58,8 +62,9 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const updateStatus = async (id, status) => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       await axios.put(`${getApiUrl()}/push-orders/${id}/status`, { status }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       fetchOrders();
     } catch (error) {
@@ -91,102 +96,105 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <BackButton onClick={onGoBack} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Aggregator Push Orders")}</h1>
-            <p className="text-sm text-gray-500">{t("Manage incoming orders from Zomato, Swiggy, etc.")}</p>
+    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-y-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-6 gap-2.5 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+          <BackButton onClick={onGoBack} className="shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-2xl font-black text-text-main tracking-tight truncate">{t("Aggregator Push Orders")}</h1>
+            <p className="text-[11px] sm:text-xs text-text-muted truncate">{t("Manage incoming orders from Zomato, Swiggy, etc.")}</p>
           </div>
         </div>
         
         <button
           onClick={simulateOrder}
-          className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg transition-colors font-medium shadow-sm">
-          
-          <PlayCircle size={20} className="text-blue-500" />{t("Simulate Incoming Order")}
+          className="flex items-center justify-center gap-1.5 bg-surface border border-border hover:bg-surface-hover text-text-main px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl transition-all font-bold text-xs sm:text-sm shadow-xs shrink-0 cursor-pointer self-start sm:self-auto whitespace-nowrap">
+          <PlayCircle size={16} className="text-blue-500 shrink-0" />
+          <span>{t("Simulate Incoming Order")}</span>
         </button>
       </div>
 
-      {loading ?
-      <div className="flex justify-center py-10"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {orders.length === 0 ?
-        <div className="col-span-full text-center py-10 text-gray-500 bg-white rounded-xl border border-gray-100">{t("Waiting for incoming orders...")}
-
-        </div> :
-
-        orders.map((order) =>
-        <div key={order._id} className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
+      {loading ? (
+        <div className="flex justify-center py-10">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
+          {orders.length === 0 ? (
+            <div className="col-span-full text-center py-12 text-text-muted bg-surface rounded-2xl border border-border text-xs sm:text-sm">
+              {t("Waiting for incoming orders...")}
+            </div>
+          ) : (
+            orders.map((order) => (
+              <div key={order._id} className="bg-surface rounded-2xl shadow-xs border border-border flex flex-col h-full overflow-hidden">
                 {/* Header */}
-                <div className={`p-4 border-b flex justify-between items-center ${getPlatformColor(order.platform)} bg-opacity-20`}>
-                  <div className="font-black text-lg tracking-wide uppercase">
+                <div className={`px-3.5 py-2.5 sm:px-4 sm:py-3 border-b border-border flex justify-between items-center ${getPlatformColor(order.platform)} bg-opacity-20`}>
+                  <div className="font-black text-sm sm:text-base tracking-wide uppercase">
                     {order.platform}
                   </div>
-                  <div className="text-xs font-bold bg-white bg-opacity-50 px-2 py-1 rounded">{t("ID:")}
-              {order.platformOrderId}
+                  <div className="text-[10px] sm:text-xs font-bold font-mono bg-surface/80 px-2 py-0.5 rounded-md border border-border/50">
+                    {t("ID:")} {order.platformOrderId}
                   </div>
                 </div>
 
                 {/* Body */}
-                <div className="p-5 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-bold text-gray-800">{order.customerDetails?.name || 'Customer'}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{t("Ordered at:")}{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                <div className="p-3.5 sm:p-5 flex-1 flex flex-col space-y-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-text-main text-xs sm:text-sm truncate">{order.customerDetails?.name || 'Customer'}</h3>
+                      <p className="text-[11px] text-text-muted mt-0.5">{t("Ordered at:")} {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
-                    {getStatusBadge(order.status)}
+                    <div className="shrink-0">
+                      {getStatusBadge(order.status)}
+                    </div>
                   </div>
 
-                  <div className="bg-gray-50 rounded-lg p-3 mb-4 border border-gray-100 flex-1">
-                    <div className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider border-b border-gray-200 pb-1">{t("Order Items")}</div>
-                    <ul className="space-y-2">
-                      {order.items.map((item, idx) =>
-                <li key={idx} className="flex justify-between text-sm">
-                          <span className="text-gray-800"><span className="font-bold text-gray-600 mr-1">{item.quantity}x</span> {item.name}</span>
-                          <span className="font-medium text-gray-600">₹{item.price * item.quantity}</span>
+                  <div className="bg-background rounded-xl p-2.5 sm:p-3 border border-border flex-1">
+                    <div className="text-[10px] sm:text-xs font-bold text-text-muted mb-1.5 uppercase tracking-wider border-b border-border pb-1">{t("Order Items")}</div>
+                    <ul className="space-y-1.5">
+                      {order.items.map((item, idx) => (
+                        <li key={idx} className="flex justify-between text-xs sm:text-sm">
+                          <span className="text-text-main"><span className="font-bold text-text-muted mr-1">{item.quantity}x</span> {item.name}</span>
+                          <span className="font-bold text-text-main font-mono">₹{item.price * item.quantity}</span>
                         </li>
-                )}
+                      ))}
                     </ul>
                   </div>
 
-                  <div className="flex justify-between items-center mb-5">
-                    <span className="text-xs font-bold text-gray-500 uppercase">{t("Total Amount")}</span>
-                    <span className="text-xl font-black text-gray-800">₹{order.totalAmount}</span>
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-[10px] sm:text-xs font-bold text-text-muted uppercase">{t("Total Amount")}</span>
+                    <span className="text-base sm:text-xl font-black text-text-main font-mono">₹{order.totalAmount}</span>
                   </div>
 
                   {/* Actions */}
-                  <div className="grid grid-cols-2 gap-2 mt-auto">
-                    {order.status === 'new' &&
-              <>
-                        <button onClick={() => updateStatus(order._id, 'cancelled')} className="py-2.5 text-sm font-bold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100">{t("Reject")}</button>
-                        <button onClick={() => updateStatus(order._id, 'accepted')} className="py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm">{t("Accept Order")}</button>
+                  <div className="grid grid-cols-2 gap-2 pt-1 mt-auto">
+                    {order.status === 'new' && (
+                      <>
+                        <button onClick={() => updateStatus(order._id, 'cancelled')} className="py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 rounded-xl transition-all border border-red-100 dark:border-red-900/40 cursor-pointer">{t("Reject")}</button>
+                        <button onClick={() => updateStatus(order._id, 'accepted')} className="py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs cursor-pointer">{t("Accept Order")}</button>
                       </>
-              }
-                    {order.status === 'accepted' &&
-              <button onClick={() => updateStatus(order._id, 'preparing')} className="col-span-2 py-2.5 text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors shadow-sm">{t("Start Preparing")}</button>
-              }
-                    {order.status === 'preparing' &&
-              <button onClick={() => updateStatus(order._id, 'ready')} className="col-span-2 py-2.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors shadow-sm">{t("Mark Ready (Food is Cooked)")}</button>
-              }
-                    {order.status === 'ready' &&
-              <button onClick={() => updateStatus(order._id, 'dispatched')} className="col-span-2 py-2.5 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm">{t("Handover to Rider")}</button>
-              }
-                    {(order.status === 'dispatched' || order.status === 'delivered' || order.status === 'cancelled') &&
-              <div className="col-span-2 py-2.5 text-sm font-bold text-gray-400 text-center bg-gray-50 rounded-lg border border-gray-100">{t("No further action needed")}
-
-              </div>
-              }
+                    )}
+                    {order.status === 'accepted' && (
+                      <button onClick={() => updateStatus(order._id, 'preparing')} className="col-span-2 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition-all shadow-xs cursor-pointer">{t("Start Preparing")}</button>
+                    )}
+                    {order.status === 'preparing' && (
+                      <button onClick={() => updateStatus(order._id, 'ready')} className="col-span-2 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition-all shadow-xs cursor-pointer">{t("Mark Ready (Food Cooked)")}</button>
+                    )}
+                    {order.status === 'ready' && (
+                      <button onClick={() => updateStatus(order._id, 'dispatched')} className="col-span-2 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl transition-all shadow-xs cursor-pointer">{t("Handover to Rider")}</button>
+                    )}
+                    {(order.status === 'dispatched' || order.status === 'delivered' || order.status === 'cancelled') && (
+                      <div className="col-span-2 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-text-muted text-center bg-surface-hover rounded-xl border border-border">{t("No further action needed")}</div>
+                    )}
                   </div>
                 </div>
               </div>
-        )
-        }
+            ))
+          )}
         </div>
-      }
-    </div>);
+      )}
+    </div>
+  );
 
 };
 

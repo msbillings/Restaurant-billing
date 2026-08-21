@@ -139,11 +139,36 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
   };
 
   const handleGetLocation = () => {
+    setLoading(true);
+
+    const fallbackToIP = async () => {
+      try {
+        const response = await fetch('https://get.geojs.io/v1/ip/geo.json');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data && data.latitude && data.longitude) {
+          setSettings((prev) => ({
+            ...prev,
+            latitude: parseFloat(data.latitude),
+            longitude: parseFloat(data.longitude)
+          }));
+          setToast({ message: t("Location captured successfully!"), type: 'success' });
+        } else {
+          setToast({ message: `IP Geolocation failed: No coordinates in response.`, type: 'error' });
+        }
+      } catch (err) {
+        console.error('IP Geolocation error:', err);
+        setToast({ message: `IP Fallback Error: ${err.message}`, type: 'error' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (!navigator.geolocation) {
-      setToast({ message: t("Geolocation is not supported by your browser"), type: 'error' });
+      fallbackToIP();
       return;
     }
-    setLoading(true);
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setSettings((prev) => ({
@@ -155,10 +180,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
         setToast({ message: t("Location captured successfully!"), type: 'success' });
       },
       (err) => {
-        setLoading(false);
-        setToast({ message: t("Failed to get location. Please allow location permissions."), type: 'error' });
-        console.error(err);
-      }
+        console.error('Geolocation error:', err);
+        // Fallback to IP based geolocation for Desktop/Electron
+        fallbackToIP();
+      },
+      { timeout: 10000, enableHighAccuracy: true }
     );
   };
 

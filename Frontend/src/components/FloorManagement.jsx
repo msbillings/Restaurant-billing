@@ -70,6 +70,15 @@ const isValidOrder = (o) => {
   return subtotal > 0;
 };
 
+const formatTime12Hour = (time24) => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  const hours = parseInt(h, 10);
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12 || 12;
+  return `${hours12.toString().padStart(2, '0')}:${m} ${ampm}`;
+};
+
 const FloorManagement = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
@@ -87,6 +96,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [selectedBillForPrint, setSelectedBillForPrint] = useState(null);
   const [selectedOrderForView, setSelectedOrderForView] = useState(null);
   const [menuImagesMap, setMenuImagesMap] = useState({});
+  const [reservations, setReservations] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
 
@@ -176,14 +187,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       }
     }).catch(() => {});
 
-    // 2. Background Revalidation (3-second fast poll)
+    // 2. Background Revalidation
     fetchOrders();
+    fetchReservations();
     syncSpaces();
     fetchMenuItemsMap();
     const interval = setInterval(() => {
       fetchOrders();
+      fetchReservations();
       syncSpaces();
-    }, 3000);
+      setCurrentTime(new Date());
+    }, 10000);
 
     const handleSpacesUpdated = (event) => {
       if (event.detail && Array.isArray(event.detail)) {
@@ -243,6 +257,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleRealtimeRefresh);
     const unsubFoodReady = realtimeService.subscribe('foodReady', handleRealtimeRefresh);
     const unsubSpacesUpdated = realtimeService.subscribe('spacesUpdated', handleSpacesSocket);
+    const unsubReservationUpdated = realtimeService.subscribe('reservationUpdated', fetchReservations);
 
     return () => {
       clearInterval(interval);
@@ -256,6 +271,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       unsubKotUpdated();
       unsubFoodReady();
       unsubSpacesUpdated();
+      unsubReservationUpdated();
     };
   }, []);
 
@@ -269,6 +285,15 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       }
     } catch (e) {
       console.error('Failed to sync spaces from cloud database', e);
+    }
+  };
+
+  async function fetchReservations() {
+    try {
+      const res = await api.get('/reservations');
+      setReservations(res.data || []);
+    } catch (error) {
+      console.error('Error fetching reservations:', error);
     }
   };
 
@@ -603,12 +628,59 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         statusText = 'Paid';
         SmallIcon = CheckCircle;
       }
-    } else if (item.status === 'Reserved') {
-      statusBgClass = 'bg-amber-100/60';
-      statusBorderClass = 'border-amber-300';
-      statusColorClass = 'text-amber-600';
-      statusBadgeClass = 'bg-amber-200 text-amber-800';
-      statusText = 'Reserved';
+    }
+
+    let activeReservation = null;
+    let timeToReservationStr = null;
+
+    if (!isOccupied && reservations && reservations.length > 0) {
+      const todayString = new Date().toISOString().split('T')[0];
+      const todayRes = reservations.filter(res => {
+        if (res.status === 'cancelled' || res.status === 'completed' || res.status === 'no-show') return false;
+        const resTable = res.tableType ? res.tableType.toLowerCase() : '';
+        const tName = uniqueSpaceName.toLowerCase();
+        const tNameShort = item.name.toLowerCase();
+        const matchesTable = resTable === tName || tName.includes(resTable) || resTable.includes(tName) || resTable === tNameShort || tNameShort.includes(resTable);
+        
+        const resDateStr = new Date(res.date).toISOString().split('T')[0];
+        return resDateStr === todayString && matchesTable;
+      });
+
+      if (todayRes.length > 0) {
+        todayRes.sort((a, b) => {
+          const aStart = new Date(`${todayString}T${a.time}`);
+          const bStart = new Date(`${todayString}T${b.time}`);
+          return aStart - bStart;
+        });
+        
+        activeReservation = todayRes.find(res => {
+          const resEnd = new Date(`${todayString}T${res.endTime}`);
+          return resEnd > currentTime;
+        }) || todayRes[todayRes.length - 1];
+
+        if (activeReservation) {
+          const resStart = new Date(`${todayString}T${activeReservation.time}`);
+          const diffMs = resStart - currentTime;
+          const diffMins = Math.floor(diffMs / 60000);
+          
+          if (diffMins > 0) {
+            const h = Math.floor(diffMins / 60);
+            const m = diffMins % 60;
+            timeToReservationStr = `in ${h > 0 ? `${h}h ` : ''}${m}m`;
+          } else {
+            timeToReservationStr = 'Now';
+          }
+        }
+      }
+    }
+
+    if (!isOccupied && (activeReservation || item.status === 'Reserved')) {
+      const isSeated = activeReservation?.status === 'seated';
+      statusBgClass = isSeated ? 'bg-teal-50/80' : 'bg-amber-100/60';
+      statusBorderClass = isSeated ? 'border-teal-300' : 'border-amber-300';
+      statusColorClass = isSeated ? 'text-teal-700' : 'text-amber-600';
+      statusBadgeClass = isSeated ? 'bg-teal-200 text-teal-800' : 'bg-amber-200 text-amber-800';
+      statusText = isSeated ? 'Seated' : (activeReservation?.status === 'confirmed' ? 'Confirmed' : 'Reserved');
       SmallIcon = Clock;
     }
 
@@ -655,7 +727,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             {item.name}
           </h3>
           
-          {!isOccupied ? (
+          {!isOccupied && activeReservation ? (
+            <div className={`px-1.5 py-0.5 rounded-xl text-[9px] sm:text-[10px] font-bold tracking-tight bg-white shadow-xs ${statusColorClass} mb-0.5 flex flex-col items-center leading-[1.1]`}>
+              <span className="uppercase tracking-wider">{statusText}</span>
+              <span className="text-[8.5px] font-mono lowercase tracking-normal text-amber-800">
+                {formatTime12Hour(activeReservation.time)} - {formatTime12Hour(activeReservation.endTime)}
+              </span>
+              <span className="text-[8.5px] lowercase tracking-normal text-amber-600">
+                ({timeToReservationStr})
+              </span>
+            </div>
+          ) : !isOccupied ? (
             <div className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-white shadow-xs ${statusColorClass} mb-0.5`}>
               {statusText}
             </div>
@@ -685,8 +767,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             </div>
           )}
         </div>
-
-        {!isOccupied && (
+        {!isOccupied && !activeReservation && item.status !== 'Reserved' && (
           <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-30">
             <button
               onClick={(e) => handleRemoveSpace(e, type, item.id)}

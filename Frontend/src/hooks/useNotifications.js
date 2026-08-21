@@ -93,7 +93,37 @@ export const getNotificationSocket = () => {
   return realtimeService.getSocket();
 };
 
-// ── 2. ROLE-BASED NOTIFICATION FILTERING HELPER ─────────────────────────────
+// ── 2.5 CAPACITOR ANDROID NOTIFICATION CHANNEL & PERMISSION AUTO-INIT ────────
+let isChannelInitialized = false;
+export const initCapacitorNotifications = async () => {
+  if (typeof window === 'undefined' || !Capacitor.isNativePlatform() || isChannelInitialized) return;
+  try {
+    // 1. Runtime permission request (Mandatory for Android 13+ / API 33+)
+    const permStatus = await LocalNotifications.checkPermissions();
+    if (permStatus.display !== 'granted') {
+      await LocalNotifications.requestPermissions();
+    }
+
+    // 2. High-Priority Notification Channel (Mandatory for Android 8.0+)
+    await LocalNotifications.createChannel({
+      id: 'restaurant_orders',
+      name: 'Restaurant Orders & KOT',
+      description: 'High-priority notifications for new orders, KOT updates, and table service',
+      importance: 5, // High / Max (Popup + Sound + Heads Up)
+      visibility: 1, // Public
+      sound: 'beep.wav',
+      vibration: true,
+      lights: true,
+      lightColor: '#EA580C'
+    });
+    isChannelInitialized = true;
+    console.log('[useNotifications] Native High-Priority Notification Channel initialized');
+  } catch (err) {
+    console.warn('[useNotifications] Capacitor notification init:', err);
+  }
+};
+
+// ── 3. ROLE-BASED NOTIFICATION FILTERING HELPER ─────────────────────────────
 export const isNotificationForRole = (notification, role = 'Admin') => {
   if (!notification) return false;
   const userRole = (role || 'Admin').trim().toLowerCase();
@@ -227,10 +257,12 @@ const isTargetCancelNotification = (n, criteria) => {
   return false;
 };
 
-// ── 3. MAIN USE_NOTIFICATIONS HOOK ──────────────────────────────────────────
+// ── 4. MAIN USE_NOTIFICATIONS HOOK ──────────────────────────────────────────
 const useNotifications = (userRole = 'Admin') => {
   const getTenantKey = () => localStorage.getItem('resto_db_name') || 'default';
   const roleKey = (userRole || 'Admin').toLowerCase();
+  const knownNotifIdsRef = useRef(new Set());
+  const isInitialLoadDoneRef = useRef(false);
 
   const [notifications, setNotifications] = useState(() => {
     try {
@@ -255,7 +287,7 @@ const useNotifications = (userRole = 'Admin') => {
           }
         });
 
-        return parsed
+        const filtered = parsed
           .filter(n => {
             const t = new Date(n.time || n.timestamp || Date.now()).getTime();
             if (t <= twoDaysAgo) return false;
@@ -270,6 +302,12 @@ const useNotifications = (userRole = 'Admin') => {
             return true;
           })
           .filter(n => isNotificationForRole(n, userRole));
+
+        filtered.forEach(n => {
+          if (n.id) knownNotifIdsRef.current.add(String(n.id));
+        });
+
+        return filtered;
       }
     } catch (e) {
       console.error('Failed to parse realtime notifications', e);
@@ -308,17 +346,71 @@ const useNotifications = (userRole = 'Admin') => {
     localStorage.setItem(`realtime_unread_count_${tenantKey}_${roleKey}`, unreadCount.toString());
   }, [unreadCount, roleKey]);
 
-  // Fetch active notifications from backend database on app launch / login
-  const fetchActiveNotifications = async () => {
+  // Dispatch Native Notification Helper (Android APK & iOS)
+  const triggerNativeNotification = (notification) => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      LocalNotifications.schedule({
+        notifications: [
+          {
+            title: notification.title || 'New Notification',
+            body: notification.message || '',
+            id: Math.floor(Math.random() * 1000000),
+            schedule: { at: new Date(Date.now() + 50) },
+            sound: 'beep.wav',
+            channelId: 'restaurant_orders', // High priority channel for Android
+            actionTypeId: '',
+            extra: notification.data || null
+          }
+        ]
+      }).catch(e => console.warn('Failed to schedule native notification', e));
+    } catch (e) {
+      console.warn('LocalNotifications plugin error', e);
+    }
+  };
+
+  // Fetch active notifications from backend database (with smart fallback detection for Vercel/offline)
+  const fetchActiveNotifications = async (isBackgroundPoll = false) => {
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       if (!token) return;
 
       const res = await api.get('/bills/active-notifications');
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        // Filter by role before saving to state
+      if (Array.isArray(res.data)) {
+        // Filter by role
         const roleFiltered = res.data.filter(n => isNotificationForRole(n, userRole));
-        
+        const now = Date.now();
+        const freshWindow = 3 * 60 * 1000; // 3 minutes window for triggering chimes on newly polled items
+
+        let hasNewIncoming = false;
+
+        // On background polling, detect newly arrived items that were not seen before
+        if (isBackgroundPoll && isInitialLoadDoneRef.current) {
+          roleFiltered.forEach(n => {
+            const notifId = String(n.id || n._id || '');
+            if (notifId && !knownNotifIdsRef.current.has(notifId)) {
+              knownNotifIdsRef.current.add(notifId);
+              const notifTime = new Date(n.time || n.timestamp || n.createdAt || now).getTime();
+              // If notification was created recently, trigger chime & native push
+              if (now - notifTime <= freshWindow) {
+                hasNewIncoming = true;
+                triggerNativeNotification(n);
+              }
+            }
+          });
+
+          if (hasNewIncoming) {
+            playNotificationSound();
+            setUnreadCount(prev => prev + 1);
+          }
+        } else {
+          // Initial population of known IDs
+          roleFiltered.forEach(n => {
+            if (n.id) knownNotifIdsRef.current.add(String(n.id));
+          });
+          isInitialLoadDoneRef.current = true;
+        }
+
         setNotifications(prev => {
           const newMap = new Map();
           roleFiltered.forEach(n => newMap.set(n.id, n));
@@ -339,20 +431,45 @@ const useNotifications = (userRole = 'Admin') => {
     }
   };
 
+  // ── 5. LIFECYCLE & FALLBACK POLLING ENGINE ─────────────────────────────────
   useEffect(() => {
-    fetchActiveNotifications();
-    const handleLogin = () => fetchActiveNotifications();
+    // 1. Initialize Capacitor Android Notification Channel & Permissions
+    initCapacitorNotifications();
+
+    // 2. Initial fetch
+    fetchActiveNotifications(false);
+    const handleLogin = () => fetchActiveNotifications(false);
     window.addEventListener('loginSuccess', handleLogin);
+
+    // 3. Fallback Adaptive Polling for Vercel & Socket.io Disconnection
+    // Checks every 6 seconds (or 15s in background) to guarantee notifications arrive even on serverless hosting
+    const pollInterval = setInterval(() => {
+      const socket = realtimeService.getSocket();
+      const isSocketDisconnected = !socket || !socket.connected;
+      const isVercelHost = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+
+      // Poll if socket is disconnected, running on Vercel, or on native APK
+      if (isSocketDisconnected || isVercelHost || Capacitor.isNativePlatform()) {
+        fetchActiveNotifications(true);
+      }
+    }, 6000);
+
+    // 4. Tab focus & visibility change listener
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchActiveNotifications(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // Capacitor specific: fetch notifications when app resumes from background
+    // 5. Capacitor native app state listener
     let appStateListener;
     if (Capacitor.isNativePlatform()) {
       App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           console.log('[useNotifications] App returned to foreground. Syncing notifications...');
-          // Reconnect socket just in case it died
           realtimeService.rejoinTenant();
-          fetchActiveNotifications();
+          fetchActiveNotifications(false);
         }
       }).then(listener => {
         appStateListener = listener;
@@ -360,11 +477,14 @@ const useNotifications = (userRole = 'Admin') => {
     }
 
     return () => {
+      clearInterval(pollInterval);
       window.removeEventListener('loginSuccess', handleLogin);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (appStateListener) appStateListener.remove();
     };
   }, [userRole]);
 
+  // ── 6. REAL-TIME WEBSOCKET SUBSCRIPTIONS ──────────────────────────────────
   useEffect(() => {
     const handleNewNotification = (notification) => {
       if (!notification) return;
@@ -380,6 +500,9 @@ const useNotifications = (userRole = 'Admin') => {
       if (!isNotificationForRole(notification, userRole)) {
         return;
       }
+
+      const notifId = String(notification.id || '');
+      if (notifId) knownNotifIdsRef.current.add(notifId);
 
       setNotifications((prev) => {
         let updatedList = prev;
@@ -406,26 +529,7 @@ const useNotifications = (userRole = 'Admin') => {
       playNotificationSound();
 
       // Trigger native system notification on Mobile (APK/IPA)
-      if (Capacitor.isNativePlatform()) {
-        try {
-          LocalNotifications.schedule({
-            notifications: [
-              {
-                title: notification.title || 'New Notification',
-                body: notification.message || '',
-                id: Math.floor(Math.random() * 1000000), // Random ID for the notification
-                schedule: { at: new Date(Date.now() + 100) },
-                sound: null,
-                attachments: null,
-                actionTypeId: '',
-                extra: null
-              }
-            ]
-          }).catch(e => console.warn('Failed to schedule native notification', e));
-        } catch (e) {
-          console.warn('LocalNotifications plugin error', e);
-        }
-      }
+      triggerNativeNotification(notification);
     };
 
     const handleDismissNotification = (criteria) => {

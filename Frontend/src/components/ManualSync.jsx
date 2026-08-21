@@ -16,8 +16,9 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchSyncStatus = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.get(`${getApiUrl()}/sync/status`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setSyncStatus(response.data);
     } catch (error) {
@@ -44,8 +45,9 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     setSyncResult(null);
 
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.post(`${getApiUrl()}/sync/trigger`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       setSyncResult({
@@ -78,61 +80,66 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-6 overflow-y-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <BackButton onClick={onGoBack} />
+    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-y-auto w-full">
+      <div className="flex items-center justify-between mb-3 sm:mb-6 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-4">
+          <BackButton onClick={onGoBack} className="shrink-0" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">{t("Cloud Data Sync")}</h1>
-            <p className="text-sm text-gray-500">{t("Push your offline/local data to the cloud database")}</p>
+            <h1 className="text-base sm:text-2xl font-black text-text-main tracking-tight">{t("Cloud Data Sync")}</h1>
+            <p className="text-[11px] sm:text-xs text-text-muted">{t("Push your offline/local data to the cloud database")}</p>
           </div>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto w-full">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <Database className="text-primary" size={20} />{t("System Status")}
+      <div className="max-w-3xl mx-auto w-full space-y-3 sm:space-y-6">
+        {/* System Status Card */}
+        <div className="bg-surface rounded-2xl shadow-xs border border-border overflow-hidden">
+          <div className="px-3.5 py-2.5 sm:px-6 sm:py-4 border-b border-border bg-surface-hover flex items-center justify-between">
+            <h2 className="text-xs sm:text-base font-bold text-text-main flex items-center gap-2">
+              <Database className="text-primary shrink-0" size={16} />
+              <span>{t("System Status")}</span>
             </h2>
           </div>
           
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-2.5 sm:p-6">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               
               {/* Network Status */}
-              <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                <div className={`p-4 rounded-full mb-3 ${syncStatus?.isOnline ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                  {syncStatus?.isOnline ? <Cloud size={32} /> : <AlertCircle size={32} />}
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-4 bg-background rounded-xl border border-border text-center">
+                <div className={`p-2 sm:p-3 rounded-full mb-1 sm:mb-2 shrink-0 ${syncStatus?.isOnline ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
+                  {syncStatus?.isOnline ? <Cloud size={18} className="sm:hidden" /> : <AlertCircle size={18} className="sm:hidden" />}
+                  {syncStatus?.isOnline ? <Cloud size={24} className="hidden sm:block" /> : <AlertCircle size={24} className="hidden sm:block" />}
                 </div>
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">{t("Internet")}</h3>
-                <p className={`font-bold text-lg ${syncStatus?.isOnline ? 'text-green-600' : 'text-red-600'}`}>
+                <h3 className="text-[9px] sm:text-xs font-bold text-text-muted uppercase tracking-wider mb-0.5 truncate w-full">{t("Internet")}</h3>
+                <p className={`font-black text-xs sm:text-base truncate w-full ${syncStatus?.isOnline ? 'text-green-600' : 'text-red-600'}`}>
                   {syncStatus?.isOnline ? t('Connected') : t('Offline')}
                 </p>
               </div>
 
               {/* Pending Changes */}
-              <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                <div className="p-4 rounded-full mb-3 bg-blue-100 text-blue-600">
-                  <Server size={32} />
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-4 bg-background rounded-xl border border-border text-center">
+                <div className="p-2 sm:p-3 rounded-full mb-1 sm:mb-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 shrink-0">
+                  <Server size={18} className="sm:hidden" />
+                  <Server size={24} className="hidden sm:block" />
                 </div>
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">{t("Pending Sync")}</h3>
-                <p className="font-bold text-lg text-gray-800">
+                <h3 className="text-[9px] sm:text-xs font-bold text-text-muted uppercase tracking-wider mb-0.5 truncate w-full">{t("Pending Sync")}</h3>
+                <p className="font-black text-xs sm:text-base text-text-main truncate w-full">
                   {syncStatus?.pendingChanges || 0} {t("Records")}
                 </p>
               </div>
 
               {/* Last Sync */}
-              <div className="flex flex-col items-center justify-center p-6 bg-gray-50 rounded-xl border border-gray-100 text-center">
-                <div className="p-4 rounded-full mb-3 bg-purple-100 text-purple-600">
-                  <Clock size={32} />
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-4 bg-background rounded-xl border border-border text-center">
+                <div className="p-2 sm:p-3 rounded-full mb-1 sm:mb-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 shrink-0">
+                  <Clock size={18} className="sm:hidden" />
+                  <Clock size={24} className="hidden sm:block" />
                 </div>
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">{t("Last Synced")}</h3>
-                <p className="font-bold text-md text-gray-800 break-words w-full">
+                <h3 className="text-[9px] sm:text-xs font-bold text-text-muted uppercase tracking-wider mb-0.5 truncate w-full">{t("Last Synced")}</h3>
+                <p className="font-black text-xs sm:text-base text-text-main truncate w-full font-mono">
                   {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : t('Never')}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleDateString() : ''}
+                <p className="text-[9px] sm:text-xs text-text-muted mt-0.5 truncate w-full">
+                  {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}
                 </p>
               </div>
 
@@ -140,47 +147,47 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
         </div>
 
-        {/* Sync Actions */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden text-center p-10">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">{t("Ready to Sync?")}</h2>
-          <p className="text-gray-500 mb-8 max-w-lg mx-auto">{t("Pushing local transactions, bills, and KOTs to the cloud database ensures your dashboard is up to date and your data is securely backed up.")}
-
+        {/* Sync Actions Card */}
+        <div className="bg-surface rounded-2xl shadow-xs border border-border overflow-hidden text-center p-4 sm:p-8">
+          <h2 className="text-base sm:text-xl font-bold text-text-main mb-1 sm:mb-2">{t("Ready to Sync?")}</h2>
+          <p className="text-xs sm:text-sm text-text-muted mb-4 sm:mb-6 max-w-md mx-auto leading-relaxed">
+            {t("Pushing local transactions, bills, and KOTs to the cloud database ensures your dashboard is up to date and your data is securely backed up.")}
           </p>
 
           <button
             onClick={handleSync}
             disabled={isSyncing || !syncStatus?.isOnline || syncStatus?.pendingChanges === 0}
             className={`
-              relative flex items-center justify-center gap-3 mx-auto text-white px-8 py-4 rounded-xl font-bold text-lg transition-all shadow-md
+              inline-flex items-center justify-center gap-2 mx-auto text-white px-5 sm:px-8 py-2.5 sm:py-3.5 rounded-xl font-bold text-xs sm:text-base transition-all shadow-md cursor-pointer
               ${isSyncing ?
             'bg-primary/80 cursor-not-allowed' :
             !syncStatus?.isOnline || syncStatus?.pendingChanges === 0 ?
-            'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none' :
-            'bg-primary hover:bg-primary-hover hover:-translate-y-1 hover:shadow-lg'}
+            'bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed shadow-none' :
+            'bg-primary hover:bg-primary-hover hover:-translate-y-0.5 hover:shadow-primary/30'}
             `}>
             
-            {isSyncing ?
-            <>
-                <RefreshCw size={24} className="animate-spin" />{t("Syncing to Cloud...")}
-
-            </> :
-
-            <>
-                <RefreshCw size={24} />{t("Push to Cloud Now")}
-
-            </>
-            }
+            {isSyncing ? (
+              <>
+                <RefreshCw size={18} className="animate-spin" />
+                <span>{t("Syncing to Cloud...")}</span>
+              </>
+            ) : (
+              <>
+                <RefreshCw size={18} />
+                <span>{t("Push to Cloud Now")}</span>
+              </>
+            )}
           </button>
 
-          {syncResult &&
-          <div className={`mt-8 p-4 rounded-lg inline-flex items-center gap-3 text-left ${syncResult.success ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
-              {syncResult.success ? <CheckCircle className="text-green-500" size={24} /> : <AlertCircle className="text-red-500" size={24} />}
+          {syncResult && (
+            <div className={`mt-4 sm:mt-6 p-3 sm:p-4 rounded-xl inline-flex items-center gap-2.5 text-left text-xs sm:text-sm ${syncResult.success ? 'bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300' : 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300'}`}>
+              {syncResult.success ? <CheckCircle className="text-green-500 shrink-0" size={20} /> : <AlertCircle className="text-red-500 shrink-0" size={20} />}
               <div>
                 <p className="font-bold">{syncResult.success ? t('Sync Successful') : t('Sync Failed')}</p>
-                <p className="text-sm">{syncResult.message}</p>
+                <p className="text-text-muted mt-0.5">{syncResult.message}</p>
               </div>
             </div>
-          }
+          )}
         </div>
       </div>
     </div>);

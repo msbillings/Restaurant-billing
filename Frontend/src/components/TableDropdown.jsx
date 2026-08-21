@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, ChevronRight, LayoutGrid } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
-const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customButton, wrapperClass }) => {
+const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customButton, wrapperClass, openOrders = [], reservations = [] }) => {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -21,6 +21,41 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
   const handleSelectTable = (tableName) => {
     onSelect(tableName);
     setIsOpen(false);
+  };
+
+  const getTableStatus = (tableName) => {
+    // Check busy
+    const isBusyNow = openOrders.some(order => {
+      if (!order || order.status === 'Cancelled' || order.status === 'Paid') return false;
+      const activeItems = (order.items || []).filter(i => !i.isCancelled && (i.quantity - (i.cancelledQuantity || 0)) > 0);
+      if (activeItems.length === 0) return false;
+      const oTable = order.tableNo ? order.tableNo.trim().toLowerCase() : '';
+      const tName = tableName.trim().toLowerCase();
+      return oTable === tName || oTable.includes(tName) || tName.includes(oTable);
+    });
+    
+    if (isBusyNow) return 'Busy';
+
+    // Check reserved for today
+    const todayString = new Date().toISOString().split('T')[0];
+    const isReserved = reservations.some(res => {
+      if (res.status === 'cancelled' || res.status === 'completed' || res.status === 'no-show') return false;
+      const resTable = res.tableType ? res.tableType.toLowerCase() : '';
+      const tName = tableName.trim().toLowerCase();
+      const matchesTable = resTable === tName || tName.includes(resTable) || resTable.includes(tName);
+      const resDateStr = new Date(res.date).toISOString().split('T')[0];
+      return resDateStr === todayString && matchesTable;
+    });
+
+    if (isReserved) return 'Reserved';
+
+    return 'Empty';
+  };
+
+  const renderStatusBadge = (status) => {
+    if (status === 'Busy') return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold ml-2">(Busy)</span>;
+    if (status === 'Reserved') return <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold ml-2">(Reserved)</span>;
+    return <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold ml-2">(Empty)</span>;
   };
 
   const renderCurrentTable = () => {
@@ -45,7 +80,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
       )}
 
       {isOpen && (
-        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-visible z-[1000000]`}>
+        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1.5 w-56 sm:w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-hidden z-[99999] ring-1 ring-black/5`}>
           {floors.length === 0 ? (
             // Default 20 tables if no floors
             <div className="max-h-60 overflow-y-auto custom-scrollbar">
@@ -60,7 +95,10 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                     }}
                     className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer flex items-center justify-between group"
                   >
-                    <span className="font-medium text-gray-700 group-hover:text-red-600">TBL-{num}</span>
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-700 group-hover:text-red-600">TBL-{num}</span>
+                      {renderStatusBadge(getTableStatus(`TBL-${num}`))}
+                    </div>
                     <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
                   </div>
                 );
@@ -89,7 +127,10 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         }}
                         className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
                       >
-                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <div className="flex items-center">
+                          <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                        </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
                       </div>
                     ))}
@@ -102,7 +143,10 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         }}
                         className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
                       >
-                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <div className="flex items-center">
+                          <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                        </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('cabin') || 'Cabin'})</span>
                       </div>
                     ))}
@@ -115,7 +159,10 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         }}
                         className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
                       >
-                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <div className="flex items-center">
+                          <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                        </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('sofa') || 'Sofa'})</span>
                       </div>
                     ))}
@@ -128,7 +175,10 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         }}
                         className="px-4 py-2 hover:bg-red-50 hover:text-red-600 cursor-pointer text-sm flex items-center justify-between group"
                       >
-                        <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                        <div className="flex items-center">
+                          <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                        </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t(item.type || 'space') || item.type || 'Space'})</span>
                       </div>
                     ))}

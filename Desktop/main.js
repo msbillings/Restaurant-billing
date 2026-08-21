@@ -560,7 +560,6 @@ app.on('ready', async () => {
     console.error('[Cache] Error clearing cache:', err);
   }
 
-  // ✅ Auto-grant camera/mic/media permissions inside Electron
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
     console.log(`[Permissions] Auto-granting permission request for '${permission}'`);
     callback(true);

@@ -79,6 +79,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [activeTable, setActiveTable] = useState(initialTable || '');
   const [floors, setFloors] = useState([]);
   const [openOrdersList, setOpenOrdersList] = useState([]);
+  const [reservations, setReservations] = useState([]);
   const [isLayoutLocked, setIsLayoutLocked] = useState(false);
 
   const [rightPanelWidth, setRightPanelWidth] = useState(400);
@@ -143,6 +144,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const unsubBillSettled = realtimeService.subscribe('billSettled', fetchOpenOrdersList);
     const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', fetchOpenOrdersList);
     const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeUpdate);
+    const unsubReservationUpdated = realtimeService.subscribe('reservationUpdated', fetchOpenOrdersList);
 
     const handleOfflineSave = (e) => {
       showToast(`⚠️ ${e.detail?.message || 'Order saved offline. Will sync when backend reconnects.'}`, 'error');
@@ -158,6 +160,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       unsubBillSettled();
       unsubTableStatusChanged();
       unsubNewKOT();
+      unsubReservationUpdated();
       window.removeEventListener('offlineOrderSaved', handleOfflineSave);
     };
   }, []);
@@ -169,6 +172,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     } catch (error) {
       console.error('Error fetching open orders list:', error);
     }
+
+    try {
+      const API_BASE_URL = getApiUrl();
+      const res = await fetch(`${API_BASE_URL}/reservations`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+      });
+      if (res.ok) {
+        const rdata = await res.json();
+        setReservations(rdata || []);
+      }
+    } catch (e) { console.error('Error fetching reservations', e); }
   }
 
   useEffect(() => {
@@ -1604,10 +1618,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 relative z-[1]">
+      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 relative z-30">
 
         <div className="flex items-center gap-2">
-          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer z-[1]">
+          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer z-30">
             <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
             <div className="flex items-center pointer-events-none">
               <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
@@ -1653,8 +1667,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 activeTable={activeTable}
                 align="left"
                 onSelect={(val) => setActiveTable(val)}
-                wrapperClass="absolute inset-0 w-full h-full z-10"
-                customButton={<div className="absolute inset-0 w-full h-full cursor-pointer z-10" />}
+                wrapperClass="absolute inset-0 w-full h-full z-30"
+                customButton={<div className="absolute inset-0 w-full h-full cursor-pointer z-30" />}
+                openOrders={openOrdersList}
+                reservations={reservations}
               />
             }
           </div>

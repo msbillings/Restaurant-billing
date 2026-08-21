@@ -15,8 +15,9 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchConfig = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.get(`${getApiUrl()}/online-configs`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setConfig(response.data);
     } catch (error) {
@@ -38,8 +39,9 @@ const OnlineConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     e.preventDefault();
     setSaving(true);
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       await axios.put(`${getApiUrl()}/online-configs`, config, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       alert('Online order settings saved successfully!');
     } catch (error) {

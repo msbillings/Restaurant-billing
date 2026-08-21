@@ -280,25 +280,27 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 px-2.5 py-4 sm:p-6 overflow-hidden">
-      <div className="flex flex-col mb-4 shrink-0 gap-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <BackButton onClick={onGoBack} />
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
-                  <Bell className="text-orange-500" size={22} />
-                  {userRole === 'Chef' ? t("Kitchen Notifications") :
-                   userRole === 'Captain' ? t("Captain Notifications") :
-                   userRole === 'Cashier' ? t("Cashier Notifications") :
-                   t("Notification Center")}
+    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-hidden w-full">
+      <div className="flex flex-col mb-3 sm:mb-4 shrink-0 gap-2 sm:gap-3">
+        <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <BackButton onClick={onGoBack} className="shrink-0" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-base sm:text-2xl font-black text-text-main tracking-tight flex items-center gap-1.5 truncate">
+                  <Bell className="text-orange-500 shrink-0" size={19} />
+                  <span className="truncate">
+                    {userRole === 'Chef' ? t("Kitchen Notifications") :
+                     userRole === 'Captain' ? t("Captain Notifications") :
+                     userRole === 'Cashier' ? t("Cashier Notifications") :
+                     t("Notification Center")}
+                  </span>
                 </h1>
-                <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider bg-orange-100 text-orange-700">
+                <span className="text-[9px] sm:text-xs font-black px-2 py-0.5 rounded-full uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 shrink-0">
                   {userRole}
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{getRoleHeaderSubtitle()}</p>
+              <p className="text-[11px] sm:text-xs text-text-muted mt-0.5 truncate">{getRoleHeaderSubtitle()}</p>
             </div>
           </div>
           
@@ -306,29 +308,29 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
           {allNotifications.length > 0 && (userRole === 'Admin' || userRole === 'Manager') && (
             <button
               onClick={() => setShowClearModal(true)}
-              className="flex items-center justify-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 rounded-xl transition-all font-semibold text-xs sm:text-sm shadow-xs self-start sm:self-auto shrink-0 cursor-pointer"
+              className="flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-surface border border-border text-text-muted hover:text-red-600 hover:border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all font-bold text-xs sm:text-sm shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
             >
-              <Trash2 size={15} />
-              {t("Clear All")}
+              <Trash2 size={13} />
+              <span>{t("Clear All")}</span>
             </button>
           )}
         </div>
 
         {/* Role category filter tabs for Admin / Manager */}
         {(userRole === 'Admin' || userRole === 'Manager') && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mt-1 text-xs">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs shrink-0 flex-nowrap scrollbar-none">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 cursor-pointer ${
-                activeTab === 'all' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                activeTab === 'all' ? 'bg-orange-500 text-white shadow-xs' : 'bg-surface border border-border text-text-muted hover:bg-surface-hover'
               }`}
             >
               {t("All")}
             </button>
             <button
               onClick={() => setActiveTab('kitchen')}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                activeTab === 'kitchen' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                activeTab === 'kitchen' ? 'bg-orange-500 text-white shadow-xs' : 'bg-surface border border-border text-text-muted hover:bg-surface-hover'
               }`}
             >
               <ChefHat size={13} />
@@ -336,8 +338,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
             </button>
             <button
               onClick={() => setActiveTab('service')}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                activeTab === 'service' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                activeTab === 'service' ? 'bg-orange-500 text-white shadow-xs' : 'bg-surface border border-border text-text-muted hover:bg-surface-hover'
               }`}
             >
               <UserCheck size={13} />
@@ -345,8 +347,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
             </button>
             <button
               onClick={() => setActiveTab('billing')}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                activeTab === 'billing' ? 'bg-orange-500 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                activeTab === 'billing' ? 'bg-orange-500 text-white shadow-xs' : 'bg-surface border border-border text-text-muted hover:bg-surface-hover'
               }`}
             >
               <Receipt size={13} />
@@ -354,8 +356,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
             </button>
             <button
               onClick={() => setActiveTab('broadcasts')}
-              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                activeTab === 'broadcasts' ? 'bg-purple-600 text-white shadow-xs' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+              className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer whitespace-nowrap ${
+                activeTab === 'broadcasts' ? 'bg-purple-600 text-white shadow-xs' : 'bg-surface border border-border text-text-muted hover:bg-surface-hover'
               }`}
             >
               <Radio size={13} />
@@ -365,15 +367,15 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 space-y-4">
+      <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 sm:space-y-3.5">
         {loading && broadcasts.length === 0 ?
         <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
         allNotifications.length === 0 ?
-        <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center">
-              <BellOff size={40} className="text-gray-300" />
+        <div className="flex flex-col items-center justify-center h-full text-text-muted space-y-4">
+            <div className="w-20 h-20 bg-surface rounded-full flex items-center justify-center border border-border">
+              <BellOff size={36} className="text-text-muted" />
             </div>
-            <p className="text-lg font-medium">{t("No new notifications")}</p>
+            <p className="text-sm sm:text-base font-bold">{t("No new notifications")}</p>
           </div> :
 
         allNotifications.map((notif) => {
@@ -384,31 +386,31 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
           const isRead = isAdmin && readIds.has(notif.id);
 
           const cardClass = isRead 
-            ? 'bg-emerald-50/90 border-emerald-300 shadow-2xs' 
+            ? 'bg-emerald-50/90 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800 shadow-2xs' 
             : isBroadcast 
-              ? 'bg-white border-purple-200 shadow-purple-100/50' 
-              : 'bg-white border-gray-200 shadow-xs';
+              ? 'bg-surface border-purple-200 dark:border-purple-900/50 shadow-xs' 
+              : 'bg-surface border-border shadow-xs';
 
           return (
-            <div key={notif.id} className={`${cardClass} p-3 sm:p-5 rounded-2xl flex gap-3 sm:gap-4 items-start transition-all hover:shadow-md`}>
-                <div className={`p-2 sm:p-3 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
-                  <Icon size={20} className="sm:hidden" />
-                  <Icon size={24} className="hidden sm:block" />
+            <div key={notif.id} className={`${cardClass} p-3 sm:p-4 rounded-xl sm:rounded-2xl border flex gap-2.5 sm:gap-3.5 items-start transition-all shadow-xs`}>
+                <div className={`p-2 sm:p-2.5 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
+                  <Icon size={18} className="sm:hidden" />
+                  <Icon size={22} className="hidden sm:block" />
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className={`font-bold text-base sm:text-lg truncate ${isRead ? 'text-emerald-900' : 'text-gray-800'}`}>{t(notif.title)}</h3>
-                      {isRead && <span className="bg-emerald-200/80 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">{t("Read")}</span>}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1.5 gap-0.5 sm:gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <h3 className={`font-bold text-xs sm:text-base truncate ${isRead ? 'text-emerald-900 dark:text-emerald-300' : 'text-text-main'}`}>{t(notif.title)}</h3>
+                      {isRead && <span className="bg-emerald-200/80 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase">{t("Read")}</span>}
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-400 font-medium shrink-0">
-                      <Clock size={12} />
+                    <div className="flex items-center gap-1 text-[10px] sm:text-xs text-text-muted font-medium shrink-0">
+                      <Clock size={11} />
                       {formatTimeAgo(notif.timestamp || notif.time)}
                     </div>
                   </div>
 
-                  <p className={`leading-relaxed text-xs sm:text-sm mb-3 whitespace-pre-wrap ${isRead ? 'text-emerald-800/90 font-medium' : 'text-gray-700'}`}>{t(notif.message)}</p>
+                  <p className={`leading-relaxed text-xs sm:text-sm mb-2.5 whitespace-pre-wrap ${isRead ? 'text-emerald-800/90 dark:text-emerald-400 font-medium' : 'text-text-muted'}`}>{t(notif.message)}</p>
 
                   {isBroadcast && notif.imageUrl &&
                     <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">

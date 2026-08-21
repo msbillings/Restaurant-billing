@@ -29,8 +29,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
 
   const fetchConfigs = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.get(`${getApiUrl()}/printer-configs`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setConfigs(response.data);
     } catch (error) {
@@ -84,13 +85,14 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
   const handleSave = async (e) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       if (editingConfig) {
         await axios.put(`${getApiUrl()}/printer-configs/${editingConfig._id}`, formData, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
       } else {
         await axios.post(`${getApiUrl()}/printer-configs`, formData, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
       }
       closeModal();
@@ -104,8 +106,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this printer?')) {
       try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
         await axios.delete(`${getApiUrl()}/printer-configs/${id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
         fetchConfigs();
       } catch (error) {
@@ -117,8 +120,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage()
 
   const handleTestPrint = async (id) => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       await axios.post(`${getApiUrl()}/printer-configs/${id}/test`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       alert('Test print sent successfully!');
     } catch (error) {

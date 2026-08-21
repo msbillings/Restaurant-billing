@@ -5,33 +5,34 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className="bg-surface w-full max-w-md rounded-2xl shadow-2xl border border-border overflow-hidden animate-in zoom-in-95 duration-200"
+        className="bg-surface w-full max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl border-t sm:border border-border overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6">
-          <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-full shrink-0 ${isDanger ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary'}`}>
-              <AlertTriangle size={24} />
+        <div className="p-4 sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className={`p-2.5 sm:p-3 rounded-full shrink-0 ${isDanger ? 'bg-danger/10 text-danger' : 'bg-primary/10 text-primary'}`}>
+              <AlertTriangle size={20} className="sm:hidden" />
+              <AlertTriangle size={24} className="hidden sm:block" />
             </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-text-main mb-2">{title}</h3>
-              <p className="text-text-muted leading-relaxed">{message}</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-bold text-text-main mb-1 sm:mb-2">{title}</h3>
+              <p className="text-xs sm:text-sm text-text-muted leading-relaxed">{message}</p>
             </div>
             <button 
               onClick={onClose}
-              className="text-text-muted hover:text-text-main transition-colors"
+              className="text-text-muted hover:text-text-main transition-colors p-1 cursor-pointer"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
         </div>
 
-        <div className="p-4 bg-background border-t border-border flex justify-end gap-3">
+        <div className="p-3.5 sm:p-4 bg-background border-t border-border flex justify-end gap-2.5 sm:gap-3">
           <button 
             onClick={onClose}
-            className="px-4 py-2 rounded-xl font-medium text-text-muted hover:bg-surface hover:text-text-main transition-colors"
+            className="flex-1 sm:flex-initial px-4 py-2.5 sm:py-2 rounded-xl font-bold text-xs sm:text-sm text-text-muted hover:bg-surface hover:text-text-main transition-colors cursor-pointer"
           >
             {cancelText}
           </button>
@@ -40,7 +41,7 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
               onConfirm();
               onClose();
             }}
-            className={`px-4 py-2 rounded-xl font-bold text-white shadow-lg transition-all transform active:scale-95 ${
+            className={`flex-1 sm:flex-initial px-5 py-2.5 sm:py-2 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-95 cursor-pointer ${
               isDanger 
                 ? 'bg-danger hover:bg-red-600 shadow-danger/20' 
                 : 'bg-primary hover:bg-primary-hover shadow-primary/20'

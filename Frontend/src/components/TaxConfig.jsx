@@ -19,8 +19,9 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchTaxes = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const response = await axios.get(`${getApiUrl()}/taxes`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${token}` }
       });
       setTaxes(response.data);
     } catch (error) {
@@ -37,13 +38,14 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       if (editingTax) {
         await axios.put(`${getApiUrl()}/taxes/${editingTax._id}`, formData, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
       } else {
         await axios.post(`${getApiUrl()}/taxes`, formData, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
       }
       setIsModalOpen(false);
@@ -59,8 +61,9 @@ const TaxConfig = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this tax?')) {
       try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
         await axios.delete(`${getApiUrl()}/taxes/${id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          headers: { Authorization: `Bearer ${token}` }
         });
         fetchTaxes();
       } catch (error) {
