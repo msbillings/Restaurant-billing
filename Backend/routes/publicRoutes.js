@@ -292,12 +292,13 @@ export const formatPublicBillPayload = (bill, taxSettings) => {
 };
 
 // Public endpoint to fetch categories and active menu items
+// Public endpoint to fetch categories and active menu items with high-speed in-memory caching
 router.get('/menu', async (req, res) => {
   try {
     const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
     const cached = publicMenuCache.get(tenantKey);
-    if (cached && (Date.now() - cached.timestamp < 30000)) {
-      res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    if (cached && (Date.now() - cached.timestamp < 60000)) {
+      res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
       return res.status(200).json(cached.data);
     }
 
@@ -305,11 +306,31 @@ router.get('/menu', async (req, res) => {
     const Category = getTenantModel(req, 'Category', CategoryDefault);
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
 
-    const [categories, items, settingDocs] = await Promise.all([
-      Category.find().sort({ order: 1, name: 1 }).maxTimeMS(6000).lean(),
-      Menu.find({ isAvailable: true }).populate('category', 'name').maxTimeMS(6000).lean(),
-      Setting.find({ key: { $in: ['googleReviewLink', 'restaurantSettings'] } }).maxTimeMS(6000).lean()
+    const [categories, rawItems, settingDocs] = await Promise.all([
+      Category.find().sort({ order: 1, name: 1 }).maxTimeMS(4000).lean().catch(() => []),
+      Menu.find({ isAvailable: true }).maxTimeMS(4000).lean().catch(() => []),
+      Setting.find({ key: { $in: ['googleReviewLink', 'restaurantSettings'] } }).maxTimeMS(3000).lean().catch(() => [])
     ]);
+
+    // Build category map in memory for 0ms resolution without slow Mongoose populate overhead
+    const categoryMap = new Map();
+    (categories || []).forEach(cat => {
+      if (cat._id) {
+        categoryMap.set(String(cat._id), cat);
+      }
+    });
+
+    const items = (rawItems || []).map(item => {
+      if (item.category && typeof item.category === 'object' && item.category.name) {
+        return item;
+      }
+      const catId = item.category ? String(item.category) : '';
+      const matchedCat = categoryMap.get(catId);
+      return {
+        ...item,
+        category: matchedCat ? { _id: matchedCat._id, name: matchedCat.name } : item.category
+      };
+    });
 
     let googleReviewLink = null;
     let restaurantSettings = {};
@@ -324,10 +345,10 @@ router.get('/menu', async (req, res) => {
       });
     }
 
-    const responsePayload = { categories, items, googleReviewLink, restaurantSettings };
+    const responsePayload = { categories: categories || [], items, googleReviewLink, restaurantSettings };
     publicMenuCache.set(tenantKey, { data: responsePayload, timestamp: Date.now() });
 
-    res.setHeader('Cache-Control', 'public, max-age=15, stale-while-revalidate=60');
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
     res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching public menu:", error);
@@ -335,7 +356,7 @@ router.get('/menu', async (req, res) => {
   }
 });
 
-// Public endpoint to submit an order from a customer
+// Public endpoint to submit an order from a customer with ultra-low latency response
 router.post('/order', async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
@@ -346,22 +367,28 @@ router.post('/order', async (req, res) => {
       return res.status(400).json({ message: 'Table number and items are required' });
     }
 
-    // QR Code Locking Check: Check if table is currently reserved
+    // Fast indexed reservation check for today only with lean execution
     const tableRegex = getTableMatchCondition(tableNo);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     const activeReservations = await Reservation.find({
       tableType: tableRegex,
+      date: { $gte: todayStart },
       status: { $in: ['pending', 'confirmed', 'seated'] }
-    });
+    }).lean().maxTimeMS(1500).catch(() => []);
     
     const now = new Date();
     let isReserved = false;
     for (const reservation of activeReservations) {
-      const resStart = new Date(`${new Date(reservation.date).toISOString().split('T')[0]}T${reservation.time}`);
-      const resEnd = new Date(`${new Date(reservation.endDate).toISOString().split('T')[0]}T${reservation.endTime}`);
-      if (now >= resStart && now <= resEnd) {
-        isReserved = true;
-        break;
-      }
+      try {
+        const resStart = new Date(`${new Date(reservation.date).toISOString().split('T')[0]}T${reservation.time}`);
+        const resEnd = new Date(`${new Date(reservation.endDate || reservation.date).toISOString().split('T')[0]}T${reservation.endTime || reservation.time}`);
+        if (now >= resStart && now <= resEnd) {
+          isReserved = true;
+          break;
+        }
+      } catch (e) {}
     }
 
     if (isReserved) {
@@ -455,48 +482,50 @@ router.post('/order', async (req, res) => {
       await bill.save();
     }
 
-    // Prepare unified formatted payload for 0ms frontend rendering
+    // Prepare unified formatted payload for immediate customer response
     const formattedPayload = formatPublicBillPayload(bill, taxSettings);
 
-    // ⚡ INSTANT REAL-TIME SOCKET BROADCAST (0ms latency to POS, KDS, Floor, Kitchen)
-    const io = req.app?.locals?.io;
-    const tenantDb = getTenantDbFromReq(req);
-    if (io) {
-      const payloadOrder = { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}`, orderId: bill._id, order: bill };
-      const payloadKot = { tableNo, kotNumber, items: sanitizedItems, orderId: bill._id, kot: newKotTicket };
-      if (tenantDb) {
-        io.to(tenantDb).emit('orderUpdated', payloadOrder);
-        io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
-        io.to(tenantDb).emit('newKOT', payloadKot);
-        io.to(tenantDb).emit('kotUpdated', payloadKot);
-      } else {
-        io.emit('orderUpdated', payloadOrder);
-        io.emit('tableUpdated', { tableNo, status: 'Open' });
-        io.emit('newKOT', payloadKot);
-        io.emit('kotUpdated', payloadKot);
-      }
-    }
-
-    // ⚡ INSTANT NOTIFICATION BROADCAST FOR POS & MANAGERS
-    try {
-      const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-      const cleanTable = tableNo.replace(/^Table\s*/i, '');
-      emitNotification(
-        req, 
-        `Table ${cleanTable} Order`, 
-        `${itemNames}`, 
-        'success', 
-        ['Admin', 'Manager', 'Captain', 'Chef']
-      );
-    } catch (notifErr) {
-      console.warn("Notification error on public order:", notifErr.message);
-    }
-
-    // ⚡ RETURN STRUCTURED PAYLOAD TO CUSTOMER IMMEDIATELY
+    // ⚡ INSTANT 201 RESPONSE TO CUSTOMER (No waiting on sockets or print queue)
     res.status(201).json(formattedPayload);
 
-    // Background printing and floor status DB update
+    // ⚡ BACKGROUND ASYNC: WebSockets, Notifications, Floor update, and KOT Printing
     setImmediate(async () => {
+      try {
+        const io = req.app?.locals?.io;
+        const tenantDb = getTenantDbFromReq(req);
+        if (io) {
+          const payloadOrder = { tableNo, status: 'Open', message: `New digital menu order from Table ${tableNo}`, orderId: bill._id, order: bill };
+          const payloadKot = { tableNo, kotNumber, items: sanitizedItems, orderId: bill._id, kot: newKotTicket };
+          if (tenantDb) {
+            io.to(tenantDb).emit('orderUpdated', payloadOrder);
+            io.to(tenantDb).emit('tableUpdated', { tableNo, status: 'Open' });
+            io.to(tenantDb).emit('newKOT', payloadKot);
+            io.to(tenantDb).emit('kotUpdated', payloadKot);
+          } else {
+            io.emit('orderUpdated', payloadOrder);
+            io.emit('tableUpdated', { tableNo, status: 'Open' });
+            io.emit('newKOT', payloadKot);
+            io.emit('kotUpdated', payloadKot);
+          }
+        }
+      } catch (sockErr) {
+        console.warn("Socket broadcast error on public order:", sockErr.message);
+      }
+
+      try {
+        const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+        const cleanTable = tableNo.replace(/^Table\s*/i, '');
+        emitNotification(
+          req, 
+          `Table ${cleanTable} Order`, 
+          `${itemNames}`, 
+          'success', 
+          ['Admin', 'Manager', 'Captain', 'Chef']
+        );
+      } catch (notifErr) {
+        console.warn("Notification error on public order:", notifErr.message);
+      }
+
       try {
         await updateTableStatusHelper(req, tableNo, 'Open', bill._id);
       } catch (e) {

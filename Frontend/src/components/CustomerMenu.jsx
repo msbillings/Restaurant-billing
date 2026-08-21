@@ -17,13 +17,43 @@ const apiClient = axios.create({
   }
 });
 
+const getCustomerParams = () => {
+  if (typeof window === 'undefined') return new URLSearchParams();
+  let search = window.location.search;
+  if (!search && window.location.hash && window.location.hash.includes('?')) {
+    search = window.location.hash.substring(window.location.hash.indexOf('?'));
+  }
+  return new URLSearchParams(search);
+};
+
+const getCachedCustomerMenu = (tenant) => {
+  if (!tenant || typeof window === 'undefined') return null;
+  try {
+    const cached = sessionStorage.getItem(`customer_menu_${tenant}`) || localStorage.getItem(`customer_menu_${tenant}`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 const CustomerMenu = () => {
   const { language, setLanguage, t } = useLanguage();
-  const [googleReviewLink, setGoogleReviewLink] = useState(null);
-  const [categories, setCategories] = useState([]);
-  const [items, setItems] = useState([]);
+  
+  const urlParams = useMemo(() => getCustomerParams(), []);
+  const tenant = urlParams.get('tenant');
+  const table = urlParams.get('table');
+
+  const cachedMenu = useMemo(() => getCachedCustomerMenu(tenant), [tenant]);
+
+  const [googleReviewLink, setGoogleReviewLink] = useState(() => cachedMenu?.googleReviewLink || null);
+  const [categories, setCategories] = useState(() => cachedMenu?.categories || []);
+  const [items, setItems] = useState(() => cachedMenu?.items || []);
   const [cart, setCart] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cachedMenu);
   const [isCheckingOrder, setIsCheckingOrder] = useState(true);
   const [error, setError] = useState(null);
   const [geoError, setGeoError] = useState(null);
@@ -196,9 +226,7 @@ const CustomerMenu = () => {
   const [cancelModalData, setCancelModalData] = useState(null); // { item, maxQty, selectedQty }
   const isCheckingRef = useRef(false);
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const tenant = urlParams.get('tenant');
-  const table = urlParams.get('table');
+
 
   const handleRequestItemCancel = (item) => {
     const maxCancellable = Math.max(1, (item.quantity || 1) - (item.cancelledQuantity || 0));
@@ -671,10 +699,7 @@ const CustomerMenu = () => {
         setActiveOrderData(response.data);
       }
       setOrderStatus('success');
-      setTimeout(() => setOrderStatus('menu'), 3500);
-      
-      // Instantly trigger an order status check to ensure background sync
-      checkOrderStatus();
+      setTimeout(() => setOrderStatus('menu'), 2500);
     } catch (err) {
       console.error("Order placement notice:", err);
       const errorMsg = err.response?.data?.message || (err.message && !err.message.includes('timeout') ? err.message : null) || t("Order could not be placed right now. Please check your connection or ask a staff member.");
@@ -703,61 +728,7 @@ const CustomerMenu = () => {
     }
   };
 
-  if (geoError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-        <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-600 mb-4">
-          <MapPin size={32} />
-        </div>
-        <h2 className="text-2xl font-black text-slate-800 mb-2">{t("Location Verification")}</h2>
-        <p className="text-slate-600 font-medium max-w-sm mb-6 leading-relaxed">{geoError}</p>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-          <button
-            onClick={() => {
-              setGeoError(null);
-              setLoading(true);
-              fetchMenu();
-            }}
-            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <RefreshCw size={18} />
-            <span>{t("Retry Location")}</span>
-          </button>
-
-          <button
-            onClick={() => setGeoError(null)}
-            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <UtensilsCrossed size={18} className="text-orange-500" />
-            <span>{t("Continue to Menu")}</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-        <Info className="w-16 h-16 text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">{t("Oops!")}</h2>
-        <p className="text-slate-600 max-w-sm mb-6">{error}</p>
-        <button
-          onClick={() => {
-            setError(null);
-            setLoading(true);
-            window.location.reload();
-          }}
-          className="py-3 px-6 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
-        >
-          <RefreshCw size={18} />
-          <span>{t("Retry Loading Menu")}</span>
-        </button>
-      </div>);
-  }
-
-  // Pre-calculate category visibility, items, and search relevance sorting
+  // Pre-calculate category visibility, items, and search relevance sorting (Hook must be called before any early return)
   const visibleCategoriesData = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
@@ -821,6 +792,60 @@ const CustomerMenu = () => {
       return 0;
     });
   }, [categories, items, dietaryFilter, searchQuery]);
+
+  if (geoError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
+        <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-600 mb-4">
+          <MapPin size={32} />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 mb-2">{t("Location Verification")}</h2>
+        <p className="text-slate-600 font-medium max-w-sm mb-6 leading-relaxed">{geoError}</p>
+
+        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+          <button
+            onClick={() => {
+              setGeoError(null);
+              setLoading(true);
+              fetchMenu();
+            }}
+            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <RefreshCw size={18} />
+            <span>{t("Retry Location")}</span>
+          </button>
+
+          <button
+            onClick={() => setGeoError(null)}
+            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <UtensilsCrossed size={18} className="text-orange-500" />
+            <span>{t("Continue to Menu")}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
+        <Info className="w-16 h-16 text-red-500 mb-4" />
+        <h2 className="text-2xl font-bold text-slate-800 mb-2">{t("Oops!")}</h2>
+        <p className="text-slate-600 max-w-sm mb-6">{error}</p>
+        <button
+          onClick={() => {
+            setError(null);
+            setLoading(true);
+            window.location.reload();
+          }}
+          className="py-3 px-6 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+        >
+          <RefreshCw size={18} />
+          <span>{t("Retry Loading Menu")}</span>
+        </button>
+      </div>);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
@@ -1089,8 +1114,8 @@ const CustomerMenu = () => {
         </div>
       )}
 
-      {/* ── EMPTY TABLE / READY TO ORDER BADGE ── shown when table is empty and no active order */}
-      {!isCheckingOrder && orderStatus !== 'placing' && orderStatus !== 'success' && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
+      {/* ── EMPTY TABLE / READY TO ORDER BADGE ── shown when table is confirmed empty and menu loaded */}
+      {!isCheckingOrder && !loading && orderStatus !== 'placing' && orderStatus !== 'success' && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
         <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
           <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -2476,7 +2501,7 @@ const CustomerMenu = () => {
                 >
                   {t("Keep Item")}
                 </button>
-                <button
+                <button     
                   type="button"
                   onClick={() => executeItemCancel(cancelModalData.item, cancelModalData.selectedQty)}
                   className="flex-1 py-3 rounded-2xl bg-red-500 hover:bg-red-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-red-500/20 transition-all cursor-pointer"

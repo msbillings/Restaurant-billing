@@ -389,8 +389,11 @@ function App() {
 
     setTimeout(() => setLoading(false), 0);
 
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const hasCustomerParams = searchParams.has('table') && searchParams.has('tenant');
+
     // Initialize the Offline Sync Engine (caches menu/categories/floors, processes sync queue for POS only)
-    if (!window.location.pathname.includes('order')) {
+    if (!window.location.pathname.includes('order') && !hasCustomerParams) {
       initSyncEngine();
       setTimeout(() => syncConfigFromBackend(), 0);
     }
@@ -813,7 +816,10 @@ function App() {
   };
 
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU — must be BEFORE any loading/auth guard!
-  const isCustomerOrderRoute = window.location.pathname === '/order' || window.location.pathname.startsWith('/order/');
+  const currentSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const isCustomerOrderRoute = window.location.pathname === '/order' || 
+                               window.location.pathname.startsWith('/order/') || 
+                               (currentSearchParams.has('table') && currentSearchParams.has('tenant'));
 
   if (isCustomerOrderRoute) {
     return (
