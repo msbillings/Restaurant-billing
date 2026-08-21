@@ -985,7 +985,7 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className={`min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-1 sm:gap-4 w-full z-40 relative overflow-visible ${
+      <header className={`min-h-[60px] h-auto py-2 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-1 sm:gap-4 w-full z-40 relative overflow-visible ${
         view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
       }`}>
         {/* Left: Hamburger & Logo */}
