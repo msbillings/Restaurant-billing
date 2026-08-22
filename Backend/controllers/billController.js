@@ -2517,11 +2517,11 @@ export const getActiveNotifications = async (req, res) => {
     let notifications = [];
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-    // 0. Fetch persistent notifications from the new DB model
+    // 0. Fetch persistent notifications from the DB model
     try {
       const persistentNotifs = await NotificationModel.find({
         createdAt: { $gte: twoDaysAgo }
-      }).sort({ createdAt: -1 }).lean();
+      }).sort({ createdAt: -1 }).limit(100).lean();
       
       persistentNotifs.forEach(n => {
         notifications.push({
@@ -2539,7 +2539,7 @@ export const getActiveNotifications = async (req, res) => {
       console.error('Error fetching persistent notifications:', dbErr);
     }
 
-    // 1. Query open and billed orders that have pending cancellation requests (for Admin, Manager, Captain)
+    // 1. Query open and billed orders that have pending cancellation requests (for interactive Accept/Reject actions)
     const activeCancelBills = await Bill.find({
       status: { $in: ['Open', 'Billed'] },
       'items.cancellationRequested': true
@@ -2572,10 +2572,11 @@ export const getActiveNotifications = async (req, res) => {
       }
     });
 
-    // 2. Query recent Service Requests (Call Waiter, Need Water, Pay the Bill) from last 48 hours
+    // 2. Query recent pending Service Requests (Call Waiter, Need Water, Pay the Bill) from last 48 hours
     const serviceRequests = await ServiceRequest.find({
-      createdAt: { $gte: twoDaysAgo }
-    }).sort({ createdAt: -1 }).limit(50).lean();
+      createdAt: { $gte: twoDaysAgo },
+      status: { $ne: 'Completed' }
+    }).sort({ createdAt: -1 }).limit(30).lean();
 
     serviceRequests.forEach(reqItem => {
       const cleanTable = (reqItem.tableNumber || '').replace('Table ', '');
@@ -2602,65 +2603,7 @@ export const getActiveNotifications = async (req, res) => {
       });
     });
 
-    // 3. Query recent KOT orders & item updates from open/cooking bills (for Chef, KDS, Manager, Admin)
-    const recentBills = await Bill.find({
-      createdAt: { $gte: twoDaysAgo },
-      status: { $in: ['Open', 'Hold', 'Billed'] }
-    }).select('billNumber tableNo billType items kots createdAt updatedAt total orderSource status').sort({ updatedAt: -1 }).limit(30).lean();
-
-    recentBills.forEach(bill => {
-      const cleanTable = (bill.tableNo || '').replace(/^Table\s*/i, '');
-      const validItems = (bill.items || []).filter(i => !i.isCancelled);
-      const totalItemsCount = validItems.length;
-      const itemNames = validItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-      
-      // Feature 1: Digital Menu "Order Placed" Push (Specifically for recent open bills)
-      if (bill.status === 'Open' && totalItemsCount > 0) {
-        const kotCount = bill.kots ? bill.kots.length : 1;
-        const lastKot = bill.kots && bill.kots.length > 0 ? bill.kots[bill.kots.length - 1] : null;
-        const eventTime = lastKot ? (lastKot.createdAt || bill.updatedAt || bill.createdAt) : (bill.updatedAt || bill.createdAt);
-
-        notifications.push({
-          id: `new-order-${bill._id}-kot-${kotCount}`,
-          type: 'success',
-          title: `Table ${cleanTable} Order`,
-          message: itemNames || `Order Total: ₹${bill.total || 0}`,
-          time: eventTime || new Date(),
-          timestamp: new Date(eventTime || Date.now()),
-          targetRoles: ['Admin', 'Manager', 'Captain', 'Chef'],
-          data: {
-            orderId: bill._id,
-            type: 'digital_order',
-            tableNo: bill.tableNo,
-            total: bill.total
-          }
-        });
-      }
-
-      // Feature 2: KOT / Kitchen Updates
-      const hasCookingOrReady = Array.isArray(bill.items) && bill.items.some(i => i.kdsStatus === 'Cooking' || i.kdsStatus === 'Ready');
-      if (hasCookingOrReady || bill.status === 'Open') {
-        if (totalItemsCount > 0) {
-          notifications.push({
-            id: `kot-order-${bill._id}`,
-            type: 'info',
-            title: `Table ${cleanTable} Order Updated`,
-            message: `${totalItemsCount} items • ${bill.billType || 'Dine-In'}`,
-            time: bill.updatedAt || bill.createdAt || new Date(),
-            timestamp: new Date(bill.updatedAt || bill.createdAt || Date.now()),
-            targetRoles: ['Chef', 'Manager', 'Admin', 'Captain'],
-            data: {
-              orderId: bill._id,
-              type: 'kot_update',
-              tableNo: bill.tableNo,
-              billNumber: bill.billNumber
-            }
-          });
-        }
-      }
-    });
-
-    // Deduplicate notifications by ID so we don't have overlapping old logic & new DB logic
+    // Deduplicate notifications by ID
     const uniqueMap = new Map();
     notifications.forEach(n => {
       if (!uniqueMap.has(n.id)) {

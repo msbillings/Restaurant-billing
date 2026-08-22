@@ -270,34 +270,50 @@ function App() {
   };
 
   const [toastNotifInfo, setToastNotifInfo] = useState(null);
-  const prevUnreadCountRef = React.useRef(totalUnreadCount);
+  const prevRtNotifIdRef = React.useRef(null);
+  const prevBroadcastIdRef = React.useRef(null);
+  const isInitialToastMounted = React.useRef(false);
 
   useEffect(() => {
-    if (totalUnreadCount > prevUnreadCountRef.current) {
-      // New broadcast or real-time notification arrived!
-      const isRealTime = rtUnreadCount > prevUnreadCountRef.current;
-      if (isRealTime && realTimeNotifs.length > 0) {
-        const latest = realTimeNotifs[0];
+    // Skip toast popup on initial page load
+    if (!isInitialToastMounted.current) {
+      isInitialToastMounted.current = true;
+      if (realTimeNotifs.length > 0) prevRtNotifIdRef.current = realTimeNotifs[0]?.id;
+      if (broadcasts.length > 0) prevBroadcastIdRef.current = broadcasts[0]?._id || broadcasts[0]?.id;
+      return;
+    }
+
+    // 1. Check if a new real-time notification arrived (KOT, Food Ready, Service Request, Bill Printed)
+    if (realTimeNotifs.length > 0) {
+      const topRt = realTimeNotifs[0];
+      const topRtId = topRt?.id;
+      if (topRtId && topRtId !== prevRtNotifIdRef.current) {
+        prevRtNotifIdRef.current = topRtId;
         setToastNotifInfo({
-          title: latest.title || 'Notification',
-          message: latest.message || '',
-          type: latest.type || 'info',
-          imageUrl: latest.imageUrl
+          title: topRt.title || 'Notification',
+          message: topRt.message || '',
+          type: topRt.type || 'info',
+          imageUrl: topRt.imageUrl
         });
-      } else if (broadcasts.length > 0) {
-        const latestBc = broadcasts[0];
+        return;
+      }
+    }
+
+    // 2. Check if a new Broadcast arrived
+    if (broadcasts.length > 0) {
+      const topBc = broadcasts[0];
+      const topBcId = topBc?._id || topBc?.id;
+      if (topBcId && topBcId !== prevBroadcastIdRef.current) {
+        prevBroadcastIdRef.current = topBcId;
         setToastNotifInfo({
-          title: latestBc.title || 'New Broadcast',
-          message: latestBc.message || '',
+          title: topBc.title || 'New Broadcast',
+          message: topBc.message || '',
           type: 'broadcast',
-          imageUrl: latestBc.imageUrl
+          imageUrl: topBc.imageUrl
         });
       }
-
-      prevUnreadCountRef.current = totalUnreadCount;
     }
-    prevUnreadCountRef.current = totalUnreadCount;
-  }, [totalUnreadCount, realTimeNotifs, rtUnreadCount, broadcasts]);
+  }, [realTimeNotifs, broadcasts]);
 
   // Auto-hide toast messages after 5 seconds
   useEffect(() => {

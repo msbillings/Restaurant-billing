@@ -443,14 +443,31 @@ const useNotifications = (userRole = 'Admin') => {
           readIds = new Set(JSON.parse(localStorage.getItem(readKey) || '[]'));
         } catch (e) {}
         setNotifications(prev => {
-          const newMap = new Map();
-          roleFiltered.forEach(n => newMap.set(String(n.id), n));
-          prev.forEach(n => {
-            if (!newMap.has(String(n.id)) && isNotificationForRole(n, userRole)) {
-              newMap.set(String(n.id), n);
-            }
+          const newMap = new Set();
+          const seenSemantic = new Set();
+
+          const getKey = (n) => {
+            const id = String(n.id || '');
+            const titleMsg = `${n.title || ''}::${n.message || ''}`;
+            const timeBucket = Math.floor(new Date(n.time || n.timestamp || 0).getTime() / 5000);
+            return { id, semantic: `${titleMsg}::${timeBucket}` };
+          };
+
+          const allItems = [...roleFiltered, ...prev];
+          const deduplicated = [];
+
+          allItems.forEach(n => {
+            if (!isNotificationForRole(n, userRole)) return;
+            const { id, semantic } = getKey(n);
+            if (id && newMap.has(id)) return;
+            if (seenSemantic.has(semantic)) return;
+
+            if (id) newMap.add(id);
+            seenSemantic.add(semantic);
+            deduplicated.push(n);
           });
-          const merged = Array.from(newMap.values()).sort((a, b) => {
+
+          const merged = deduplicated.sort((a, b) => {
             const timeA = new Date(a.time || a.timestamp || 0);
             const timeB = new Date(b.time || b.timestamp || 0);
             return timeB - timeA;
@@ -490,9 +507,11 @@ const useNotifications = (userRole = 'Admin') => {
       fetchActiveNotifications(true);
     }, 4000);
 
-    // 5. Tab focus & visibility change listener
+    // 5. Visibility / Window Focus listener
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        console.log('[useNotifications] Window focused. Re-syncing notifications & socket...');
+        realtimeService.rejoinTenant();
         fetchActiveNotifications(false);
       }
     };
@@ -540,6 +559,8 @@ const useNotifications = (userRole = 'Admin') => {
       const notifId = String(notification.id || '');
       if (notifId) knownNotifIdsRef.current.add(notifId);
 
+      let isDuplicate = false;
+
       setNotifications((prev) => {
         let updatedList = prev;
 
@@ -555,17 +576,25 @@ const useNotifications = (userRole = 'Admin') => {
           updatedList = updatedList.filter(n => !isTargetCancelNotification(n, criteria));
         }
 
-        // Deduplicate: Don't add if we already have this notification ID
-        if (updatedList.some(n => n.id === notification.id)) return updatedList;
+        // Deduplicate: Don't add if we already have this notification ID or same message within 5 seconds
+        isDuplicate = updatedList.some(n => {
+          if (String(n.id) === String(notification.id)) return true;
+          if (n.title === notification.title && n.message === notification.message) {
+            const timeDiff = Math.abs(new Date(n.time || n.timestamp || 0) - new Date(notification.time || notification.timestamp || 0));
+            if (timeDiff < 5000) return true;
+          }
+          return false;
+        });
+
+        if (isDuplicate) return updatedList;
         return [notification, ...updatedList];
       });
       
-      setUnreadCount((prev) => prev + 1);
-      // Play sound only for notifications meant for this role
-      playNotificationSound();
-
-      // Trigger native system notification on Mobile (APK/IPA)
-      triggerNativeNotification(notification);
+      if (!isDuplicate) {
+        setUnreadCount((prev) => prev + 1);
+        playNotificationSound();
+        triggerNativeNotification(notification);
+      }
     };
 
     const handleDismissNotification = (criteria) => {

@@ -1416,7 +1416,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         customerPhone,
         customerName,
         deliveryCharge: parseFloat(deliveryCharge || 0),
-        containerCharge: parseFloat(containerCharge || 0)
+        containerCharge: parseFloat(containerCharge || 0),
+        skipNotification: true // Do not fire "New Order Placed" or "Order Updated" right before KOT is fired
       };
 
       let currentId = orderId;
