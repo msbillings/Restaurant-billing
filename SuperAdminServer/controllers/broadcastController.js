@@ -4,7 +4,9 @@ import Client from '../models/Client.js';
 
 export const getBroadcasts = async (req, res) => {
   try {
-    const broadcasts = await Broadcast.find().sort({ createdAt: -1 });
+    const broadcasts = await Broadcast.find()
+      .populate('targetClients', 'restaurantName ownerName email databaseName')
+      .sort({ createdAt: -1 });
     res.status(200).json(broadcasts);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching broadcasts', error: error.message });

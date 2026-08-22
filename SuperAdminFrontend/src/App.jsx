@@ -397,12 +397,24 @@ function App() {
     }
   };
 
+  const getTargetShopNames = (b) => {
+    if (!b.targetClients || b.targetClients.length === 0) {
+      return 'All Shops (Global)';
+    }
+    return b.targetClients.map(c => {
+      if (typeof c === 'object' && c.restaurantName) return c.restaurantName;
+      const found = clients.find(cl => cl._id === c || cl._id?.toString() === c?.toString());
+      return found ? found.restaurantName : 'Unknown Shop';
+    }).join(', ');
+  };
+
   const handleEditBroadcast = (b) => {
+    const clientIds = (b.targetClients || []).map(c => typeof c === 'object' ? (c._id || c.id) : c);
     setNewBroadcast({
       title: b.title,
       message: b.message,
       imageUrl: b.imageUrl || '',
-      targetClients: b.targetClients || [],
+      targetClients: clientIds,
       targetRoles: b.targetRoles || [],
       file: null,
       allowReplies: b.allowReplies
@@ -1380,15 +1392,27 @@ function App() {
                                   {b.active ? <CheckCircle className="w-3 h-3"/> : <XCircle className="w-3 h-3"/>}
                                   {b.active ? 'Active' : 'Inactive'}
                                 </button>
-                                <button onClick={() => deleteBroadcast(b._id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors" title="Delete">
+                                <button onClick={() => deleteBroadcast(b._id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer" title="Delete">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleEditBroadcast(b)} className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors" title="Edit">
+                                <button onClick={() => handleEditBroadcast(b)} className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors cursor-pointer" title="Edit">
                                   <Edit3 className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
-                            <p className="text-gray-400 text-sm">{b.message}</p>
+                            <p className="text-gray-400 text-sm mb-2">{b.message}</p>
+                            
+                            {/* Targeted Shops & Roles Badges */}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/25">
+                                <Globe className="w-3 h-3 text-blue-400 shrink-0" />
+                                <span>Shops: <strong className="text-white font-bold">{getTargetShopNames(b)}</strong></span>
+                              </span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 border border-purple-500/25">
+                                <Users className="w-3 h-3 text-purple-400 shrink-0" />
+                                <span>Roles: <strong className="text-white font-bold">{b.targetRoles && b.targetRoles.length > 0 ? b.targetRoles.join(', ') : 'All Roles'}</strong></span>
+                              </span>
+                            </div>
                           </div>
                           <p className="text-xs text-gray-500 mt-2 font-mono">{new Date(b.createdAt).toLocaleString()}</p>
                         </div>

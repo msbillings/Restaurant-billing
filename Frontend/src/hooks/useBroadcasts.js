@@ -1,7 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { io } from 'socket.io-client';
+import api from '../api/axios.js';
 
 const useBroadcasts = (userRole) => {
   const [broadcasts, setBroadcasts] = useState([]);
@@ -12,15 +12,13 @@ const useBroadcasts = (userRole) => {
       const tenantDb = localStorage.getItem('resto_db_name');
       if (!tenantDb) return; // No tenant DB yet (not logged in or license not verified)
 
-      const API_URL = getApiUrl();
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
       
       let response;
       try {
-        // 1. Primary: Direct query through POS Backend API
-        response = await axios.get(`${API_URL}/broadcasts`, {
-          params: { role: userRole || 'Admin' },
-          headers: { 'X-Tenant-DB': tenantDb }
+        // 1. Primary: Direct query through POS Backend API (with auth headers automatically included)
+        response = await api.get('/broadcasts', {
+          params: { role: userRole || 'Admin' }
         });
       } catch (err) {
         try {
@@ -29,9 +27,14 @@ const useBroadcasts = (userRole) => {
             params: { role: userRole || 'Admin' }
           });
         } catch (err2) {
-          response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
-            params: { role: userRole || 'Admin' }
-          });
+          try {
+            response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
+              params: { role: userRole || 'Admin' }
+            });
+          } catch (err3) {
+            console.warn('[useBroadcasts] Could not fetch broadcasts from any endpoint');
+            return;
+          }
         }
       }
 
