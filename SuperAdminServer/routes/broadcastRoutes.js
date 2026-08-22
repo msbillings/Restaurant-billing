@@ -16,10 +16,14 @@ import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// Ensure uploads directory exists
-const uploadDir = 'uploads';
+import os from 'os';
+
+// Ensure uploads directory exists (use os.tmpdir for Vercel/serverless compatibility)
+const uploadDir = path.join(os.tmpdir(), 'uploads');
 if (!fs.existsSync(uploadDir)){
-    fs.mkdirSync(uploadDir);
+  try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  } catch (e) {}
 }
 
 // Configure multer for file uploads

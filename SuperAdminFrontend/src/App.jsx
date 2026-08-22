@@ -313,25 +313,42 @@ function App() {
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
     try {
-      const formData = new FormData();
-      formData.append('title', newBroadcast.title);
-      formData.append('message', newBroadcast.message);
-      formData.append('allowReplies', newBroadcast.allowReplies);
-      if (newBroadcast.imageUrl) formData.append('imageUrl', newBroadcast.imageUrl);
-      if (newBroadcast.file) formData.append('file', newBroadcast.file);
-      formData.append('targetClients', JSON.stringify(newBroadcast.targetClients));
-      formData.append('targetRoles', JSON.stringify(newBroadcast.targetRoles));
+      if (newBroadcast.file) {
+        // Multipart upload for APK / IPA / PDF files — let Axios auto-set boundary
+        const formData = new FormData();
+        formData.append('title', newBroadcast.title);
+        formData.append('message', newBroadcast.message);
+        formData.append('allowReplies', newBroadcast.allowReplies);
+        if (newBroadcast.imageUrl) formData.append('imageUrl', newBroadcast.imageUrl);
+        formData.append('file', newBroadcast.file);
+        formData.append('targetClients', JSON.stringify(newBroadcast.targetClients));
+        formData.append('targetRoles', JSON.stringify(newBroadcast.targetRoles));
 
-      if (editingBroadcastId) {
-        await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        alert('Broadcast updated successfully!');
+        if (editingBroadcastId) {
+          await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, formData);
+          alert('Broadcast updated successfully!');
+        } else {
+          await axios.post(`${API_BASE_URL}/broadcasts`, formData);
+          alert('Broadcast created successfully!');
+        }
       } else {
-        await axios.post(`${API_BASE_URL}/broadcasts`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-        alert('Broadcast created successfully!');
+        // Clean JSON payload for text & image broadcasts
+        const payload = {
+          title: newBroadcast.title,
+          message: newBroadcast.message,
+          allowReplies: newBroadcast.allowReplies,
+          imageUrl: newBroadcast.imageUrl || '',
+          targetClients: newBroadcast.targetClients,
+          targetRoles: newBroadcast.targetRoles
+        };
+
+        if (editingBroadcastId) {
+          await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, payload);
+          alert('Broadcast updated successfully!');
+        } else {
+          await axios.post(`${API_BASE_URL}/broadcasts`, payload);
+          alert('Broadcast created successfully!');
+        }
       }
       
       setNewBroadcast({ title: '', message: '', imageUrl: '', targetClients: [], targetRoles: [], file: null, allowReplies: true });
