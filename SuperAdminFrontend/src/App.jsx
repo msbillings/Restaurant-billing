@@ -21,10 +21,10 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Use localhost during development so we can test the new upload features
-const API_BASE_URL = 'http://localhost:4000/api';
-// When deploying, change to:
-// const API_BASE_URL = 'https://restaurant-superadmin-api-maheer.vercel.app/api';
+import { getApiBaseUrl } from './config';
+
+// Dynamic API Base URL — works seamlessly on both localhost and Vercel production
+const API_BASE_URL = getApiBaseUrl();
 
 // Axios Interceptor for JWT
 axios.interceptors.request.use((config) => {

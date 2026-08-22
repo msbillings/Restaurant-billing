@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Fingerprint, Lock, Mail, Shield, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
+import { getApiBaseUrl } from './config';
 
 const Login = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -24,7 +25,8 @@ const Login = ({ onLogin }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.post('http://localhost:4000/api/auth/login', { email, password });
+      const API_URL = getApiBaseUrl();
+      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
       localStorage.setItem('superadmin_token', res.data.token);
       localStorage.setItem('superadmin_user', JSON.stringify(res.data.admin));
       onLogin(res.data.token);
@@ -40,15 +42,16 @@ const Login = ({ onLogin }) => {
     setError('');
     setBioLoading(true);
     try {
+      const API_URL = getApiBaseUrl();
       // 1. Get auth options from server
-      const resp = await axios.get('http://localhost:4000/api/auth/webauthn/authenticate/generate');
+      const resp = await axios.get(`${API_URL}/auth/webauthn/authenticate/generate`);
       const options = resp.data;
 
       // 2. Trigger browser biometric prompt (TouchID / FaceID / Windows Hello)
       const asseResp = await startAuthentication(options);
 
       // 3. Verify on server
-      const verificationResp = await axios.post('http://localhost:4000/api/auth/webauthn/authenticate/verify', asseResp);
+      const verificationResp = await axios.post(`${API_URL}/auth/webauthn/authenticate/verify`, asseResp);
       
       if (verificationResp.data.verified && verificationResp.data.token) {
         localStorage.setItem('superadmin_token', verificationResp.data.token);
