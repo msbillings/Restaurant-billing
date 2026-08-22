@@ -106,12 +106,11 @@ export const initCapacitorNotifications = async () => {
 
     // 2. High-Priority Notification Channel (Mandatory for Android 8.0+)
     await LocalNotifications.createChannel({
-      id: 'restaurant_orders',
-      name: 'Restaurant Orders & KOT',
-      description: 'High-priority notifications for new orders, KOT updates, and table service',
+      id: 'restaurant_alerts_v1',
+      name: 'Restaurant Alerts',
+      description: 'High-priority real-time alerts for orders and KOTs',
       importance: 5, // High / Max (Popup + Sound + Heads Up)
       visibility: 1, // Public
-      sound: 'beep.wav',
       vibration: true,
       lights: true,
       lightColor: '#EA580C'
@@ -346,26 +345,53 @@ const useNotifications = (userRole = 'Admin') => {
     localStorage.setItem(`realtime_unread_count_${tenantKey}_${roleKey}`, unreadCount.toString());
   }, [unreadCount, roleKey]);
 
-  // Dispatch Native Notification Helper (Android APK & iOS)
+  // Dispatch Native Notification Helper (Windows OS .exe, Mobile APK/IPA, and Web)
   const triggerNativeNotification = (notification) => {
-    if (!Capacitor.isNativePlatform()) return;
-    try {
-      LocalNotifications.schedule({
-        notifications: [
-          {
-            title: notification.title || 'New Notification',
-            body: notification.message || '',
-            id: Math.floor(Math.random() * 1000000),
-            schedule: { at: new Date(Date.now() + 50) },
-            sound: 'beep.wav',
-            channelId: 'restaurant_orders', // High priority channel for Android
-            actionTypeId: '',
-            extra: notification.data || null
-          }
-        ]
-      }).catch(e => console.warn('Failed to schedule native notification', e));
-    } catch (e) {
-      console.warn('LocalNotifications plugin error', e);
+    if (!notification) return;
+    const title = notification.title || 'New Order Notification';
+    const body = notification.message || 'New order / service request received';
+
+    // 1. Electron Desktop App (Windows .exe / macOS) -> Native Windows Action Center / Notification Panel
+    if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
+      try {
+        window.electronAPI.showNotification({ title, body });
+      } catch (e) {
+        console.warn('[useNotifications] Electron notification failed:', e);
+      }
+      return;
+    }
+
+    // 2. Android APK & iOS IPA (Capacitor)
+    if (Capacitor.isNativePlatform()) {
+      try {
+        LocalNotifications.schedule({
+          notifications: [
+            {
+              title,
+              body,
+              id: Math.floor(Math.random() * 1000000),
+              channelId: 'restaurant_alerts_v1', // High priority channel for Android
+              actionTypeId: '',
+              extra: notification.data || null
+            }
+          ]
+        }).catch(e => console.warn('Failed to schedule native notification', e));
+      } catch (e) {
+        console.warn('LocalNotifications plugin error', e);
+      }
+      return;
+    }
+
+    // 3. Web Browsers on Windows / Mac (Chrome, Edge, Firefox, Brave)
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new window.Notification(title, {
+          body,
+          icon: '/icon.png'
+        });
+      } catch (e) {
+        console.warn('[useNotifications] HTML5 Notification error:', e);
+      }
     }
   };
 
@@ -380,7 +406,7 @@ const useNotifications = (userRole = 'Admin') => {
         // Filter by role
         const roleFiltered = res.data.filter(n => isNotificationForRole(n, userRole));
         const now = Date.now();
-        const freshWindow = 3 * 60 * 1000; // 3 minutes window for triggering chimes on newly polled items
+        const freshWindow = 10 * 60 * 1000; // 10 minutes window for triggering chimes and popups on newly polled items
 
         let hasNewIncoming = false;
 
@@ -401,7 +427,8 @@ const useNotifications = (userRole = 'Admin') => {
 
           if (hasNewIncoming) {
             playNotificationSound();
-            setUnreadCount(prev => prev + 1);
+            // Notify active floor views and billing tables to update instantly
+            window.dispatchEvent(new CustomEvent('refreshFloorOrders'));
           }
         } else {
           // Initial population of known IDs
@@ -410,6 +437,16 @@ const useNotifications = (userRole = 'Admin') => {
           });
           isInitialLoadDoneRef.current = true;
         }
+
+        // Calculate accurate unread count from database & read IDs
+        const tenantKey = getTenantKey();
+        const readKey = `realtime_read_ids_${tenantKey}_${roleKey}`;
+        let readIds = new Set();
+        try {
+          readIds = new Set(JSON.parse(localStorage.getItem(readKey) || '[]'));
+        } catch (e) {}
+        const unreadItems = roleFiltered.filter(n => !readIds.has(n.id));
+        setUnreadCount(unreadItems.length);
 
         setNotifications(prev => {
           const newMap = new Map();
@@ -431,30 +468,29 @@ const useNotifications = (userRole = 'Admin') => {
     }
   };
 
-  // ── 5. LIFECYCLE & FALLBACK POLLING ENGINE ─────────────────────────────────
+  // ── 5. LIFECYCLE & UNIVERSAL REAL-TIME SYNC ENGINE ─────────────────────────
   useEffect(() => {
     // 1. Initialize Capacitor Android Notification Channel & Permissions
     initCapacitorNotifications();
 
-    // 2. Initial fetch
+    // 2. Request Web Notification permissions for browser users
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    // 3. Initial fetch
     fetchActiveNotifications(false);
     const handleLogin = () => fetchActiveNotifications(false);
     window.addEventListener('loginSuccess', handleLogin);
 
-    // 3. Fallback Adaptive Polling for Vercel & Socket.io Disconnection
-    // Checks every 6 seconds (or 15s in background) to guarantee notifications arrive even on serverless hosting
+    // 4. Universal Real-Time Polling Engine (Every 4 seconds)
+    // Ensures digital menu cloud orders immediately trigger chimes, table refreshes,
+    // and Windows OS toasts on .exe, .apk, and Web without relying solely on local sockets.
     const pollInterval = setInterval(() => {
-      const socket = realtimeService.getSocket();
-      const isSocketDisconnected = !socket || !socket.connected;
-      const isVercelHost = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+      fetchActiveNotifications(true);
+    }, 4000);
 
-      // Poll if socket is disconnected, running on Vercel, or on native APK
-      if (isSocketDisconnected || isVercelHost || Capacitor.isNativePlatform()) {
-        fetchActiveNotifications(true);
-      }
-    }, 6000);
-
-    // 4. Tab focus & visibility change listener
+    // 5. Tab focus & visibility change listener
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchActiveNotifications(false);
@@ -462,7 +498,7 @@ const useNotifications = (userRole = 'Admin') => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    // 5. Capacitor native app state listener
+    // 6. Capacitor native app state listener
     let appStateListener;
     if (Capacitor.isNativePlatform()) {
       App.addListener('appStateChange', ({ isActive }) => {

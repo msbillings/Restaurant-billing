@@ -13,6 +13,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [kots, setKots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedKOT, setSelectedKOT] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
@@ -35,6 +36,8 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
     const s = searchParam !== undefined ? searchParam : debouncedSearchTerm;
     if (!isBackground) {
       setLoading(true);
+    } else {
+      setRefreshing(true);
     }
     try {
       const data = await apiGetTodayKOTs(d, s);
@@ -47,6 +50,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       setKots([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [selectedDate, debouncedSearchTerm]);
 
@@ -198,7 +202,8 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       }
     });
 
-    const activeItems = Object.values(itemMap).filter(i => i.quantity > 0 || i.isCancelled);
+    // Keep cancelled items too — KOT history must show everything ordered (including cancellations)
+    const activeItems = Object.values(itemMap).filter(item => item.quantity > 0 || item.isCancelled);
     if (activeItems.length === 0) return 'No active items';
 
     const summary = activeItems.map((i) => {
@@ -337,7 +342,12 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-background sticky top-0 z-10 shadow-xs border-b border-border">
                   <tr>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("KOT No")}</th>
+                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">
+                      <div className="flex items-center gap-2">
+                        {t("KOT No")}
+                        {refreshing && <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" title="Updating..."></span>}
+                      </div>
+                    </th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Time")}</th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Table / Order")}</th>
                     <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Items Summary")}</th>

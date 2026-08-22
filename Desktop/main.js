@@ -1,6 +1,16 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell, Notification } = require('electron');
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+
+// Configure App User Model ID for Windows Toast / Action Center Notifications
+if (process.platform === 'win32') {
+  try {
+    app.setAppUserModelId(process.execPath);
+  } catch (e) {
+    app.setAppUserModelId('com.mstechhive.msbilling');
+  }
+}
+
 const path = require('path');
 const { spawn } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -236,6 +246,30 @@ function startBackend() {
     }
   });
 }
+
+ipcMain.on('show-notification', (event, { title, body, icon }) => {
+  try {
+    if (Notification && Notification.isSupported()) {
+      const notifIcon = icon || path.join(__dirname, 'icon.png');
+      const notification = new Notification({
+        title: title || 'MS Billings',
+        body: body || 'New notification received',
+        icon: notifIcon,
+        silent: false
+      });
+      notification.on('click', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+      notification.show();
+    }
+  } catch (err) {
+    console.error('[Notification] Native OS notification error:', err);
+  }
+});
 
 ipcMain.handle('get-printers', async () => {
   if (mainWindow && mainWindow.webContents) {

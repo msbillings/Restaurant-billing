@@ -92,6 +92,9 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     if (hasReservationOverlap) return { unavailable: true, reason: 'Reserved' };
 
     // If booking for today, check if the table is currently busy
+    // Rule: A "busy now" table only blocks bookings whose time range overlaps
+    //       with the 1-hour window [currentTime, currentTime + 60 min] (IST).
+    //       If the user is booking for a time OUTSIDE that window, allow it.
     if (isToday) {
       const isBusyNow = openOrders.some(order => {
         if (!order || order.status === 'Cancelled' || order.status === 'Paid') return false;
@@ -104,7 +107,22 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         return oTable === tName || oTable.includes(tName) || tName.includes(oTable);
       });
       
-      if (isBusyNow) return { unavailable: true, reason: 'Busy Now' };
+      if (isBusyNow) {
+        // Current IST time
+        const nowIST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        // Block window: [now, now + 1 hour]
+        const blockWindowStart = nowIST;
+        const blockWindowEnd = new Date(nowIST.getTime() + 60 * 60 * 1000);
+
+        // The booking overlaps the block window if:
+        //   bookingStart < blockWindowEnd  AND  bookingEnd > blockWindowStart
+        const bookingOverlapsBlockWindow = startDateTime < blockWindowEnd && endDateTime > blockWindowStart;
+
+        if (bookingOverlapsBlockWindow) {
+          return { unavailable: true, reason: 'Busy Now' };
+        }
+        // Otherwise, booking is outside the 1-hour busy window — allow it
+      }
     }
 
     return { unavailable: false, reason: '' };

@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShowUserManual: (callback) => ipcRenderer.on('show-user-manual', () => callback()),
   onShowAbout: (callback) => ipcRenderer.on('show-about', (event, version) => callback(version)),
   onUpdateReady: (callback) => ipcRenderer.on('update-ready', () => callback()),
-  installUpdate: () => ipcRenderer.send('install-update')
+  installUpdate: () => ipcRenderer.send('install-update'),
+  showNotification: (data) => ipcRenderer.send('show-notification', data)
 });

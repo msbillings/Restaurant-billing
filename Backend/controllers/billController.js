@@ -1203,19 +1203,32 @@ export const getOpenOrders = async (req, res) => {
     .limit(100)
     .lean();
 
-    // Auto-clean any legacy empty/zero-item bills in DB in the background
-    Bill.updateMany(
-      {
-        status: { $in: ['Open', 'Billed'] },
-        $or: [
-          { items: { $size: 0 } },
-          { 'items.quantity': { $lte: 0 }, 'items.printedQuantity': { $lte: 0 } }
-        ]
-      },
-      {
-        $set: { status: 'Cancelled', cancelReason: 'Auto-cleaned empty zero-item bill' }
-      }
-    ).catch(() => {});
+    // Auto-clean ONLY bills that are completely empty (no items at all, or all items have qty=0 AND printedQty=0 AND are not KOT-printed).
+    // IMPORTANT: Do NOT use cross-array conditions — they incorrectly match orders with a mix of cancelled + active items.
+    Bill.find({ status: { $in: ['Open', 'Billed'] } })
+      .select('_id items kots')
+      .lean()
+      .then(async (openBills) => {
+        const emptyBillIds = openBills
+          .filter(b => {
+            if (!b.items || b.items.length === 0) return true;
+            // Only cancel if ALL items are zero AND no KOTs were ever fired
+            const hasKots = b.kots && b.kots.length > 0;
+            if (hasKots) return false; // Has KOT history — never auto-cancel
+            const hasAnyActiveItem = b.items.some(i =>
+              Number(i.quantity || 0) > 0 || (i.printedQuantity || 0) > 0
+            );
+            return !hasAnyActiveItem;
+          })
+          .map(b => b._id);
+        if (emptyBillIds.length > 0) {
+          await Bill.updateMany(
+            { _id: { $in: emptyBillIds } },
+            { $set: { status: 'Cancelled', cancelReason: 'Auto-cleaned empty zero-item bill' } }
+          );
+        }
+      }).catch(() => {});
+
 
     const dynamicTaxRate = await getDynamicTaxRate(req);
 
@@ -1382,6 +1395,7 @@ export const getDailyStats = async (req, res) => {
     const cancelledOrders = cancelledOrdersRes.status === 'fulfilled' ? cancelledOrdersRes.value : [];
     const editedOrders = editedOrdersRes.status === 'fulfilled' ? editedOrdersRes.value : [];
     const rawTimeline = timelineRes.status === 'fulfilled' ? timelineRes.value : [];
+    const activeOrders = openKOTs.length;
 
     let salesTimeline = [];
     if (isSingleDay) {
@@ -1640,13 +1654,12 @@ export const generateKOT = async (req, res) => {
                 kItem.reducedQuantity = (kItem.reducedQuantity || 0) + (kItem.quantity - kQty);
                 kItem.quantity = kQty;
                 targetRemaining -= kQty;
-                kItem.unitStatuses = (kItem.unitStatuses || []).slice(0, kQty);
-                while (kItem.unitStatuses.length < kQty) {
-                  kItem.unitStatuses.push(kItem.status || 'Pending');
-                }
-                kItem.preparedQuantity = kItem.unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
-                kItem.preparingQuantity = kItem.unitStatuses.filter(s => s === 'Preparing').length;
-                kItem.pendingQuantity = kItem.unitStatuses.filter(s => s === 'Pending').length;
+                // Reset all remaining units to 'Pending' so kitchen sees the updated order in KDS
+                kItem.status = 'Pending';
+                kItem.unitStatuses = Array.from({ length: kQty }, () => 'Pending');
+                kItem.preparedQuantity = 0;
+                kItem.preparingQuantity = 0;
+                kItem.pendingQuantity = kQty;
               }
             }
           }
@@ -1900,7 +1913,8 @@ export const getTodayKOTs = async (req, res) => {
                 pendingQuantity: pendingQty
               };
             })
-            .filter(item => item.quantity > 0 && !item.isCancelled);
+            // Include cancelled items so KOT history shows exactly what was ordered + what was cancelled
+            .filter(item => item.quantity > 0 || item.isCancelled);
 
           allKOTs.push({
             ...kot,
@@ -2127,8 +2141,14 @@ export const getActiveKOTs = async (req, res) => {
             };
           });
 
-        // Include KOTs that have active items needing kitchen preparation (Pending or Preparing)
-        const hasActiveKitchenItems = processedItems.some(item => (item.status === 'Pending' || item.status === 'Preparing' || (item.pendingQuantity > 0 || item.preparingQuantity > 0)));
+        // Include KOTs that have active items needing kitchen preparation (Pending, Preparing, or reduced quantities)
+        const hasActiveKitchenItems = processedItems.some(item => (
+          item.status === 'Pending' ||
+          item.status === 'Preparing' ||
+          item.pendingQuantity > 0 ||
+          item.preparingQuantity > 0 ||
+          (item.reducedQuantity > 0 && item.pendingQuantity > 0)
+        ));
         if (hasActiveKitchenItems) {
           allKots.push({
             orderId: order._id,
@@ -2586,14 +2606,40 @@ export const getActiveNotifications = async (req, res) => {
     const recentBills = await Bill.find({
       createdAt: { $gte: twoDaysAgo },
       status: { $in: ['Open', 'Hold', 'Billed'] }
-    }).select('billNumber tableNo billType items createdAt updatedAt').sort({ updatedAt: -1 }).limit(30).lean();
+    }).select('billNumber tableNo billType items kots createdAt updatedAt total orderSource status').sort({ updatedAt: -1 }).limit(30).lean();
 
     recentBills.forEach(bill => {
-      const cleanTable = (bill.tableNo || '').replace('Table ', '');
-      const hasCookingOrReady = Array.isArray(bill.items) && bill.items.some(i => i.kdsStatus === 'Cooking' || i.kdsStatus === 'Ready');
+      const cleanTable = (bill.tableNo || '').replace(/^Table\s*/i, '');
+      const validItems = (bill.items || []).filter(i => !i.isCancelled);
+      const totalItemsCount = validItems.length;
+      const itemNames = validItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
       
+      // Feature 1: Digital Menu "Order Placed" Push (Specifically for recent open bills)
+      if (bill.status === 'Open' && totalItemsCount > 0) {
+        const kotCount = bill.kots ? bill.kots.length : 1;
+        const lastKot = bill.kots && bill.kots.length > 0 ? bill.kots[bill.kots.length - 1] : null;
+        const eventTime = lastKot ? (lastKot.createdAt || bill.updatedAt || bill.createdAt) : (bill.updatedAt || bill.createdAt);
+
+        notifications.push({
+          id: `new-order-${bill._id}-kot-${kotCount}`,
+          type: 'success',
+          title: `Table ${cleanTable} Order`,
+          message: itemNames || `Order Total: ₹${bill.total || 0}`,
+          time: eventTime || new Date(),
+          timestamp: new Date(eventTime || Date.now()),
+          targetRoles: ['Admin', 'Manager', 'Captain', 'Chef'],
+          data: {
+            orderId: bill._id,
+            type: 'digital_order',
+            tableNo: bill.tableNo,
+            total: bill.total
+          }
+        });
+      }
+
+      // Feature 2: KOT / Kitchen Updates
+      const hasCookingOrReady = Array.isArray(bill.items) && bill.items.some(i => i.kdsStatus === 'Cooking' || i.kdsStatus === 'Ready');
       if (hasCookingOrReady || bill.status === 'Open') {
-        const totalItemsCount = (bill.items || []).filter(i => !i.isCancelled).length;
         if (totalItemsCount > 0) {
           notifications.push({
             id: `kot-order-${bill._id}`,

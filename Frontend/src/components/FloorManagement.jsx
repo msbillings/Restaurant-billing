@@ -248,6 +248,11 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       }
     };
 
+    const handleFloorRefresh = () => {
+      fetchOrders();
+    };
+    window.addEventListener('refreshFloorOrders', handleFloorRefresh);
+
     const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', handleRealtimeRefresh);
     const unsubOrdersUpdated = realtimeService.subscribe('ordersUpdated', handleRealtimeRefresh);
     const unsubTableTransferred = realtimeService.subscribe('tableTransferred', handleRealtimeRefresh);
@@ -262,6 +267,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     return () => {
       clearInterval(interval);
       window.removeEventListener('spacesUpdated', handleSpacesUpdated);
+      window.removeEventListener('refreshFloorOrders', handleFloorRefresh);
       unsubOrderUpdated();
       unsubOrdersUpdated();
       unsubTableTransferred();

@@ -18,6 +18,11 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const [activeTableIndex, setActiveTableIndex] = useState(0);
   const scrollContainerRef = useRef(null);
   const fetchingRef = useRef(false);
+  const observerRef = useRef(null);
+  
+  // Track active mutations to prevent polling from reverting optimistic UI
+  const activeActionCount = useRef(0);
+  const [processingActions, setProcessingActions] = useState({});
 
   const scrollToTable = (tableNo, index) => {
     setActiveTableIndex(index);
@@ -26,6 +31,35 @@ const KDS = ({ onNavigate, onGoBack }) => {
       element.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }
   };
+
+  // Sync active pill when user manually swipes the scroll container
+  const setupScrollSync = useCallback((groups) => {
+    if (observerRef.current) observerRef.current.disconnect();
+    if (!scrollContainerRef.current || groups.length === 0) return;
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+            const tableNo = entry.target.dataset.tableNo;
+            const idx = groups.findIndex(g => g.tableNo === tableNo);
+            if (idx !== -1) setActiveTableIndex(idx);
+          }
+        });
+      },
+      { root: scrollContainerRef.current, threshold: 0.5 }
+    );
+
+    groups.forEach((g) => {
+      const el = document.getElementById(`kds-table-${g.tableNo}`);
+      if (el) {
+        el.dataset.tableNo = g.tableNo;
+        observerRef.current.observe(el);
+      }
+    });
+
+    return () => observerRef.current && observerRef.current.disconnect();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -51,7 +85,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
   };
 
   const fetchKOTs = useCallback(async () => {
-    if (fetchingRef.current) return; // Prevent concurrent fetches
+    // Prevent concurrent fetches AND prevent fetching while mutations are in-flight (avoids glitching)
+    if (fetchingRef.current || activeActionCount.current > 0) return; 
     fetchingRef.current = true;
     try {
       const response = await api.get('/bills/kots/active');
@@ -206,6 +241,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
   }, [fetchKOTs]);
 
   const updateUnitStatus = async (orderId, kotId, itemId, unitIndex, newStatus, itemName = '', tableNo = '') => {
+    const actionKey = `unit-${kotId}-${itemId}-${unitIndex}`;
+    activeActionCount.current += 1;
+    setProcessingActions(prev => ({ ...prev, [actionKey]: true }));
+
     // 1. Instant 0ms Local State Update
     setKots((prevKots) =>
       prevKots.map((kot) => {
@@ -256,14 +295,21 @@ const KDS = ({ onNavigate, onGoBack }) => {
         unitIndex,
         status: newStatus
       });
-      fetchKOTs();
+      await fetchKOTs();
     } catch (error) {
       console.error('Error updating unit status:', error);
-      fetchKOTs();
+      await fetchKOTs();
+    } finally {
+      activeActionCount.current = Math.max(0, activeActionCount.current - 1);
+      setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
     }
   };
 
   const updateItemStatus = async (orderId, kotId, itemId, newStatus, itemName = '', tableNo = '') => {
+    const actionKey = `item-${kotId}-${itemId}`;
+    activeActionCount.current += 1;
+    setProcessingActions(prev => ({ ...prev, [actionKey]: true }));
+
     // 1. Instant 0ms Local State Update
     setKots((prevKots) =>
       prevKots.map((kot) => {
@@ -323,10 +369,13 @@ const KDS = ({ onNavigate, onGoBack }) => {
         itemId,
         status: newStatus
       });
-      fetchKOTs();
+      await fetchKOTs();
     } catch (error) {
       console.error('Error updating status:', error);
-      fetchKOTs();
+      await fetchKOTs();
+    } finally {
+      activeActionCount.current = Math.max(0, activeActionCount.current - 1);
+      setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
     }
   };
 
@@ -378,6 +427,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
   };
 
   const updateAggregatedItemStatus = async (item, newStatus, tableNo) => {
+    const actionKey = `agg-${item.kotNumbers.join('-')}-${item.name}`;
+    activeActionCount.current += 1;
+    setProcessingActions(prev => ({ ...prev, [actionKey]: true }));
+
     // 1. Instant 0ms Local State Optimistic Update across all subKots in this item
     setKots((prevKots) =>
       prevKots.map((kot) => {
@@ -428,19 +481,22 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
     try {
       await Promise.all(
-        (item.subKots || []).map(sub =>
+        (item.subKots || []).map(subKot => 
           api.post('/bills/kot/item/status', {
-            orderId: sub.originalOrderId,
-            kotId: sub.kotId,
-            itemId: sub.itemId,
+            orderId: subKot.originalOrderId,
+            kotId: subKot.kotId,
+            itemId: subKot.itemId,
             status: newStatus
           })
         )
       );
-      fetchKOTs();
+      await fetchKOTs();
     } catch (error) {
       console.error('Error updating aggregated item status:', error);
-      fetchKOTs();
+      await fetchKOTs();
+    } finally {
+      activeActionCount.current = Math.max(0, activeActionCount.current - 1);
+      setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
     }
   };
 
@@ -608,8 +664,15 @@ const KDS = ({ onNavigate, onGoBack }) => {
       };
     }).filter(g => g.items.some(item => item.status === 'Pending' || item.status === 'Preparing'));
 
+    result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     return result;
   }, [kots]);
+
+  // Apply scroll sync when groupedKOTs changes
+  useEffect(() => {
+    const cleanup = setupScrollSync(groupedKOTs);
+    return cleanup;
+  }, [groupedKOTs, setupScrollSync]);
 
   if (loading) return (
     <div className="h-full flex flex-col items-center justify-center bg-slate-950 text-amber-500 font-bold p-8">
@@ -648,11 +711,13 @@ const KDS = ({ onNavigate, onGoBack }) => {
       {/* Mobile Swipe Guidance Banner & Table Quick-Select */}
       {groupedKOTs.length > 1 && (
         <div className="flex flex-col sm:hidden gap-2 mb-3 shrink-0">
-          <div className="flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 border border-amber-500/40 rounded-2xl px-3.5 py-2 shadow-lg shadow-amber-950/40 backdrop-blur-sm animate-pulse">
+          {/* Swipe hint banner */}
+          <div className="flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 border border-amber-500/40 rounded-2xl px-3.5 py-2 shadow-lg shadow-amber-950/40 backdrop-blur-sm">
             <div className="flex items-center gap-2">
-              <span className="text-lg">👆</span>
+              {/* Right-pointing swipe arrow */}
+              <span className="text-lg animate-[nudge_1.5s_ease-in-out_infinite]">👉</span>
               <span className="text-xs font-black text-amber-300 tracking-wide">
-                {t("Swipe to view another table food")}
+                {t("Swipe left / right to switch tables")}
               </span>
             </div>
             <span className="text-[10px] font-mono font-black bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/40">
@@ -660,7 +725,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
             </span>
           </div>
 
-          {/* Quick Table Switch Pills */}
+          {/* Quick Table Switch Pills — highlight follows swipe automatically */}
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {groupedKOTs.map((group, idx) => {
               const pendingCount = group.items.filter(i => !i.isCancelled && (i.status === 'Pending' || i.status === 'Preparing')).length;
@@ -676,7 +741,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                   }`}
                 >
                   <span>{group.tableNo}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                     isSelected ? 'bg-slate-950 text-amber-400 font-black' : 'bg-slate-800 text-slate-400 font-bold'
                   }`}>
                     {pendingCount}

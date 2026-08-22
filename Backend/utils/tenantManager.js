@@ -28,6 +28,7 @@ import PushOrderDefault from '../models/PushOrder.js';
 import PrinterConfigDefault from '../models/PrinterConfig.js';
 import OnlineConfigDefault from '../models/OnlineConfig.js';
 import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
+import { NotificationDefault } from '../models/Notification.js';
 
 const tenantModelsCache = new Map();
 
@@ -81,6 +82,7 @@ export const getTenantModels = async (databaseName) => {
   const PrinterConfig = conn.models.PrinterConfig || conn.model('PrinterConfig', PrinterConfigDefault.schema);
   const OnlineConfig = conn.models.OnlineConfig || conn.model('OnlineConfig', OnlineConfigDefault.schema);
   const LoyaltyConfig = conn.models.LoyaltyConfig || conn.model('LoyaltyConfig', LoyaltyConfigDefault.schema);
+  const Notification = conn.models.Notification || conn.model('Notification', NotificationDefault.schema);
 
   const models = {
     Menu,
@@ -107,6 +109,7 @@ export const getTenantModels = async (databaseName) => {
     PrinterConfig,
     OnlineConfig,
     LoyaltyConfig,
+    Notification,
     connection: conn
   };
 

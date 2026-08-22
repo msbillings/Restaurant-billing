@@ -485,10 +485,26 @@ router.post('/order', async (req, res) => {
     // Prepare unified formatted payload for immediate customer response
     const formattedPayload = formatPublicBillPayload(bill, taxSettings);
 
+    // ⚡ SYNCHRONOUS NOTIFICATION (Fixes missing 'Order Placed' notifications)
+    try {
+      const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
+      const cleanTable = tableNo.replace(/^Table\s*/i, '');
+      emitNotification(
+        req, 
+        `Table ${cleanTable} Order`, 
+        `${itemNames}`, 
+        'success', 
+        ['Admin', 'Manager', 'Captain', 'Chef'],
+        { orderId: bill._id, type: 'digital_order', tableNo: bill.tableNo, total: bill.total }
+      );
+    } catch (notifErr) {
+      console.warn("Notification error on public order:", notifErr.message);
+    }
+
     // ⚡ INSTANT 201 RESPONSE TO CUSTOMER (No waiting on sockets or print queue)
     res.status(201).json(formattedPayload);
 
-    // ⚡ BACKGROUND ASYNC: WebSockets, Notifications, Floor update, and KOT Printing
+    // ⚡ BACKGROUND ASYNC: WebSockets, Floor update, and KOT Printing
     setImmediate(async () => {
       try {
         const io = req.app?.locals?.io;
@@ -510,20 +526,6 @@ router.post('/order', async (req, res) => {
         }
       } catch (sockErr) {
         console.warn("Socket broadcast error on public order:", sockErr.message);
-      }
-
-      try {
-        const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
-        const cleanTable = tableNo.replace(/^Table\s*/i, '');
-        emitNotification(
-          req, 
-          `Table ${cleanTable} Order`, 
-          `${itemNames}`, 
-          'success', 
-          ['Admin', 'Manager', 'Captain', 'Chef']
-        );
-      } catch (notifErr) {
-        console.warn("Notification error on public order:", notifErr.message);
       }
 
       try {

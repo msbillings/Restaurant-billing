@@ -1768,7 +1768,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { width: isCartCollapsed ? 0 : rightPanelWidth } : { width: '100%', maxWidth: '100vw' }}
             className={`flex flex-col bg-surface h-full ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'} ${
-            isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-hidden' : 'border-l border-border/50 overflow-hidden'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
+            isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-visible' : 'border-l border-border/50 overflow-visible'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
             
             
             {/* Drag Handle */}
@@ -1781,7 +1781,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             
             <button
               onClick={() => setIsCartCollapsed(!isCartCollapsed)}
-              className="hidden md:flex absolute top-1/2 -translate-y-1/2 -left-3.5 z-30 bg-white border border-border shadow-md rounded-full p-1.5 hover:bg-gray-50 transition-all text-gray-500 hover:text-primary"
+              className="hidden md:flex absolute top-1/2 -translate-y-1/2 -left-3.5 z-30 bg-primary text-white shadow-md rounded-full p-1.5 hover:opacity-90 transition-all"
               title={isCartCollapsed ? t('expandCart') : t('collapseCart')}>
               
               {isCartCollapsed ? <ChevronLeft size={14} className="ml-0.5" /> : <ChevronRight size={14} className="mr-0.5" />}

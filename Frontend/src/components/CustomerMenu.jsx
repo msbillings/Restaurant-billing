@@ -56,7 +56,7 @@ const CustomerMenu = () => {
   const [loading, setLoading] = useState(() => !cachedMenu);
   const [isCheckingOrder, setIsCheckingOrder] = useState(true);
   const [error, setError] = useState(null);
-  const [geoError, setGeoError] = useState(null);
+  const [geoError, setGeoError] = useState(null); // non-blocking warning only
   const [verifyingLocation, setVerifyingLocation] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderStatus, setOrderStatus] = useState('menu'); // menu, placing, success
@@ -98,6 +98,7 @@ const CustomerMenu = () => {
     const percent = Math.min(100, Math.max(0, (elapsedMs / totalMs) * 100));
     return { remainingMins, remainingSecs, isOverdue: false, percent };
   };
+  
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -360,98 +361,10 @@ const CustomerMenu = () => {
 
   // Geolocation verification with dynamic radius from settings & GPS accuracy compensation
   const verifyLocation = useCallback((settings) => {
-    // If running on local IP / LAN (http://192.168.x.x), localhost, or non-HTTPS origin, skip location check
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const isIp = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(host);
-    if (typeof window !== 'undefined' && (window.location.protocol !== 'https:' || isIp || host === 'localhost' || host === '127.0.0.1')) {
-      setGeoError(null);
-      setVerifyingLocation(false);
-      return;
-    }
-
-    if (!settings || !settings.enableGeoFencing) {
-      setGeoError(null);
-      setVerifyingLocation(false);
-      return;
-    }
-
-    const { latitude, longitude, geoFencingRadius = 100 } = settings;
-    if (!latitude || !longitude) {
-      setGeoError(null);
-      setVerifyingLocation(false);
-      return;
-    }
-
-    if (!navigator.geolocation) {
-      console.warn("Geolocation not supported by browser");
-      setVerifyingLocation(false);
-      return;
-    }
-
-    setVerifyingLocation(true);
-
-    const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
-      const R = 6371e3;
-      const rad = (deg) => deg * Math.PI / 180;
-      const dLat = rad(lat2 - lat1);
-      const dLon = rad(lon2 - lon1);
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(rad(lat1)) * Math.cos(rad(lat2)) *
-                Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    };
-
-    // Use the dynamic radius configured in restaurant settings
-    const allowedRadius = Number(geoFencingRadius) > 0 ? Number(geoFencingRadius) : 100;
-
-    const checkPosition = (position) => {
-      try {
-        const rawDist = getDistanceInMeters(
-          position.coords.latitude,
-          position.coords.longitude,
-          Number(latitude),
-          Number(longitude)
-        );
-        const accuracy = position.coords.accuracy || 0;
-        // Compensate for mobile indoor GPS inaccuracy (up to 40% of allowed radius or accuracy)
-        const effectiveDistance = Math.max(0, rawDist - Math.min(accuracy, allowedRadius * 0.4));
-
-        if (effectiveDistance > allowedRadius) {
-          const distM = Math.round(rawDist);
-          setGeoError(
-            `${t("You appear to be away from the restaurant. Please ensure you are physically at the table to place an order.")} (${t("Distance")}: ~${distM}m, ${t("Allowed")}: ${allowedRadius}m)`
-          );
-        } else {
-          setGeoError(null); // Location verified successfully!
-        }
-      } catch (err) {
-        console.warn("Distance check error:", err);
-      } finally {
-        setVerifyingLocation(false);
-      }
-    };
-
-    const handleGeoError = (err) => {
-      console.warn("Geolocation notice:", err);
-      setVerifyingLocation(false);
-      if (err.code === 1) { // PERMISSION_DENIED
-        setGeoError(t("Please allow location access to verify you are at Table ") + table);
-      }
-    };
-
-    // Request fresh location with high accuracy
-    navigator.geolocation.getCurrentPosition(
-      checkPosition,
-      () => {
-        navigator.geolocation.getCurrentPosition(
-          checkPosition,
-          handleGeoError,
-          { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 }
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    // LOCATION BLOCKING DISABLED AS REQUESTED
+    setGeoError(null);
+    setVerifyingLocation(false);
+    return;
   }, [table, t]);
 
   const hasLoadedInitialOrderRef = useRef(false);
@@ -793,39 +706,7 @@ const CustomerMenu = () => {
     });
   }, [categories, items, dietaryFilter, searchQuery]);
 
-  if (geoError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
-        <div className="w-16 h-16 bg-amber-500/15 border border-amber-500/30 rounded-2xl flex items-center justify-center text-amber-600 mb-4">
-          <MapPin size={32} />
-        </div>
-        <h2 className="text-2xl font-black text-slate-800 mb-2">{t("Location Verification")}</h2>
-        <p className="text-slate-600 font-medium max-w-sm mb-6 leading-relaxed">{geoError}</p>
-
-        <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
-          <button
-            onClick={() => {
-              setGeoError(null);
-              setLoading(true);
-              fetchMenu();
-            }}
-            className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <RefreshCw size={18} />
-            <span>{t("Retry Location")}</span>
-          </button>
-
-          <button
-            onClick={() => setGeoError(null)}
-            className="w-full py-3 px-4 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <UtensilsCrossed size={18} className="text-orange-500" />
-            <span>{t("Continue to Menu")}</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // NOTE: geoError is non-blocking — a dismissable banner is shown inline inside the menu instead.
 
   if (error) {
     return (
@@ -950,6 +831,22 @@ const CustomerMenu = () => {
           </span>
         </div>
       </header>
+
+      {/* Non-Blocking Geo-Fencing Warning Banner — menu is always accessible */}
+      {geoError && (
+        <div className="mx-4 mt-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3 shadow-sm">
+          <MapPin size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-amber-800 text-xs font-semibold leading-snug flex-1">{geoError}</p>
+          <button
+            type="button"
+            onClick={() => setGeoError(null)}
+            className="text-amber-500 hover:text-amber-700 shrink-0 cursor-pointer transition-colors"
+            title={t("Dismiss")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md px-4 py-3 shadow-sm border-b border-slate-200">

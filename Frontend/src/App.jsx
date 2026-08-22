@@ -1097,79 +1097,122 @@ function App() {
               )}
             </button>
 
-            {/* Notifications Dropdown */}
+            {/* Notifications Dropdown — always fixed, never overflows any screen */}
             {showNotifications && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
-                <div className="absolute right-0 top-11 mt-1 w-80 max-w-[calc(100vw-24px)] bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                {/* Backdrop — closes panel on outside click */}
+                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+
+                {/* Panel — fixed to viewport, always visible, never overflows */}
+                <div
+                  className="fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                  style={{
+                    /* Position: just below the top navbar (~60px) */
+                    top: '68px',
+                    /* Right-align to screen edge with a small margin */
+                    right: '8px',
+                    /* Mobile: stretch to near-full-width; desktop: fixed 320px */
+                    left: 'max(8px, calc(100vw - 336px))',
+                    /* Height: never exceed 60% of the viewport */
+                    maxHeight: 'min(60vh, calc(100vh - 88px))',
+                    /* Minimum reasonable width */
+                    minWidth: '260px',
+                  }}
+                >
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0 rounded-t-2xl">
                     <span className="font-bold text-gray-800 text-sm">{t("Notifications")}</span>
                     <span
                       onClick={() => { setShowNotifications(false); handleViewChange('notification'); }}
-                      className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200">{t("View All")}
+                      className="text-xs bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200 active:scale-95 transition-transform select-none"
+                    >
+                      {t("View All")}
                     </span>
                   </div>
-                  <div className="max-h-75 overflow-y-auto">
-                    {notifications.map((n) => (
-                      <div key={n.id} className="px-4 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors flex gap-3">
-                        <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' : n.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`}></div>
-                        <div className="flex-1">
-                          <p className="text-xs font-bold text-gray-800 leading-tight">{n.title}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
-                          {n.data?.type === 'cancel_item_request' && (
-                            <div className="mt-2 flex gap-2 items-center">
-                              {resolvingCancelIds[n.id] === 'accept' ? (
-                                <span className="flex items-center gap-1.5 bg-red-100 text-red-600 px-3 py-1 rounded text-xs font-bold animate-pulse">
-                                  <Loader2 size={12} className="animate-spin" />
-                                  {t("Accepting...")}
-                                </span>
-                              ) : resolvingCancelIds[n.id] === 'reject' ? (
-                                <span className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold animate-pulse">
-                                  <Loader2 size={12} className="animate-spin" />
-                                  {t("Rejecting...")}
-                                </span>
-                              ) : resolvingCancelIds[n.id] === 'accept_done' ? (
-                                <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded text-xs font-bold">
-                                  ✓ {t("Accepted")}
-                                </span>
-                              ) : resolvingCancelIds[n.id] === 'reject_done' ? (
-                                <span className="flex items-center gap-1 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold">
-                                  ✕ {t("Rejected")}
-                                </span>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
-                                    className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer"
-                                  >
-                                    {t("Accept")}
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
-                                    className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1 rounded text-xs font-bold transition-all shadow-xs cursor-pointer"
-                                  >
-                                    {t("Reject")}
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
+
+                  {/* Scrollable list — grows to fill space, scrolls internally */}
+                  <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-gray-50 min-h-0">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-10 text-center text-xs text-gray-400 font-medium">
+                        {t("No new notifications")}
                       </div>
-                    ))}
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          className="px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start"
+                        >
+                          {/* colour dot */}
+                          <div
+                            className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                              n.type === 'warning' ? 'bg-amber-500' :
+                              n.type === 'success' ? 'bg-green-500' :
+                              n.type === 'error'   ? 'bg-red-500'   : 'bg-blue-500'
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-800 leading-snug break-words">{n.title}</p>
+                            <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed break-words">{n.message}</p>
+
+                            {/* Accept / Reject for cancel-item requests */}
+                            {n.data?.type === 'cancel_item_request' && (
+                              <div className="mt-2 flex flex-wrap gap-2 items-center">
+                                {resolvingCancelIds[n.id] === 'accept' ? (
+                                  <span className="flex items-center gap-1.5 bg-red-100 text-red-600 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                    <Loader2 size={12} className="animate-spin" />
+                                    {t("Accepting...")}
+                                  </span>
+                                ) : resolvingCancelIds[n.id] === 'reject' ? (
+                                  <span className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                    <Loader2 size={12} className="animate-spin" />
+                                    {t("Rejecting...")}
+                                  </span>
+                                ) : resolvingCancelIds[n.id] === 'accept_done' ? (
+                                  <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded text-xs font-bold">
+                                    ✓ {t("Accepted")}
+                                  </span>
+                                ) : resolvingCancelIds[n.id] === 'reject_done' ? (
+                                  <span className="flex items-center gap-1 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold">
+                                    ✕ {t("Rejected")}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
+                                      className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                    >
+                                      {t("Accept")}
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
+                                      className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                    >
+                                      {t("Reject")}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
+
+                  {/* Footer — always visible at bottom */}
+                  <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center shrink-0 rounded-b-2xl">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         rtClearNotification('ALL');
-                        // Only Admin & Manager clear shared broadcasts — other roles clear only their own
                         if (isAdmin || isManager) {
                           clearAllBroadcasts();
                         }
                         setShowNotifications(false);
                       }}
-                      className="text-xs font-bold text-red-600 hover:text-red-700">{t("Clear All")}
+                      className="text-xs font-bold text-red-600 hover:text-red-700 active:scale-95 transition-transform py-1 px-3 cursor-pointer"
+                    >
+                      {t("Clear All")}
                     </button>
                   </div>
                 </div>

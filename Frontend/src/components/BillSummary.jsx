@@ -352,9 +352,11 @@ const BillSummary = ({
                     const effectiveQty = Math.max(0, rawQty - cancelledQty);
                     const totalQty = Math.max(0, rawQty);
 
-                    const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === totalQty && totalQty > 0
+                    // Use only the first `effectiveQty` slots so cancelled units don't inflate status counts
+                    const rawUnitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === totalQty && totalQty > 0
                       ? item.unitStatuses
-                      : Array.from({ length: effectiveQty }, () => item.status || 'Pending');
+                      : Array.from({ length: totalQty }, () => item.status || 'Pending');
+                    const unitStatuses = rawUnitStatuses.slice(0, effectiveQty);
 
                     const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
                     const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
@@ -364,6 +366,11 @@ const BillSummary = ({
                       (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
                       (preparingCount > 0 && pendingCount > 0)
                     );
+
+                    // If item has zero effective quantity (cancelled or removed), show Cancelled — don't run status logic
+                    if (effectiveQty === 0) {
+                      return <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>;
+                    }
 
                     if (item.isCancelled) {
                       return <span className="text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded font-bold">{t("Cancelled")}</span>;
@@ -413,7 +420,7 @@ const BillSummary = ({
                           <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
                         </span>
                       );
-                    } else if (item.status === 'Ready' || item.status === 'Prepared' || preparedCount === effectiveQty) {
+                    } else if (effectiveQty > 0 && (item.status === 'Ready' || item.status === 'Prepared' || preparedCount === effectiveQty)) {
                       statusNode = (
                         <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
                           <CheckCircle size={10} className="text-emerald-600 shrink-0" />
