@@ -269,7 +269,6 @@ function App() {
     }
   };
 
-  const [toastMessage, setToastMessage] = useState(null);
   const [toastNotifInfo, setToastNotifInfo] = useState(null);
   const prevUnreadCountRef = React.useRef(totalUnreadCount);
 
@@ -279,26 +278,36 @@ function App() {
       const isRealTime = rtUnreadCount > prevUnreadCountRef.current;
       if (isRealTime && realTimeNotifs.length > 0) {
         const latest = realTimeNotifs[0];
-        setToastNotifInfo({ title: latest.title, message: latest.message, type: latest.type || 'warning' });
-      } else {
-        setToastMessage("You have a new Notification!");
+        setToastNotifInfo({
+          title: latest.title || 'Notification',
+          message: latest.message || '',
+          type: latest.type || 'info',
+          imageUrl: latest.imageUrl
+        });
+      } else if (broadcasts.length > 0) {
+        const latestBc = broadcasts[0];
+        setToastNotifInfo({
+          title: latestBc.title || 'New Broadcast',
+          message: latestBc.message || '',
+          type: 'broadcast',
+          imageUrl: latestBc.imageUrl
+        });
       }
 
       prevUnreadCountRef.current = totalUnreadCount;
     }
     prevUnreadCountRef.current = totalUnreadCount;
-  }, [totalUnreadCount, realTimeNotifs, rtUnreadCount]);
+  }, [totalUnreadCount, realTimeNotifs, rtUnreadCount, broadcasts]);
 
   // Auto-hide toast messages after 5 seconds
   useEffect(() => {
-    if (toastMessage || toastNotifInfo) {
+    if (toastNotifInfo) {
       const timer = setTimeout(() => {
-        setToastMessage(null);
         setToastNotifInfo(null);
       }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [toastMessage, toastNotifInfo]);
+  }, [toastNotifInfo]);
 
   // Helper to format notification time clearly in 12-hour AM/PM format
   const formatNotifTime = (n) => {
@@ -975,39 +984,85 @@ function App() {
   return (
     <div className={`h-screen flex flex-col font-sans overflow-hidden relative ${view === 'kds' ? 'bg-slate-950 text-slate-100' : 'bg-background text-text-main'}`}>
 
-      {/* Broadcast Toast Notification */}
+      {/* Toast Notification Banner (Exact Content for all notification types) */}
       <AnimatePresence>
-        {(toastMessage || toastNotifInfo) &&
+        {toastNotifInfo && (
           <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 20 }}
-            exit={{ opacity: 0, y: -50 }}
-            className={`absolute top-0 right-6 z-9999 ${toastNotifInfo ? 'bg-white border-l-4 ' + (toastNotifInfo.type === 'warning' ? 'border-amber-500 text-slate-800' : 'border-green-500 text-slate-800') : 'bg-linear-to-r from-purple-600 to-indigo-600 text-white'} px-6 py-4 rounded-xl shadow-2xl flex items-start gap-4 cursor-pointer min-w-[320px] max-w-md`}
+            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 20, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.95 }}
+            className={`fixed top-0 right-4 sm:right-6 z-9999 bg-white border border-gray-200 border-l-4 ${
+              toastNotifInfo.type === 'broadcast'
+                ? 'border-l-purple-600 shadow-purple-500/10'
+                : toastNotifInfo.type === 'warning'
+                ? 'border-l-amber-500 shadow-amber-500/10'
+                : toastNotifInfo.type === 'error'
+                ? 'border-l-red-500 shadow-red-500/10'
+                : toastNotifInfo.type === 'success'
+                ? 'border-l-green-500 shadow-green-500/10'
+                : 'border-l-blue-500 shadow-blue-500/10'
+            } px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer min-w-[300px] max-w-md`}
             onClick={() => {
-              setToastMessage(null);
               setToastNotifInfo(null);
               handleViewChange('notification');
-            }}>
+            }}
+          >
+            {/* Icon */}
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                toastNotifInfo.type === 'broadcast'
+                  ? 'bg-purple-100 text-purple-600'
+                  : toastNotifInfo.type === 'warning'
+                  ? 'bg-amber-100 text-amber-600'
+                  : toastNotifInfo.type === 'error'
+                  ? 'bg-red-100 text-red-600'
+                  : toastNotifInfo.type === 'success'
+                  ? 'bg-green-100 text-green-600'
+                  : 'bg-blue-100 text-blue-600'
+              }`}
+            >
+              {toastNotifInfo.type === 'broadcast' ? (
+                <Radio size={18} className="animate-pulse" />
+              ) : (
+                <Bell size={18} className="animate-bounce" />
+              )}
+            </div>
 
-            {toastNotifInfo ? (
-              <>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${toastNotifInfo.type === 'warning' ? 'bg-amber-100 text-amber-600' : 'bg-green-100 text-green-600'}`}>
-                  <Bell className="animate-bounce" size={20} />
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <h4 className="font-bold text-xs sm:text-sm text-gray-900 truncate">
+                  {toastNotifInfo.title}
+                </h4>
+                {toastNotifInfo.type === 'broadcast' && (
+                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 uppercase tracking-wider shrink-0">
+                    Broadcast
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-600 leading-snug line-clamp-2">
+                {toastNotifInfo.message}
+              </p>
+              {toastNotifInfo.imageUrl && (
+                <div className="mt-2 w-full h-20 rounded-lg bg-gray-100 overflow-hidden relative border border-gray-200">
+                  <img src={toastNotifInfo.imageUrl} alt="" className="w-full h-full object-cover" />
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-sm mb-1">{toastNotifInfo.title}</h4>
-                  <p className="text-xs text-slate-500 leading-tight">{toastNotifInfo.message}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <Bell className="animate-bounce" size={20} />
-                <span className="font-bold">{toastMessage}</span>
-              </>
-            )}
-            <X size={16} className={`ml-2 rounded-full p-0.5 transition-colors ${toastNotifInfo ? 'text-slate-400 hover:bg-slate-100' : 'hover:bg-white/20'}`} onClick={(e) => { e.stopPropagation(); setToastMessage(null); setToastNotifInfo(null); }} />
+              )}
+            </div>
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setToastNotifInfo(null);
+              }}
+              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors shrink-0 -mr-1 -mt-1 cursor-pointer"
+            >
+              <X size={15} />
+            </button>
           </motion.div>
-        }
+        )}
       </AnimatePresence>
 
       {/* Offline / Sync Status Banner */}
