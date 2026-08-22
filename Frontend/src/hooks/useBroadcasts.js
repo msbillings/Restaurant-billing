@@ -99,7 +99,28 @@ const useBroadcasts = (userRole) => {
   };
 
   useEffect(() => {
+    // 1. Initial immediate fetch
     fetchBroadcasts();
+
+    // 2. High-speed 10-second background sync for near-instant broadcast delivery
+    const interval = setInterval(() => {
+      fetchBroadcasts();
+    }, 10000);
+
+    // 3. Instant refresh on tab visibility / window focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBroadcasts();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', fetchBroadcasts);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', fetchBroadcasts);
+    };
   }, [userRole]);
 
   return { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts, fetchBroadcasts };

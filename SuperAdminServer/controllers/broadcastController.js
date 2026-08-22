@@ -20,12 +20,21 @@ export const createBroadcast = async (req, res) => {
     // Parse JSON strings if sent as FormData
     let parsedClients = [];
     if (targetClients) {
-        parsedClients = typeof targetClients === 'string' ? JSON.parse(targetClients) : targetClients;
+      const raw = typeof targetClients === 'string' ? JSON.parse(targetClients) : targetClients;
+      if (Array.isArray(raw)) {
+        parsedClients = raw
+          .map(id => typeof id === 'object' ? (id._id || id.id) : id)
+          .filter(id => id && mongoose.Types.ObjectId.isValid(id))
+          .map(id => new mongoose.Types.ObjectId(id));
+      }
     }
     
     let parsedRoles = [];
     if (targetRoles) {
-        parsedRoles = typeof targetRoles === 'string' ? JSON.parse(targetRoles) : targetRoles;
+      const raw = typeof targetRoles === 'string' ? JSON.parse(targetRoles) : targetRoles;
+      if (Array.isArray(raw)) {
+        parsedRoles = raw.filter(r => r && typeof r === 'string');
+      }
     }
 
     // If file was uploaded via multer, use that URL instead of the body

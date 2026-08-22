@@ -1206,17 +1206,59 @@ function App() {
                         className="w-full bg-background border border-border border-dashed rounded-lg p-4 text-gray-400 hover:text-white hover:border-primary transition-colors flex flex-col items-center justify-center cursor-pointer min-h-[100px]"
                       >
                         {newBroadcast.imageUrl ? (
-                          <div className="relative w-full h-32 rounded bg-black/50 overflow-hidden flex items-center justify-center group">
+                          <div className="relative w-full h-36 rounded-lg bg-black/50 overflow-hidden flex items-center justify-center group">
                             <img src={newBroadcast.imageUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <span className="text-white text-sm flex items-center gap-2"><Upload className="w-4 h-4"/> Change Image</span>
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                              <span className="text-white text-xs font-semibold flex items-center gap-1.5 bg-gray-800/80 px-2.5 py-1.5 rounded-lg">
+                                <Upload className="w-3.5 h-3.5"/> Change
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setNewBroadcast(prev => ({ ...prev, imageUrl: '', file: null }));
+                                  const fileInput = document.getElementById('broadcast-image-upload');
+                                  if (fileInput) fileInput.value = '';
+                                }}
+                                className="text-white text-xs font-semibold flex items-center gap-1.5 bg-red-600 hover:bg-red-700 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5"/> Remove
+                              </button>
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setNewBroadcast(prev => ({ ...prev, imageUrl: '', file: null }));
+                                const fileInput = document.getElementById('broadcast-image-upload');
+                                if (fileInput) fileInput.value = '';
+                              }}
+                              className="absolute top-2 right-2 p-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-full transition-all shadow-md cursor-pointer group-hover:opacity-100 opacity-80"
+                              title="Remove Image"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         ) : newBroadcast.file ? (
-                          <div className="flex flex-col items-center justify-center text-primary">
+                          <div className="relative w-full flex flex-col items-center justify-center text-primary py-2 group">
                              <ExternalLink className="w-6 h-6 mb-2" />
                              <span className="text-sm font-bold">{newBroadcast.file.name}</span>
                              <span className="text-xs mt-1 text-gray-400">{(newBroadcast.file.size / (1024*1024)).toFixed(2)} MB - Click to change</span>
+                             <button
+                               type="button"
+                               onClick={(e) => {
+                                 e.preventDefault();
+                                 e.stopPropagation();
+                                 setNewBroadcast(prev => ({ ...prev, file: null, imageUrl: '' }));
+                                 const fileInput = document.getElementById('broadcast-image-upload');
+                                 if (fileInput) fileInput.value = '';
+                               }}
+                               className="mt-2 text-xs text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 px-2 py-1 rounded border border-red-500/20"
+                             >
+                               <Trash2 className="w-3 h-3" /> Remove file
+                             </button>
                           </div>
                         ) : (
                           <>
