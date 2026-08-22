@@ -69,7 +69,7 @@ import { clearCategoryCache } from './api/category';
 import { clearAllOfflineData } from './db/offlineDb';
 import { logoutUser } from './api/auth';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { initSyncEngine } from './utils/syncEngine';
@@ -981,88 +981,105 @@ function App() {
     }
   };
 
+  // Helper for Tailored Notification Styling & Badges across ALL notification types
+  const getToastStyling = (info) => {
+    if (!info) return { border: 'border-l-blue-500', bgIcon: 'bg-blue-100 text-blue-600', Icon: Bell, badge: null, badgeBg: 'bg-blue-100 text-blue-700' };
+    const title = (info.title || '').toLowerCase();
+    const msg = (info.message || '').toLowerCase();
+    const type = (info.type || '').toLowerCase();
+
+    // 1. Broadcast (SuperAdmin Announcements)
+    if (type === 'broadcast' || title.includes('broadcast')) {
+      return { border: 'border-l-purple-600 shadow-purple-500/10', bgIcon: 'bg-purple-100 text-purple-600', Icon: Radio, badge: 'Broadcast', badgeBg: 'bg-purple-100 text-purple-700' };
+    }
+    // 2. Cancellation Request
+    if (type === 'error' || type.includes('cancel') || title.includes('cancel')) {
+      return { border: 'border-l-red-500 shadow-red-500/10', bgIcon: 'bg-red-100 text-red-600', Icon: AlertTriangle, badge: 'Cancellation Req', badgeBg: 'bg-red-100 text-red-700' };
+    }
+    // 3. Food Ready / Dish Ready
+    if (title.includes('food ready') || title.includes('dish ready') || title.includes('ready for table') || type === 'success') {
+      return { border: 'border-l-emerald-500 shadow-emerald-500/10', bgIcon: 'bg-emerald-100 text-emerald-600', Icon: CheckCircle, badge: 'Food Ready', badgeBg: 'bg-emerald-100 text-emerald-700' };
+    }
+    // 4. Bill Saved & Printed / Invoice / Settle Bill
+    if (title.includes('bill saved') || title.includes('print') || title.includes('paid') || title.includes('settle')) {
+      return { border: 'border-l-cyan-600 shadow-cyan-500/10', bgIcon: 'bg-cyan-100 text-cyan-600', Icon: Receipt, badge: 'Bill Printed', badgeBg: 'bg-cyan-100 text-cyan-700' };
+    }
+    // 5. Table Service / Waiter Call / Water Request / Bill Request
+    if (type.includes('service') || title.includes('service') || msg.includes('water') || msg.includes('waiter') || msg.includes('pay the bill')) {
+      return { border: 'border-l-amber-500 shadow-amber-500/10', bgIcon: 'bg-amber-100 text-amber-600', Icon: UserCheck, badge: 'Table Service', badgeBg: 'bg-amber-100 text-amber-700' };
+    }
+    // 6. Kitchen / KOT Updates / Order Placed / New Items
+    if (title.includes('kot') || title.includes('order placed') || title.includes('order updated') || title.includes('item quantity')) {
+      return { border: 'border-l-orange-500 shadow-orange-500/10', bgIcon: 'bg-orange-100 text-orange-600', Icon: ChefHat, badge: 'Kitchen / KOT', badgeBg: 'bg-orange-100 text-orange-700' };
+    }
+    // 7. Low Stock / Inventory Reorder Alert
+    if (title.includes('stock') || type.includes('inventory')) {
+      return { border: 'border-l-rose-500 shadow-rose-500/10', bgIcon: 'bg-rose-100 text-rose-600', Icon: Package, badge: 'Stock Alert', badgeBg: 'bg-rose-100 text-rose-700' };
+    }
+    // Default system alert
+    return { border: 'border-l-blue-500 shadow-blue-500/10', bgIcon: 'bg-blue-100 text-blue-600', Icon: Bell, badge: 'System Alert', badgeBg: 'bg-blue-100 text-blue-700' };
+  };
+
   return (
     <div className={`h-screen flex flex-col font-sans overflow-hidden relative ${view === 'kds' ? 'bg-slate-950 text-slate-100' : 'bg-background text-text-main'}`}>
 
       {/* Toast Notification Banner (Exact Content for all notification types) */}
       <AnimatePresence>
-        {toastNotifInfo && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 20, scale: 1 }}
-            exit={{ opacity: 0, y: -50, scale: 0.95 }}
-            className={`fixed top-0 right-4 sm:right-6 z-9999 bg-white border border-gray-200 border-l-4 ${
-              toastNotifInfo.type === 'broadcast'
-                ? 'border-l-purple-600 shadow-purple-500/10'
-                : toastNotifInfo.type === 'warning'
-                ? 'border-l-amber-500 shadow-amber-500/10'
-                : toastNotifInfo.type === 'error'
-                ? 'border-l-red-500 shadow-red-500/10'
-                : toastNotifInfo.type === 'success'
-                ? 'border-l-green-500 shadow-green-500/10'
-                : 'border-l-blue-500 shadow-blue-500/10'
-            } px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer min-w-[300px] max-w-md`}
-            onClick={() => {
-              setToastNotifInfo(null);
-              handleViewChange('notification');
-            }}
-          >
-            {/* Icon */}
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                toastNotifInfo.type === 'broadcast'
-                  ? 'bg-purple-100 text-purple-600'
-                  : toastNotifInfo.type === 'warning'
-                  ? 'bg-amber-100 text-amber-600'
-                  : toastNotifInfo.type === 'error'
-                  ? 'bg-red-100 text-red-600'
-                  : toastNotifInfo.type === 'success'
-                  ? 'bg-green-100 text-green-600'
-                  : 'bg-blue-100 text-blue-600'
-              }`}
+        {toastNotifInfo && (() => {
+          const style = getToastStyling(toastNotifInfo);
+          const IconComponent = style.Icon;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -50, scale: 0.95 }}
+              animate={{ opacity: 1, y: 20, scale: 1 }}
+              exit={{ opacity: 0, y: -50, scale: 0.95 }}
+              className={`fixed top-0 right-4 sm:right-6 z-9999 bg-white border border-gray-200 border-l-4 ${style.border} px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer min-w-[300px] max-w-md`}
+              onClick={() => {
+                setToastNotifInfo(null);
+                handleViewChange('notification');
+              }}
             >
-              {toastNotifInfo.type === 'broadcast' ? (
-                <Radio size={18} className="animate-pulse" />
-              ) : (
-                <Bell size={18} className="animate-bounce" />
-              )}
-            </div>
+              {/* Dynamic Icon */}
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${style.bgIcon}`}>
+                <IconComponent size={18} className="animate-pulse" />
+              </div>
 
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <h4 className="font-bold text-xs sm:text-sm text-gray-900 truncate">
-                  {toastNotifInfo.title}
-                </h4>
-                {toastNotifInfo.type === 'broadcast' && (
-                  <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 uppercase tracking-wider shrink-0">
-                    Broadcast
-                  </span>
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <h4 className="font-bold text-xs sm:text-sm text-gray-900 truncate">
+                    {toastNotifInfo.title}
+                  </h4>
+                  {style.badge && (
+                    <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase tracking-wider shrink-0 ${style.badgeBg}`}>
+                      {style.badge}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-600 leading-snug line-clamp-2">
+                  {toastNotifInfo.message}
+                </p>
+                {toastNotifInfo.imageUrl && (
+                  <div className="mt-2 w-full h-20 rounded-lg bg-gray-100 overflow-hidden relative border border-gray-200">
+                    <img src={toastNotifInfo.imageUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
                 )}
               </div>
-              <p className="text-xs text-gray-600 leading-snug line-clamp-2">
-                {toastNotifInfo.message}
-              </p>
-              {toastNotifInfo.imageUrl && (
-                <div className="mt-2 w-full h-20 rounded-lg bg-gray-100 overflow-hidden relative border border-gray-200">
-                  <img src={toastNotifInfo.imageUrl} alt="" className="w-full h-full object-cover" />
-                </div>
-              )}
-            </div>
 
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setToastNotifInfo(null);
-              }}
-              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors shrink-0 -mr-1 -mt-1 cursor-pointer"
-            >
-              <X size={15} />
-            </button>
-          </motion.div>
-        )}
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToastNotifInfo(null);
+                }}
+                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors shrink-0 -mr-1 -mt-1 cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Offline / Sync Status Banner */}
