@@ -369,6 +369,7 @@ import syncRoutes from './routes/syncRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import cameraRoutes from './routes/cameraRoutes.js';
 import loyaltyRoutes from './routes/loyaltyRoutes.js';
+import broadcastRoutes from './routes/broadcastRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -401,6 +402,7 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/cameras', cameraRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
+app.use('/api/broadcasts', broadcastRoutes);
 
 // Serve AI Face Detection models statically over HTTP with CORS
 const possibleModelPaths = [

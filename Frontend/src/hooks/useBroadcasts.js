@@ -12,18 +12,27 @@ const useBroadcasts = (userRole) => {
       const tenantDb = localStorage.getItem('resto_db_name');
       if (!tenantDb) return; // No tenant DB yet (not logged in or license not verified)
 
-      // Use the actual SuperAdmin URL, or a local dev URL
+      const API_URL = getApiUrl();
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
       
       let response;
       try {
-        response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb}`, {
-          params: { role: userRole || 'Admin' }
+        // 1. Primary: Direct query through POS Backend API
+        response = await axios.get(`${API_URL}/broadcasts`, {
+          params: { role: userRole || 'Admin' },
+          headers: { 'X-Tenant-DB': tenantDb }
         });
       } catch (err) {
-        response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
-          params: { role: userRole || 'Admin' }
-        });
+        try {
+          // 2. Fallback: SuperAdmin API public endpoint
+          response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb}`, {
+            params: { role: userRole || 'Admin' }
+          });
+        } catch (err2) {
+          response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
+            params: { role: userRole || 'Admin' }
+          });
+        }
       }
 
       const fetchedBroadcasts = Array.isArray(response.data) ? response.data : [];
@@ -88,29 +97,6 @@ const useBroadcasts = (userRole) => {
 
   useEffect(() => {
     fetchBroadcasts();
-    
-    const SUPERADMIN_API_URL = getSuperadminApiUrl();
-    const socket = io(SUPERADMIN_API_URL);
-
-    // When any broadcast event happens, we just fetch again for simplicity 
-    // and correctness, or we can just fetch to keep it in sync.
-    // Given the complexity of filtering, calling fetchBroadcasts is safest
-    // and still gives real-time updates without polling.
-    socket.on('new_broadcast', () => {
-      fetchBroadcasts();
-    });
-
-    socket.on('update_broadcast', () => {
-      fetchBroadcasts();
-    });
-
-    socket.on('delete_broadcast', () => {
-      fetchBroadcasts();
-    });
-    
-    return () => {
-      socket.disconnect();
-    };
   }, [userRole]);
 
   return { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts, fetchBroadcasts };
