@@ -300,7 +300,7 @@ function App() {
     }
   }, [toastMessage, toastNotifInfo]);
 
-  // Helper to format notification time clearly
+  // Helper to format notification time clearly in 12-hour AM/PM format
   const formatNotifTime = (n) => {
     try {
       const d = n.timestamp || (n.time ? new Date(n.time) : null) || (n.createdAt ? new Date(n.createdAt) : null);
@@ -308,7 +308,7 @@ function App() {
       const dateObj = new Date(d);
       const now = new Date();
       const isToday = dateObj.toDateString() === now.toDateString();
-      const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeStr = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
       if (isToday) return timeStr;
       return `${dateObj.getDate()} ${dateObj.toLocaleString('en', { month: 'short' })}, ${timeStr}`;
     } catch {
@@ -323,7 +323,7 @@ function App() {
       title: b.title,
       message: b.message,
       imageUrl: b.imageUrl,
-      time: new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(b.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
       timestamp: new Date(b.createdAt),
       type: 'broadcast',
       isBroadcast: true
