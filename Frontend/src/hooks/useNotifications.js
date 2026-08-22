@@ -266,9 +266,8 @@ const useNotifications = (userRole = 'Admin') => {
   const [notifications, setNotifications] = useState(() => {
     try {
       const tenantKey = getTenantKey();
-      const saved = localStorage.getItem(`realtime_notifications_${tenantKey}_${roleKey}`) ||
-                    localStorage.getItem(`realtime_notifications_${tenantKey}`) ||
-                    localStorage.getItem('realtime_notifications');
+      // Strictly load role-scoped tenant notifications — do NOT fall back to shared/global keys which resurrect stale notifications
+      const saved = localStorage.getItem(`realtime_notifications_${tenantKey}_${roleKey}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         const twoDaysAgo = Date.now() - 48 * 60 * 60 * 1000;
@@ -318,9 +317,7 @@ const useNotifications = (userRole = 'Admin') => {
     try {
       const tenantKey = getTenantKey();
       return parseInt(
-        localStorage.getItem(`realtime_unread_count_${tenantKey}_${roleKey}`) ||
-        localStorage.getItem(`realtime_unread_count_${tenantKey}`) ||
-        localStorage.getItem('realtime_unread_count') || '0',
+        localStorage.getItem(`realtime_unread_count_${tenantKey}_${roleKey}`) || '0',
         10
       );
     } catch {
@@ -621,12 +618,11 @@ const useNotifications = (userRole = 'Admin') => {
         const tenantKey = getTenantKey();
         localStorage.removeItem(`realtime_notifications_${tenantKey}_${roleKey}`);
         localStorage.setItem(`realtime_unread_count_${tenantKey}_${roleKey}`, '0');
-        // Also clear the shared key ONLY if we are admin/manager (full clear)
-        const isAdminRole = roleKey === 'admin' || roleKey === 'manager';
-        if (isAdminRole) {
-          localStorage.removeItem(`realtime_notifications_${tenantKey}`);
-          localStorage.setItem(`realtime_unread_count_${tenantKey}`, '0');
-        }
+        // Also clear legacy shared keys so they never resurrect old notifications
+        localStorage.removeItem(`realtime_notifications_${tenantKey}`);
+        localStorage.setItem(`realtime_unread_count_${tenantKey}`, '0');
+        localStorage.removeItem('realtime_notifications');
+        localStorage.setItem('realtime_unread_count', '0');
       } catch (e) {
         console.error('Error clearing notifications:', e);
       }

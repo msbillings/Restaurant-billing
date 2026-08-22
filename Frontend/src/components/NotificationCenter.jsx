@@ -39,11 +39,13 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   const { broadcasts, markAsRead: markBroadcastRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, markAllAsRead: markRtAllRead, clearNotification } = useNotifications(userRole);
 
-  // One-time cleanup: remove legacy shared realtime_read_ids keys that caused false "Read" on load
+  // One-time cleanup: remove legacy shared realtime_read_ids and un-scoped notification keys
   useEffect(() => {
     try {
       // Remove old shared (non-role-scoped) keys so they don't pollute role-scoped state
       localStorage.removeItem('realtime_read_ids');
+      localStorage.removeItem('realtime_notifications');
+      localStorage.removeItem('realtime_unread_count');
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';
       localStorage.removeItem(`realtime_read_ids_${tenantKey}`);
     } catch (e) {}
