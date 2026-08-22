@@ -150,31 +150,29 @@ export const getClientBroadcasts = async (req, res) => {
     const activeBroadcasts = await Broadcast.find(query).sort({ createdAt: -1 });
     console.log("ALL ACTIVE BROADCASTS FROM DB:", JSON.stringify(activeBroadcasts, null, 2));
     
-    // Find the actual client document by databaseName to get its _id
-    const clientDoc = await Client.findOne({ databaseName: clientId });
-    console.log(`Found client for ${clientId}:`, clientDoc ? clientDoc._id : 'NOT FOUND');
+    // Find the actual client document by databaseName or _id
+    let clientDoc = await Client.findOne({ databaseName: clientId });
+    if (!clientDoc && mongoose.Types.ObjectId.isValid(clientId)) {
+      clientDoc = await Client.findById(clientId);
+    }
     const realClientId = clientDoc ? clientDoc._id.toString() : null;
 
     // Filter in memory for simplicity given array complexities
     const filteredBroadcasts = activeBroadcasts.filter(b => {
-      // 1. Check if client matches (if targetClients is empty, it's global)
+      // 1. Check if client matches (if targetClients is empty, it's global to all shops)
       let clientMatch = true;
       if (b.targetClients && b.targetClients.length > 0) {
         if (!realClientId) {
-          console.log(`Broadcast ${b._id} requires client match but realClientId is null`);
           return false;
         }
         clientMatch = b.targetClients.some(cId => cId.toString() === realClientId);
-        console.log(`Broadcast ${b._id} clientMatch: ${clientMatch} for realClientId ${realClientId}`);
-      } else {
-        console.log(`Broadcast ${b._id} is GLOBAL (no targetClients)`);
       }
       
       // 2. Check if role matches (if targetRoles is empty, it's all roles)
       let roleMatch = true;
       if (b.targetRoles && b.targetRoles.length > 0) {
         if (!role) return false;
-        roleMatch = b.targetRoles.includes(role);
+        roleMatch = b.targetRoles.some(r => r.toLowerCase() === (role || '').toLowerCase());
       }
 
       return clientMatch && roleMatch;

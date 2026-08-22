@@ -15,11 +15,18 @@ const useBroadcasts = (userRole) => {
       // Use the actual SuperAdmin URL, or a local dev URL
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
       
-      const response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
-        params: { role: userRole || 'Admin' }
-      });
+      let response;
+      try {
+        response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb}`, {
+          params: { role: userRole || 'Admin' }
+        });
+      } catch (err) {
+        response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
+          params: { role: userRole || 'Admin' }
+        });
+      }
 
-      const fetchedBroadcasts = response.data;
+      const fetchedBroadcasts = Array.isArray(response.data) ? response.data : [];
       const clearedIds = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
       const visibleBroadcasts = fetchedBroadcasts.filter(b => !clearedIds.includes(b._id));
       setBroadcasts(visibleBroadcasts);

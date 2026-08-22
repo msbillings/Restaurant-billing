@@ -1,5 +1,6 @@
 import express from 'express';
 import { getAllClients, createClient, updateClientPassword, validateLicense, updateLicense, loginClient, updateFeatures, getLicenseInfo, updateClientStatus, deleteClient } from '../controllers/clientController.js';
+import { getClientBroadcasts } from '../controllers/broadcastController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -18,5 +19,6 @@ router.delete('/:id', protect, deleteClient);
 router.post('/validate', validateLicense);
 router.post('/login', loginClient);
 router.get('/license/:key', getLicenseInfo);
+router.get('/broadcasts/:clientId', getClientBroadcasts);
 
 export default router;

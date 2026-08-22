@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -84,6 +84,8 @@ function App() {
 
   // Broadcast State
   const [broadcasts, setBroadcasts] = useState([]);
+  const [loadingBroadcasts, setLoadingBroadcasts] = useState(false);
+  const [isSubmittingBroadcast, setIsSubmittingBroadcast] = useState(false);
   const [replies, setReplies] = useState([]);
   const [editingBroadcastId, setEditingBroadcastId] = useState(null);
   
@@ -120,6 +122,7 @@ function App() {
   }, [newBroadcast]);
 
   const fetchBroadcasts = async () => {
+    setLoadingBroadcasts(true);
     try {
       const response = await axios.get(`${API_BASE_URL}/broadcasts`);
       setBroadcasts(response.data);
@@ -127,6 +130,8 @@ function App() {
       setReplies(repResponse.data);
     } catch (error) {
       console.error('Error fetching broadcasts:', error);
+    } finally {
+      setLoadingBroadcasts(false);
     }
   };
 
@@ -312,6 +317,7 @@ function App() {
 
   const handleCreateBroadcast = async (e) => {
     e.preventDefault();
+    setIsSubmittingBroadcast(true);
     try {
       if (newBroadcast.file) {
         // Multipart upload for APK / IPA / PDF files — let Axios auto-set boundary
@@ -358,6 +364,8 @@ function App() {
     } catch (err) {
       console.error(err);
       alert(`Failed to ${editingBroadcastId ? 'update' : 'create'} broadcast. ` + (err.response?.data?.message || err.message));
+    } finally {
+      setIsSubmittingBroadcast(false);
     }
   };
 
@@ -1191,18 +1199,48 @@ function App() {
                     />
                     <label htmlFor="allowReplies" className="text-sm font-medium">Allow shops to reply to this broadcast</label>
                   </div>
-                  <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2">
-                    {editingBroadcastId ? <Edit3 className="w-5 h-5" /> : <Radio className="w-5 h-5" />}
-                    {editingBroadcastId ? 'Update Broadcast' : 'Broadcast Now'}
+                  <button 
+                    type="submit" 
+                    disabled={isSubmittingBroadcast}
+                    className="w-full bg-primary hover:bg-primary-hover disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSubmittingBroadcast ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>{editingBroadcastId ? 'Updating Broadcast...' : 'Broadcasting Now...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        {editingBroadcastId ? <Edit3 className="w-5 h-5" /> : <Radio className="w-5 h-5" />}
+                        <span>{editingBroadcastId ? 'Update Broadcast' : 'Broadcast Now'}</span>
+                      </>
+                    )}
                   </button>
                 </form>
               </div>
 
               {/* History */}
               <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl lg:col-span-2">
-                <h3 className="text-lg md:text-xl font-bold mb-4 md:mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts</h3>
+                <div className="flex justify-between items-center mb-4 md:mb-6">
+                  <h3 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts
+                  </h3>
+                  <button 
+                    onClick={fetchBroadcasts} 
+                    disabled={loadingBroadcasts} 
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                    title="Refresh Broadcasts"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingBroadcasts ? 'animate-spin text-primary' : ''}`} />
+                  </button>
+                </div>
                 <div className="space-y-4">
-                  {broadcasts.length === 0 ? (
+                  {loadingBroadcasts ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-gray-400 bg-background/50 border border-border rounded-xl">
+                      <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+                      <span className="text-sm font-medium">Fetching active & past broadcasts...</span>
+                    </div>
+                  ) : broadcasts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 bg-background rounded-xl border border-border border-dashed">
                       <Radio className="w-12 h-12 mx-auto mb-3 opacity-20" />
                       No broadcasts found. Create one to notify your clients.
