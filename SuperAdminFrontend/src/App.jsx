@@ -21,7 +21,7 @@ let DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-import { getApiBaseUrl } from './config';
+import { getApiBaseUrl, getBroadcastApiUrl, BROADCAST_API_URL } from './config';
 
 // Dynamic API Base URL — works seamlessly on both localhost and Vercel production
 const API_BASE_URL = getApiBaseUrl();
@@ -152,10 +152,14 @@ function App() {
   const fetchBroadcasts = async () => {
     setLoadingBroadcasts(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/broadcasts`);
+      const response = await axios.get(`${BROADCAST_API_URL}/broadcasts`);
       setBroadcasts(response.data);
-      const repResponse = await axios.get(`${API_BASE_URL}/broadcasts/replies`);
-      setReplies(repResponse.data);
+      try {
+        const repResponse = await axios.get(`${BROADCAST_API_URL}/broadcasts/replies`);
+        setReplies(repResponse.data);
+      } catch (e) {
+        setReplies([]);
+      }
     } catch (error) {
       console.error('Error fetching broadcasts:', error);
     } finally {
@@ -359,10 +363,10 @@ function App() {
         formData.append('targetRoles', JSON.stringify(newBroadcast.targetRoles));
 
         if (editingBroadcastId) {
-          await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, formData);
+          await axios.put(`${BROADCAST_API_URL}/broadcasts/${editingBroadcastId}`, formData);
           alert('Broadcast updated successfully!');
         } else {
-          await axios.post(`${API_BASE_URL}/broadcasts`, formData);
+          await axios.post(`${BROADCAST_API_URL}/broadcasts`, formData);
           alert('Broadcast created successfully!');
         }
       } else {
@@ -377,10 +381,10 @@ function App() {
         };
 
         if (editingBroadcastId) {
-          await axios.put(`${API_BASE_URL}/broadcasts/${editingBroadcastId}`, payload);
+          await axios.put(`${BROADCAST_API_URL}/broadcasts/${editingBroadcastId}`, payload);
           alert('Broadcast updated successfully!');
         } else {
-          await axios.post(`${API_BASE_URL}/broadcasts`, payload);
+          await axios.post(`${BROADCAST_API_URL}/broadcasts`, payload);
           alert('Broadcast created successfully!');
         }
       }
@@ -426,7 +430,7 @@ function App() {
 
   const toggleBroadcast = async (id) => {
     try {
-      await axios.put(`${API_BASE_URL}/broadcasts/${id}/toggle`);
+      await axios.put(`${BROADCAST_API_URL}/broadcasts/${id}/toggle`);
       fetchBroadcasts();
     } catch (err) {
       alert('Failed to toggle broadcast');
@@ -436,7 +440,7 @@ function App() {
   const deleteBroadcast = async (id) => {
     if (!window.confirm('Are you sure you want to delete this broadcast?')) return;
     try {
-      await axios.delete(`${API_BASE_URL}/broadcasts/${id}`);
+      await axios.delete(`${BROADCAST_API_URL}/broadcasts/${id}`);
       fetchBroadcasts();
     } catch (err) {
       alert('Failed to delete broadcast');
