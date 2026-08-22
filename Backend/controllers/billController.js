@@ -2483,8 +2483,8 @@ export const resolveItemCancel = async (req, res) => {
       io.to(tenantDb).emit('orderUpdated', { tableNo: bill.tableNo, status: bill.status });
     }
 
-    // ⚡ Dismiss the cancellation request notification from all Admin/Captain notification panels
-    emitDismissNotification(req, {
+    // ⚡ Dismiss & permanently delete the cancellation request notification from DB & all Admin/Captain panels
+    await emitDismissNotification(req, {
       type: 'cancel_item_request',
       orderId,
       itemId,
@@ -2515,12 +2515,12 @@ export const getActiveNotifications = async (req, res) => {
     const shopName = settings?.restaurantName || 'Restaurant';
 
     let notifications = [];
-    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // 0. Fetch persistent notifications from the DB model
+    // 0. Fetch persistent notifications from the DB model (last 24 hours)
     try {
       const persistentNotifs = await NotificationModel.find({
-        createdAt: { $gte: twoDaysAgo }
+        createdAt: { $gte: oneDayAgo }
       }).sort({ createdAt: -1 }).limit(100).lean();
       
       persistentNotifs.forEach(n => {
@@ -2539,10 +2539,11 @@ export const getActiveNotifications = async (req, res) => {
       console.error('Error fetching persistent notifications:', dbErr);
     }
 
-    // 1. Query open and billed orders that have pending cancellation requests (for interactive Accept/Reject actions)
+    // 1. Query open and billed orders that have pending cancellation requests (fallback for interactive Accept/Reject actions)
     const activeCancelBills = await Bill.find({
       status: { $in: ['Open', 'Billed'] },
-      'items.cancellationRequested': true
+      'items.cancellationRequested': true,
+      updatedAt: { $gte: oneDayAgo }
     }).select('tableNo items createdAt updatedAt').lean();
 
     activeCancelBills.forEach(bill => {
@@ -2550,31 +2551,40 @@ export const getActiveNotifications = async (req, res) => {
       if (Array.isArray(bill.items)) {
         bill.items.forEach(item => {
           if (item.cancellationRequested) {
-            notifications.push({
-              id: `cancel-${bill._id}-${item._id}`,
-              type: 'error',
-              title: `${shopName} | Table ${cleanTable} Cancel Req`,
-              message: `${item.cancellationRequestedQty || item.quantity}x ${item.name}`,
-              time: item.updatedAt || bill.updatedAt || bill.createdAt || new Date(),
-              timestamp: new Date(item.updatedAt || bill.updatedAt || bill.createdAt || Date.now()),
-              targetRoles: ['Admin', 'Manager', 'Captain'],
-              data: {
-                orderId: bill._id,
-                itemId: item._id,
-                type: 'cancel_item_request',
-                itemName: item.name,
-                cancelQty: item.cancellationRequestedQty || item.quantity,
-                tableNo: bill.tableNo
-              }
-            });
+            // Only add if not already present in persistent notifications (avoids double notifications)
+            const alreadyPresent = notifications.some(n =>
+              (n.data?.type === 'cancel_item_request' || n.title?.includes('Cancel Req')) &&
+              n.data?.orderId?.toString() === bill._id?.toString() &&
+              n.data?.itemId?.toString() === item._id?.toString()
+            );
+
+            if (!alreadyPresent) {
+              notifications.push({
+                id: `cancel-${bill._id}-${item._id}`,
+                type: 'error',
+                title: `${shopName} | Table ${cleanTable} Cancel Req`,
+                message: `${item.cancellationRequestedQty || item.quantity}x ${item.name}`,
+                time: item.updatedAt || bill.updatedAt || bill.createdAt || new Date(),
+                timestamp: new Date(item.updatedAt || bill.updatedAt || bill.createdAt || Date.now()),
+                targetRoles: ['Admin', 'Manager', 'Captain'],
+                data: {
+                  orderId: bill._id,
+                  itemId: item._id,
+                  type: 'cancel_item_request',
+                  itemName: item.name,
+                  cancelQty: item.cancellationRequestedQty || item.quantity,
+                  tableNo: bill.tableNo
+                }
+              });
+            }
           }
         });
       }
     });
 
-    // 2. Query recent pending Service Requests (Call Waiter, Need Water, Pay the Bill) from last 48 hours
+    // 2. Query recent pending Service Requests (Call Waiter, Need Water, Pay the Bill) from last 24 hours
     const serviceRequests = await ServiceRequest.find({
-      createdAt: { $gte: twoDaysAgo },
+      createdAt: { $gte: oneDayAgo },
       status: { $ne: 'Completed' }
     }).sort({ createdAt: -1 }).limit(30).lean();
 
@@ -2621,6 +2631,78 @@ export const getActiveNotifications = async (req, res) => {
     res.json(sorted);
   } catch (error) {
     console.error('Error fetching active notifications:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Delete a single notification permanently from the backend database
+export const deleteNotification = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ message: 'Notification ID is required' });
+
+    const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+
+    // 1. If valid MongoDB ID or matched by data.id / data.itemId
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      await NotificationModel.findByIdAndDelete(id);
+    }
+    await NotificationModel.deleteMany({
+      $or: [
+        { 'data.id': id },
+        { 'data.itemId': id }
+      ]
+    });
+
+    // 2. If it is a service request notification (service-<id>)
+    if (id.startsWith('service-')) {
+      const sId = id.replace('service-', '');
+      if (mongoose.Types.ObjectId.isValid(sId)) {
+        await ServiceRequest.findByIdAndUpdate(sId, { status: 'Completed' });
+      }
+    }
+
+    // 3. If it is a cancel request notification (cancel-<orderId>-<itemId>)
+    if (id.startsWith('cancel-')) {
+      const parts = id.split('-');
+      if (parts.length >= 3) {
+        const orderId = parts[1];
+        const itemId = parts[2];
+        if (mongoose.Types.ObjectId.isValid(orderId)) {
+          const bill = await Bill.findById(orderId);
+          if (bill && bill.items) {
+            const item = bill.items.id ? bill.items.id(itemId) : bill.items.find(i => String(i._id) === itemId);
+            if (item) {
+              item.cancellationRequested = false;
+              bill.markModified('items');
+              await bill.save();
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'Notification deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Clear all active notifications permanently from the database
+export const deleteAllNotifications = async (req, res) => {
+  try {
+    const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
+    const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
+
+    await NotificationModel.deleteMany({});
+    await ServiceRequest.updateMany({ status: { $ne: 'Completed' } }, { status: 'Completed' });
+
+    res.json({ success: true, message: 'All notifications cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing all notifications:', error);
     res.status(500).json({ message: error.message });
   }
 };

@@ -270,47 +270,56 @@ function App() {
   };
 
   const [toastNotifInfo, setToastNotifInfo] = useState(null);
-  const prevRtNotifIdRef = React.useRef(null);
-  const prevBroadcastIdRef = React.useRef(null);
-  const isInitialToastMounted = React.useRef(false);
+  const prevRtNotifIdRef = React.useRef(undefined);
+  const prevBroadcastIdRef = React.useRef(undefined);
 
   useEffect(() => {
-    // Skip toast popup on initial page load
-    if (!isInitialToastMounted.current) {
-      isInitialToastMounted.current = true;
-      if (realTimeNotifs.length > 0) prevRtNotifIdRef.current = realTimeNotifs[0]?.id;
-      if (broadcasts.length > 0) prevBroadcastIdRef.current = broadcasts[0]?._id || broadcasts[0]?.id;
-      return;
-    }
-
     // 1. Check if a new real-time notification arrived (KOT, Food Ready, Service Request, Bill Printed)
     if (realTimeNotifs.length > 0) {
       const topRt = realTimeNotifs[0];
-      const topRtId = topRt?.id;
-      if (topRtId && topRtId !== prevRtNotifIdRef.current) {
-        prevRtNotifIdRef.current = topRtId;
-        setToastNotifInfo({
-          title: topRt.title || 'Notification',
-          message: topRt.message || '',
-          type: topRt.type || 'info',
-          imageUrl: topRt.imageUrl
-        });
-        return;
+      const topRtId = String(topRt?.id || topRt?._id || '');
+      if (topRtId) {
+        if (prevRtNotifIdRef.current === undefined) {
+          // Initial population on page load / fetch completion: record baseline ID, DO NOT popup toast
+          prevRtNotifIdRef.current = topRtId;
+        } else if (prevRtNotifIdRef.current !== topRtId) {
+          // A genuinely new real-time notification arrived while the user is using the app!
+          prevRtNotifIdRef.current = topRtId;
+          setToastNotifInfo({
+            title: topRt.title || 'Notification',
+            message: topRt.message || '',
+            type: topRt.type || 'info',
+            imageUrl: topRt.imageUrl
+          });
+          return;
+        }
       }
     }
 
-    // 2. Check if a new Broadcast arrived
+    // 2. Check if a new Broadcast arrived from SuperAdmin
     if (broadcasts.length > 0) {
       const topBc = broadcasts[0];
-      const topBcId = topBc?._id || topBc?.id;
-      if (topBcId && topBcId !== prevBroadcastIdRef.current) {
-        prevBroadcastIdRef.current = topBcId;
-        setToastNotifInfo({
-          title: topBc.title || 'New Broadcast',
-          message: topBc.message || '',
-          type: 'broadcast',
-          imageUrl: topBc.imageUrl
-        });
+      const topBcId = String(topBc?._id || topBc?.id || '');
+      if (topBcId) {
+        // Also check if user has already read or dismissed this broadcast in localStorage
+        const readBcIds = new Set(JSON.parse(localStorage.getItem('read_broadcasts') || '[]'));
+        const isAlreadyRead = readBcIds.has(topBcId);
+
+        if (prevBroadcastIdRef.current === undefined) {
+          // Initial population on page load / fetch completion: record baseline ID, DO NOT popup toast
+          prevBroadcastIdRef.current = topBcId;
+        } else if (prevBroadcastIdRef.current !== topBcId) {
+          // A genuinely NEW broadcast was sent from SuperAdmin while the page is open!
+          prevBroadcastIdRef.current = topBcId;
+          if (!isAlreadyRead) {
+            setToastNotifInfo({
+              title: topBc.title || 'New Broadcast',
+              message: topBc.message || '',
+              type: 'broadcast',
+              imageUrl: topBc.imageUrl
+            });
+          }
+        }
       }
     }
   }, [realTimeNotifs, broadcasts]);
@@ -1330,36 +1339,36 @@ function App() {
                             {n.data?.type === 'cancel_item_request' && (
                               <div className="mt-2 flex flex-wrap gap-2 items-center">
                                 {resolvingCancelIds[n.id] === 'accept' ? (
-                                  <span className="flex items-center gap-1.5 bg-red-100 text-red-600 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                  <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
                                     <Loader2 size={12} className="animate-spin" />
                                     {t("Accepting...")}
                                   </span>
                                 ) : resolvingCancelIds[n.id] === 'reject' ? (
-                                  <span className="flex items-center gap-1.5 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold animate-pulse">
+                                  <span className="flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
                                     <Loader2 size={12} className="animate-spin" />
                                     {t("Rejecting...")}
                                   </span>
                                 ) : resolvingCancelIds[n.id] === 'accept_done' ? (
-                                  <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded text-xs font-bold">
+                                  <span className="flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold">
                                     ✓ {t("Accepted")}
                                   </span>
                                 ) : resolvingCancelIds[n.id] === 'reject_done' ? (
-                                  <span className="flex items-center gap-1 bg-slate-200 text-slate-700 px-3 py-1 rounded text-xs font-bold">
+                                  <span className="flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold">
                                     ✕ {t("Rejected")}
                                   </span>
                                 ) : (
                                   <>
                                     <button
                                       onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
-                                      className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
                                     >
-                                      {t("Accept")}
+                                      ✓ {t("Accept")}
                                     </button>
                                     <button
                                       onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
-                                      className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                                      className="bg-rose-500 hover:bg-rose-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
                                     >
-                                      {t("Reject")}
+                                      ✕ {t("Reject")}
                                     </button>
                                   </>
                                 )}

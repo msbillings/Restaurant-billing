@@ -124,15 +124,62 @@ export const sendFcmPushNotification = async (tenantDb, title, message, targetRo
 
 /**
  * Utility to broadcast notification dismissal / removal strictly to tenant-scoped connected clients
+ * and permanently delete the notification documents from the tenant's MongoDB collection.
  */
-export const emitDismissNotification = (req, criteria = {}) => {
+export const emitDismissNotification = async (req, criteria = {}) => {
   try {
-    const io = req?.app?.locals?.io;
-    if (io) {
-      const tenantDb = getTenantDbFromReq(req);
-      if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+    const tenantDb = getTenantDbFromReq(req);
+    if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+      let deletedIds = [];
+      try {
+        const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
+        const query = { tenantDb };
+        const orConditions = [];
+
+        if (criteria.id) {
+          orConditions.push({ _id: criteria.id });
+        }
+        if (criteria.orderId && criteria.itemId) {
+          orConditions.push({ 'data.orderId': criteria.orderId, 'data.itemId': criteria.itemId });
+          orConditions.push({ 'data.orderId': criteria.orderId.toString(), 'data.itemId': criteria.itemId.toString() });
+        }
+        if (criteria.orderId) {
+          orConditions.push({ 'data.orderId': criteria.orderId, 'data.type': criteria.type || 'cancel_item_request' });
+          orConditions.push({ 'data.orderId': criteria.orderId.toString(), 'data.type': criteria.type || 'cancel_item_request' });
+        }
+        if (criteria.itemName) {
+          const safeName = criteria.itemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          orConditions.push({
+            $and: [
+              { 'data.type': criteria.type || 'cancel_item_request' },
+              { $or: [{ message: { $regex: new RegExp(safeName, 'i') } }, { 'data.itemName': { $regex: new RegExp(safeName, 'i') } }] }
+            ]
+          });
+        }
+
+        if (orConditions.length > 0) {
+          query.$or = orConditions;
+        } else if (criteria.type) {
+          query['data.type'] = criteria.type;
+        }
+
+        // Find matching document IDs before deletion
+        const docsToDelete = await NotificationModel.find(query).select('_id').lean();
+        deletedIds = docsToDelete.map(d => d._id.toString());
+
+        if (deletedIds.length > 0) {
+          const deleteRes = await NotificationModel.deleteMany({ _id: { $in: docsToDelete.map(d => d._id) } });
+          console.log(`[Notification] Permanently deleted ${deleteRes.deletedCount} notifications from DB for tenant ${tenantDb}:`, deletedIds);
+        }
+      } catch (dbErr) {
+        console.warn('[Notification] DB delete warning in emitDismissNotification:', dbErr.message);
+      }
+
+      const io = req?.app?.locals?.io;
+      if (io) {
         io.to(tenantDb).emit('dismiss_notification', {
           ...criteria,
+          deletedIds,
           tenantDb
         });
         console.log(`[Notification] Broadcasted dismiss notification to tenant room ${tenantDb}`, criteria);
@@ -142,3 +189,4 @@ export const emitDismissNotification = (req, criteria = {}) => {
     console.error('Notification dismiss emit error:', err);
   }
 };
+

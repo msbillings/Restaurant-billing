@@ -29,8 +29,8 @@ const NotificationSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
-    // TTL index: automatically delete documents 48 hours (172800 seconds) after createdAt
-    expires: 172800
+    // TTL index: automatically delete documents 24 hours (86400 seconds) after createdAt
+    expires: 86400
   }
 });
 

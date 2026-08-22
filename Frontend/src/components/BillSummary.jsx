@@ -456,6 +456,14 @@ const BillSummary = ({
                     <Clipboard size={10} />
                   </button>
                 </div>
+                {(item.orderedAt || item.createdAt || item.time || item.addedAt) && (
+                  <div className="text-[8.5px] text-gray-400 font-semibold mt-0.5 flex items-center gap-0.5">
+                    <span>🕒 {(() => {
+                      const d = new Date(item.orderedAt || item.createdAt || item.time || item.addedAt);
+                      return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                    })()}</span>
+                  </div>
+                )}
                 {item.specialNote ? (
                   <div
                     onClick={() => handleItemNoteClick(item)}

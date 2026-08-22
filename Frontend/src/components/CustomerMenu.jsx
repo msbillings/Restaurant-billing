@@ -40,6 +40,20 @@ const getCachedCustomerMenu = (tenant) => {
   return null;
 };
 
+const getCachedActiveOrder = (tenant, table) => {
+  if (!tenant || !table || typeof window === 'undefined') return null;
+  try {
+    const cached = sessionStorage.getItem(`active_order_${tenant}_${table}`) || localStorage.getItem(`active_order_${tenant}_${table}`);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && Array.isArray(parsed.items) && parsed.items.filter(i => !i.isCancelled).length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 const CustomerMenu = () => {
   const { language, setLanguage, t } = useLanguage();
   
@@ -48,13 +62,16 @@ const CustomerMenu = () => {
   const table = urlParams.get('table');
 
   const cachedMenu = useMemo(() => getCachedCustomerMenu(tenant), [tenant]);
+  const cachedActiveOrder = useMemo(() => getCachedActiveOrder(tenant, table), [tenant, table]);
 
   const [googleReviewLink, setGoogleReviewLink] = useState(() => cachedMenu?.googleReviewLink || null);
   const [categories, setCategories] = useState(() => cachedMenu?.categories || []);
   const [items, setItems] = useState(() => cachedMenu?.items || []);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(() => !cachedMenu);
-  const [isCheckingOrder, setIsCheckingOrder] = useState(true);
+  const [activeOrderData, setActiveOrderData] = useState(() => cachedActiveOrder);
+  const [isCheckingOrder, setIsCheckingOrder] = useState(() => !cachedActiveOrder);
+  const [hasConfirmedTableStatus, setHasConfirmedTableStatus] = useState(() => !!cachedActiveOrder);
   const [error, setError] = useState(null);
   const [geoError, setGeoError] = useState(null); // non-blocking warning only
   const [verifyingLocation, setVerifyingLocation] = useState(false);
@@ -74,7 +91,6 @@ const CustomerMenu = () => {
   ];
 
   // Live Order Tracking State
-  const [activeOrderData, setActiveOrderData] = useState(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -82,8 +98,20 @@ const CustomerMenu = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Format time in 12-hour AM/PM format (e.g. 02:48 AM, 03:10 PM)
+  const format12HourTime = (dateInput) => {
+    if (!dateInput) return '';
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
   const getPrepCountdown = (item) => {
     if (!item || !item.prepTimeMinutes) return null;
+    // When KDS / Kitchen marks dish Prepared / Ready, stop and hide the countdown timer
+    const isReadyOrPrepared = item.kdsStatus === 'Ready' || item.kdsStatus === 'Prepared' || item.status === 'Ready' || item.status === 'Prepared';
+    if (isReadyOrPrepared) return null;
+
     const startMs = item.prepStartTime ? new Date(item.prepStartTime).getTime() : now;
     const totalMs = item.prepTimeMinutes * 60 * 1000;
     const elapsedMs = now - startMs;
@@ -398,25 +426,42 @@ const CustomerMenu = () => {
         if (validItems.length > 0) {
           hasLoadedInitialOrderRef.current = true;
           setActiveOrderData(response.data);
+          try {
+            sessionStorage.setItem(`active_order_${tenant}_${table}`, JSON.stringify(response.data));
+            localStorage.setItem(`active_order_${tenant}_${table}`, JSON.stringify(response.data));
+          } catch (e) {}
         } else {
           hasLoadedInitialOrderRef.current = true;
           setActiveOrderData(null);
+          try {
+            sessionStorage.removeItem(`active_order_${tenant}_${table}`);
+            localStorage.removeItem(`active_order_${tenant}_${table}`);
+          } catch (e) {}
         }
       } else {
         hasLoadedInitialOrderRef.current = true;
         setActiveOrderData(null);
+        try {
+          sessionStorage.removeItem(`active_order_${tenant}_${table}`);
+          localStorage.removeItem(`active_order_${tenant}_${table}`);
+        } catch (e) {}
       }
     } catch (err) {
       // If 404, the table is legitimately empty (no open bill)
       if (err.response?.status === 404) {
         hasLoadedInitialOrderRef.current = true;
         setActiveOrderData(null);
+        try {
+          sessionStorage.removeItem(`active_order_${tenant}_${table}`);
+          localStorage.removeItem(`active_order_${tenant}_${table}`);
+        } catch (e) {}
       } else {
         console.warn("Table order status notice:", err?.message);
       }
     } finally {
       isCheckingRef.current = false;
       setIsCheckingOrder(false);
+      setHasConfirmedTableStatus(true);
     }
   }, [table, tenant]);
 
@@ -499,8 +544,15 @@ const CustomerMenu = () => {
         checkOrderStatus();
       });
       socket.on('cancellationResolved', (data) => {
-        setServiceMessage(`Item cancellation ${data.action}ed: ${data.itemName}`);
-        setTimeout(() => setServiceMessage(''), 3000);
+        if (data?.action === 'accept') {
+          setServiceMessage(`✅ Cancellation Accepted: "${data.itemName || 'Your dish'}" has been cancelled.`);
+        } else {
+          setServiceMessage(`❌ Cancellation Rejected: "${data.itemName || 'Your dish'}" is already being prepared.`);
+        }
+        setTimeout(() => setServiceMessage(null), 5000);
+        checkOrderStatus();
+      });
+      socket.on('itemCancellationWithdrawn', () => {
         checkOrderStatus();
       });
     } catch (sockErr) {
@@ -574,6 +626,58 @@ const CustomerMenu = () => {
 
   const calculateTotal = () => {
     return cart.reduce((total, item) => total + item.price * item.quantity, 0);
+  };
+
+  const smoothScrollToY = (targetY, duration = 400) => {
+    const startY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const difference = targetY - startY;
+    if (Math.abs(difference) < 4) return;
+
+    const startTime = performance.now();
+    const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+
+    const step = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const ease = easeInOutQuad(progress);
+      const newY = startY + difference * ease;
+
+      window.scrollTo(0, newY);
+      if (document.documentElement) document.documentElement.scrollTop = newY;
+      if (document.body) document.body.scrollTop = newY;
+
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      }
+    };
+
+    requestAnimationFrame(step);
+  };
+
+  const scrollToMenuItems = (categoryId = null) => {
+    const doScroll = () => {
+      let target = null;
+      if (categoryId) {
+        target = document.getElementById(`category-${categoryId}`);
+      }
+      if (!target) {
+        target = document.getElementById('menu-items-container') || document.querySelector('main > div[id^="category-"]') || document.querySelector('main');
+      }
+      if (target) {
+        const stickyHeader = document.querySelector('.sticky');
+        const stickyHeight = stickyHeader ? stickyHeader.offsetHeight : 110;
+        const rect = target.getBoundingClientRect();
+        const currentScroll = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const targetY = Math.max(0, rect.top + currentScroll - stickyHeight - 12);
+
+        smoothScrollToY(targetY, 450);
+        try {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {}
+      }
+    };
+
+    setTimeout(doScroll, 100);
   };
 
   const placeOrder = async () => {
@@ -849,8 +953,8 @@ const CustomerMenu = () => {
       )}
 
       {/* Search and Filters */}
-      <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md px-4 py-3 shadow-sm border-b border-slate-200">
-        <div className="flex flex-col gap-2.5 max-w-2xl mx-auto">
+      <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md px-3 sm:px-4 py-3 shadow-sm border-b border-slate-200">
+        <div className="flex flex-col gap-2.5 max-w-3xl mx-auto">
           {/* Search Row with Top-Left Filter Dropdown */}
           <div className="flex items-center gap-2">
             {/* Top-Left Filter Dropdown */}
@@ -893,7 +997,7 @@ const CustomerMenu = () => {
                     >
                       <button
                         type="button"
-                        onClick={() => { setDietaryFilter('all'); setIsFilterDropdownOpen(false); }}
+                        onClick={() => { setDietaryFilter('all'); setIsFilterDropdownOpen(false); scrollToMenuItems(); }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${dietaryFilter === 'all' ? 'bg-orange-50 text-orange-600' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center gap-2">
@@ -905,7 +1009,7 @@ const CustomerMenu = () => {
 
                       <button
                         type="button"
-                        onClick={() => { setDietaryFilter('veg'); setIsFilterDropdownOpen(false); }}
+                        onClick={() => { setDietaryFilter('veg'); setIsFilterDropdownOpen(false); scrollToMenuItems(); }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${dietaryFilter === 'veg' ? 'bg-green-50 text-green-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center gap-2">
@@ -917,7 +1021,7 @@ const CustomerMenu = () => {
 
                       <button
                         type="button"
-                        onClick={() => { setDietaryFilter('non-veg'); setIsFilterDropdownOpen(false); }}
+                        onClick={() => { setDietaryFilter('non-veg'); setIsFilterDropdownOpen(false); scrollToMenuItems(); }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${dietaryFilter === 'non-veg' ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center gap-2">
@@ -929,7 +1033,7 @@ const CustomerMenu = () => {
 
                       <button
                         type="button"
-                        onClick={() => { setDietaryFilter('bestseller'); setIsFilterDropdownOpen(false); }}
+                        onClick={() => { setDietaryFilter('bestseller'); setIsFilterDropdownOpen(false); scrollToMenuItems(); }}
                         className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${dietaryFilter === 'bestseller' ? 'bg-amber-50 text-amber-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
                         <div className="flex items-center gap-2">
@@ -976,14 +1080,8 @@ const CustomerMenu = () => {
               visibleCategoriesData.map((category) => (
                 <button
                   key={`nav-${category._id}`}
-                  onClick={() => {
-                    const el = document.getElementById(`category-${category._id}`);
-                    if (el) {
-                      const y = el.getBoundingClientRect().top + window.scrollY - 180;
-                      window.scrollTo({ top: y, behavior: 'smooth' });
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold whitespace-nowrap border border-orange-100 transition-colors hover:bg-orange-100 active:bg-orange-200"
+                  onClick={() => scrollToMenuItems(category._id)}
+                  className="px-3 py-1.5 rounded-xl bg-orange-50 text-orange-600 text-xs font-bold whitespace-nowrap border border-orange-100 transition-colors hover:bg-orange-100 active:bg-orange-200 cursor-pointer"
                 >
                   {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
                 </button>
@@ -995,7 +1093,7 @@ const CustomerMenu = () => {
 
       {/* ── ORDER LOADING SPINNER SKELETON ── shown while checking table order */}
       {isCheckingOrder && !activeOrderData && (
-        <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
+        <div className="px-2 sm:px-4 pt-3 pb-1 max-w-3xl mx-auto">
           <div className="bg-white/90 border border-orange-200/90 rounded-2xl p-3.5 flex items-center gap-3.5 shadow-sm">
             <div className="w-9 h-9 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0 shadow-xs">
               <RefreshCw className="animate-spin" size={17} />
@@ -1011,60 +1109,38 @@ const CustomerMenu = () => {
         </div>
       )}
 
-      {/* ── EMPTY TABLE / READY TO ORDER BADGE ── shown when table is confirmed empty and menu loaded */}
-      {!isCheckingOrder && !loading && orderStatus !== 'placing' && orderStatus !== 'success' && (!activeOrderData || !activeOrderData.items || activeOrderData.items.filter(i => !i.isCancelled).length === 0) && (
-        <div className="px-4 pt-3 pb-1 max-w-2xl mx-auto">
-          <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
-                <UtensilsCrossed size={16} />
-              </div>
-              <div>
-                <p className="text-xs font-black text-emerald-950">
-                  {t("This is an empty table")} ({table})
-                </p>
-                <p className="text-[10.5px] text-emerald-700 font-medium">
-                  {t("No active order. Select delicious items below to place your order!")}
-                </p>
-              </div>
-            </div>
-            <span className="text-[9px] font-black bg-emerald-600 text-white px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
-              {t("Empty Table")}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* ── YOUR CURRENT ORDER SECTION ── shown when table has an active bill (hidden during active search for top viewport focus) */}
       {activeOrderData && activeOrderData.items && activeOrderData.items.filter(i => !i.isCancelled).length > 0 && !searchQuery.trim() && (
-        <div className="px-4 pt-4 pb-2 max-w-2xl mx-auto">
+        <div className="px-2 sm:px-4 pt-3 pb-2 w-full max-w-3xl mx-auto">
           <div className="bg-white rounded-2xl shadow-md border border-orange-100 overflow-hidden">
             {/* Section header */}
-            <div className="bg-orange-500 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white">
-                <ChefHat size={18} />
-                <span className="font-black text-sm">{t("Your Current Order")}</span>
-                <span className="bg-white/20 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+            <div className="bg-orange-500 px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <ChefHat size={17} className="text-white shrink-0" />
+                <span className="font-black text-xs sm:text-sm text-white whitespace-nowrap">{t("Your Current Order")}</span>
+                <span className="bg-white/20 text-white text-[10px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                   {activeOrderData.items.filter(i => !i.isCancelled).length} {t("items")}
                 </span>
               </div>
-              <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black ${
+              <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-black shrink-0 whitespace-nowrap ${
                 activeOrderData.kitchenStatus === 'Ready'
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-emerald-100 text-emerald-800'
                   : activeOrderData.kitchenStatus === 'Preparing'
-                  ? 'bg-amber-100 text-amber-700'
+                  ? 'bg-amber-100 text-amber-800'
                   : activeOrderData.kitchenStatus === 'Completed'
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-blue-100 text-blue-700'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-blue-100 text-blue-800'
               }`}>
-                <span className={`w-2 h-2 rounded-full animate-pulse inline-block ${
+                <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${
                   activeOrderData.kitchenStatus === 'Ready' ? 'bg-emerald-500' :
                   activeOrderData.kitchenStatus === 'Preparing' ? 'bg-amber-500' :
                   activeOrderData.kitchenStatus === 'Completed' ? 'bg-purple-500' : 'bg-blue-500'
-                }`}></span>
-                {activeOrderData.kitchenStatus === 'Ready' ? t('Prepared & Ready') :
-                 activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') :
-                 activeOrderData.kitchenStatus === 'Completed' ? t('Bill Generated') : t('Received')}
+                } animate-pulse inline-block`}></span>
+                <span className="whitespace-nowrap">
+                  {activeOrderData.kitchenStatus === 'Ready' ? t('Prepared & Ready') :
+                   activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') :
+                   activeOrderData.kitchenStatus === 'Completed' ? t('Bill Generated') : t('Received')}
+                </span>
               </div>
             </div>
 
@@ -1073,20 +1149,25 @@ const CustomerMenu = () => {
               {activeOrderData.items.filter(i => !i.isCancelled).map((item, idx) => {
                 const effectiveQty = item.quantity - (item.cancelledQuantity || 0);
                 const itemTotal = item.price * effectiveQty;
-                const isPrepared = item.kdsStatus === 'Ready' || item.status === 'Ready';
+                const isPrepared = item.kdsStatus === 'Ready' || item.status === 'Ready' || item.kdsStatus === 'Prepared';
                 const isPreparing = item.kdsStatus === 'Preparing' || item.status === 'Preparing';
 
                 return (
-                  <div key={item._id || idx} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="w-6 h-6 rounded-full bg-orange-50 text-orange-600 text-xs font-black flex items-center justify-center shrink-0">
+                  <div key={item._id || idx} className="flex items-center justify-between px-3.5 sm:px-5 py-2.5 gap-2.5 sm:gap-4">
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
+                      <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-orange-50 text-orange-600 text-xs sm:text-sm font-black flex items-center justify-center shrink-0">
                         {effectiveQty}
                       </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">{item.name}</p>
-                        {item.specialNote && (
-                          <p className="text-[10px] text-slate-400 truncate">📝 {item.specialNote}</p>
-                        )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{item.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                            🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
+                          </span>
+                          {item.specialNote && (
+                            <span className="text-[10px] text-slate-400 truncate">📝 {item.specialNote}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -1109,10 +1190,10 @@ const CustomerMenu = () => {
                         if (item.cancellationRequested) {
                           return (
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[9px] bg-red-50 text-red-500 border border-red-200 px-1.5 py-0.5 rounded-full font-bold">Cancel Pending</span>
+                              <span className="text-[9px] sm:text-[10px] bg-red-50 text-red-500 border border-red-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">Cancel Pending</span>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
-                                className="text-[9px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-2 py-0.5 rounded-full flex items-center gap-0.5 transition-all shadow-xs cursor-pointer"
+                                className="text-[9px] sm:text-[10px] bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-2.5 py-0.5 rounded-full flex items-center gap-0.5 transition-all shadow-xs cursor-pointer whitespace-nowrap"
                                 title={t("Withdraw Cancel Request")}
                               >
                                 ↩️ {t("Withdraw")}
@@ -1121,23 +1202,44 @@ const CustomerMenu = () => {
                           );
                         }
 
+                        if (item.cancellationRejected) {
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9px] sm:text-[10px] bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+                                ✕ {t("Cancel Rejected")}
+                              </span>
+                              {isPrepared ? (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                  <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                                  <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}{t("Prepared")}</span>
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                  <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                                  <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+
                         if (hasMixedStatus) {
                           return (
-                            <div className="flex items-center gap-1 flex-wrap">
+                            <div className="flex items-center gap-1 flex-wrap justify-end">
                               {preparedCount > 0 && (
-                                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
                                   <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
                                   <span>{preparedCount}x {t("Prepared")}</span>
                                 </span>
                               )}
                               {preparingCount > 0 && (
-                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
                                   <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
                                   <span>{preparingCount}x 👨‍🍳 {t("Preparing")}</span>
                                 </span>
                               )}
                               {pendingCount > 0 && (
-                                <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                                <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
                                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                                   <span>{pendingCount}x ⏳ {t("Pending")}</span>
                                 </span>
@@ -1148,8 +1250,8 @@ const CustomerMenu = () => {
 
                         if (isPrepared) {
                           return (
-                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
-                              <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                            <span className="text-[10px] sm:text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <Check size={11} strokeWidth={3} className="text-emerald-600 shrink-0" />
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}{t("Prepared")}</span>
                             </span>
                           );
@@ -1157,8 +1259,8 @@ const CustomerMenu = () => {
 
                         if (isPreparing) {
                           return (
-                            <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
-                              <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                            <span className="text-[10px] sm:text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <Loader2 size={11} className="animate-spin text-amber-600 shrink-0" />
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
                             </span>
                           );
@@ -1166,13 +1268,13 @@ const CustomerMenu = () => {
 
                         return (
                           <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
                             </span>
                             <button
                               onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
-                              className="text-[9px] font-bold bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-200 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 shadow-2xs"
+                              className="text-[9px] sm:text-[10px] font-bold bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-200 px-2 py-0.5 rounded-full transition-all cursor-pointer active:scale-95 shadow-2xs whitespace-nowrap"
                               title={t("Cancel Item")}
                             >
                               {t("Cancel")}
@@ -1180,7 +1282,7 @@ const CustomerMenu = () => {
                           </div>
                         );
                       })()}
-                      <span className="text-xs font-black text-orange-600">₹{itemTotal}</span>
+                      <span className="text-xs sm:text-sm font-black text-orange-600 shrink-0 whitespace-nowrap">₹{itemTotal}</span>
                     </div>
                   </div>
                 );
@@ -1223,7 +1325,7 @@ const CustomerMenu = () => {
             )}
 
             {/* Order total footer */}
-            <div className="bg-slate-50 px-4 py-3 flex items-center justify-between border-t border-slate-100">
+            <div className="bg-slate-50 px-3.5 sm:px-5 py-3 flex items-center justify-between border-t border-slate-100">
               <div className="text-xs text-slate-500 font-bold">{t("Table")} {table}</div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
@@ -1238,7 +1340,7 @@ const CustomerMenu = () => {
                     setIsDetailsExpanded(!isDetailsExpanded);
                     setShowOrderModal(true);
                   }}
-                  className="bg-orange-500 text-white text-[11px] font-black px-3 py-1.5 rounded-xl hover:bg-orange-600 active:scale-95 transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                  className="bg-orange-500 text-white text-[11px] font-black px-3.5 py-1.5 rounded-xl hover:bg-orange-600 active:scale-95 transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                 >
                   {t("Details")} {isDetailsExpanded ? '▲' : '→'}
                 </button>
@@ -1249,7 +1351,7 @@ const CustomerMenu = () => {
       )}
 
       {/* Menu Categories & Items */}
-      <main className="p-4 space-y-8 mt-2 max-w-2xl mx-auto">
+      <main id="menu-items-container" style={{ scrollMarginTop: '135px' }} className="p-2 sm:p-4 space-y-8 mt-2 max-w-3xl mx-auto scroll-mt-36">
         {(loading || (items.length === 0 && !error)) ? (
           /* ── DYNAMIC ANIMATED MENU LOADING SKELETON ── */
           <div className="space-y-6 animate-in fade-in duration-300">
@@ -1391,7 +1493,7 @@ const CustomerMenu = () => {
             const categoryItems = category.filteredItems;
 
             return (
-              <div key={category._id} id={`category-${category._id}`} className="animate-in fade-in slide-in-from-bottom-4 duration-500 scroll-mt-32">
+              <div key={category._id} id={`category-${category._id}`} style={{ scrollMarginTop: '135px' }} className="animate-in fade-in slide-in-from-bottom-4 duration-500 scroll-mt-36">
                 <h2 className="text-xl font-black text-slate-800 mb-4 px-2 flex items-center gap-2">
                   {(language !== 'en' && category.nameTranslations?.[language]) || t(category.name)}
                   <div className="h-px bg-slate-200 flex-1 ml-4 mt-1"></div>
@@ -1502,14 +1604,14 @@ const CustomerMenu = () => {
             {showOrderModal && (
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex flex-col justify-end"
+                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4"
                 onClick={() => setShowOrderModal(false)}
               >
                 <motion.div
                   initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
                   transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
                   onClick={(e) => e.stopPropagation()}
-                  className={`rounded-t-3xl text-white p-6 shadow-2xl flex flex-col gap-4 ${
+                  className={`w-full max-w-lg sm:max-w-xl md:max-w-2xl mx-auto rounded-t-3xl sm:rounded-3xl text-white p-4 sm:p-6 shadow-2xl flex flex-col gap-3 max-h-[90dvh] sm:max-h-[92vh] overflow-hidden ${
                     activeOrderData.kitchenStatus === 'Ready'
                       ? 'bg-emerald-600'
                       : activeOrderData.kitchenStatus === 'Preparing'
@@ -1582,15 +1684,21 @@ const CustomerMenu = () => {
 
                   {/* Items List */}
                   {activeOrderData.items && activeOrderData.items.length > 0 && (
-                    <div className="mt-4 bg-white/10 rounded-2xl p-4 max-h-[30vh] overflow-y-auto custom-scrollbar flex flex-col gap-3">
+                    <div className="mt-2 bg-white/10 rounded-2xl p-3 sm:p-4 max-h-[46vh] overflow-y-auto custom-scrollbar flex flex-col gap-2.5">
                       <h3 className="font-bold text-sm border-b border-white/20 pb-2 mb-1">{t("Order Details")}</h3>
                       {activeOrderData.items.map(item => (
-                        <div key={item._id} className={`flex items-center justify-between gap-2 ${item.isCancelled ? 'opacity-50' : ''}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-bold text-sm truncate ${item.isCancelled ? 'line-through' : ''}`}>
+                        <div key={item._id} className={`flex items-center justify-between gap-2.5 py-1.5 border-b border-white/10 last:border-0 ${item.isCancelled ? 'opacity-50' : ''}`}>
+                          <div className="flex-1 min-w-0 pr-1">
+                            <p className={`font-bold text-sm text-white leading-snug break-words ${item.isCancelled ? 'line-through' : ''}`}>
                               {item.quantity - (item.cancelledQuantity || 0)}x {item.name}
-                              {item.cancelledQuantity > 0 && !item.isCancelled && <span className="text-[10px] ml-1 bg-red-500/20 px-1.5 py-0.5 rounded text-red-100">({item.cancelledQuantity} Cancelled)</span>}
+                              {item.cancelledQuantity > 0 && !item.isCancelled && <span className="text-[10px] ml-1.5 bg-red-500/20 px-1.5 py-0.5 rounded text-red-100 font-normal">({item.cancelledQuantity} Cancelled)</span>}
                             </p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-[10.5px] text-white/80 font-medium flex items-center gap-0.5 whitespace-nowrap">
+                                🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
+                              </span>
+                              {item.specialNote && <span className="text-[10.5px] text-white/80">📝 {item.specialNote}</span>}
+                            </div>
                             {(() => {
                               const cd = getPrepCountdown(item);
                               if (!cd || item.isCancelled) return null;
@@ -1611,9 +1719,8 @@ const CustomerMenu = () => {
                                 </div>
                               );
                             })()}
-                            {item.specialNote && <p className="text-[10px] text-white/70 truncate">Note: {item.specialNote}</p>}
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className={`font-black text-sm ${item.isCancelled ? 'line-through' : ''}`}>
                               ₹{item.price * (item.quantity - (item.cancelledQuantity || 0))}
                             </span>
@@ -1748,7 +1855,7 @@ const CustomerMenu = () => {
                   {/* Close button — only closes the modal, does NOT cancel the order */}
                   <button
                     onClick={() => setShowOrderModal(false)}
-                    className="mt-2 w-full bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-2xl transition-colors"
+                    className="mt-2 w-full bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-2xl transition-colors cursor-pointer"
                   >
                     {t("Close")}
                   </button>
@@ -1969,12 +2076,12 @@ const CustomerMenu = () => {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.92, opacity: 0, y: 25 }}
               transition={{ type: "spring", bounce: 0.15, duration: 0.35 }}
-              className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[92vh] border border-slate-100 relative"
+              className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] border border-slate-100 relative my-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Hero Image Section with Pinch-To-Zoom Touch Controls & Full Uncropped Image */}
               <div 
-                className="relative w-full h-64 sm:h-80 bg-slate-950 shrink-0 overflow-hidden select-none touch-none"
+                className="relative w-full h-44 sm:h-64 bg-slate-950 shrink-0 overflow-hidden select-none touch-none"
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -2005,7 +2112,7 @@ const CustomerMenu = () => {
                   </>
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-orange-600 via-amber-500 to-orange-400 text-white p-6 text-center">
-                    <UtensilsCrossed size={56} className="opacity-90 animate-pulse mb-2" />
+                    <UtensilsCrossed size={48} className="opacity-90 animate-pulse mb-2" />
                     <span className="font-bold text-sm tracking-wide uppercase opacity-85">{t("Fresh Kitchen Special")}</span>
                   </div>
                 )}
@@ -2056,7 +2163,7 @@ const CustomerMenu = () => {
                     {(language !== 'en' && viewingItemDetail.category?.nameTranslations?.[language]) || viewingItemDetail.category?.name || viewingItemDetail.category || t("Specialty Dish")}
                   </span>
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-2xl sm:text-3xl font-serif font-black tracking-tight drop-shadow-md text-white truncate">
+                    <h2 className="text-xl sm:text-2xl font-serif font-black tracking-tight drop-shadow-md text-white truncate">
                       {(language !== 'en' && viewingItemDetail.nameTranslations?.[language]) || t(viewingItemDetail.name)}
                     </h2>
                     <span className="text-[10px] text-white/70 font-semibold shrink-0 bg-black/40 px-2 py-0.5 rounded-full">
@@ -2067,14 +2174,14 @@ const CustomerMenu = () => {
               </div>
 
               {/* Modal Body Info */}
-              <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/60">
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 min-h-0 bg-slate-50/60 custom-scrollbar">
                 {/* Description Card */}
-                <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs space-y-1.5">
+                <div className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs space-y-1">
                   <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-wider">
-                    <Info size={15} className="text-orange-500" />
+                    <Info size={14} className="text-orange-500" />
                     <span>{t("About this Dish")}</span>
                   </div>
-                  <p className="text-slate-600 text-sm leading-relaxed font-normal">
+                  <p className="text-slate-600 text-xs leading-relaxed font-normal">
                     {(language !== 'en' && viewingItemDetail.descriptionTranslations?.[language]) ||
                      viewingItemDetail.description ||
                      t("Prepared fresh to order using finest ingredients, house-ground spices, and authentic culinary techniques.")}
@@ -2083,76 +2190,76 @@ const CustomerMenu = () => {
 
                 {/* Variants & Pricing Structure */}
                 {viewingItemDetail.variants && viewingItemDetail.variants.length > 0 ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black text-slate-700 uppercase tracking-wider">{t("Choose Portion / Variant")}</p>
                       <span className="text-[11px] font-bold text-orange-600">{t("Select 1 option")}</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {viewingItemDetail.variants.map((v, idx) => {
                         const isSelected = (detailSelectedVariant?.name || viewingItemDetail.variants[0]?.name) === v.name;
                         return (
                           <div
                             key={idx}
                             onClick={() => setDetailSelectedVariant(v)}
-                            className={`p-3.5 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
+                            className={`p-3 rounded-2xl border-2 transition-all cursor-pointer flex items-center justify-between ${
                               isSelected
                                 ? 'border-orange-500 bg-orange-50/80 shadow-xs'
                                 : 'border-slate-200 bg-white hover:border-slate-300'
                             }`}
                           >
-                            <div className="flex items-center gap-2.5">
+                            <div className="flex items-center gap-2">
                               <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
                                 {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white"></div>}
                               </div>
-                              <span className="font-bold text-sm text-slate-800">{v.name}</span>
+                              <span className="font-bold text-xs text-slate-800">{v.name}</span>
                             </div>
-                            <span className="font-black text-base text-orange-600">₹{v.price}</span>
+                            <span className="font-black text-sm text-orange-600">₹{v.price}</span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-xs flex items-center justify-between">
+                  <div className="bg-white rounded-2xl p-3.5 border border-slate-100 shadow-xs flex items-center justify-between">
                     <span className="text-xs font-black text-slate-600 uppercase tracking-wider">{t("Item Price")}</span>
-                    <span className="text-2xl font-black text-orange-600">₹{viewingItemDetail.price}</span>
+                    <span className="text-xl font-black text-orange-600">₹{viewingItemDetail.price}</span>
                   </div>
                 )}
 
                 {/* Chef Special Cooking Instructions */}
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <p className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Clipboard size={14} className="text-orange-500" />
+                    <Clipboard size={13} className="text-orange-500" />
                     <span>{t("Cooking Note / Special Requests")}</span>
                   </p>
                   <textarea
                     value={detailSpecialNote}
                     onChange={(e) => setDetailSpecialNote(e.target.value)}
                     placeholder={t("e.g., Less spicy, no onion/garlic, extra sauce, well done...")}
-                    className="w-full bg-white border border-slate-200 rounded-2xl p-3.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500/40 resize-none h-20 shadow-2xs placeholder:text-slate-400"
+                    className="w-full bg-white border border-slate-200 rounded-2xl p-3 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500/40 resize-none h-16 shadow-2xs placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
               {/* Bottom Action Footer */}
-              <div className="bg-white border-t border-slate-100 p-4 sm:p-5 flex items-center gap-3 shrink-0">
+              <div className="bg-white border-t border-slate-100 p-3 sm:p-4 flex items-center gap-3 shrink-0 shadow-lg">
                 {/* Quantity Stepper */}
                 <div className="flex items-center bg-slate-100 border border-slate-200 rounded-2xl p-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => setDetailQuantity(prev => Math.max(1, prev - 1))}
-                    className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-slate-600 hover:bg-white hover:text-orange-600 active:scale-90 transition-all cursor-pointer"
+                    className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-slate-600 hover:bg-white hover:text-orange-600 active:scale-90 transition-all cursor-pointer"
                   >
-                    <Minus size={16} />
+                    <Minus size={15} />
                   </button>
-                  <span className="w-8 text-center font-black text-base text-slate-800">{detailQuantity}</span>
+                  <span className="w-7 text-center font-black text-sm text-slate-800">{detailQuantity}</span>
                   <button
                     type="button"
                     onClick={() => setDetailQuantity(prev => prev + 1)}
-                    className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-slate-600 hover:bg-white hover:text-green-600 active:scale-90 transition-all cursor-pointer"
+                    className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-slate-600 hover:bg-white hover:text-green-600 active:scale-90 transition-all cursor-pointer"
                   >
-                    <Plus size={16} />
+                    <Plus size={15} />
                   </button>
                 </div>
 
@@ -2170,7 +2277,7 @@ const CustomerMenu = () => {
                         setServiceMessage(`✅ ${t("Added")} ${detailQuantity}x "${(language !== 'en' && viewingItemDetail.nameTranslations?.[language]) || viewingItemDetail.name}" ${t("to order!")}`);
                         setTimeout(() => setServiceMessage(null), 3000);
                       }}
-                      className="flex-1 py-3.5 px-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/25 flex items-center justify-between cursor-pointer"
+                      className="flex-1 py-3 px-4 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:to-amber-600 active:scale-[0.98] text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/25 flex items-center justify-between cursor-pointer"
                     >
                       <span>{t("Add to Order")}</span>
                       <span className="font-mono text-base font-black">₹{itemTotal}</span>

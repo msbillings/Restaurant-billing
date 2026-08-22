@@ -22,7 +22,9 @@ import {
   getEditedBills,
   resolveItemCancel,
   updateItemPrepTime,
-  getActiveNotifications
+  getActiveNotifications,
+  deleteNotification,
+  deleteAllNotifications
 } from '../controllers/billController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
@@ -51,6 +53,10 @@ router.post('/kot/item/status', authenticateToken, updateKOTItemStatus);
 router.post('/kot/item/prep-time', authenticateToken, updateItemPrepTime);
 router.post('/refund/:id', authenticateToken, refundOrder);
 router.post('/resolve-item-cancel', authenticateToken, resolveItemCancel);
+
+// DELETE notification routes - authenticated users
+router.delete('/notifications/all', authenticateToken, deleteAllNotifications);
+router.delete('/notifications/:id', authenticateToken, deleteNotification);
 
 // DELETE - Requires password verification in controller
 router.delete('/:id', authenticateToken, deleteBill);

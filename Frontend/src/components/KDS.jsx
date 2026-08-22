@@ -68,6 +68,9 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
   const getPrepCountdown = (item) => {
     if (!item.prepTimeMinutes) return null;
+    const isPrepared = item.status === 'Ready' || item.status === 'Prepared' || (Array.isArray(item.unitStatuses) && item.unitStatuses.length > 0 && item.unitStatuses.every(s => s === 'Ready' || s === 'Prepared'));
+    if (isPrepared) return null;
+
     const startMs = item.prepStartTime ? new Date(item.prepStartTime).getTime() : now;
     const totalMs = item.prepTimeMinutes * 60 * 1000;
     const elapsedMs = now - startMs;
@@ -935,13 +938,18 @@ const KDS = ({ onNavigate, onGoBack }) => {
                             <div className="pt-2 border-t border-slate-800/80 mt-1 flex flex-col gap-1.5">
                               {(() => {
                                 const cd = getPrepCountdown(item);
+                                const isReady = item.status === 'Ready' || item.status === 'Prepared' || (Array.isArray(item.unitStatuses) && item.unitStatuses.length > 0 && item.unitStatuses.every(s => s === 'Ready' || s === 'Prepared'));
                                 return (
                                   <>
                                     <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
                                       <span className="flex items-center gap-1 text-amber-400 font-semibold">
                                         <Timer size={12} /> {t("Prep Time")}:
                                       </span>
-                                      {cd ? (
+                                      {isReady ? (
+                                        <span className="font-bold text-xs px-2 py-0.5 rounded border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 flex items-center gap-1">
+                                          ✅ {t("Prepared & Ready")}
+                                        </span>
+                                      ) : cd ? (
                                         <span className={`font-bold text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${
                                           cd.isOverdue
                                             ? 'bg-red-500/20 text-red-400 border-red-500/40 animate-pulse'

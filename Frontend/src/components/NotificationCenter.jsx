@@ -84,10 +84,18 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
 
       // 2. Fetch active server notifications and filter by role
       try {
+        const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+        const roleKeyLC = (userRole || 'Admin').toLowerCase();
+        const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKeyLC}`;
+        let clearedIds = new Set();
+        try {
+          clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
+        } catch (e) {}
+
         const notifRes = await api.get('/bills/active-notifications');
         if (Array.isArray(notifRes.data)) {
           const roleFiltered = notifRes.data
-            .filter(n => isNotificationForRole(n, userRole))
+            .filter(n => isNotificationForRole(n, userRole) && !clearedIds.has(String(n.id)))
             .map(n => {
               let icon = Bell;
               let color = 'text-blue-500';
@@ -456,14 +464,14 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                     <div className="mt-3 flex gap-2 items-center">
                       {resolvingNotifs[notif.id] ? (
                         <span className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold animate-pulse ${
-                          resolvingNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                          resolvingNotifs[notif.id] === 'accept' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'
                         }`}>
                           <Loader2 size={14} className="animate-spin" />
                           {resolvingNotifs[notif.id] === 'accept' ? t("Accepting...") : t("Rejecting...")}
                         </span>
                       ) : resolvedNotifs[notif.id] ? (
                         <span className={`px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold ${
-                          resolvedNotifs[notif.id] === 'accept' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'
+                          resolvedNotifs[notif.id] === 'accept' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-rose-100 text-rose-800 border border-rose-300'
                         }`}>
                           {resolvedNotifs[notif.id] === 'accept' ? t("✓ Accepted") : t("✕ Rejected")}
                         </span>
@@ -471,13 +479,13 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                         <>
                           <button
                             onClick={() => handleResolveCancel(notif, 'accept')}
-                            className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer">
-                            {t("Accept")}
+                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1">
+                            ✓ {t("Accept")}
                           </button>
                           <button
                             onClick={() => handleResolveCancel(notif, 'reject')}
-                            className="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-800 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer">
-                            {t("Reject")}
+                            className="bg-rose-500 hover:bg-rose-600 active:scale-95 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1">
+                            ✕ {t("Reject")}
                           </button>
                         </>
                       )}
@@ -518,6 +526,13 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                     <button
                       onClick={() => {
                         if (isBroadcast) {
+                          try {
+                            const clearedBc = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
+                            if (!clearedBc.includes(notif.id)) {
+                              clearedBc.push(notif.id);
+                              localStorage.setItem('cleared_broadcasts', JSON.stringify(clearedBc));
+                            }
+                          } catch (e) {}
                           clearAllBroadcasts && clearAllBroadcasts();
                         } else {
                           clearNotification(notif.id);

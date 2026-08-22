@@ -944,10 +944,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     let newCart;
     if (existing) {
       showToast(`${t('increasedQty', { defaultValue: 'Increased quantity of' })} ${item.name}`, 'success');
-      newCart = cart.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1, specialNote: i.specialNote || '' } : i);
+      newCart = cart.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1, specialNote: i.specialNote || '', orderedAt: i.orderedAt || new Date().toISOString() } : i);
     } else {
       showToast(`${t('addedToOrder', { defaultValue: 'Added to order' })} ${item.name}`, 'success');
-      newCart = [...cart, { ...item, quantity: 1, specialNote: item.specialNote || '' }];
+      newCart = [...cart, { ...item, quantity: 1, specialNote: item.specialNote || '', orderedAt: item.orderedAt || new Date().toISOString() }];
     }
     setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time

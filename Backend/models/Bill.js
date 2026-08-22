@@ -33,7 +33,8 @@ const billSchema = new mongoose.Schema({
     isCancelled: { type: Boolean, default: false },
     cancelledQuantity: { type: Number, default: 0 },
     prepTimeMinutes: { type: Number, default: 0 },
-    prepStartTime: { type: Date }
+    prepStartTime: { type: Date },
+    orderedAt: { type: Date, default: Date.now }
   }],
   subtotal: {
     type: Number,

@@ -97,7 +97,7 @@ export const clearPublicMenuCache = (tenantKey) => {
 
 // Helper to dynamically load tax rates & settings with in-memory caching (60s TTL)
 export const getCachedDynamicSettings = async (req) => {
-  const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
+  const tenantKey = getTenantDbFromReq(req) || req.query?.tenant || 'default';
   const cached = dynamicSettingsCache.get(tenantKey);
   if (cached && (Date.now() - cached.timestamp < 60000)) {
     return cached.data;
@@ -106,7 +106,7 @@ export const getCachedDynamicSettings = async (req) => {
   let taxRate = 0;
   let cgstRate = 0;
   let sgstRate = 0;
-  let restaurantName = 'Restaurant';
+  let restaurantName = 'Savoria';
 
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
@@ -402,6 +402,7 @@ router.post('/order', async (req, res) => {
       price: Number(item.price || 0),
       quantity: Number(item.quantity || 1),
       specialNote: item.specialNote || '',
+      orderedAt: item.orderedAt ? new Date(item.orderedAt) : new Date(),
       total: Number(item.price || 0) * Number(item.quantity || 1)
     }));
 
@@ -417,6 +418,7 @@ router.post('/order', async (req, res) => {
         name: i.name,
         quantity: i.quantity,
         specialNote: i.specialNote || '',
+        orderedAt: i.orderedAt || new Date(),
         status: 'Pending'
       })),
       createdAt: new Date()
@@ -436,8 +438,11 @@ router.post('/order', async (req, res) => {
           existingItem.quantity += newItem.quantity;
           existingItem.total = existingItem.price * existingItem.quantity;
           existingItem.printedQuantity = (existingItem.printedQuantity || 0) + newItem.quantity;
+          if (!existingItem.orderedAt) {
+            existingItem.orderedAt = newItem.orderedAt || new Date();
+          }
         } else {
-          bill.items.push({ ...newItem, printedQuantity: newItem.quantity });
+          bill.items.push({ ...newItem, printedQuantity: newItem.quantity, orderedAt: newItem.orderedAt || new Date() });
         }
       });
 
@@ -712,8 +717,8 @@ router.post('/withdraw-item-cancel', async (req, res) => {
     const io = req.app?.locals?.io;
     const tenantDb = req.headers['x-tenant-db'];
 
-    // 1. ⚡ Dismiss the cancellation request notification from all Admin/Captain notification panels
-    emitDismissNotification(req, {
+    // 1. ⚡ Dismiss & permanently delete the cancellation request notification from DB & all Admin/Captain panels
+    await emitDismissNotification(req, {
       type: 'cancel_item_request',
       orderId: bill._id,
       itemId: item._id,

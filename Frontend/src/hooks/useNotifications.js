@@ -438,13 +438,22 @@ const useNotifications = (userRole = 'Admin') => {
         // Calculate accurate unread count from database & read IDs
         const tenantKey = getTenantKey();
         const readKey = `realtime_read_ids_${tenantKey}_${roleKey}`;
+        const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKey}`;
         let readIds = new Set();
+        let clearedIds = new Set();
         try {
           readIds = new Set(JSON.parse(localStorage.getItem(readKey) || '[]'));
         } catch (e) {}
+        try {
+          clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
+        } catch (e) {}
+
+        const visibleItems = roleFiltered.filter(n => !clearedIds.has(String(n.id)));
+
         setNotifications(prev => {
           const newMap = new Set();
           const seenSemantic = new Set();
+          const seenCancelReqs = new Set();
 
           const getKey = (n) => {
             const id = String(n.id || '');
@@ -453,14 +462,23 @@ const useNotifications = (userRole = 'Admin') => {
             return { id, semantic: `${titleMsg}::${timeBucket}` };
           };
 
-          const allItems = [...roleFiltered, ...prev];
+          const allItems = [...visibleItems, ...prev];
           const deduplicated = [];
 
           allItems.forEach(n => {
             if (!isNotificationForRole(n, userRole)) return;
+            if (clearedIds.has(String(n.id))) return;
             const { id, semantic } = getKey(n);
             if (id && newMap.has(id)) return;
             if (seenSemantic.has(semantic)) return;
+
+            // Extra deduplication for cancel requests: never show duplicate cancel requests for the same item
+            const isCancel = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
+            if (isCancel) {
+              const cancelKey = `cancel_${n.data?.orderId || ''}_${n.data?.itemId || ''}_${(n.message || '').toLowerCase().trim()}`;
+              if (seenCancelReqs.has(cancelKey)) return;
+              seenCancelReqs.add(cancelKey);
+            }
 
             if (id) newMap.add(id);
             seenSemantic.add(semantic);
@@ -556,6 +574,15 @@ const useNotifications = (userRole = 'Admin') => {
         return;
       }
 
+      // Check if already cleared
+      const tenantKey = getTenantKey();
+      const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKey}`;
+      let clearedIds = new Set();
+      try {
+        clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
+      } catch (e) {}
+      if (notification.id && clearedIds.has(String(notification.id))) return;
+
       const notifId = String(notification.id || '');
       if (notifId) knownNotifIdsRef.current.add(notifId);
 
@@ -583,6 +610,17 @@ const useNotifications = (userRole = 'Admin') => {
             const timeDiff = Math.abs(new Date(n.time || n.timestamp || 0) - new Date(notification.time || notification.timestamp || 0));
             if (timeDiff < 5000) return true;
           }
+          // If cancel request for the same item/order already exists, ignore duplicate
+          const isThisCancel = notification.data?.type === 'cancel_item_request' || (notification.title && notification.title.includes('Cancel Req'));
+          const isExistingCancel = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
+          if (isThisCancel && isExistingCancel) {
+            if (
+              (notification.data?.itemId && n.data?.itemId && String(notification.data.itemId) === String(n.data.itemId)) ||
+              (notification.message && n.message && notification.message.trim().toLowerCase() === n.message.trim().toLowerCase())
+            ) {
+              return true;
+            }
+          }
           return false;
         });
 
@@ -597,19 +635,45 @@ const useNotifications = (userRole = 'Admin') => {
       }
     };
 
+    const recordDismissedIds = (removedIds = []) => {
+      if (!Array.isArray(removedIds) || removedIds.length === 0) return;
+      try {
+        const tenantKey = getTenantKey();
+        const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKey}`;
+        const current = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+        const updated = Array.from(new Set([...current, ...removedIds.map(String)]));
+        localStorage.setItem(clearedKey, JSON.stringify(updated.slice(-300)));
+      } catch (e) {}
+    };
+
     const handleDismissNotification = (criteria) => {
       if (!criteria) return;
-      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, criteria)));
+      if (criteria.deletedIds && Array.isArray(criteria.deletedIds)) {
+        recordDismissedIds(criteria.deletedIds);
+      }
+      setNotifications((prev) => {
+        const matchingIds = prev.filter(n => isTargetCancelNotification(n, criteria)).map(n => n.id);
+        recordDismissedIds(matchingIds);
+        return prev.filter((n) => !isTargetCancelNotification(n, criteria));
+      });
     };
 
     const handleItemCancellationWithdrawn = (data) => {
       if (!data) return;
-      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, data)));
+      setNotifications((prev) => {
+        const matchingIds = prev.filter(n => isTargetCancelNotification(n, data)).map(n => n.id);
+        recordDismissedIds(matchingIds);
+        return prev.filter((n) => !isTargetCancelNotification(n, data));
+      });
     };
 
     const handleCancellationResolved = (data) => {
       if (!data) return;
-      setNotifications((prev) => prev.filter((n) => !isTargetCancelNotification(n, data)));
+      setNotifications((prev) => {
+        const matchingIds = prev.filter(n => isTargetCancelNotification(n, data)).map(n => n.id);
+        recordDismissedIds(matchingIds);
+        return prev.filter((n) => !isTargetCancelNotification(n, data));
+      });
     };
 
     const unsubNotif = realtimeService.subscribe('new_notification', handleNewNotification);
@@ -641,13 +705,18 @@ const useNotifications = (userRole = 'Admin') => {
   };
 
   const clearNotification = (id) => {
+    const tenantKey = getTenantKey();
+    const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKey}`;
+
     if (id === 'ALL') {
-      // Strictly role-scoped clear: ONLY remove THIS role's notifications from localStorage
-      // Other roles (Admin, Captain, Cashier) are NOT affected
+      const allIds = notifications.map(n => String(n.id)).filter(Boolean);
       setNotifications([]);
       setUnreadCount(0);
       try {
-        const tenantKey = getTenantKey();
+        const existingCleared = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+        const combined = Array.from(new Set([...existingCleared, ...allIds]));
+        localStorage.setItem(clearedKey, JSON.stringify(combined));
+
         localStorage.removeItem(`realtime_notifications_${tenantKey}_${roleKey}`);
         localStorage.setItem(`realtime_unread_count_${tenantKey}_${roleKey}`, '0');
         // Also clear legacy shared keys so they never resurrect old notifications
@@ -655,11 +724,26 @@ const useNotifications = (userRole = 'Admin') => {
         localStorage.setItem(`realtime_unread_count_${tenantKey}`, '0');
         localStorage.removeItem('realtime_notifications');
         localStorage.setItem('realtime_unread_count', '0');
+
+        // Delete permanently from backend
+        api.delete('/bills/notifications/all').catch(() => {});
       } catch (e) {
         console.error('Error clearing notifications:', e);
       }
     } else {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      const idStr = String(id);
+      setNotifications((prev) => prev.filter((n) => String(n.id) !== idStr));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      try {
+        const existingCleared = JSON.parse(localStorage.getItem(clearedKey) || '[]');
+        existingCleared.push(idStr);
+        localStorage.setItem(clearedKey, JSON.stringify(Array.from(new Set(existingCleared))));
+
+        // Delete permanently from backend
+        api.delete(`/bills/notifications/${encodeURIComponent(idStr)}`).catch(() => {});
+      } catch (e) {
+        console.error('Error clearing notification:', e);
+      }
     }
   };
 
