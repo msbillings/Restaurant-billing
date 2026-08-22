@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare, Loader2 } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -88,6 +88,34 @@ function App() {
   const [isSubmittingBroadcast, setIsSubmittingBroadcast] = useState(false);
   const [replies, setReplies] = useState([]);
   const [editingBroadcastId, setEditingBroadcastId] = useState(null);
+  const [broadcastStartDate, setBroadcastStartDate] = useState('');
+  const [broadcastEndDate, setBroadcastEndDate] = useState('');
+  const [broadcastPage, setBroadcastPage] = useState(1);
+  const BROADCASTS_PER_PAGE = 4;
+
+  const filteredBroadcasts = useMemo(() => {
+    return broadcasts.filter(b => {
+      if (!b.createdAt) return true;
+      const bDate = new Date(b.createdAt);
+      if (broadcastStartDate) {
+        const start = new Date(broadcastStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (bDate < start) return false;
+      }
+      if (broadcastEndDate) {
+        const end = new Date(broadcastEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (bDate > end) return false;
+      }
+      return true;
+    });
+  }, [broadcasts, broadcastStartDate, broadcastEndDate]);
+
+  const totalBroadcastPages = Math.ceil(filteredBroadcasts.length / BROADCASTS_PER_PAGE) || 1;
+  const paginatedBroadcasts = useMemo(() => {
+    const start = (broadcastPage - 1) * BROADCASTS_PER_PAGE;
+    return filteredBroadcasts.slice(start, start + BROADCASTS_PER_PAGE);
+  }, [filteredBroadcasts, broadcastPage]);
   
   // Persist broadcast form in localStorage
   const getInitialBroadcastState = () => {
@@ -1221,32 +1249,113 @@ function App() {
 
               {/* History */}
               <div className="bg-surface border border-border rounded-xl md:rounded-2xl p-4 md:p-6 shadow-xl lg:col-span-2">
-                <div className="flex justify-between items-center mb-4 md:mb-6">
-                  <h3 className="text-lg md:text-xl font-bold flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts
-                  </h3>
-                  <button 
-                    onClick={fetchBroadcasts} 
-                    disabled={loadingBroadcasts} 
-                    className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
-                    title="Refresh Broadcasts"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loadingBroadcasts ? 'animate-spin text-primary' : ''}`} />
-                  </button>
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-4 md:mb-6">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-blue-400"/> Active & Past Broadcasts
+                    </h3>
+                    {broadcasts.length > 0 && (
+                      <span className="text-xs bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full border border-primary/20">
+                        {filteredBroadcasts.length}{filteredBroadcasts.length !== broadcasts.length ? ` / ${broadcasts.length}` : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right Side Controls: Date Filter + Compact Pagination + Refresh */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Date Filters */}
+                    <div className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded-xl shadow-xs text-xs">
+                      <Calendar className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <input
+                        type="date"
+                        value={broadcastStartDate}
+                        onChange={(e) => {
+                          setBroadcastStartDate(e.target.value);
+                          setBroadcastPage(1);
+                        }}
+                        className="bg-transparent text-gray-200 border-none outline-none text-xs focus:ring-0 cursor-pointer"
+                        title="Start Date"
+                      />
+                      <span className="text-gray-500 font-mono text-xs">to</span>
+                      <input
+                        type="date"
+                        value={broadcastEndDate}
+                        onChange={(e) => {
+                          setBroadcastEndDate(e.target.value);
+                          setBroadcastPage(1);
+                        }}
+                        className="bg-transparent text-gray-200 border-none outline-none text-xs focus:ring-0 cursor-pointer"
+                        title="End Date"
+                      />
+                      {(broadcastStartDate || broadcastEndDate) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBroadcastStartDate('');
+                            setBroadcastEndDate('');
+                            setBroadcastPage(1);
+                          }}
+                          className="p-0.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded transition-colors cursor-pointer ml-0.5"
+                          title="Clear date filter"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Compact Pagination Component */}
+                    {filteredBroadcasts.length > BROADCASTS_PER_PAGE && (
+                      <div className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded-xl shadow-xs text-xs font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setBroadcastPage(p => Math.max(1, p - 1))}
+                          disabled={broadcastPage === 1 || loadingBroadcasts}
+                          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded transition-colors cursor-pointer"
+                          title="Previous Page"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-gray-300 font-mono px-1.5 whitespace-nowrap">
+                          {broadcastPage} / {totalBroadcastPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBroadcastPage(p => Math.min(totalBroadcastPages, p + 1))}
+                          disabled={broadcastPage === totalBroadcastPages || loadingBroadcasts}
+                          className="p-1 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded transition-colors cursor-pointer"
+                          title="Next Page"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={fetchBroadcasts} 
+                      disabled={loadingBroadcasts} 
+                      className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
+                      title="Refresh Broadcasts"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loadingBroadcasts ? 'animate-spin text-primary' : ''}`} />
+                    </button>
+                  </div>
                 </div>
+
                 <div className="space-y-4">
                   {loadingBroadcasts ? (
                     <div className="flex flex-col items-center justify-center py-16 text-gray-400 bg-background/50 border border-border rounded-xl">
                       <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
                       <span className="text-sm font-medium">Fetching active & past broadcasts...</span>
                     </div>
-                  ) : broadcasts.length === 0 ? (
+                  ) : filteredBroadcasts.length === 0 ? (
                     <div className="text-center py-12 text-gray-500 bg-background rounded-xl border border-border border-dashed">
                       <Radio className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                      No broadcasts found. Create one to notify your clients.
+                      {broadcastStartDate || broadcastEndDate 
+                        ? 'No broadcasts found for the selected date range.' 
+                        : 'No broadcasts found. Create one to notify your clients.'}
                     </div>
                   ) : (
-                    broadcasts.map(b => (
+                    paginatedBroadcasts.map(b => (
                       <div key={b._id} className={`flex flex-col sm:flex-row gap-4 p-4 rounded-xl border transition-all ${b.active ? 'bg-primary/5 border-primary/30' : 'bg-background border-border opacity-60'}`}>
                         {b.imageUrl && (
                           <div className="w-full sm:w-32 h-24 rounded-lg bg-gray-800 overflow-hidden flex-shrink-0 flex items-center justify-center relative">
