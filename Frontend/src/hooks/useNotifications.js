@@ -442,22 +442,25 @@ const useNotifications = (userRole = 'Admin') => {
         try {
           readIds = new Set(JSON.parse(localStorage.getItem(readKey) || '[]'));
         } catch (e) {}
-        const unreadItems = roleFiltered.filter(n => !readIds.has(n.id));
-        setUnreadCount(unreadItems.length);
-
         setNotifications(prev => {
           const newMap = new Map();
-          roleFiltered.forEach(n => newMap.set(n.id, n));
+          roleFiltered.forEach(n => newMap.set(String(n.id), n));
           prev.forEach(n => {
-            if (!newMap.has(n.id) && isNotificationForRole(n, userRole)) {
-              newMap.set(n.id, n);
+            if (!newMap.has(String(n.id)) && isNotificationForRole(n, userRole)) {
+              newMap.set(String(n.id), n);
             }
           });
-          return Array.from(newMap.values()).sort((a, b) => {
+          const merged = Array.from(newMap.values()).sort((a, b) => {
             const timeA = new Date(a.time || a.timestamp || 0);
             const timeB = new Date(b.time || b.timestamp || 0);
             return timeB - timeA;
           });
+
+          // Calculate role-accurate unread count from all role notifications
+          const unreadItems = merged.filter(n => !readIds.has(String(n.id)));
+          setUnreadCount(unreadItems.length);
+
+          return merged;
         });
       }
     } catch (err) {

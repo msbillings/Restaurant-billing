@@ -210,7 +210,23 @@ function App() {
 
   const { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
-  const totalUnreadCount = unreadCount + rtUnreadCount;
+  
+  // Calculate role-accurate unread count based on current shop and role
+  const totalUnreadCount = React.useMemo(() => {
+    try {
+      const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+      const roleKeyLC = (userRole || 'Admin').toLowerCase();
+      const readRtIds = new Set(JSON.parse(localStorage.getItem(`realtime_read_ids_${tenantKey}_${roleKeyLC}`) || '[]'));
+      const readBcIds = new Set(JSON.parse(localStorage.getItem('read_broadcasts') || '[]'));
+      
+      const unreadRt = realTimeNotifs.filter(n => !readRtIds.has(String(n.id))).length;
+      const unreadBc = broadcasts.filter(b => !readBcIds.has(String(b._id))).length;
+      return unreadRt + unreadBc;
+    } catch {
+      return (unreadCount || 0) + (rtUnreadCount || 0);
+    }
+  }, [broadcasts, realTimeNotifs, userRole, unreadCount, rtUnreadCount]);
+
   const [resolvingCancelIds, setResolvingCancelIds] = useState({});
 
   const handleResolveCancelItem = async (e, n, action) => {
@@ -284,17 +300,50 @@ function App() {
     }
   }, [toastMessage, toastNotifInfo]);
 
-  // Format broadcasts for the dropdown
-  const formattedBroadcasts = broadcasts.map((b) => ({
-    id: b._id,
-    title: b.title,
-    message: b.message,
-    time: new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    type: 'info',
-    isUnread: false
-  }));
+  // Helper to format notification time clearly
+  const formatNotifTime = (n) => {
+    try {
+      const d = n.timestamp || (n.time ? new Date(n.time) : null) || (n.createdAt ? new Date(n.createdAt) : null);
+      if (!d || isNaN(new Date(d).getTime())) return n.time || '';
+      const dateObj = new Date(d);
+      const now = new Date();
+      const isToday = dateObj.toDateString() === now.toDateString();
+      const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (isToday) return timeStr;
+      return `${dateObj.getDate()} ${dateObj.toLocaleString('en', { month: 'short' })}, ${timeStr}`;
+    } catch {
+      return n.time || '';
+    }
+  };
 
-  const notifications = [...realTimeNotifs, ...formattedBroadcasts];
+  // Format broadcasts for the dropdown
+  const formattedBroadcasts = React.useMemo(() => {
+    return broadcasts.map((b) => ({
+      id: b._id,
+      title: b.title,
+      message: b.message,
+      imageUrl: b.imageUrl,
+      time: new Date(b.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date(b.createdAt),
+      type: 'broadcast',
+      isBroadcast: true
+    }));
+  }, [broadcasts]);
+
+  const notifications = React.useMemo(() => {
+    const raw = [...formattedBroadcasts, ...realTimeNotifs];
+    const uniqueMap = new Map();
+    raw.forEach(n => {
+      if (n && n.id && !uniqueMap.has(String(n.id))) {
+        uniqueMap.set(String(n.id), n);
+      }
+    });
+    return Array.from(uniqueMap.values()).sort((a, b) => {
+      const timeA = new Date(a.timestamp || a.time || a.createdAt || 0).getTime();
+      const timeB = new Date(b.timestamp || b.time || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
+  }, [formattedBroadcasts, realTimeNotifs]);
 
   useEffect(() => {
     if (isCaptain && !['floor', 'orders', 'kothistory', 'billing'].includes(view)) {
@@ -1140,19 +1189,54 @@ function App() {
                       notifications.map((n) => (
                         <div
                           key={n.id}
-                          className="px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start"
+                          onClick={() => {
+                            if (n.isBroadcast) {
+                              markAsRead(n.id);
+                            }
+                          }}
+                          className={`px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start ${
+                            n.isBroadcast ? 'bg-purple-50/30 hover:bg-purple-50/60' : ''
+                          }`}
                         >
-                          {/* colour dot */}
-                          <div
-                            className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
-                              n.type === 'warning' ? 'bg-amber-500' :
-                              n.type === 'success' ? 'bg-green-500' :
-                              n.type === 'error'   ? 'bg-red-500'   : 'bg-blue-500'
-                            }`}
-                          />
+                          {/* Colour dot or Broadcast icon */}
+                          {n.isBroadcast ? (
+                            <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
+                              <Radio size={11} className="text-purple-600" />
+                            </div>
+                          ) : (
+                            <div
+                              className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                n.type === 'warning' ? 'bg-amber-500' :
+                                n.type === 'success' ? 'bg-green-500' :
+                                n.type === 'error'   ? 'bg-red-500'   : 'bg-blue-500'
+                              }`}
+                            />
+                          )}
+
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-gray-800 leading-snug break-words">{n.title}</p>
+                            <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-xs font-bold text-gray-800 leading-snug truncate">{n.title}</p>
+                                {n.isBroadcast && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 uppercase tracking-wider shrink-0">
+                                    Broadcast
+                                  </span>
+                                )}
+                              </div>
+                              {/* Generation Timestamp */}
+                              <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap shrink-0 ml-1">
+                                {formatNotifTime(n)}
+                              </span>
+                            </div>
+
                             <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed break-words">{n.message}</p>
+
+                            {/* Broadcast Media/Image Preview */}
+                            {n.isBroadcast && n.imageUrl && (
+                              <div className="mt-2 w-full h-24 rounded-lg bg-gray-100 overflow-hidden relative border border-purple-100 shadow-2xs">
+                                <img src={n.imageUrl} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            )}
 
                             {/* Accept / Reject for cancel-item requests */}
                             {n.data?.type === 'cancel_item_request' && (
