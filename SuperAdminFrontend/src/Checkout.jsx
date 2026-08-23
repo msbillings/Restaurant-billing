@@ -40,7 +40,7 @@ const Checkout = () => {
     try {
       const amount = plans[planType].price;
       // Create Order on Backend
-      const orderRes = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/payment/create-order', {
+      const orderRes = await axios.post(`${API_BASE_URL}/payment/create-order`, {
         amount,
         restaurantName: formData.restaurantName,
         email: formData.email,
@@ -58,7 +58,7 @@ const Checkout = () => {
         handler: async function (response) {
           try {
             // Verify Payment on Backend
-            const verifyRes = await axios.post('https://restaurant-superadmin-api-maheer.vercel.app/api/payment/verify', {
+            const verifyRes = await axios.post(`${API_BASE_URL}/payment/verify`, {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,

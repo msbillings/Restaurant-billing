@@ -89,13 +89,13 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
-    // 1. Android APK (Capacitor Native) -> ALWAYS route to live cloud Superadmin API
+    // 1. Android APK (Capacitor Native) -> ALWAYS route to live cloud API
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanSuperadminUrl(envUrl);
         }
-        return 'https://restaurant-superadmin-api-maheer.vercel.app';
+        return 'https://restaurant-billing-apk.vercel.app';
     }
 
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -105,7 +105,7 @@ export const getSuperadminApiUrl = () => {
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanSuperadminUrl(envUrl);
         }
-        return 'https://restaurant-superadmin-api-maheer.vercel.app';
+        return 'https://restaurant-billing-apk.vercel.app';
     }
 
     // 3. Local Development (localhost / 127.0.0.1) -> route to local SuperAdmin server (port 4001)
@@ -121,8 +121,8 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(envUrl);
     }
 
-    // Default to the production Superadmin API
-    return 'https://restaurant-superadmin-api-maheer.vercel.app';
+    // Default to the production live backend API
+    return 'https://restaurant-billing-apk.vercel.app';
 };
 
 export const getSocketUrl = () => {
