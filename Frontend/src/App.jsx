@@ -1,6 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "./config.js";
 import React, { useState, useEffect, Suspense } from 'react';
 import axios from 'axios';
+import api from './api/axios';
 import { useLanguage } from './context/LanguageContext';
 // Lazy load components for performance
 const BillingPage = React.lazy(() => import('./components/BillingPage'));
@@ -290,14 +291,20 @@ function App() {
       const senderName = userData.username || userRole;
       const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';
 
-      await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, {
+      const replyPayload = {
         broadcastId,
         clientId: tenantDb,
         shopName,
         senderRole: userRole,
         senderUsername: senderName,
         message: text
-      }, { timeout: 10000 });
+      };
+
+      try {
+        await api.post('/broadcasts/reply', replyPayload, { timeout: 10000 });
+      } catch (e1) {
+        await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, replyPayload, { timeout: 10000 });
+      }
 
       localStorage.setItem(`broadcast_sent_reply_${broadcastId}_${tenantDb}`, text);
       localStorage.setItem(`broadcast_sent_reply_${n.id}_${tenantDb}`, text);

@@ -180,16 +180,20 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
       const senderName = user.username || userRole;
       const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';
 
-      await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, {
+      const replyPayload = {
         broadcastId,
         clientId: tenantDb,
         shopName,
         senderRole: userRole,
         senderUsername: senderName,
         message: text
-      }, {
-        timeout: 10000
-      });
+      };
+
+      try {
+        await api.post('/broadcasts/reply', replyPayload, { timeout: 10000 });
+      } catch (e1) {
+        await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, replyPayload, { timeout: 10000 });
+      }
 
       localStorage.setItem(`broadcast_sent_reply_${broadcastId}_${tenantDb}`, text);
       localStorage.setItem(`broadcast_sent_reply_${broadcastId}`, text);
@@ -298,17 +302,16 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     if (r === 'cashier') return t("Payment requests, bill settlements, and cashier alerts");
     return t("System alerts, kitchen orders, service requests, and broadcasts");
   };
-
   return (
-    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-hidden w-full">
-      <div className="flex flex-col mb-3 sm:mb-4 shrink-0 gap-2 sm:gap-3">
-        <div className="flex items-center justify-between gap-2.5 sm:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+    <div className="h-full flex flex-col bg-background p-2 sm:p-6 overflow-hidden w-full max-w-full">
+      <div className="flex flex-col mb-2.5 sm:mb-4 shrink-0 gap-2 sm:gap-3 w-full">
+        <div className="flex items-center justify-between gap-2 w-full">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <BackButton onClick={onGoBack} className="shrink-0" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <h1 className="text-base sm:text-2xl font-black text-text-main tracking-tight flex items-center gap-1.5 truncate">
-                  <Bell className="text-orange-500 shrink-0" size={19} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-sm sm:text-2xl font-black text-text-main tracking-tight flex items-center gap-1.5 truncate">
+                  <Bell className="text-orange-500 shrink-0" size={17} />
                   <span className="truncate">
                     {userRole === 'Chef' ? t("Kitchen Notifications") :
                      userRole === 'Captain' ? t("Captain Notifications") :
@@ -316,11 +319,11 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                      t("Notification Center")}
                   </span>
                 </h1>
-                <span className="text-[9px] sm:text-xs font-black px-2 py-0.5 rounded-full uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 shrink-0">
+                <span className="text-[9px] sm:text-xs font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 shrink-0">
                   {userRole}
                 </span>
               </div>
-              <p className="text-[11px] sm:text-xs text-text-muted mt-0.5 truncate">{getRoleHeaderSubtitle()}</p>
+              <p className="text-[10px] sm:text-xs text-text-muted mt-0.5 truncate">{getRoleHeaderSubtitle()}</p>
             </div>
           </div>
           
@@ -328,7 +331,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
           {allNotifications.length > 0 && (userRole === 'Admin' || userRole === 'Manager') && (
             <button
               onClick={() => setShowClearModal(true)}
-              className="flex items-center justify-center gap-1 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-surface border border-border text-text-muted hover:text-red-600 hover:border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all font-bold text-xs sm:text-sm shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
+              className="flex items-center justify-center gap-1 px-2 sm:px-3.5 py-1.5 bg-surface border border-border text-text-muted hover:text-red-600 hover:border-red-200 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all font-bold text-xs sm:text-sm shadow-xs shrink-0 cursor-pointer whitespace-nowrap"
             >
               <Trash2 size={13} />
               <span>{t("Clear All")}</span>
@@ -338,7 +341,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
 
         {/* Role category filter tabs for Admin / Manager */}
         {(userRole === 'Admin' || userRole === 'Manager') && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs shrink-0 flex-nowrap scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs shrink-0 flex-nowrap scrollbar-none w-full">
             <button
               onClick={() => setActiveTab('all')}
               className={`px-3 py-1.5 rounded-full font-bold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
@@ -372,7 +375,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
               }`}
             >
               <Receipt size={13} />
-              <span>{t("Cashier & Billing")}</span>
+              <span>{t("Billing")}</span>
             </button>
             <button
               onClick={() => setActiveTab('broadcasts')}
@@ -387,7 +390,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 sm:space-y-3.5">
+      <div className="flex-1 overflow-y-auto pr-0.5 space-y-2.5 sm:space-y-3.5 w-full max-w-full">
         {loading && broadcasts.length === 0 ?
         <div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div> :
         allNotifications.length === 0 ?
@@ -412,17 +415,17 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
               : 'bg-surface border-border shadow-xs';
 
           return (
-            <div key={notif.id} className={`${cardClass} p-3 sm:p-4 rounded-xl sm:rounded-2xl border flex gap-2.5 sm:gap-3.5 items-start transition-all shadow-xs`}>
-                <div className={`p-2 sm:p-2.5 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
-                  <Icon size={18} className="sm:hidden" />
+            <div key={notif.id} className={`${cardClass} p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border flex gap-2 sm:gap-3.5 items-start transition-all shadow-xs w-full max-w-full overflow-hidden`}>
+                <div className={`p-1.5 sm:p-2.5 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
+                  <Icon size={16} className="sm:hidden" />
                   <Icon size={22} className="hidden sm:block" />
                 </div>
                 
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1.5 gap-0.5 sm:gap-1">
-                    <div className="flex items-center gap-1.5">
+                <div className="flex-1 min-w-0 w-full overflow-hidden">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-1 gap-0.5 sm:gap-1">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <h3 className={`font-bold text-xs sm:text-base truncate ${isRead ? 'text-emerald-900 dark:text-emerald-300' : 'text-text-main'}`}>{t(notif.title)}</h3>
-                      {isRead && <span className="bg-emerald-200/80 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase">{t("Read")}</span>}
+                      {isRead && <span className="bg-emerald-200/80 text-emerald-800 text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase shrink-0">{t("Read")}</span>}
                     </div>
                     <div className="flex items-center gap-1 text-[10px] sm:text-xs text-text-muted font-medium shrink-0">
                       <Clock size={11} />
@@ -430,16 +433,16 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                     </div>
                   </div>
 
-                  <p className={`leading-relaxed text-xs sm:text-sm mb-2.5 whitespace-pre-wrap ${isRead ? 'text-emerald-800/90 dark:text-emerald-400 font-medium' : 'text-text-muted'}`}>{t(notif.message)}</p>
+                  <p className={`leading-relaxed text-xs sm:text-sm mb-2 whitespace-pre-wrap break-words ${isRead ? 'text-emerald-800/90 dark:text-emerald-400 font-medium' : 'text-text-muted'}`}>{t(notif.message)}</p>
 
                   {isBroadcast && notif.imageUrl &&
-                    <div className="mb-4 rounded-xl overflow-hidden border border-gray-200 inline-block max-w-sm">
-                      <img src={notif.imageUrl} alt="Broadcast Attachment" className="w-full h-auto object-cover max-h-64" />
+                    <div className="mb-3 rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700 w-full max-w-full">
+                      <img src={notif.imageUrl} alt="Broadcast Attachment" className="w-full h-auto object-cover max-h-56 sm:max-h-72 rounded-xl" />
                     </div>
                   }
 
                   {isBroadcast && notif.fileUrl &&
-                    <div className="mb-4">
+                    <div className="mb-3">
                       <a
                         href={notif.fileUrl.startsWith('http') ? notif.fileUrl : `${SUPERADMIN_URL}${notif.fileUrl}`}
                         target="_blank"
@@ -462,10 +465,10 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
 
                     if (savedReply && !isEditing) {
                       return (
-                        <div className="mt-3 pt-2.5 border-t border-purple-100/70 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="mt-2.5 pt-2 border-t border-purple-100/70 dark:border-purple-900/40 flex flex-col gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1">
-                              <CheckCircle size={13} className="text-emerald-500" />
+                            <span className="text-[11px] sm:text-xs font-extrabold text-purple-700 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle size={13} className="text-emerald-500 shrink-0" />
                               {t("Your Reply")}
                             </span>
                             <button
@@ -474,13 +477,13 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                                 setReplyText(prev => ({ ...prev, [bId]: savedReply }));
                                 setEditingReplyId(prev => ({ ...prev, [bId]: true }));
                               }}
-                              className="text-xs font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-colors"
+                              className="text-[11px] sm:text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border border-purple-200 dark:border-purple-800 transition-colors shrink-0"
                             >
-                              <Edit size={12} />
+                              <Edit size={11} />
                               {t("Edit Reply")}
                             </button>
                           </div>
-                          <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-gray-800 break-words font-medium">
+                          <div className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-100 dark:border-purple-900/50 rounded-xl px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-800 dark:text-gray-200 break-words font-medium">
                             "{savedReply}"
                           </div>
                         </div>
@@ -488,22 +491,26 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                     }
 
                     return (
-                      <div className="mt-4 flex flex-col gap-2">
-                        <div className="flex gap-2">
+                      <div className="mt-2.5 flex flex-col gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5 sm:gap-2 w-full min-w-0">
                           <input
-                            type="text" placeholder={t("Write a reply to SuperAdmin...")}
+                            type="text"
+                            placeholder={t("Write a reply to SuperAdmin...")}
                             value={currentText}
                             onChange={(e) => handleReplyChange(bId, e.target.value)}
-                            className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleSendReply(bId); }} />
+                            className="flex-1 min-w-0 w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm text-text-main focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSendReply(bId); }}
+                          />
                           <button
+                            type="button"
                             onClick={() => handleSendReply(bId)}
                             disabled={isSubmittingReply || !(currentText.trim())}
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0 text-xs sm:text-sm font-bold cursor-pointer">
+                            className="bg-purple-600 hover:bg-purple-700 active:scale-95 text-white px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-1 shrink-0 text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap shadow-xs"
+                          >
                             {isSubmittingReply ? (
-                              <Loader2 size={16} className="animate-spin" />
+                              <Loader2 size={13} className="animate-spin" />
                             ) : (
-                              <Send size={16} />
+                              <Send size={13} />
                             )}
                             <span>{savedReply ? t("Update") : t("Reply")}</span>
                           </button>
@@ -513,8 +520,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                               onClick={() => {
                                 setEditingReplyId(prev => ({ ...prev, [bId]: false }));
                               }}
-                              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 cursor-pointer font-bold"
-                              title={t("Cancel")}
+                              className="text-xs text-gray-400 hover:text-gray-600 px-1 py-1 shrink-0 cursor-pointer font-bold"
                             >
                               ✕
                             </button>
