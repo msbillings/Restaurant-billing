@@ -297,6 +297,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [foodTypeFilter, setFoodTypeFilter] = useState('all'); // 'all' | 'veg' | 'non-veg'
   const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
@@ -1677,40 +1678,81 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           </div>
         </div>
 
-        <div className="items-center gap-6 hidden sm:flex">
-          {activeTable && activeTable !== 'NEW_ORDER' && billType !== 'Delivery' && billType !== 'Takeaway' && orderId && (
+        <div className="flex items-center gap-2">
+          {/* Mobile-only Veg / Non-Veg / All Segmented Filter next to Select Table */}
+          <div className="flex sm:hidden items-center bg-background p-0.5 rounded-xl border border-border shadow-xs shrink-0 gap-0.5 z-30">
             <button
-              onClick={() => setShowTransfer(true)}
-              className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-3 py-1.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-1.5 relative z-20 cursor-pointer border border-primary/20 shadow-sm"
-              title={t('transferTable', { defaultValue: 'Transfer Table' })}
+              type="button"
+              onClick={() => setFoodTypeFilter('all')}
+              className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                foodTypeFilter === 'all'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'text-text-muted hover:text-text-main'
+              }`}
             >
-              <ArrowRightLeft size={16} />
-              <span className="hidden sm:inline">{t('Transfer')}</span>
+              {t("All")}
             </button>
-          )}
-
-          <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
-            <div className="flex flex-col items-end">
-              <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1">
-                {t('sales')} <TrendingUp size={10} className="text-success" />
-              </p>
-              <p className="text-sm font-bold text-text-main font-mono">₹{dailyStats.sales.toLocaleString()}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('veg')}
+              className={`px-1.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                foodTypeFilter === 'veg'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-emerald-600 hover:bg-emerald-50/50'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
+              <span>{t("Veg")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('non-veg')}
+              className={`px-1.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                foodTypeFilter === 'non-veg'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-rose-600 hover:bg-rose-50/50'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
+              <span>{t("Non-Veg")}</span>
+            </button>
           </div>
-          
-          <button
-            onClick={() => setIsLayoutLocked(!isLayoutLocked)}
-            className={`p-2 rounded-lg transition-all ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
-            title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}>
+
+          <div className="items-center gap-6 hidden sm:flex">
+            {activeTable && activeTable !== 'NEW_ORDER' && billType !== 'Delivery' && billType !== 'Takeaway' && orderId && (
+              <button
+                onClick={() => setShowTransfer(true)}
+                className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-3 py-1.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-1.5 relative z-20 cursor-pointer border border-primary/20 shadow-sm"
+                title={t('transferTable', { defaultValue: 'Transfer Table' })}
+              >
+                <ArrowRightLeft size={16} />
+                <span className="hidden sm:inline">{t('Transfer')}</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
+              <div className="flex flex-col items-end">
+                <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1">
+                  {t('sales')} <TrendingUp size={10} className="text-success" />
+                </p>
+                <p className="text-sm font-bold text-text-main font-mono">₹{dailyStats.sales.toLocaleString()}</p>
+              </div>
+            </div>
             
-            {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
-          </button>
-          <button
-            onClick={toggleFullScreen}
-            className="p-2 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
-            
-            {isFullScreen ? <Minimize size={20} /> : <Maximize size={20} />}
-          </button>
+            <button
+              onClick={() => setIsLayoutLocked(!isLayoutLocked)}
+              className={`p-2 rounded-lg transition-all ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
+              title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}>
+              
+              {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
+            </button>
+            <button
+              onClick={toggleFullScreen}
+              className="p-2 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
+              
+              {isFullScreen ? <Minimize size={20} /> : <Maximize size={20} />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1762,11 +1804,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
           mobileTab === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 transition-all duration-300`
           }>
-            <MenuGrid onSelectItem={addToCart} searchTerm={searchTerm} onSearchChange={setSearchTerm} isLayoutLocked={isLayoutLocked} onNavigate={onNavigate} userRole={userRole} />
+            <MenuGrid 
+              onSelectItem={addToCart} 
+              searchTerm={searchTerm} 
+              onSearchChange={setSearchTerm} 
+              foodTypeFilter={foodTypeFilter}
+              onFoodTypeFilterChange={setFoodTypeFilter}
+              isLayoutLocked={isLayoutLocked} 
+              onNavigate={onNavigate} 
+              userRole={userRole} 
+            />
           </div>
 
           <div
-            style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { width: isCartCollapsed ? 0 : rightPanelWidth } : { width: '100%', maxWidth: '100vw' }}
+            style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { 
+              width: isCartCollapsed ? 0 : (window.innerWidth < 1024 ? Math.min(rightPanelWidth, 360) : rightPanelWidth),
+              maxWidth: '45vw',
+              minWidth: isCartCollapsed ? 0 : (window.innerWidth < 1024 ? '300px' : '360px')
+            } : { width: '100%', maxWidth: '100vw' }}
             className={`flex flex-col bg-surface h-full ${
             mobileTab === 'menu' ? 'hidden md:flex' : 'flex'} ${
             isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-visible' : 'border-l border-border/50 overflow-visible'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
@@ -1830,7 +1885,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 setCustomerPhone={setCustomerPhone}
                 customerName={customerName}
                 setCustomerName={setCustomerName}
-                customerInfo={customerInfo} />
+                customerInfo={customerInfo}
+                openOrders={openOrdersList}
+                reservations={reservations} />
             </div>
             
           </div>

@@ -91,6 +91,13 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const [selectedTable, setSelectedTable] = useState('ALL');
   const [restaurantName, setRestaurantName] = useState('MSBillings');
 
+  // Detect Capacitor native mobile app (.apk / .ipa)
+  const isCapacitor = typeof window !== 'undefined' && Boolean(
+    window.Capacitor?.isNativePlatform?.() || 
+    window.location.href.includes('capacitor://') ||
+    (window.location.hostname === 'localhost' && !window.location.port)
+  );
+
   // Detect Electron (file: protocol or electron userAgent)
   const isElectron = typeof window !== 'undefined' && (
     window.location.protocol === 'file:' || 
@@ -98,20 +105,16 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     Boolean(window.electronAPI)
   );
 
-  // Detect local hostname / development environment
-  const isLocalHostname = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1' || 
-    window.location.hostname === '0.0.0.0'
-  );
+  // Detect active Vite dev server (npm run dev on local port 5173/3000)
   const isDevPort = typeof window !== 'undefined' && ['5173', '5174', '5175', '3000'].includes(window.location.port);
-  const isDev = Boolean(import.meta.env.DEV || isDevPort || isLocalHostname);
+  
+  // Show Dev Mode switcher ONLY in active browser localhost development (npm run dev)
+  const isDevMode = Boolean(import.meta.env.DEV && isDevPort && !isCapacitor && !isElectron);
 
-  // Detect production environment (e.g. deployed on Vercel or cloud domain)
-  const isVercelHost = typeof window !== 'undefined' && Boolean(window.location.hostname?.includes('vercel.app'));
-  const isProduction = isVercelHost || (!isDev && !isElectron && !isLocalHostname);
+  // Production mode: Vercel, Production .exe, Production .apk
+  const isProduction = !isDevMode;
 
-  // QR Mode: In production, force 'cloud' (Vercel URL). In development, allow 'cloud' or 'wifi'
+  // QR Mode: In production (.apk, .exe, Vercel), force 'cloud' (Vercel URL). In development mode, allow 'cloud' or 'wifi'
   const [qrMode, setQrMode] = useState(() => {
     if (isProduction) return 'cloud';
     return localStorage.getItem('resto_qr_mode') || 'cloud';

@@ -3,7 +3,7 @@ import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import api from '../api/axios';
-import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2, ChefHat, UserCheck, Receipt, Radio } from 'lucide-react';
+import { ArrowLeft, Bell, BellOff, AlertTriangle, Info, CheckCircle, Package, Clock, MessageSquare, Download, Image as ImageIcon, Send, Trash2, Loader2, ChefHat, UserCheck, Receipt, Radio, Edit } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications, { isNotificationForRole } from '../hooks/useNotifications';
 import BackButton from './common/BackButton';
@@ -15,6 +15,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   const [loading, setLoading] = useState(true);
   const [replyText, setReplyText] = useState({});
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+  const [editingReplyId, setEditingReplyId] = useState({});
+  const [sentReplies, setSentReplies] = useState({});
   const [activeTab, setActiveTab] = useState('all'); // 'all', 'kitchen', 'service', 'billing', 'broadcasts'
   const [readIds, setReadIds] = useState(() => {
     try {
@@ -167,30 +169,38 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
   };
 
   const handleSendReply = async (broadcastId) => {
-    const text = replyText[broadcastId];
-    if (!text || text.trim() === '') return;
+    const text = (replyText[broadcastId] || '').trim();
+    if (!text) return;
 
     setIsSubmittingReply(true);
     try {
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
-      const tenantDb = localStorage.getItem('resto_db_name');
+      const tenantDb = localStorage.getItem('resto_db_name') || 'client_demo_db';
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const senderName = user.username || userRole;
+      const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';
 
       await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, {
         broadcastId,
         clientId: tenantDb,
-        shopName: tenantDb,
+        shopName,
         senderRole: userRole,
         senderUsername: senderName,
         message: text
+      }, {
+        timeout: 10000
       });
 
-      alert('Reply sent successfully!');
-      setReplyText((prev) => ({ ...prev, [broadcastId]: '' }));
+      localStorage.setItem(`broadcast_sent_reply_${broadcastId}_${tenantDb}`, text);
+      localStorage.setItem(`broadcast_sent_reply_${broadcastId}`, text);
+
+      setSentReplies(prev => ({ ...prev, [broadcastId]: text }));
+      setEditingReplyId(prev => ({ ...prev, [broadcastId]: false }));
+      alert(t("Reply sent successfully!"));
     } catch (error) {
       console.error('Error sending reply:', error);
-      alert('Failed to send reply. Please try again.');
+      const msg = error.response?.data?.message || error.message || t("Failed to send reply. Please try again.");
+      alert(`${t("Failed to send reply")}: ${msg}`);
     } finally {
       setIsSubmittingReply(false);
     }
@@ -442,23 +452,77 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                     </div>
                   }
 
-                  {isBroadcast && notif.allowReplies &&
-                    <div className="mt-4 flex gap-2">
-                      <input
-                        type="text" placeholder={t("Write a reply to SuperAdmin...")}
-                        value={replyText[notif.id] || ''}
-                        onChange={(e) => handleReplyChange(notif.id, e.target.value)}
-                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSendReply(notif.id); }} />
-                      <button
-                        onClick={() => handleSendReply(notif.id)}
-                        disabled={isSubmittingReply || !replyText[notif.id]?.trim()}
-                        className="bg-purple-600 hover:bg-purple-700 text-white p-1.5 sm:p-2 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center shrink-0">
-                        <Send size={16} className="sm:hidden" />
-                        <Send size={18} className="hidden sm:block" />
-                      </button>
-                    </div>
-                  }
+                  {isBroadcast && notif.allowReplies && (() => {
+                    const bId = String(notif.broadcastId || notif.id || '').replace(/^broadcast_/, '');
+                    const tenantDb = localStorage.getItem('resto_db_name') || 'default';
+                    const savedReply = notif.myReply || sentReplies[bId] || 
+                                       (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
+                    const isEditing = Boolean(editingReplyId[bId]);
+                    const currentText = replyText[bId] !== undefined ? replyText[bId] : (savedReply || '');
+
+                    if (savedReply && !isEditing) {
+                      return (
+                        <div className="mt-3 pt-2.5 border-t border-purple-100/70 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle size={13} className="text-emerald-500" />
+                              {t("Your Reply")}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyText(prev => ({ ...prev, [bId]: savedReply }));
+                                setEditingReplyId(prev => ({ ...prev, [bId]: true }));
+                              }}
+                              className="text-xs font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 transition-colors"
+                            >
+                              <Edit size={12} />
+                              {t("Edit Reply")}
+                            </button>
+                          </div>
+                          <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-gray-800 break-words font-medium">
+                            "{savedReply}"
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="mt-4 flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text" placeholder={t("Write a reply to SuperAdmin...")}
+                            value={currentText}
+                            onChange={(e) => handleReplyChange(bId, e.target.value)}
+                            className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSendReply(bId); }} />
+                          <button
+                            onClick={() => handleSendReply(bId)}
+                            disabled={isSubmittingReply || !(currentText.trim())}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 shrink-0 text-xs sm:text-sm font-bold cursor-pointer">
+                            {isSubmittingReply ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Send size={16} />
+                            )}
+                            <span>{savedReply ? t("Update") : t("Reply")}</span>
+                          </button>
+                          {isEditing && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingReplyId(prev => ({ ...prev, [bId]: false }));
+                              }}
+                              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1.5 cursor-pointer font-bold"
+                              title={t("Cancel")}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {notif.data?.type === 'cancel_item_request' && (
                     <div className="mt-3 flex gap-2 items-center">

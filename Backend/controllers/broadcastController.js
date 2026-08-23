@@ -209,7 +209,36 @@ export const getClientBroadcasts = async (req, res) => {
       return true;
     });
 
-    res.json(filteredBroadcasts);
+    // Fetch any existing replies for this client
+    let clientReplies = [];
+    if (clientDoc) {
+      clientReplies = await db.collection('broadcastreplies').find({
+        clientId: clientDoc._id,
+        broadcastId: { $in: filteredBroadcasts.map(b => b._id) }
+      }).toArray();
+    }
+
+    const replyMap = {};
+    clientReplies.forEach(r => {
+      replyMap[r.broadcastId.toString()] = {
+        _id: r._id,
+        message: r.message,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        senderUsername: r.senderUsername,
+        senderRole: r.senderRole
+      };
+    });
+
+    const broadcastsWithReply = filteredBroadcasts.map(b => {
+      const bObj = { ...b };
+      const rep = replyMap[b._id.toString()];
+      bObj.myReply = rep ? rep.message : null;
+      bObj.myReplyData = rep || null;
+      return bObj;
+    });
+
+    res.json(broadcastsWithReply);
   } catch (error) {
     console.error('[Backend BroadcastController] Error:', error);
     res.status(500).json({ message: 'Error fetching broadcasts', error: error.message });
@@ -217,7 +246,7 @@ export const getClientBroadcasts = async (req, res) => {
 };
 
 /**
- * Submit reply to a broadcast from POS terminal
+ * Submit reply to a broadcast from POS terminal (Upserts existing reply)
  */
 export const replyToBroadcast = async (req, res) => {
   try {
@@ -230,18 +259,47 @@ export const replyToBroadcast = async (req, res) => {
       clientDoc = await db.collection('clients').findOne({ databaseName: tenantDb });
     }
 
-    const reply = {
-      broadcastId: mongoose.Types.ObjectId.isValid(broadcastId) ? new mongoose.Types.ObjectId(broadcastId) : broadcastId,
-      clientId: clientDoc ? clientDoc._id : null,
-      shopName: shopName || clientDoc?.restaurantName || tenantDb,
-      senderUsername: senderUsername || 'Staff',
-      senderRole: senderRole || 'Staff',
-      message: message,
-      createdAt: new Date()
+    const bObjId = mongoose.Types.ObjectId.isValid(broadcastId) ? new mongoose.Types.ObjectId(broadcastId) : broadcastId;
+    const clientObjId = clientDoc ? clientDoc._id : null;
+
+    const query = {
+      broadcastId: bObjId,
+      ...(clientObjId ? { clientId: clientObjId } : { shopName: shopName || tenantDb })
     };
 
-    await db.collection('broadcastreplies').insertOne(reply);
-    res.status(201).json({ message: 'Reply sent successfully', reply });
+    const existing = await db.collection('broadcastreplies').findOne(query);
+
+    let reply;
+    if (existing) {
+      await db.collection('broadcastreplies').updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            message: message,
+            senderUsername: senderUsername || existing.senderUsername,
+            senderRole: senderRole || existing.senderRole,
+            shopName: shopName || clientDoc?.restaurantName || existing.shopName,
+            updatedAt: new Date()
+          }
+        }
+      );
+      reply = { ...existing, message, updatedAt: new Date() };
+    } else {
+      reply = {
+        broadcastId: bObjId,
+        clientId: clientObjId,
+        shopName: shopName || clientDoc?.restaurantName || tenantDb,
+        senderUsername: senderUsername || 'Staff',
+        senderRole: senderRole || 'Staff',
+        message: message,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      const result = await db.collection('broadcastreplies').insertOne(reply);
+      reply._id = result.insertedId;
+    }
+
+    res.status(201).json({ message: 'Reply saved successfully', reply });
   } catch (error) {
     console.error('[Backend BroadcastController] Error saving reply:', error);
     res.status(500).json({ message: 'Error replying to broadcast', error: error.message });

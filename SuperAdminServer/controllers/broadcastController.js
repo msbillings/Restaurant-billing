@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Broadcast from '../models/Broadcast.js';
 import BroadcastReply from '../models/BroadcastReply.js';
 import Client from '../models/Client.js';
@@ -189,7 +190,36 @@ export const getClientBroadcasts = async (req, res) => {
       return clientMatch && roleMatch;
     });
 
-    res.status(200).json(filteredBroadcasts);
+    // Fetch existing replies for this client
+    let clientReplies = [];
+    if (clientDoc) {
+      clientReplies = await BroadcastReply.find({
+        clientId: clientDoc._id,
+        broadcastId: { $in: filteredBroadcasts.map(b => b._id) }
+      });
+    }
+
+    const replyMap = {};
+    clientReplies.forEach(r => {
+      replyMap[r.broadcastId.toString()] = {
+        _id: r._id,
+        message: r.message,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        senderUsername: r.senderUsername,
+        senderRole: r.senderRole
+      };
+    });
+
+    const broadcastsWithReply = filteredBroadcasts.map(b => {
+      const bObj = b.toObject ? b.toObject() : { ...b };
+      const rep = replyMap[b._id.toString()];
+      bObj.myReply = rep ? rep.message : null;
+      bObj.myReplyData = rep || null;
+      return bObj;
+    });
+
+    res.status(200).json(broadcastsWithReply);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching client broadcasts', error: error.message });
   }
@@ -200,24 +230,61 @@ export const replyToBroadcast = async (req, res) => {
   try {
     const { broadcastId, clientId, shopName, senderUsername, senderRole, message } = req.body;
     
-    // Find the actual client document by databaseName to get its _id
-    const clientDoc = await Client.findOne({ databaseName: clientId });
+    // Find the actual client document by databaseName or by ObjectId or by restaurantName
+    let clientDoc = await Client.findOne({ databaseName: clientId });
+    if (!clientDoc && mongoose.Types.ObjectId.isValid(clientId)) {
+      clientDoc = await Client.findById(clientId);
+    }
+    if (!clientDoc && shopName) {
+      const safeName = shopName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      clientDoc = await Client.findOne({ 
+        $or: [
+          { restaurantName: { $regex: new RegExp(safeName, 'i') } },
+          { databaseName: { $regex: new RegExp(safeName, 'i') } }
+        ]
+      });
+    }
+    if (!clientDoc) {
+      clientDoc = await Client.findOne();
+    }
+
     if (!clientDoc) {
       return res.status(404).json({ message: 'Client not found' });
     }
 
-    const reply = new BroadcastReply({
-      broadcastId,
-      clientId: clientDoc._id,
-      shopName,
-      senderUsername,
-      senderRole,
-      message
-    });
+    let bId = broadcastId;
+    if (!mongoose.Types.ObjectId.isValid(bId)) {
+      const bDoc = await Broadcast.findOne({ title: { $regex: new RegExp(broadcastId, 'i') } });
+      if (bDoc) bId = bDoc._id;
+      else {
+        const latestB = await Broadcast.findOne({ active: true });
+        if (latestB) bId = latestB._id;
+      }
+    }
+
+    // Find if a reply already exists for this broadcast & client
+    let reply = await BroadcastReply.findOne({ broadcastId: bId, clientId: clientDoc._id });
+    if (reply) {
+      reply.message = message;
+      reply.senderUsername = senderUsername || reply.senderUsername;
+      reply.senderRole = senderRole || reply.senderRole;
+      reply.shopName = shopName || clientDoc.restaurantName || reply.shopName;
+      await reply.save();
+    } else {
+      reply = new BroadcastReply({
+        broadcastId: bId,
+        clientId: clientDoc._id,
+        shopName: shopName || clientDoc.restaurantName || 'Restaurant',
+        senderUsername: senderUsername || 'Admin',
+        senderRole: senderRole || 'Admin',
+        message
+      });
+      await reply.save();
+    }
     
-    await reply.save();
     res.status(201).json(reply);
   } catch (error) {
+    console.error('Error submitting reply:', error);
     res.status(500).json({ message: 'Error submitting reply', error: error.message });
   }
 };

@@ -45,7 +45,9 @@ const BillSummary = ({
   setDeliveryCharge,
   containerCharge,
   setContainerCharge,
-  hasUnprintedItems = true
+  hasUnprintedItems = true,
+  openOrders = [],
+  reservations = []
 }) => {
   const { t, language } = useLanguage();
   const isLocked = orderStatus === 'Paid' || orderStatus === 'Cancelled';
@@ -297,6 +299,8 @@ const BillSummary = ({
                 activeTable={null}
                 align="right"
                 onSelect={(val) => onSelectTable && onSelectTable(val)}
+                openOrders={openOrders}
+                reservations={reservations}
                 customButton={
                   <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-md flex items-center justify-center px-1.5 animate-pulse gap-0.5">
                     {t("Select Table")}

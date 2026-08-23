@@ -76,11 +76,24 @@ const formatImageUrl = (url) => {
 
 import { useLanguage } from "../context/LanguageContext";
 
-const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocked = false, onNavigate, userRole = 'Admin' }) => {const { t, language } = useLanguage();
+const MenuGrid = ({ 
+  onSelectItem, 
+  searchTerm = '', 
+  onSearchChange, 
+  isLayoutLocked = false, 
+  onNavigate, 
+  userRole = 'Admin',
+  foodTypeFilter: externalFoodTypeFilter,
+  onFoodTypeFilterChange
+}) => {
+  const { t, language } = useLanguage();
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('All');
+  const [internalFoodTypeFilter, setInternalFoodTypeFilter] = useState('all');
+  const foodTypeFilter = externalFoodTypeFilter !== undefined ? externalFoodTypeFilter : internalFoodTypeFilter;
+  const setFoodTypeFilter = onFoodTypeFilterChange || setInternalFoodTypeFilter;
   const [sortBy, setSortBy] = useState('latest');
   const [selectedItemVariants, setSelectedItemVariants] = useState(null);
   const [showImages, setShowImages] = useState(() => {
@@ -257,7 +270,13 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
     }
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()));
-    return matchesCategory && matchesSearch;
+
+    const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+    const matchesFoodType = foodTypeFilter === 'all' ||
+      (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) ||
+      (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
+
+    return matchesCategory && matchesSearch && matchesFoodType;
   }).sort((a, b) => {
     switch (sortBy) {
       case 'latest':
@@ -278,10 +297,10 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
   });
 
   return (
-    <div className="flex flex-col md:flex-row h-full bg-white overflow-hidden w-full">
-      {/* Mobile Top Category Scrollbar (Visible on small screens) */}
-      <div className="flex md:hidden overflow-x-auto category-scroll py-2 px-3 bg-gray-50 border-b border-gray-200 shrink-0 gap-2 w-full no-scrollbar">
-        {categoryOptions.map((cat) => {
+    <div className="flex flex-col lg:flex-row h-full bg-white overflow-hidden w-full">
+      {/* Mobile & Tablet Top Category Scrollbar (Visible on screens < 1024px) */}
+      <div className="flex lg:hidden overflow-x-auto category-scroll py-2 px-3 bg-gray-50 border-b border-gray-200 shrink-0 gap-2 w-full no-scrollbar">
+        {categoryOptions.filter(cat => cat !== '⭐ Favourites').map((cat) => {
           const isSelected = category === cat;
           return (
             <button
@@ -293,16 +312,16 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
                   : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
               }`}>
               {getCategoryIcon(cat, isSelected)}
-              <span>{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
+              <span>{t(cat)}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Desktop Left Sidebar: Categories (Hidden on mobile) */}
+      {/* Desktop Left Sidebar: Categories (Visible on large screens >= 1024px) */}
       <div
         style={{ width: leftSidebarWidth }}
-        className="hidden md:flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3 border-r border-gray-200">
+        className="hidden lg:flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3 border-r border-gray-200">
         <div className="flex flex-col w-full gap-1">
           {categoryOptions.map((cat) => {
             const isSelected = category === cat;
@@ -327,57 +346,111 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
       {!isLayoutLocked && (
         <div
           onMouseDown={startResizingLeft}
-          className="hidden md:block w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative" />
+          className="hidden lg:block w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative" />
       )}
       
       {/* Items Grid Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
         
-        {/* Search Bar Row */}
-        <div className="flex items-center bg-gray-50 border-b border-gray-200 h-15 shrink-0 px-3 gap-3">
-          <div className="flex-1 flex items-center h-10.5 px-4 bg-white rounded-xl border border-gray-200 shadow-sm focus-within:border-red-500 transition-all">
-            <Search size={16} className="text-gray-400 mr-2 shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text" placeholder={t("Search item")}
+        {/* Filter & Sort Controls Row */}
+        <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 py-2 px-3 gap-2 shrink-0 flex-nowrap">
+          {/* Mobile Favorite Items Toggle Button (Left side on mobile) */}
+          <button
+            type="button"
+            onClick={() => setCategory(category === '⭐ Favourites' ? 'All' : '⭐ Favourites')}
+            className={`flex sm:hidden items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${
+              category === '⭐ Favourites'
+                ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200 shadow-xs'
+            }`}
+          >
+            <Star size={13} className={category === '⭐ Favourites' ? 'fill-white text-white' : 'text-amber-500 fill-amber-500'} />
+            <span>{t("Favorite Items")}</span>
+          </button>
 
-              value={searchTerm}
-              onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-              className="w-full h-full bg-transparent border-none focus:border-none focus:ring-0 outline-none focus:outline-none shadow-none! text-[15px] font-medium text-gray-700 placeholder-gray-400"
-              style={{ outline: 'none', boxShadow: 'none', border: 'none' }} />
-            
+          {/* Veg / Non-Veg / All Segmented Filter Tabs - VISIBLE ON DESKTOP/TABLET (sm+), HIDDEN ON MOBILE */}
+          <div className="hidden sm:flex items-center bg-white p-1 rounded-xl border border-gray-200 shadow-xs shrink-0 gap-1">
+            {/* All */}
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('all')}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                foodTypeFilter === 'all'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <span>{t("All")}</span>
+            </button>
+
+            {/* Veg */}
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('veg')}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                foodTypeFilter === 'veg'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-emerald-700 hover:bg-emerald-50'
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
+              <span>{t("Veg")}</span>
+            </button>
+
+            {/* Non-Veg */}
+            <button
+              type="button"
+              onClick={() => setFoodTypeFilter('non-veg')}
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                foodTypeFilter === 'non-veg'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-rose-700 hover:bg-rose-50'
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
+              <span>{t("Non-Veg")}</span>
+            </button>
           </div>
 
-          <select 
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="h-10.5 px-3 border border-gray-200 rounded-xl bg-white text-gray-700 text-[13px] font-bold focus:outline-none focus:border-red-500 transition-all shadow-sm cursor-pointer"
-          >
-            <option value="latest">{t("Latest")}</option>
-            <option value="oldest">{t("Oldest")}</option>
-            <option value="alphaAsc">{t("A-Z")}</option>
-            <option value="alphaDesc">{t("Z-A")}</option>
-            <option value="priceAsc">{t("Price: Low-High")}</option>
-            <option value="priceDesc">{t("Price: High-Low")}</option>
-          </select>
-
-          {userRole === 'Admin' && (
-            <button
-              onClick={() => onNavigate && onNavigate('menu')}
-              className="flex items-center justify-center h-10.5 px-3 rounded-xl bg-red-500 text-white shadow-sm hover:bg-red-600 transition-all gap-1.5 font-bold text-[13px] whitespace-nowrap"
+          {/* Right Controls: Sort, Add Item, Image Toggle */}
+          <div className="flex items-center gap-2 shrink-0 ml-auto justify-end">
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="h-9 px-2.5 sm:px-3 border border-gray-200 rounded-xl bg-white text-gray-700 text-xs font-bold focus:outline-none focus:border-red-500 transition-all shadow-xs cursor-pointer"
             >
-              <Plus size={16} />
-              <span className="hidden sm:inline">{t("Add Item")}</span>
-            </button>
-          )}
-          
-          <button
-            onClick={() => setShowImages(!showImages)}
-            className={`flex items-center justify-center h-10.5 px-3 sm:px-4 rounded-xl border shadow-sm transition-all gap-2 font-bold text-[13px] ${showImages ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+              <option value="latest">{t("Latest")}</option>
+              <option value="oldest">{t("Oldest")}</option>
+              <option value="alphaAsc">{t("A-Z")}</option>
+              <option value="alphaDesc">{t("Z-A")}</option>
+              <option value="priceAsc">{t("Price: Low-High")}</option>
+              <option value="priceDesc">{t("Price: High-Low")}</option>
+            </select>
+
+            {userRole === 'Admin' && (
+              <button
+                onClick={() => onNavigate && onNavigate('menu')}
+                className="flex items-center justify-center h-9 px-2.5 sm:px-3 rounded-xl bg-red-500 text-white shadow-xs hover:bg-red-600 active:scale-95 transition-all gap-1.5 font-bold text-xs whitespace-nowrap cursor-pointer"
+                title={t("Add Item")}
+              >
+                <Plus size={15} />
+                <span className="hidden sm:inline">{t("Add Item")}</span>
+              </button>
+            )}
             
-            <ImageIcon size={16} />
-            <span className="hidden sm:inline">{showImages ? t('Images: On') : t('Images: Off')}</span>
-          </button>
+            <button
+              onClick={() => setShowImages(!showImages)}
+              className={`flex items-center justify-center h-9 px-2.5 sm:px-3.5 rounded-xl border shadow-xs active:scale-95 transition-all gap-1.5 font-bold text-xs cursor-pointer ${
+                showImages 
+                  ? 'bg-red-50 text-red-600 border-red-200' 
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}
+              title={showImages ? t('Images: On') : t('Images: Off')}
+            >
+              <ImageIcon size={15} />
+              <span className="hidden sm:inline">{showImages ? t('Images: On') : t('Images: Off')}</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 relative bg-gray-50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
@@ -393,7 +466,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
                 <p className="text-xs text-gray-400 mt-1">{t("Fetching live dishes & prices")}</p>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 w-full opacity-60">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(155px,1fr))] gap-3 sm:gap-4 w-full opacity-60">
                 {[...Array(10)].map((_, i) => (
                   <div key={i} className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm animate-pulse flex flex-col justify-between h-36">
                     <div className="flex justify-between items-center mb-2">
@@ -410,7 +483,7 @@ const MenuGrid = ({ onSelectItem, searchTerm = '', onSearchChange, isLayoutLocke
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(155px,1fr))] gap-3 sm:gap-4">
               {filteredItems.map((item) => {
                 const isAvailable = item.isAvailable !== false; // default to true if undefined
                 const dotColor = item.type === 'veg' ? 'bg-green-500 shadow-sm border border-green-200' : item.type === 'non-veg' ? 'bg-red-500 shadow-sm border border-red-200' : 'bg-gray-300';

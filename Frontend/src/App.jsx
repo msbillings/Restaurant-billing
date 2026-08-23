@@ -69,7 +69,7 @@ import { clearCategoryCache } from './api/category';
 import { clearAllOfflineData } from './db/offlineDb';
 import { logoutUser } from './api/auth';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat, Send, Edit } from 'lucide-react';
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { initSyncEngine } from './utils/syncEngine';
@@ -266,6 +266,54 @@ function App() {
         return next;
       });
       alert(`Failed to ${action} cancellation request`);
+    }
+  };
+
+  const [broadcastReplies, setBroadcastReplies] = useState({});
+  const [submittingBroadcastReply, setSubmittingBroadcastReply] = useState({});
+  const [broadcastReplySuccess, setBroadcastReplySuccess] = useState({});
+  const [editingReplyId, setEditingReplyId] = useState({});
+  const [sentReplies, setSentReplies] = useState({});
+
+  const handleSendBroadcastReply = async (e, n) => {
+    e.stopPropagation();
+    const rawId = n.broadcastId || n.data?.broadcastId || n.id;
+    const broadcastId = String(rawId).replace(/^broadcast_/, '');
+    const text = (broadcastReplies[n.id] || '').trim();
+    if (!text) return;
+
+    setSubmittingBroadcastReply(prev => ({ ...prev, [n.id]: true }));
+    try {
+      const SUPERADMIN_API_URL = getSuperadminApiUrl();
+      const tenantDb = localStorage.getItem('resto_db_name') || 'client_demo_db';
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      const senderName = userData.username || userRole;
+      const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';
+
+      await axios.post(`${SUPERADMIN_API_URL}/api/broadcasts/reply`, {
+        broadcastId,
+        clientId: tenantDb,
+        shopName,
+        senderRole: userRole,
+        senderUsername: senderName,
+        message: text
+      }, { timeout: 10000 });
+
+      localStorage.setItem(`broadcast_sent_reply_${broadcastId}_${tenantDb}`, text);
+      localStorage.setItem(`broadcast_sent_reply_${n.id}_${tenantDb}`, text);
+
+      setSentReplies(prev => ({ ...prev, [n.id]: text, [broadcastId]: text }));
+      setEditingReplyId(prev => ({ ...prev, [n.id]: false }));
+      setBroadcastReplySuccess(prev => ({ ...prev, [n.id]: true }));
+      setTimeout(() => {
+        setBroadcastReplySuccess(prev => ({ ...prev, [n.id]: false }));
+      }, 3000);
+    } catch (err) {
+      console.error('Failed to send broadcast reply from dropdown:', err);
+      const msg = err.response?.data?.message || err.message || t("Failed to send reply. Please try again.");
+      alert(`${t("Failed to send reply")}: ${msg}`);
+    } finally {
+      setSubmittingBroadcastReply(prev => ({ ...prev, [n.id]: false }));
     }
   };
 
@@ -542,11 +590,39 @@ function App() {
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
             }
 
-            // 5. Update Broadcasts
+            // 5. Update Broadcasts (Show popup once per user role per broadcast)
             if (saData.broadcasts && saData.broadcasts.length > 0) {
-              const latestUnread = saData.broadcasts.find((b) => b.active && !localStorage.getItem('dismissed_broadcast_' + b._id));
+              const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+              const roleKey = (userRole || 'Admin').toLowerCase();
+              const latestUnread = saData.broadcasts.find((b) => {
+                const bId = String(b._id || b.id || '');
+                if (!b.active || !bId) return false;
+                
+                // Target role filter: if targetRoles specified, only show to target roles
+                if (b.targetRoles && Array.isArray(b.targetRoles) && b.targetRoles.length > 0) {
+                  const roleMatches = b.targetRoles.some(r => (r || '').toLowerCase() === roleKey);
+                  if (!roleMatches) return false;
+                }
+
+                const dismissedRoleKey = `dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`;
+                const dismissedGlobalKey = `dismissed_broadcast_${bId}`;
+                let readKey = [];
+                try {
+                  readKey = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+                } catch (e) {
+                  readKey = [];
+                }
+                
+                const isDismissed = localStorage.getItem(dismissedRoleKey) === 'true' || 
+                                    localStorage.getItem(dismissedGlobalKey) === 'true' ||
+                                    (Array.isArray(readKey) && readKey.includes(bId));
+
+                return !isDismissed;
+              });
+
               if (latestUnread) {
-                setActiveBroadcast((prev) => prev?._id === latestUnread._id ? prev : latestUnread);
+                const bId = String(latestUnread._id || latestUnread.id || '');
+                setActiveBroadcast((prev) => (prev?._id === bId || prev?.id === bId) ? prev : latestUnread);
               } else {
                 setActiveBroadcast(null);
               }
@@ -1247,11 +1323,11 @@ function App() {
             {showNotifications && (
               <>
                 {/* Backdrop — closes panel on outside click */}
-                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                <div className="fixed inset-0 z-[140]" onClick={() => setShowNotifications(false)} />
 
                 {/* Panel — fixed to viewport, always visible, never overflows */}
                 <div
-                  className="fixed z-50 bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                  className="fixed z-[150] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
                   style={{
                     /* Position: just below the top navbar (~60px) */
                     top: '68px',
@@ -1334,6 +1410,97 @@ function App() {
                                 <img src={n.imageUrl} alt="" className="w-full h-full object-cover" />
                               </div>
                             )}
+
+                            {/* Inline Broadcast Reply Box / Sent Reply Display */}
+                            {n.isBroadcast && (() => {
+                              const rawId = n.broadcastId || n.data?.broadcastId || n.id || '';
+                              const bId = String(rawId).replace(/^broadcast_/, '');
+                              const tenantDb = localStorage.getItem('resto_db_name') || 'default';
+                              const savedReply = n.myReply || sentReplies[bId] || 
+                                                 (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
+                              const isEditing = Boolean(editingReplyId[bId]);
+                              const currentText = broadcastReplies[bId] !== undefined ? broadcastReplies[bId] : (savedReply || '');
+
+                              if (savedReply && !isEditing) {
+                                return (
+                                  <div className="mt-2.5 pt-2 border-t border-purple-100/70 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1">
+                                        <CheckCircle size={11} className="text-emerald-500" />
+                                        {t("Your Reply")}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setBroadcastReplies(prev => ({ ...prev, [bId]: savedReply }));
+                                          setEditingReplyId(prev => ({ ...prev, [bId]: true }));
+                                        }}
+                                        className="text-[10px] font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 transition-colors"
+                                      >
+                                        <Edit size={10} />
+                                        {t("Edit")}
+                                      </button>
+                                    </div>
+                                    <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3 py-1.5 text-xs text-gray-800 break-words font-medium">
+                                      "{savedReply}"
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="mt-2 pt-1.5 border-t border-purple-100 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {broadcastReplySuccess[bId] ? (
+                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl">
+                                      <CheckCircle size={12} className="text-emerald-600" />
+                                      <span>{t("Reply sent to Super-Admin!")}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={currentText}
+                                        onChange={(e) => setBroadcastReplies(prev => ({ ...prev, [bId]: e.target.value }))}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            handleSendBroadcastReply(e, n);
+                                          }
+                                        }}
+                                        placeholder={t("Reply to super admin...")}
+                                        className="flex-1 min-w-0 bg-white border border-purple-200 focus:border-purple-500 rounded-xl px-2.5 py-1 text-xs text-gray-800 placeholder-gray-400 focus:outline-none shadow-2xs"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => handleSendBroadcastReply(e, n)}
+                                        disabled={submittingBroadcastReply[bId] || !(currentText.trim())}
+                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
+                                          submittingBroadcastReply[bId] || !(currentText.trim())
+                                            ? 'bg-purple-200 text-purple-400 cursor-not-allowed'
+                                            : 'bg-purple-600 hover:bg-purple-700 active:scale-95 text-white cursor-pointer shadow-xs'
+                                        }`}
+                                      >
+                                        {submittingBroadcastReply[bId] ? (
+                                          <Loader2 size={11} className="animate-spin" />
+                                        ) : (
+                                          <Send size={11} />
+                                        )}
+                                        <span>{savedReply ? t("Update") : t("Reply")}</span>
+                                      </button>
+                                      {isEditing && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingReplyId(prev => ({ ...prev, [bId]: false }))}
+                                          className="text-xs text-gray-400 hover:text-gray-600 p-1 cursor-pointer font-bold"
+                                          title={t("Cancel")}
+                                        >
+                                          ✕
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
 
                             {/* Accept / Reject for cancel-item requests */}
                             {n.data?.type === 'cancel_item_request' && (
@@ -2118,7 +2285,7 @@ function App() {
       )}
 
       {/* License Expiry Warning Popup */}
-      {showExpiryPopup && daysRemaining !== null &&
+      {showExpiryPopup && daysRemaining !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-9999 animate-in fade-in duration-200">
           <div className="bg-surface rounded-3xl border border-border shadow-2xl max-w-md w-full mx-4 overflow-hidden">
             {/* Header */}
@@ -2236,27 +2403,31 @@ function App() {
             <div className="px-6 pb-5">
               <button
                 onClick={() => setShowExpiryPopup(false)}
-                className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all transform active:scale-[0.98]">{t("Got it, I'll Renew")}
-
-
+                className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all transform active:scale-[0.98]">
+                {t("Got it, I'll Renew")}
               </button>
             </div>
           </div>
         </div>
-      }
+      )}
 
       {/* Global Broadcast Modal */}
-      {activeBroadcast &&
+      {activeBroadcast && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-100 animate-fade-in p-4 backdrop-blur-sm">
           <div className="bg-surface border border-primary/50 p-1 rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-transform overflow-hidden relative">
             <div className="bg-background rounded-xl p-6 sm:p-8 relative">
               <button
                 onClick={() => {
-                  localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                  const bId = String(activeBroadcast._id || activeBroadcast.id || '');
+                  const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+                  const roleKey = (userRole || 'Admin').toLowerCase();
+                  localStorage.setItem(`dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`, 'true');
+                  localStorage.setItem(`dismissed_broadcast_${bId}`, 'true');
+                  if (typeof markAsRead === 'function') markAsRead(bId);
                   setActiveBroadcast(null);
                 }}
-                className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10">
-
+                className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10 cursor-pointer"
+              >
                 <X className="w-5 h-5 text-gray-400" />
               </button>
 
@@ -2267,28 +2438,33 @@ function App() {
 
                 <h3 className="text-2xl font-black mb-4 text-white">{activeBroadcast.title}</h3>
 
-                {activeBroadcast.imageUrl &&
+                {activeBroadcast.imageUrl && (
                   <div className="w-full max-h-64 rounded-xl overflow-hidden mb-6 border border-border shadow-lg">
                     <img src={activeBroadcast.imageUrl} alt={activeBroadcast.title} className="w-full h-full object-contain bg-surface" />
                   </div>
-                }
+                )}
 
                 <p className="text-gray-300 mb-8 leading-relaxed whitespace-pre-wrap">{activeBroadcast.message}</p>
 
                 <button
                   onClick={() => {
-                    localStorage.setItem('dismissed_broadcast_' + activeBroadcast._id, 'true');
+                    const bId = String(activeBroadcast._id || activeBroadcast.id || '');
+                    const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+                    const roleKey = (userRole || 'Admin').toLowerCase();
+                    localStorage.setItem(`dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`, 'true');
+                    localStorage.setItem(`dismissed_broadcast_${bId}`, 'true');
+                    if (typeof markAsRead === 'function') markAsRead(bId);
                     setActiveBroadcast(null);
                   }}
-                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg">{t("Got it, Thanks!")}
-
-
+                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg cursor-pointer"
+                >
+                  {t("Got it, Thanks!")}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      }
+      )}
 
       {/* Tools & Dialog Modals */}
       <Suspense fallback={null}>

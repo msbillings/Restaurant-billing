@@ -64,7 +64,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
   };
 
   return (
-    <div className={wrapperClass || "relative z-[90] w-full h-full flex items-center justify-center"} ref={dropdownRef}>
+    <div className={wrapperClass || "relative z-20 w-full h-full flex items-center justify-center"} ref={dropdownRef}>
       {customButton ? (
         <div onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }} className="w-full h-full cursor-pointer">
           {customButton}
@@ -80,7 +80,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
       )}
 
       {isOpen && (
-        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1.5 w-56 sm:w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-hidden z-[99999] ring-1 ring-black/5`}>
+        <div className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-1.5 w-56 sm:w-64 bg-white border border-gray-200 rounded-xl shadow-2xl py-1 text-sm font-medium text-gray-700 max-h-[60vh] overflow-hidden z-50 ring-1 ring-black/5`}>
           {floors.length === 0 ? (
             // Default 20 tables if no floors
             <div className="max-h-60 overflow-y-auto custom-scrollbar">
