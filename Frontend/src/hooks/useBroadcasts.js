@@ -72,8 +72,7 @@ const useBroadcasts = (userRole) => {
 
   const fetchBroadcasts = async () => {
     try {
-      const tenantDb = localStorage.getItem('resto_db_name');
-      if (!tenantDb) return; // No tenant DB yet (not logged in or license not verified)
+      const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
 
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
       
@@ -81,17 +80,17 @@ const useBroadcasts = (userRole) => {
       try {
         // 1. Primary: Direct query through POS Backend API (with auth headers automatically included)
         response = await api.get('/broadcasts', {
-          params: { role: userRole || 'Admin' }
+          params: { role: userRole || 'Admin', tenant: tenantDb }
         });
       } catch (err) {
         try {
           // 2. Fallback: SuperAdmin API public endpoint
-          response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb}`, {
+          response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb || 'default'}`, {
             params: { role: userRole || 'Admin' }
           });
         } catch (err2) {
           try {
-            response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb}`, {
+            response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb || 'default'}`, {
               params: { role: userRole || 'Admin' }
             });
           } catch (err3) {

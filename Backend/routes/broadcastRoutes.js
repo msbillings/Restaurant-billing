@@ -6,10 +6,14 @@ import {
   toggleBroadcast, 
   deleteBroadcast, 
   getClientBroadcasts, 
-  replyToBroadcast 
+  replyToBroadcast,
+  getBroadcastReplies
 } from '../controllers/broadcastController.js';
 
 const router = express.Router();
+
+// Static routes before /:id
+router.get('/replies', getBroadcastReplies);
 
 // Route GET / — if tenant header or query is present, strictly filter for that POS client; otherwise return SuperAdmin list
 router.get('/', (req, res, next) => {
@@ -22,8 +26,8 @@ router.get('/', (req, res, next) => {
 
 // SuperAdmin mutation routes
 router.post('/', createBroadcast);
-router.put('/:id', updateBroadcast);
 router.put('/:id/toggle', toggleBroadcast);
+router.put('/:id', updateBroadcast);
 router.delete('/:id', deleteBroadcast);
 
 // Explicit client endpoint

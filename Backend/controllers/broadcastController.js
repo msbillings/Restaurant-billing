@@ -180,8 +180,9 @@ export const getClientBroadcasts = async (req, res) => {
     const activeBroadcasts = await db.collection('broadcasts').find({ active: true }).sort({ createdAt: -1 }).toArray();
 
     let realClientId = null;
+    let clientDoc = null;
     if (tenantDb) {
-      const clientDoc = await db.collection('clients').findOne({ 
+      clientDoc = await db.collection('clients').findOne({ 
         $or: [
           { databaseName: tenantDb },
           ...(mongoose.Types.ObjectId.isValid(tenantDb) ? [{ _id: new mongoose.Types.ObjectId(tenantDb) }] : [])
@@ -303,5 +304,37 @@ export const replyToBroadcast = async (req, res) => {
   } catch (error) {
     console.error('[Backend BroadcastController] Error saving reply:', error);
     res.status(500).json({ message: 'Error replying to broadcast', error: error.message });
+  }
+};
+
+/**
+ * SuperAdmin: Get all replies from all shops
+ */
+export const getBroadcastReplies = async (req, res) => {
+  try {
+    const db = mongoose.connection.useDb('mscurechain');
+    const replies = await db.collection('broadcastreplies').find().sort({ createdAt: -1 }).toArray();
+
+    // Populate broadcast and client details
+    const broadcasts = await db.collection('broadcasts').find().toArray();
+    const clients = await db.collection('clients').find().toArray();
+
+    const broadcastMap = new Map(broadcasts.map(b => [b._id.toString(), b]));
+    const clientMap = new Map(clients.map(c => [c._id.toString(), c]));
+
+    const populated = replies.map(r => {
+      const bDoc = r.broadcastId ? broadcastMap.get(r.broadcastId.toString()) : null;
+      const cDoc = r.clientId ? clientMap.get(r.clientId.toString()) : null;
+      return {
+        ...r,
+        broadcastId: bDoc ? { _id: bDoc._id, title: bDoc.title } : { title: 'Unknown Broadcast' },
+        clientId: cDoc ? { _id: cDoc._id, restaurantName: cDoc.restaurantName, databaseName: cDoc.databaseName } : null
+      };
+    });
+
+    res.status(200).json(populated);
+  } catch (error) {
+    console.error('[Backend BroadcastController] Error fetching replies:', error);
+    res.status(500).json({ message: 'Error fetching replies', error: error.message });
   }
 };

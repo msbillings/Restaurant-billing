@@ -198,7 +198,7 @@ function App() {
     } catch {/* ignore */ }
     return { kds: true, inventory: true, crm: true, staff: true, analytics: true, daybook: true, qrcode: true, delivery: true, expenses: true };
   });
-  const [activeBroadcast, setActiveBroadcast] = useState(null);
+  // Broadcasts are kept strictly in notifications dropdown & Notification Center without blocking screen popups
 
   const rawRole = user?.role || 'Admin';
   const usernameLower = user?.username?.toLowerCase() || '';
@@ -590,45 +590,7 @@ function App() {
               localStorage.setItem('resto_features', JSON.stringify(saData.features));
             }
 
-            // 5. Update Broadcasts (Show popup once per user role per broadcast)
-            if (saData.broadcasts && saData.broadcasts.length > 0) {
-              const tenantKey = localStorage.getItem('resto_db_name') || 'default';
-              const roleKey = (userRole || 'Admin').toLowerCase();
-              const latestUnread = saData.broadcasts.find((b) => {
-                const bId = String(b._id || b.id || '');
-                if (!b.active || !bId) return false;
-                
-                // Target role filter: if targetRoles specified, only show to target roles
-                if (b.targetRoles && Array.isArray(b.targetRoles) && b.targetRoles.length > 0) {
-                  const roleMatches = b.targetRoles.some(r => (r || '').toLowerCase() === roleKey);
-                  if (!roleMatches) return false;
-                }
-
-                const dismissedRoleKey = `dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`;
-                const dismissedGlobalKey = `dismissed_broadcast_${bId}`;
-                let readKey = [];
-                try {
-                  readKey = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
-                } catch (e) {
-                  readKey = [];
-                }
-                
-                const isDismissed = localStorage.getItem(dismissedRoleKey) === 'true' || 
-                                    localStorage.getItem(dismissedGlobalKey) === 'true' ||
-                                    (Array.isArray(readKey) && readKey.includes(bId));
-
-                return !isDismissed;
-              });
-
-              if (latestUnread) {
-                const bId = String(latestUnread._id || latestUnread.id || '');
-                setActiveBroadcast((prev) => (prev?._id === bId || prev?.id === bId) ? prev : latestUnread);
-              } else {
-                setActiveBroadcast(null);
-              }
-            } else {
-              setActiveBroadcast(null);
-            }
+            // 5. Broadcasts are loaded and displayed solely in notification center/dropdown
           } else if (saRes.status === 404) {
             // Kill switch: Account was deleted or license key was changed in SuperAdmin
             localStorage.removeItem('user');
@@ -2406,61 +2368,6 @@ function App() {
                 className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-2xl shadow-lg shadow-primary/30 transition-all transform active:scale-[0.98]">
                 {t("Got it, I'll Renew")}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Global Broadcast Modal */}
-      {activeBroadcast && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-100 animate-fade-in p-4 backdrop-blur-sm">
-          <div className="bg-surface border border-primary/50 p-1 rounded-2xl shadow-2xl max-w-lg w-full transform scale-100 transition-transform overflow-hidden relative">
-            <div className="bg-background rounded-xl p-6 sm:p-8 relative">
-              <button
-                onClick={() => {
-                  const bId = String(activeBroadcast._id || activeBroadcast.id || '');
-                  const tenantKey = localStorage.getItem('resto_db_name') || 'default';
-                  const roleKey = (userRole || 'Admin').toLowerCase();
-                  localStorage.setItem(`dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`, 'true');
-                  localStorage.setItem(`dismissed_broadcast_${bId}`, 'true');
-                  if (typeof markAsRead === 'function') markAsRead(bId);
-                  setActiveBroadcast(null);
-                }}
-                className="absolute top-4 right-4 p-2 bg-surface hover:bg-gray-800 rounded-full transition-colors z-10 cursor-pointer"
-              >
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-
-              <div className="flex flex-col items-center text-center">
-                <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-6 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
-                  <Radio className="w-8 h-8 text-primary animate-pulse" />
-                </div>
-
-                <h3 className="text-2xl font-black mb-4 text-white">{activeBroadcast.title}</h3>
-
-                {activeBroadcast.imageUrl && (
-                  <div className="w-full max-h-64 rounded-xl overflow-hidden mb-6 border border-border shadow-lg">
-                    <img src={activeBroadcast.imageUrl} alt={activeBroadcast.title} className="w-full h-full object-contain bg-surface" />
-                  </div>
-                )}
-
-                <p className="text-gray-300 mb-8 leading-relaxed whitespace-pre-wrap">{activeBroadcast.message}</p>
-
-                <button
-                  onClick={() => {
-                    const bId = String(activeBroadcast._id || activeBroadcast.id || '');
-                    const tenantKey = localStorage.getItem('resto_db_name') || 'default';
-                    const roleKey = (userRole || 'Admin').toLowerCase();
-                    localStorage.setItem(`dismissed_broadcast_${bId}_${tenantKey}_${roleKey}`, 'true');
-                    localStorage.setItem(`dismissed_broadcast_${bId}`, 'true');
-                    if (typeof markAsRead === 'function') markAsRead(bId);
-                    setActiveBroadcast(null);
-                  }}
-                  className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-4 rounded-xl transition-all shadow-lg cursor-pointer"
-                >
-                  {t("Got it, Thanks!")}
-                </button>
-              </div>
             </div>
           </div>
         </div>

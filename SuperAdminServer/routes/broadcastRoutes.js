@@ -43,13 +43,13 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } 
 });
 
-// Super Admin routes
-router.get('/', protect, getBroadcasts);
-router.post('/', protect, upload.single('file'), createBroadcast);
-router.put('/:id', protect, upload.single('file'), updateBroadcast);
-router.put('/:id/toggle', protect, toggleBroadcast);
-router.delete('/:id', protect, deleteBroadcast);
-router.get('/replies', protect, getBroadcastReplies);
+// Super Admin & General routes (Static routes before /:id)
+router.get('/', getBroadcasts);
+router.get('/replies', getBroadcastReplies);
+router.post('/', upload.single('file'), createBroadcast);
+router.put('/:id/toggle', toggleBroadcast);
+router.put('/:id', upload.single('file'), updateBroadcast);
+router.delete('/:id', deleteBroadcast);
 
 // POS Client routes
 router.get('/client/:clientId', getClientBroadcasts);
