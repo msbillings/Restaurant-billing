@@ -91,15 +91,50 @@ const LicenseScreen = ({ onValidLicense }) => {
 
     try {
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
-      const response = await fetch(`${SUPERADMIN_API_URL}/api/clients/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password: password.trim() })
-      });
+      const LOCAL_API_URL = getApiUrl();
+      let response = null;
+      let data = null;
+      let lastError = null;
 
-      const data = await response.json();
+      // 1. Try SuperAdmin Cloud API first
+      try {
+        const cloudRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), password: password.trim() })
+        });
+        const cloudData = await cloudRes.json().catch(() => ({}));
+        if (cloudRes.ok && cloudData.valid) {
+          response = cloudRes;
+          data = cloudData;
+        } else if (cloudData.message) {
+          lastError = cloudData.message;
+        }
+      } catch (cloudErr) {
+        console.warn('SuperAdmin cloud login unreachable, trying local backend...', cloudErr);
+      }
 
-      if (response.ok && data.valid) {
+      // 2. Fallback to Local Backend API if Cloud is unreachable or didn't return valid data
+      if (!data && !lastError) {
+        try {
+          const localRes = await fetch(`${LOCAL_API_URL}/clients/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.trim(), password: password.trim() })
+          });
+          const localData = await localRes.json().catch(() => ({}));
+          if (localRes.ok && localData.valid) {
+            response = localRes;
+            data = localData;
+          } else if (localData.message) {
+            lastError = localData.message;
+          }
+        } catch (localErr) {
+          console.warn('Local backend login attempt failed:', localErr);
+        }
+      }
+
+      if (data && data.valid) {
         localStorage.setItem('resto_license', data.licenseKey || 'ACCOUNT-LOGIN');
         localStorage.setItem('resto_license_expiry', data.validUntil);
         if (data.databaseName) localStorage.setItem('resto_db_name', data.databaseName);
@@ -149,7 +184,7 @@ const LicenseScreen = ({ onValidLicense }) => {
 
         onValidLicense();
       } else {
-        setError(data.message || 'Invalid email or password.');
+        setError(lastError || 'Invalid email or password.');
       }
     } catch (err) {
       setError(`Connection Error: ${err.message}. Please check your internet connection or contact support.`);

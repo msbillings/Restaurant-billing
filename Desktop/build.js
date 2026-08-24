@@ -34,13 +34,53 @@ if (fs.existsSync(desktopBackend)) fs.rmSync(desktopBackend, { recursive: true, 
 // Build Frontend
 console.log('Building Frontend...');
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-execSync(`${npmCmd} run build`, { cwd: path.join(__dirname, '../Frontend'), stdio: 'inherit' });
+execSync(`${npmCmd} run build`, { 
+  cwd: path.join(__dirname, '../Frontend'), 
+  stdio: 'inherit',
+  env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' }
+});
 
 // Copy Frontend
 console.log('Copying Frontend...');
 copySync(frontendDist, desktopFrontend);
 // Also copy to backend so the Express server can serve it to mobile phones without asar restrictions
 copySync(frontendDist, path.join(desktopBackend, 'frontend'));
+
+// Convert all root absolute paths to relative paths in index.html for Electron file:// protocol
+console.log('Patching HTML asset paths for Electron file:// protocol...');
+const desktopBackendFrontend = path.join(desktopBackend, 'frontend');
+[desktopFrontend, desktopBackendFrontend].forEach(dir => {
+  const indexHtml = path.join(dir, 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    let html = fs.readFileSync(indexHtml, 'utf8');
+    html = html.replace(/src="\/assets\//g, 'src="./assets/');
+    html = html.replace(/href="\/assets\//g, 'href="./assets/');
+    html = html.replace(/href="\/icon\.png"/g, 'href="./icon.png"');
+    html = html.replace(/href="\/manifest\.webmanifest"/g, 'href="./manifest.webmanifest"');
+    html = html.replace(/src="\/registerSW\.js"/g, 'src="./registerSW.js"');
+    html = html.replace(/ crossorigin/g, '');
+    fs.writeFileSync(indexHtml, html);
+  }
+});
+
+// Disable PWA service worker in Electron & LAN clients to prevent stale chunk cache issues
+const swDisableScript = `// Unregister stale service workers to prevent cache errors on mobile & desktop
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+`;
+
+[desktopFrontend, desktopBackendFrontend].forEach(dir => {
+  const swPath = path.join(dir, 'registerSW.js');
+  if (fs.existsSync(swPath)) {
+    fs.writeFileSync(swPath, swDisableScript);
+    console.log(`Disabled service worker in ${dir}`);
+  }
+});
 
 // Fix for Desktop app: Ensure it connects to localhost instead of the hardcoded IP from Vite build
 console.log('Patching API URLs for Desktop (localhost)...');
@@ -51,7 +91,7 @@ if (fs.existsSync(assetsDir)) {
     if (file.endsWith('.js')) {
       const filePath = path.join(assetsDir, file);
       let content = fs.readFileSync(filePath, 'utf8');
-      // Replace Vercel URL with 127.0.0.1 for Desktop to avoid IPv6 issues
+      // Replace Vercel API URL with 127.0.0.1 for Desktop to avoid IPv6 issues
       content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://127.0.0.1:5002/api');
       content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
       content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');

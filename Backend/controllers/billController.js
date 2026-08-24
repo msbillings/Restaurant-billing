@@ -980,6 +980,22 @@ export const settleBill = async (req, res) => {
     // Explicitly update the updatedAt timestamp to ensure latest bills show first
     order.updatedAt = new Date();
     
+    // Ensure billNumber exists if not previously generated
+    if (!order.billNumber) {
+      let nextNum = 1;
+      const latestBill = await Bill.findOne({ billNumber: /^MS\d+$/ })
+        .sort({ billNumber: -1 })
+        .collation({ locale: 'en_US', numericOrdering: true });
+
+      if (latestBill && latestBill.billNumber) {
+        const currentNum = parseInt(latestBill.billNumber.replace('MS', ''), 10);
+        if (!isNaN(currentNum)) {
+          nextNum = currentNum + 1;
+        }
+      }
+      order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+    }
+
     // Save the bill - it's now in billing history with fresh timestamp
     await order.save();
     
@@ -995,6 +1011,47 @@ export const settleBill = async (req, res) => {
     
     emitSocketEvent(req, 'billSettled', { tableNo: order.tableNo, billNumber: order.billNumber, order, bill: order });
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Paid', order });
+
+    // Fetch shop name dynamically for tenant-accurate notification
+    let shopName = '';
+    try {
+      const Setting = getTenantModel(req, 'Setting', SettingDefault);
+      const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+      if (settingsDoc?.value) {
+        const s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
+        if (s.restaurantName) shopName = s.restaurantName.trim();
+      }
+    } catch (e) {
+      console.warn('Could not fetch restaurant settings for notification:', e.message);
+    }
+
+    const cleanTable = (order.tableNo || '').replace(/^Table\s*/i, '');
+    const billNumDisplay = order.billNumber ? `#${order.billNumber}` : '';
+    const notifTitle = shopName 
+      ? `${shopName} | Bill ${billNumDisplay} Settled`.trim()
+      : `Bill ${billNumDisplay} Settled`.trim();
+
+    const notifMessage = order.billType === 'Dine-In'
+      ? `Bill ${billNumDisplay} of ₹${order.total || 0} for Table ${cleanTable} settled via ${order.paymentMode || 'Cash'}`
+      : `Bill ${billNumDisplay} of ₹${order.total || 0} settled via ${order.paymentMode || 'Cash'} (${order.billType || 'Takeaway'})`;
+
+    emitNotification(
+      req,
+      notifTitle,
+      notifMessage,
+      'success',
+      ['Admin', 'Manager', 'Cashier', 'Captain'],
+      {
+        orderId: order._id,
+        billNumber: order.billNumber,
+        type: 'bill_settled',
+        tableNo: order.tableNo,
+        total: order.total,
+        paymentMode: order.paymentMode,
+        billType: order.billType,
+        shopName
+      }
+    );
     
     // Free up the table in DB in background
     if (order.billType === 'Dine-In') {

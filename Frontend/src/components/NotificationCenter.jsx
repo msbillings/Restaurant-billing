@@ -115,6 +115,10 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
                 icon = ChefHat;
                 color = 'text-orange-600';
                 bg = 'bg-orange-50';
+              } else if (n.data?.type === 'bill_settled' || (n.title && (n.title.toLowerCase().includes('settle') || n.title.toLowerCase().includes('bill')))) {
+                icon = Receipt;
+                color = 'text-emerald-600';
+                bg = 'bg-emerald-50';
               }
 
               return {
@@ -284,7 +288,8 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
       list = list.filter(n => {
         const title = (n.title || '').toLowerCase();
         const msg = (n.message || '').toLowerCase();
-        return title.includes('bill') || title.includes('payment') || msg.includes('pay the bill');
+        const type = (n.data?.type || n.type || '').toLowerCase();
+        return title.includes('bill') || title.includes('payment') || title.includes('settle') || msg.includes('pay the bill') || type.includes('bill') || type.includes('settle');
       });
     } else if (activeTab === 'broadcasts') {
       list = list.filter(n => n.type === 'broadcast');
@@ -402,7 +407,30 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
           </div> :
 
         allNotifications.map((notif) => {
-          const Icon = notif.icon || Bell;
+          let Icon = notif.icon || Bell;
+          let notifBg = notif.bg || 'bg-blue-50';
+          let notifColor = notif.color || 'text-blue-500';
+
+          if (!notif.icon) {
+            if (notif.type === 'error' || notif.data?.type === 'cancel_item_request') {
+              Icon = AlertTriangle;
+              notifBg = 'bg-red-50';
+              notifColor = 'text-red-500';
+            } else if (notif.data?.type === 'service_request') {
+              Icon = UserCheck;
+              notifBg = notif.message === 'Pay the Bill' ? 'bg-amber-50' : 'bg-blue-50';
+              notifColor = notif.message === 'Pay the Bill' ? 'text-amber-600' : 'text-blue-600';
+            } else if (notif.data?.type === 'kot_update' || (notif.title && notif.title.includes('Order'))) {
+              Icon = ChefHat;
+              notifBg = 'bg-orange-50';
+              notifColor = 'text-orange-600';
+            } else if (notif.data?.type === 'bill_settled' || (notif.title && (notif.title.toLowerCase().includes('settle') || notif.title.toLowerCase().includes('bill')))) {
+              Icon = Receipt;
+              notifBg = 'bg-emerald-50';
+              notifColor = 'text-emerald-600';
+            }
+          }
+
           const isBroadcast = notif.type === 'broadcast';
           // Only Admin/Manager can mark notifications as read — all other roles always see unread state
           const isAdmin = userRole === 'Admin' || userRole === 'Manager';
@@ -416,7 +444,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
 
           return (
             <div key={notif.id} className={`${cardClass} p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border flex gap-2 sm:gap-3.5 items-start transition-all shadow-xs w-full max-w-full overflow-hidden`}>
-                <div className={`p-1.5 sm:p-2.5 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notif.bg} ${notif.color}`} shrink-0`}>
+                <div className={`p-1.5 sm:p-2.5 rounded-xl ${isRead ? 'bg-emerald-100 text-emerald-700' : `${notifBg} ${notifColor}`} shrink-0`}>
                   <Icon size={16} className="sm:hidden" />
                   <Icon size={22} className="hidden sm:block" />
                 </div>

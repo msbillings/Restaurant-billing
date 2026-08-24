@@ -6,6 +6,19 @@ import { Capacitor } from '@capacitor/core';
 export const isCapacitorApp = () => Capacitor.isNativePlatform();
 
 /**
+ * Returns true when running inside Electron Desktop App (.exe).
+ */
+export const isElectronApp = () => {
+    if (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().includes('electron')) {
+        return true;
+    }
+    if (typeof window !== 'undefined' && (!!window.electronAPI || window.location.protocol === 'file:')) {
+        return true;
+    }
+    return false;
+};
+
+/**
  * Normalize and clean API URLs so there are never trailing slashes or duplicate /api/api
  */
 export const cleanApiUrl = (url) => {
@@ -30,7 +43,7 @@ export const cleanSuperadminUrl = (url) => {
 
 export const getApiUrl = () => {
     // 1. Electron Desktop EXE — always use localhost backend
-    if (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')) {
+    if (isElectronApp()) {
         return 'http://127.0.0.1:5002/api';
     }
 
@@ -89,7 +102,16 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
-    // 1. Android APK (Capacitor Native) -> ALWAYS route to live cloud API
+    // 1. If running in Electron Desktop App (.exe) -> SuperAdmin is the live cloud server
+    if (isElectronApp()) {
+        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
+        if (envUrl && envUrl.startsWith('https://')) {
+            return cleanSuperadminUrl(envUrl);
+        }
+        return 'https://restaurant-billing-apk.vercel.app';
+    }
+
+    // 2. Android APK (Capacitor Native) -> ALWAYS route to live cloud API
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
@@ -99,7 +121,7 @@ export const getSuperadminApiUrl = () => {
     }
 
     const host = typeof window !== 'undefined' ? window.location.hostname : '';
-    // 2. If running on Vercel or any cloud HTTPS deployment
+    // 3. If running on Vercel or any cloud HTTPS deployment
     if (host && (host.includes('vercel.app') || (typeof window !== 'undefined' && window.location.protocol === 'https:'))) {
         let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
@@ -108,20 +130,12 @@ export const getSuperadminApiUrl = () => {
         return 'https://restaurant-billing-apk.vercel.app';
     }
 
-    // 3. Local Development (localhost / 127.0.0.1) -> route to local SuperAdmin server (port 4001)
-    if (host === 'localhost' || host === '127.0.0.1' || host === '') {
-        return 'http://localhost:4001';
-    }
-
+    // 4. Default: Live production cloud SuperAdmin server
     let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
-    if (envUrl) {
-        if (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
-             return cleanSuperadminUrl(envUrl.replace(/localhost|127\.0\.0\.1/, host || '127.0.0.1'));
-        }
+    if (envUrl && envUrl.startsWith('https://')) {
         return cleanSuperadminUrl(envUrl);
     }
 
-    // Default to the production live backend API
     return 'https://restaurant-billing-apk.vercel.app';
 };
 

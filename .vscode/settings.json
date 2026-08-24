@@ -1,3 +1,27 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "java.configuration.updateBuildConfiguration": "disabled",
+    "java.import.gradle.enabled": false,
+    "java.import.gradle.wrapper.enabled": false,
+    "java.import.generatesMetadataFilesAtProjectRoot": false,
+    "java.project.importOnFirstTimeStartup": "disabled",
+    "java.autobuild.enabled": false,
+    "gradle.autoDetect": "off",
+    "gradle.nestedProjects": false,
+    "gradle.buildServer.enabled": "off",
+    "java.server.launchMode": "LightWeight",
+    "java.project.resourceFilters": [
+        "node_modules",
+        ".git",
+        "Frontend/node_modules",
+        "Frontend/android",
+        "Desktop/node_modules",
+        "Desktop/backend",
+        "Backend/node_modules"
+    ],
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.git/**": true,
+        "**/Frontend/android/**": true,
+        "**/.gradle/**": true
+    }
 }
