@@ -42,4 +42,9 @@ const customerSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Indexes for fast customer search and leaderboards
+customerSchema.index({ phone: 1 });
+customerSchema.index({ lastVisit: -1 });
+customerSchema.index({ totalSpend: -1 });
+
 export default mongoose.model('Customer', customerSchema);

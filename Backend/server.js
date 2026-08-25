@@ -24,6 +24,7 @@ import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import compression from 'compression';
 
 // __dirname is not available in ES modules — polyfill it
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +33,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
+app.use(compression());
 const server = http.createServer(app);
 app.set('trust proxy', 1); // Required for Render.com / Vercel reverse proxy rate limiting
 
@@ -230,9 +232,7 @@ mongoose.set('strictQuery', true);
 
 app.use(hpp());
 
-// Enable Gzip compression for better performance
-import compression from 'compression';
-app.use(compression());
+
 
 // Health check route
 app.get('/', (req, res) => {
@@ -376,6 +376,7 @@ import clientRoutes from './routes/clientRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
+import { globalErrorHandler } from './middleware/errorHandler.js';
 
 app.use('/api/menu', menuRoutes);
 app.use('/api/bills', billRoutes);
@@ -407,6 +408,10 @@ app.use('/api/cameras', cameraRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
+
+// --- GLOBAL ERROR HANDLER ---
+// Must be placed after all API route definitions
+app.use(globalErrorHandler);
 
 // Serve AI Face Detection models statically over HTTP with CORS
 const possibleModelPaths = [

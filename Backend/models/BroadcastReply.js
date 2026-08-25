@@ -33,4 +33,6 @@ const broadcastReplySchema = new mongoose.Schema({
   }
 });
 
+broadcastReplySchema.index({ broadcastId: 1, createdAt: -1 });
+
 export default mongoose.models.BroadcastReply || mongoose.model('BroadcastReply', broadcastReplySchema);

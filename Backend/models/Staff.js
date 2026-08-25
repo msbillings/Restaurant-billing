@@ -55,4 +55,8 @@ const staffSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Indexes for fast staff lookups and attendance history
+staffSchema.index({ status: 1, role: 1 });
+staffSchema.index({ 'attendance.date': -1 });
+
 export default mongoose.model('Staff', staffSchema);

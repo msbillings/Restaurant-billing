@@ -43,4 +43,7 @@ const inventoryItemSchema = new mongoose.Schema({
   timestamps: true
 });
 
+inventoryItemSchema.index({ name: 1 });
+inventoryItemSchema.index({ currentStock: 1, minStockAlert: 1 }); // For low stock alerts
+
 export default mongoose.model('InventoryItem', inventoryItemSchema);

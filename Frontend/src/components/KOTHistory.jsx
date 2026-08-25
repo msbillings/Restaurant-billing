@@ -192,8 +192,14 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       
       if (isCancelled) {
         itemMap[key].isCancelled = true;
+        const cancelQty = Math.max(1, parseInt(i.cancelledQuantity || i.reducedQuantity || (qty === 0 ? 1 : qty), 10));
+        itemMap[key].cancelledQuantity = Math.max(itemMap[key].cancelledQuantity || 0, cancelQty);
       } else {
         itemMap[key].quantity += qty;
+        const itemReduced = Math.max(0, parseInt(i.reducedQuantity || i.cancelledQuantity || 0, 10));
+        if (itemReduced > 0) {
+          itemMap[key].reducedQuantity = Math.max(itemMap[key].reducedQuantity || 0, itemReduced);
+        }
         const units = i.unitStatuses && Array.isArray(i.unitStatuses) && i.unitStatuses.length === qty && qty > 0
           ? i.unitStatuses
           : Array.from({ length: qty }, () => i.status || 'Pending');
@@ -207,8 +213,12 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
     if (activeItems.length === 0) return 'No active items';
 
     const summary = activeItems.map((i) => {
-      if (i.isCancelled && i.quantity === 0) return `0x ${t(i.name)} (${t("Cancelled")})`;
+      if (i.isCancelled && i.quantity === 0) {
+        const cQty = i.cancelledQuantity || 1;
+        return `${cQty}x ${t(i.name)} (${t("Cancelled")})`;
+      }
       const qty = i.quantity;
+      const reducedSuffix = i.reducedQuantity > 0 ? ` (-${i.reducedQuantity}x ${t("Reduced")})` : '';
       const units = i.unitStatuses;
       const prep = units.filter(s => s === 'Ready' || s === 'Prepared').length;
       const cook = units.filter(s => s === 'Preparing').length;
@@ -219,9 +229,9 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         if (prep > 0) parts.push(`${prep} Prepared`);
         if (cook > 0) parts.push(`${cook} Cooking`);
         if (pend > 0) parts.push(`${pend} Pending`);
-        return `${qty}x ${t(i.name)} (${parts.join(', ')})`;
+        return `${qty}x ${t(i.name)}${reducedSuffix} (${parts.join(', ')})`;
       }
-      return `${qty}x ${t(i.name)} [${t(i.status || 'Pending')}]`;
+      return `${qty}x ${t(i.name)}${reducedSuffix} [${t(i.status || 'Pending')}]`;
     }).join(', ');
 
     return summary.length > 90 ? summary.substring(0, 87) + '...' : summary;

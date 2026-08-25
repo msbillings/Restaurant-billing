@@ -38,4 +38,7 @@ const stockLogSchema = new mongoose.Schema({
   timestamps: true
 });
 
+stockLogSchema.index({ createdAt: -1 });
+stockLogSchema.index({ item: 1, createdAt: -1 });
+
 export default mongoose.model('StockLog', stockLogSchema);

@@ -1,31 +1,25 @@
 import express from 'express';
 const router = express.Router();
+
 import { 
-  getActiveOrder, 
-  saveOrder, 
-  generateBill, 
-  settleBill, 
-  getBills, 
-  getBillById, 
-  deleteBill, 
-  getOpenOrders,
-  getDailyStats,
-  generateKOT,
-  getTodayKOTs,
-  getActiveKOTs,
-  updateKOTItemStatus,
-  reopenOrder,
-  cancelOrder,
-  refundOrder,
-  transferTable,
-  mergeTableOrders,
-  getEditedBills,
-  resolveItemCancel,
-  updateItemPrepTime,
-  getActiveNotifications,
-  deleteNotification,
-  deleteAllNotifications
-} from '../controllers/billController.js';
+  getActiveOrder, saveOrder, generateBill, settleBill, getOpenOrders, reopenOrder, cancelOrder, refundOrder 
+} from '../controllers/orderController.js';
+import { 
+  generateKOT, getTodayKOTs, getActiveKOTs, updateKOTItemStatus, updateItemPrepTime, resolveItemCancel 
+} from '../controllers/kotController.js';
+import { 
+  transferTable, mergeTableOrders 
+} from '../controllers/tableOrderController.js';
+import { 
+  getBills, getBillById, deleteBill, getEditedBills 
+} from '../controllers/billHistoryController.js';
+import { 
+  getDailyStats 
+} from '../controllers/billStatsController.js';
+import { 
+  getActiveNotifications, deleteNotification, deleteAllNotifications 
+} from '../controllers/notificationController.js';
+
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 // GET routes - authenticated users only
@@ -46,8 +40,8 @@ router.post('/generate/:id', authenticateToken, generateBill);
 router.post('/reopen/:id', authenticateToken, reopenOrder);
 router.post('/cancel/:id', authenticateToken, cancelOrder);
 router.post('/settle/:id', authenticateToken, settleBill);
-router.post('/transfer/:id', transferTable);
-router.post('/merge', mergeTableOrders);
+router.post('/transfer/:id', authenticateToken, transferTable);
+router.post('/merge', authenticateToken, mergeTableOrders);
 router.post('/kot/:id', authenticateToken, generateKOT);
 router.post('/kot/item/status', authenticateToken, updateKOTItemStatus);
 router.post('/kot/item/prep-time', authenticateToken, updateItemPrepTime);

@@ -39,4 +39,6 @@ const broadcastSchema = new mongoose.Schema({
   }
 });
 
+broadcastSchema.index({ createdAt: -1 });
+
 export default mongoose.models.Broadcast || mongoose.model('Broadcast', broadcastSchema);

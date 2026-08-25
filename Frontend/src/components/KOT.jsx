@@ -94,6 +94,11 @@ const KOT = ({ order, onClose }) => {
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
             </div>
             <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
+            {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
+              <div className="text-base font-bold text-gray-900" style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
+                {t("Queue No:")} #{order.tokenNo || order.queueNumber || order.kotNumber?.replace(/[^0-9]/g, '') || '1'}
+              </div>
+            )}
             <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{order.billType || order.orderType || 'Dine In'}</div>
             {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No:")}{order.tableNo}</div>}
           </div>
@@ -110,10 +115,9 @@ const KOT = ({ order, onClose }) => {
           <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
 
           {/* Items Header - Row layout */}
-          <div className="flex w-full mb-1" style={{ display: 'flex', width: '100%', marginBottom: '4px' }}>
+          <div className="flex w-full mb-1 font-bold border-b border-black pb-1" style={{ display: 'flex', width: '100%', marginBottom: '4px', borderBottom: '1px solid black', paddingBottom: '2px', fontWeight: 'bold' }}>
             <div className="flex-1 text-left" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t("Item")}</div>
-            <div className="w-16 text-center shrink-0" style={{ width: '64px', textAlign: 'center', flexShrink: 0 }}>{t("Special")}<br />{t("Note")}</div>
-            <div className="w-8 text-center shrink-0 self-end" style={{ width: '32px', textAlign: 'center', flexShrink: 0, alignSelf: 'flex-end' }}>{t("Qty.")}</div>
+            <div className="w-12 text-right shrink-0" style={{ width: '48px', textAlign: 'right', flexShrink: 0 }}>{t("Qty.")}</div>
           </div>
 
           {/* Items List */}
@@ -121,17 +125,25 @@ const KOT = ({ order, onClose }) => {
             {order.items && order.items.length > 0 ?
             order.items.map((item, idx) => {
               const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+              const isReduced = !isCancelled && (item.reducedQuantity > 0);
+              const cancelCount = item.cancelledQuantity || item.quantity || 1;
               return (
-                <div key={idx} className="flex w-full items-start mb-1" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', marginBottom: '4px' }}>
-                  <div className={`flex-1 text-left pr-1 break-words ${isCancelled ? 'line-through' : ''}`} style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none' }}>
-                    {item.name || 'Unknown Item'} {isCancelled ? '(CANCELLED)' : ''}
+                <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
+                  <div className="flex w-full items-start justify-between">
+                    <div className={`flex-1 text-left pr-2 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '8px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
+                      {item.name || 'Unknown Item'}
+                      {isCancelled && <span className="text-xs ml-1 font-black text-red-600" style={{ fontSize: '11px', marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
+                      {isReduced && <span className="text-xs ml-1 font-black text-red-500" style={{ fontSize: '11px', marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
+                    </div>
+                    <div className={`w-12 text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '48px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
+                      {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
+                    </div>
                   </div>
-                  <div className="w-16 text-center text-gray-700 shrink-0" style={{ width: '64px', textAlign: 'center', color: '#374151', flexShrink: 0 }}>
-                    {item.specialNote ? item.specialNote : '--'}
-                  </div>
-                  <div className={`w-8 text-center shrink-0 ${isCancelled ? 'line-through' : ''}`} style={{ width: '32px', textAlign: 'center', flexShrink: 0, textDecoration: isCancelled ? 'line-through' : 'none' }}>
-                    {isCancelled ? 0 : (item.quantity || 0)}
-                  </div>
+                  {item.specialNote && (
+                    <div className="text-xs text-gray-700 italic mt-0.5 pl-2" style={{ fontSize: '11px', color: '#374151', fontStyle: 'italic', paddingLeft: '8px', marginTop: '2px' }}>
+                      * {item.specialNote}
+                    </div>
+                  )}
                 </div>
               );
             }) :

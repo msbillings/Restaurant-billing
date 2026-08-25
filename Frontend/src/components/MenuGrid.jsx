@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronLeft, ChevronRight, Star, X, ChevronDown, Image as ImageIcon,
-Pizza, Sandwich, UtensilsCrossed, Flame, Gift, Menu as MenuIcon, Utensils,
-Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus, Loader2, RefreshCw } from
-'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Search, ChevronLeft, ChevronRight, Star, X, ChevronDown, Image as ImageIcon,
+  Pizza, Sandwich, UtensilsCrossed, Flame, Gift, Menu as MenuIcon, Utensils,
+  Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus, Loader2, RefreshCw
+} from
+  'lucide-react';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
@@ -28,12 +30,12 @@ const getCategoryIcon = (catName, isSelected = false) => {
   // Generate a deterministic random icon and color for unhandled categories
   const icons = [Utensils, Cookie, Star, Smile, Flame, Popcorn, Soup, Pizza, Sandwich, Scroll, Beef, Gift, UtensilsCrossed];
   const colors = ['text-red-500', 'text-blue-500', 'text-green-500', 'text-yellow-500', 'text-purple-500', 'text-pink-500', 'text-indigo-500', 'text-teal-500', 'text-orange-500', 'text-cyan-500'];
-  
+
   let hash = 0;
   for (let i = 0; i < catName.length; i++) {
     hash = catName.charCodeAt(i) + ((hash << 5) - hash);
   }
-  
+
   const IconComponent = icons[Math.abs(hash) % icons.length];
   const colorClass = colors[Math.abs(hash) % colors.length];
 
@@ -58,7 +60,7 @@ const formatImageUrl = (url) => {
       const urlObj = new URL(trimmed);
       const extracted = urlObj.searchParams.get('mediaurl');
       if (extracted) trimmed = extracted;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
@@ -66,22 +68,63 @@ const formatImageUrl = (url) => {
   }
   if (/^[A-Za-z0-9+/=]{30,}$/.test(trimmed) || trimmed.startsWith('iVBOR') || trimmed.startsWith('/9j/') || trimmed.startsWith('R0lGOD') || trimmed.startsWith('UklGR')) {
     let mime = 'jpeg';
-    if (trimmed.startsWith('iVBOR')) mime = 'png';else
-    if (trimmed.startsWith('R0lGOD')) mime = 'gif';else
-    if (trimmed.startsWith('UklGR')) mime = 'webp';
+    if (trimmed.startsWith('iVBOR')) mime = 'png'; else
+      if (trimmed.startsWith('R0lGOD')) mime = 'gif'; else
+        if (trimmed.startsWith('UklGR')) mime = 'webp';
     return `data:image/${mime};base64,${trimmed}`;
   }
   return trimmed;
 };
 
-import { useLanguage } from "../context/LanguageContext";
+// Lazy Menu Image Component with skeleton shimmer loader and smooth fade-in
+const LazyMenuImage = ({ src, alt, className }) => {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
-const MenuGrid = ({ 
-  onSelectItem, 
-  searchTerm = '', 
-  onSearchChange, 
-  isLayoutLocked = false, 
-  onNavigate, 
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+  }, [src]);
+
+  if (!src || error) {
+    return (
+      <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-gray-400 border-b border-gray-100 border-dashed">
+        <ImageIcon size={22} className="opacity-30 mb-1" />
+        <span className="text-[10px] font-medium opacity-50">No Image</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full relative overflow-hidden bg-gray-100">
+      {/* Animated shimmer skeleton while loading */}
+      {!loaded && (
+        <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse flex items-center justify-center">
+          <UtensilsCrossed size={16} className="text-gray-300 animate-spin" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+        className={`w-full h-full object-cover transition-all duration-500 ease-out ${loaded ? 'opacity-100 scale-100 filter-none' : 'opacity-0 scale-95 blur-xs'
+          } ${className || ''}`}
+      />
+    </div>
+  );
+};
+
+import { useLanguage } from "../context/LanguageContext";
+import useDebounce from "../hooks/useDebounce";
+
+const MenuGrid = ({
+  onSelectItem,
+  searchTerm = '',
+  onSearchChange,
+  isLayoutLocked = false,
+  onNavigate,
   userRole = 'Admin',
   foodTypeFilter: externalFoodTypeFilter,
   onFoodTypeFilterChange
@@ -96,12 +139,32 @@ const MenuGrid = ({
   const setFoodTypeFilter = onFoodTypeFilterChange || setInternalFoodTypeFilter;
   const [sortBy, setSortBy] = useState('latest');
   const [selectedItemVariants, setSelectedItemVariants] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(30);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const gridContainerRef = useRef(null);
   const [showImages, setShowImages] = useState(() => {
     const saved = localStorage.getItem('menuGrid_showImages');
     return saved !== null ? JSON.parse(saved) : true;
   });
   const scrollContainerRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  // ── Mobile Infinite Scroll ──────────────────────────────────────────────
+  const MOBILE_BATCH_SIZE = 20;
+  const [mobileLoadedCount, setMobileLoadedCount] = useState(MOBILE_BATCH_SIZE);
+  const [isMobileLoadingMore, setIsMobileLoadingMore] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
+  const sentinelRef = useRef(null);
+
+  // Track viewport size
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(260);
   const isResizingLeft = useRef(false);
@@ -153,9 +216,8 @@ const MenuGrid = ({
     const handleGlobalKeyDown = (e) => {
       // Ignore if user is already typing in an input or textarea
       if (
-      document.activeElement && (
-      document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA'))
-      {
+        document.activeElement && (
+          document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
         return;
       }
 
@@ -239,7 +301,7 @@ const MenuGrid = ({
       if (cachedCats && Array.isArray(cachedCats) && cachedCats.length > 0) {
         setCategories(cachedCats);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // 2. Background Revalidation
     fetchCategories();
@@ -256,48 +318,125 @@ const MenuGrid = ({
   });
   const categoryOptions = ['All', '⭐ Favourites', ...(validCategories.length > 0 ? validCategories : categories).map((cat) => cat.name)];
 
-  const filteredItems = items.filter((item) => {
-    let matchesCategory = false;
-    if (category === 'All') {
-      matchesCategory = true;
-    } else if (category === '⭐ Favourites') {
-      matchesCategory = item.isFavorite === true;
-    } else {
-      const itemCatName = item.category?.name || (typeof item.category === 'string' ? item.category : '');
-      const itemCatId = item.category?._id || item.category;
-      const matchedCat = categories.find(c => c.name === category);
-      matchesCategory = itemCatName === category || (matchedCat && (itemCatId === matchedCat._id || itemCatName === matchedCat.name));
-    }
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredItems = React.useMemo(() => {
+    const term = (debouncedSearchTerm || '').trim().toLowerCase();
+    const isSearching = term.length > 0;
 
-    const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
-    const matchesFoodType = foodTypeFilter === 'all' ||
-      (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) ||
-      (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
+    return items.filter((item) => {
+      let matchesCategory = false;
+      // If user is searching, find all matching items across the whole restaurant catalog!
+      if (isSearching) {
+        matchesCategory = true;
+      } else if (category === 'All') {
+        matchesCategory = true;
+      } else if (category === '⭐ Favourites') {
+        matchesCategory = item.isFavorite === true;
+      } else {
+        const itemCatName = item.category?.name || (typeof item.category === 'string' ? item.category : '');
+        const itemCatId = item.category?._id || item.category;
+        const matchedCat = categories.find(c => c.name === category);
+        matchesCategory = itemCatName === category || (matchedCat && (itemCatId === matchedCat._id || itemCatName === matchedCat.name));
+      }
 
-    return matchesCategory && matchesSearch && matchesFoodType;
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case 'latest':
-        return new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0);
-      case 'oldest':
-        return new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0);
-      case 'alphaAsc':
-        return a.name.localeCompare(b.name);
-      case 'alphaDesc':
-        return b.name.localeCompare(a.name);
-      case 'priceAsc':
-        return a.price - b.price;
-      case 'priceDesc':
-        return b.price - a.price;
-      default:
-        return 0;
+      const matchesSearch = !isSearching ||
+        item.name.toLowerCase().includes(term) ||
+        (item.code && item.code.toLowerCase().includes(term)) ||
+        (item.description && item.description.toLowerCase().includes(term)) ||
+        (item.category?.name && item.category.name.toLowerCase().includes(term));
+
+      const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+      const matchesFoodType = foodTypeFilter === 'all' ||
+        (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) ||
+        (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
+
+      return matchesCategory && matchesSearch && matchesFoodType;
+    }).sort((a, b) => {
+      switch (sortBy) {
+        case 'latest':
+          return new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0);
+        case 'oldest':
+          return new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0);
+        case 'alphaAsc':
+          return a.name.localeCompare(b.name);
+        case 'alphaDesc':
+          return b.name.localeCompare(a.name);
+        case 'priceAsc':
+          return a.price - b.price;
+        case 'priceDesc':
+          return b.price - a.price;
+        default:
+          return 0;
+      }
+    });
+  }, [items, category, debouncedSearchTerm, foodTypeFilter, sortBy, categories]);
+
+  // IntersectionObserver for mobile sentinel (placed AFTER filteredItems is defined)
+  useEffect(() => {
+    if (!isMobile) return;
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && mobileLoadedCount < filteredItems.length) {
+          setIsMobileLoadingMore(true);
+          // Slight delay for smooth UX
+          setTimeout(() => {
+            setMobileLoadedCount((prev) => Math.min(prev + MOBILE_BATCH_SIZE, filteredItems.length));
+            setIsMobileLoadingMore(false);
+          }, 400);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [isMobile, mobileLoadedCount, filteredItems.length]);
+
+  // Reset to page 1 (desktop) and mobileLoadedCount (mobile) when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setMobileLoadedCount(MOBILE_BATCH_SIZE);
+    if (gridContainerRef.current) {
+      gridContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  });
+  }, [category, foodTypeFilter, debouncedSearchTerm, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / (itemsPerPage === 'all' ? (filteredItems.length || 1) : itemsPerPage)));
+
+  const paginatedItems = React.useMemo(() => {
+    if (itemsPerPage === 'all') return filteredItems;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredItems.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredItems, currentPage, itemsPerPage]);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      if (gridContainerRef.current) {
+        gridContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col lg:flex-row h-full bg-white overflow-hidden w-full">
+      <style>{`
+        @keyframes menuCardCascade {
+          0% {
+            opacity: 0;
+            transform: translateY(8px) scale(0.97);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .menu-card-item {
+          animation: menuCardCascade 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+      `}</style>
       {/* Mobile & Tablet Top Category Scrollbar (Visible on screens < 1024px) */}
       <div className="flex lg:hidden overflow-x-auto category-scroll py-2 px-3 bg-gray-50 border-b border-gray-200 shrink-0 gap-2 w-full no-scrollbar">
         {categoryOptions.filter(cat => cat !== '⭐ Favourites').map((cat) => {
@@ -306,11 +445,10 @@ const MenuGrid = ({
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all shadow-xs ${
-                isSelected
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all shadow-xs ${isSelected
                   ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-sm'
                   : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-              }`}>
+                }`}>
               {getCategoryIcon(cat, isSelected)}
               <span>{t(cat)}</span>
             </button>
@@ -341,44 +479,42 @@ const MenuGrid = ({
           })}
         </div>
       </div>
-      
+
       {/* Left Sidebar Drag Handle (Desktop only) */}
       {!isLayoutLocked && (
         <div
           onMouseDown={startResizingLeft}
           className="hidden lg:block w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative" />
       )}
-      
+
       {/* Items Grid Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
-        
+
         {/* Filter & Sort Controls Row */}
         <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 py-2 px-3 gap-2 shrink-0 flex-nowrap">
           {/* Mobile Favorite Items Toggle Button (Left side on mobile) */}
           <button
             type="button"
             onClick={() => setCategory(category === '⭐ Favourites' ? 'All' : '⭐ Favourites')}
-            className={`flex sm:hidden items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${
-              category === '⭐ Favourites'
+            className={`flex sm:hidden items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${category === '⭐ Favourites'
                 ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                 : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200 shadow-xs'
-            }`}
+              }`}
           >
             <Star size={13} className={category === '⭐ Favourites' ? 'fill-white text-white' : 'text-amber-500 fill-amber-500'} />
             <span>{t("Favorite Items")}</span>
           </button>
 
-          {/* Veg / Non-Veg / All Segmented Filter Tabs - VISIBLE ON DESKTOP/TABLET (sm+), HIDDEN ON MOBILE */}
+          {/* Veg / Non-Veg / All Segmented Filter Tabs */}
           <div className="hidden sm:flex items-center bg-white p-1 rounded-xl border border-gray-200 shadow-xs shrink-0 gap-1">
             {/* All */}
             <button
               type="button"
               onClick={() => setFoodTypeFilter('all')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                foodTypeFilter === 'all'
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'all'
                   ? 'bg-gray-900 text-white shadow-xs'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
+                }`}
             >
               <span>{t("All")}</span>
             </button>
@@ -387,11 +523,10 @@ const MenuGrid = ({
             <button
               type="button"
               onClick={() => setFoodTypeFilter('veg')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                foodTypeFilter === 'veg'
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'veg'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-emerald-700 hover:bg-emerald-50'
-              }`}
+                }`}
             >
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
               <span>{t("Veg")}</span>
@@ -401,11 +536,10 @@ const MenuGrid = ({
             <button
               type="button"
               onClick={() => setFoodTypeFilter('non-veg')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                foodTypeFilter === 'non-veg'
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'non-veg'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-rose-700 hover:bg-rose-50'
-              }`}
+                }`}
             >
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
               <span>{t("Non-Veg")}</span>
@@ -414,7 +548,7 @@ const MenuGrid = ({
 
           {/* Right Controls: Sort, Add Item, Image Toggle */}
           <div className="flex items-center gap-2 shrink-0 ml-auto justify-end">
-            <select 
+            <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
               className="h-9 px-2.5 sm:px-3 border border-gray-200 rounded-xl bg-white text-gray-700 text-xs font-bold focus:outline-none focus:border-red-500 transition-all shadow-xs cursor-pointer"
@@ -437,14 +571,13 @@ const MenuGrid = ({
                 <span className="hidden sm:inline">{t("Add Item")}</span>
               </button>
             )}
-            
+
             <button
               onClick={() => setShowImages(!showImages)}
-              className={`flex items-center justify-center h-9 px-2.5 sm:px-3.5 rounded-xl border shadow-xs active:scale-95 transition-all gap-1.5 font-bold text-xs cursor-pointer ${
-                showImages 
-                  ? 'bg-red-50 text-red-600 border-red-200' 
+              className={`flex items-center justify-center h-9 px-2.5 sm:px-3.5 rounded-xl border shadow-xs active:scale-95 transition-all gap-1.5 font-bold text-xs cursor-pointer ${showImages
+                  ? 'bg-red-50 text-red-600 border-red-200'
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}
+                }`}
               title={showImages ? t('Images: On') : t('Images: Off')}
             >
               <ImageIcon size={15} />
@@ -453,7 +586,8 @@ const MenuGrid = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 relative bg-gray-50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {/* Scrollable Items Grid */}
+        <div ref={gridContainerRef} className="flex-1 overflow-y-auto p-4 relative bg-gray-50 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {/* Dynamic Loading State with Animated Spinner & Pulse Skeletons */}
           {loading && items.length === 0 ? (
             <div className="flex flex-col items-center justify-center min-h-[360px] w-full">
@@ -484,16 +618,16 @@ const MenuGrid = ({
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(155px,1fr))] gap-3 sm:gap-4">
-              {filteredItems.map((item) => {
+              {/* Mobile: show progressively loaded items; Desktop: show paginated items */}
+              {(isMobile ? filteredItems.slice(0, mobileLoadedCount) : paginatedItems).map((item, idx) => {
                 const isAvailable = item.isAvailable !== false; // default to true if undefined
                 const dotColor = item.type === 'veg' ? 'bg-green-500 shadow-sm border border-green-200' : item.type === 'non-veg' ? 'bg-red-500 shadow-sm border border-red-200' : 'bg-gray-300';
 
                 return (
                   <div
                     key={item._id}
-                    className={`bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${
-                    isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${
-                    showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
+                    style={{ animationDelay: `${Math.min(idx * 25, 300)}ms` }}
+                    className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
                     onClick={() => {
                       if (!isAvailable) return;
                       if (item.variants && item.variants.length > 0) {
@@ -502,42 +636,36 @@ const MenuGrid = ({
                         onSelectItem(item);
                       }
                     }}>
-                    
+
                     <div className={`flex items-start justify-between w-full h-4 z-[2] absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
                       <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
-                      
+
                       <div className="flex gap-1.5 items-center">
                         {!isAvailable && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shadow-sm ${showImages ? 'text-white bg-red-500/90 backdrop-blur-sm' : 'text-red-500 bg-red-50'}`}>{t("Out of Stock")}</span>}
-                        
+
                         <button
                           onClick={(e) => handleToggleFavorite(e, item)}
-                          className={`p-1 rounded-full backdrop-blur-sm transition-all shadow-sm flex items-center justify-center ${
-                          item.isFavorite ?
-                          'bg-yellow-50 text-yellow-500 border border-yellow-200' :
-                          showImages ? 'bg-black/20 text-white hover:bg-black/40 border border-white/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'}`
+                          className={`p-1 rounded-full backdrop-blur-sm transition-all shadow-sm flex items-center justify-center ${item.isFavorite ?
+                              'bg-yellow-50 text-yellow-500 border border-yellow-200' :
+                              showImages ? 'bg-black/20 text-white hover:bg-black/40 border border-white/20' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 border border-gray-200'}`
                           }>
                           <Star size={12} className={item.isFavorite ? "fill-yellow-500" : ""} />
                         </button>
                       </div>
                     </div>
-                    
-                    {showImages && item.image ?
-                      <div className="w-full h-22.5 shrink-0 bg-gray-100 relative">
-                        <img src={formatImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent"></div>
-                      </div> :
-                      showImages &&
-                      <div className="w-full h-22.5 bg-gray-50 flex flex-col items-center justify-center shrink-0 text-gray-400 border-b border-gray-100 border-dashed">
-                        <ImageIcon size={24} className="opacity-30 mb-1" />
-                        <span className="text-[10px] font-medium opacity-50">{t("No Image")}</span>
+
+                    {showImages && (
+                      <div className="w-full h-22.5 shrink-0 bg-gray-100 relative overflow-hidden">
+                        <LazyMenuImage src={formatImageUrl(item.image)} alt={item.name} />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
                       </div>
-                    }
-                    
+                    )}
+
                     <div className={`flex-1 flex flex-col justify-between ${showImages ? 'p-2.5' : ''}`}>
                       <div className={`flex-1 flex items-center justify-center text-center mt-1 text-[14px] leading-tight ${isAvailable ? 'font-bold text-gray-800' : 'font-medium text-gray-500 line-through'}`}>
                         <span className="line-clamp-2 leading-snug">{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
                       </div>
-                      
+
                       <div className={`flex justify-center w-full ${showImages ? 'mt-1.5' : 'mt-2 mb-0.5'}`}>
                         <span className={`text-[13px] font-black px-3 py-1 rounded-full shadow-sm border ${showImages ? 'bg-orange-50 text-orange-700 border-orange-100' : 'bg-gray-50 text-gray-800 border-gray-100'}`}>
                           ₹{item.price ? `${item.price.toFixed(2)}` : '0.00'}
@@ -580,7 +708,126 @@ const MenuGrid = ({
               )}
             </div>
           )}
+
+          {/* ── Mobile Infinite Scroll Sentinel & Loader ── */}
+          {isMobile && filteredItems.length > 0 && (
+            <>
+              {/* Sentinel: observed to trigger next batch load */}
+              <div ref={sentinelRef} className="h-4 w-full" />
+
+              {/* Spinner while loading next batch */}
+              {isMobileLoadingMore && (
+                <div className="flex items-center justify-center py-4 gap-2">
+                  <Loader2 size={20} className="animate-spin text-red-500" />
+                  <span className="text-xs text-gray-500 font-medium">{t("Loading more...")}</span>
+                </div>
+              )}
+
+              {/* End-of-list message */}
+              {!isMobileLoadingMore && mobileLoadedCount >= filteredItems.length && filteredItems.length > MOBILE_BATCH_SIZE && (
+                <div className="flex items-center justify-center py-4">
+                  <span className="text-[11px] text-gray-400 font-medium px-4 py-1.5 bg-gray-100 rounded-full">
+                    ✓ {t("All")} {filteredItems.length} {t("items loaded")}
+                  </span>
+                </div>
+              )}
+            </>
+          )}
         </div>
+
+        {/* Pagination Navigation Footer Bar — Desktop only (hidden on mobile) */}
+        {filteredItems.length > 0 && (
+          <div className="hidden lg:flex flex-col sm:flex-row items-center justify-between bg-white border-t border-gray-200 py-2.5 px-4 gap-2.5 shrink-0 shadow-xs">
+            {/* Item Count Display */}
+            <div className="text-xs text-gray-500 font-medium">
+              {itemsPerPage === 'all' ? (
+                <span>{t("Showing all")} <strong className="text-gray-800 font-bold">{filteredItems.length}</strong> {t("items")}</span>
+              ) : (
+                <span>
+                  {t("Showing")}{" "}
+                  <strong className="text-gray-800 font-bold">
+                    {Math.min(filteredItems.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredItems.length, currentPage * itemsPerPage)}
+                  </strong>{" "}
+                  {t("of")}{" "}
+                  <strong className="text-gray-800 font-bold">{filteredItems.length}</strong> {t("items")}
+                </span>
+              )}
+            </div>
+
+            {/* Page Navigation Controls */}
+            {itemsPerPage !== 'all' && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                  title={t("Previous Page")}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) {
+                      acc.push('...');
+                    }
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) => {
+                    if (p === '...') {
+                      return <span key={`ellipsis-${idx}`} className="px-1 text-xs text-gray-400 font-bold">...</span>;
+                    }
+                    const isActive = currentPage === p;
+                    return (
+                      <button
+                        type="button"
+                        key={p}
+                        onClick={() => handlePageChange(p)}
+                        className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs ${isActive
+                            ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xs'
+                            : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+                  title={t("Next Page")}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
+
+            {/* Items Per Page Selector */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-600">
+              <span className="hidden sm:inline font-medium">{t("Per Page:")}</span>
+              <select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                  setItemsPerPage(val);
+                  setCurrentPage(1);
+                }}
+                className="h-8 px-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 text-xs font-bold focus:outline-none focus:border-red-500 transition-all cursor-pointer shadow-2xs"
+              >
+                <option value={15}>15</option>
+                <option value={30}>30</option>
+                <option value={60}>60</option>
+                <option value="all">{t("All")}</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Variant Selection Modal */}

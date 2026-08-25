@@ -2,7 +2,7 @@ import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
-import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, ChevronDown, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin, RefreshCw, Loader2, SlidersHorizontal, Clipboard } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, Info, UtensilsCrossed, ChevronRight, ChevronUp, ChevronDown, CheckCircle2, Navigation, Bell, Droplets, CreditCard, Search, Star, ChefHat, Check, MapPin, RefreshCw, Loader2, SlidersHorizontal, Clipboard, Wallet, Receipt, BadgeCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { io } from 'socket.io-client';
 
@@ -536,7 +536,14 @@ const CustomerMenu = () => {
       socket.on('kotUpdated', () => checkOrderStatus());
       socket.on('orderUpdated', () => checkOrderStatus());
       socket.on('newKOT', () => checkOrderStatus());
-      socket.on('billSettled', () => checkOrderStatus());
+      socket.on('billSettled', (data) => {
+        const payMode = data?.order?.paymentMode || data?.bill?.paymentMode || 'Cash';
+        const billNum = data?.billNumber || data?.order?.billNumber || '';
+        const totalAmt = data?.order?.total || data?.bill?.total || '';
+        setServiceMessage(`✅ Payment Completed! Bill ${billNum ? '#' + billNum : ''} of ₹${totalAmt} settled via ${payMode}. Thank you for dining with us! 🎉`);
+        setTimeout(() => setServiceMessage(null), 8000);
+        checkOrderStatus();
+      });
       socket.on('foodReady', () => checkOrderStatus());
       socket.on('prepTimeUpdated', (data) => {
         setServiceMessage(`👨‍🍳 Chef set prep time: ${data.prepTimeMinutes} mins for ${data.itemName || 'your dish'}`);
@@ -1114,16 +1121,30 @@ const CustomerMenu = () => {
         <div className="px-2 sm:px-4 pt-3 pb-2 w-full max-w-3xl mx-auto">
           <div className="bg-white rounded-2xl shadow-md border border-orange-100 overflow-hidden">
             {/* Section header */}
-            <div className="bg-orange-500 px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+            <div className={`px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2 ${
+              activeOrderData.status === 'Paid' ? 'bg-gradient-to-r from-emerald-500 to-green-500' :
+              activeOrderData.status === 'Billed' ? 'bg-gradient-to-r from-purple-500 to-violet-500' :
+              'bg-orange-500'
+            }`}>
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                <ChefHat size={17} className="text-white shrink-0" />
-                <span className="font-black text-xs sm:text-sm text-white whitespace-nowrap">{t("Your Current Order")}</span>
+                {activeOrderData.status === 'Paid' ? <BadgeCheck size={17} className="text-white shrink-0" /> :
+                 activeOrderData.status === 'Billed' ? <Receipt size={17} className="text-white shrink-0" /> :
+                 <ChefHat size={17} className="text-white shrink-0" />}
+                <span className="font-black text-xs sm:text-sm text-white whitespace-nowrap">
+                  {activeOrderData.status === 'Paid' ? t('Payment Completed') :
+                   activeOrderData.status === 'Billed' ? t('Bill Generated') :
+                   t('Your Current Order')}
+                </span>
                 <span className="bg-white/20 text-white text-[10px] sm:text-[11px] font-extrabold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0">
                   {activeOrderData.items.filter(i => !i.isCancelled).length} {t("items")}
                 </span>
               </div>
               <div className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-black shrink-0 whitespace-nowrap ${
-                activeOrderData.kitchenStatus === 'Ready'
+                activeOrderData.status === 'Paid'
+                  ? 'bg-white text-emerald-700'
+                  : activeOrderData.status === 'Billed'
+                  ? 'bg-white/90 text-purple-700'
+                  : activeOrderData.kitchenStatus === 'Ready'
                   ? 'bg-emerald-100 text-emerald-800'
                   : activeOrderData.kitchenStatus === 'Preparing'
                   ? 'bg-amber-100 text-amber-800'
@@ -1132,17 +1153,163 @@ const CustomerMenu = () => {
                   : 'bg-blue-100 text-blue-800'
               }`}>
                 <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${
+                  activeOrderData.status === 'Paid' ? 'bg-emerald-500' :
+                  activeOrderData.status === 'Billed' ? 'bg-purple-500' :
                   activeOrderData.kitchenStatus === 'Ready' ? 'bg-emerald-500' :
                   activeOrderData.kitchenStatus === 'Preparing' ? 'bg-amber-500' :
                   activeOrderData.kitchenStatus === 'Completed' ? 'bg-purple-500' : 'bg-blue-500'
-                } animate-pulse inline-block`}></span>
+                } ${activeOrderData.status === 'Paid' ? '' : 'animate-pulse'} inline-block`}></span>
                 <span className="whitespace-nowrap">
-                  {activeOrderData.kitchenStatus === 'Ready' ? t('Prepared & Ready') :
+                  {activeOrderData.status === 'Paid' ? `✓ ${t('Paid')}${activeOrderData.paymentMode ? ` · ${activeOrderData.paymentMode}` : ''}` :
+                   activeOrderData.status === 'Billed' ? `${t('Bill Generated')}${activeOrderData.billNumber ? ` #${activeOrderData.billNumber}` : ''}` :
+                   activeOrderData.kitchenStatus === 'Ready' ? t('Prepared & Ready') :
                    activeOrderData.kitchenStatus === 'Preparing' ? t('Preparing') :
                    activeOrderData.kitchenStatus === 'Completed' ? t('Bill Generated') : t('Received')}
                 </span>
               </div>
             </div>
+
+            {/* ── ORDER PROGRESS STEPPER ── Color-coded lifecycle tracker */}
+            {(() => {
+              const billStatus = activeOrderData.status;
+              const kStatus = activeOrderData.kitchenStatus;
+              
+              // Determine which step is active (0-indexed)
+              let activeStep = 0;
+              if (billStatus === 'Paid') activeStep = 4;
+              else if (billStatus === 'Billed') activeStep = 3;
+              else if (kStatus === 'Ready') activeStep = 2;
+              else if (kStatus === 'Preparing') activeStep = 1;
+              else activeStep = 0;
+
+              const steps = [
+                { label: t('Ordered'), icon: '📋', color: 'blue' },
+                { label: t('Preparing'), icon: '👨‍🍳', color: 'amber' },
+                { label: t('Ready'), icon: '✅', color: 'emerald' },
+                { label: t('Billed'), icon: '🧾', color: 'purple' },
+                { label: t('Paid'), icon: '💳', color: 'green' },
+              ];
+
+              const colorMap = {
+                blue:    { bg: 'bg-blue-500',    ring: 'ring-blue-200',    line: 'bg-blue-400',    text: 'text-blue-700' },
+                amber:   { bg: 'bg-amber-500',   ring: 'ring-amber-200',   line: 'bg-amber-400',   text: 'text-amber-700' },
+                emerald: { bg: 'bg-emerald-500',  ring: 'ring-emerald-200', line: 'bg-emerald-400', text: 'text-emerald-700' },
+                purple:  { bg: 'bg-purple-500',   ring: 'ring-purple-200',  line: 'bg-purple-400',  text: 'text-purple-700' },
+                green:   { bg: 'bg-green-500',    ring: 'ring-green-200',   line: 'bg-green-400',   text: 'text-green-700' },
+              };
+
+              return (
+                <div className="px-3 sm:px-5 py-3 bg-slate-50/80 border-b border-slate-100">
+                  <div className="flex items-center justify-between relative">
+                    {steps.map((step, idx) => {
+                      const isComplete = idx < activeStep;
+                      const isCurrent = idx === activeStep;
+                      const isPending = idx > activeStep;
+                      const c = colorMap[step.color];
+
+                      return (
+                        <React.Fragment key={idx}>
+                          <div className="flex flex-col items-center z-10" style={{ minWidth: '36px' }}>
+                            <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-black transition-all duration-500 ${
+                              isComplete
+                                ? `${c.bg} text-white shadow-sm`
+                                : isCurrent
+                                ? `${c.bg} text-white ring-4 ${c.ring} shadow-md animate-pulse`
+                                : 'bg-slate-200 text-slate-400'
+                            }`}>
+                              {isComplete ? <Check size={13} strokeWidth={3} /> : <span className="text-[11px]">{step.icon}</span>}
+                            </div>
+                            <span className={`text-[8px] sm:text-[9px] font-bold mt-1 text-center leading-tight whitespace-nowrap ${
+                              isComplete || isCurrent ? c.text : 'text-slate-400'
+                            }`}>
+                              {step.label}
+                            </span>
+                          </div>
+                          {idx < steps.length - 1 && (
+                            <div className="flex-1 h-0.5 mx-0.5 sm:mx-1 rounded-full overflow-hidden bg-slate-200 relative" style={{ marginTop: '-10px' }}>
+                              <div
+                                className={`h-full rounded-full transition-all duration-700 ease-out ${
+                                  idx < activeStep ? colorMap[steps[idx + 1].color].line : 'bg-transparent'
+                                }`}
+                                style={{ width: idx < activeStep ? '100%' : isCurrent ? '0%' : '0%' }}
+                              />
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── PAYMENT INFO BANNER ── Shown when Billed or Paid */}
+            {activeOrderData.status === 'Paid' && (
+              <div className="mx-3 sm:mx-4 mt-2.5 mb-1 rounded-2xl bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 px-3.5 py-3 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <BadgeCheck size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-emerald-800">{t('Payment Settled Successfully')} 🎉</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                      {activeOrderData.billNumber && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <Receipt size={10} /> Bill #{activeOrderData.billNumber}
+                        </span>
+                      )}
+                      {activeOrderData.paymentMode && (
+                        <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                          <Wallet size={10} /> {activeOrderData.paymentMode === 'Mixed' ? t('Split Payment') : activeOrderData.paymentMode}
+                          {activeOrderData.paymentMode === 'UPI' && activeOrderData.upiApp ? ` (${activeOrderData.upiApp})` : ''}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-black text-emerald-700 flex items-center gap-1">
+                        ₹{activeOrderData.total}
+                      </span>
+                      {activeOrderData.paymentMode === 'Mixed' && activeOrderData.splitPayments && (
+                        <span className="text-[10px] text-emerald-500 font-semibold">
+                          ({activeOrderData.splitPayments.cash ? `Cash ₹${activeOrderData.splitPayments.cash}` : ''}
+                          {activeOrderData.splitPayments.upi ? `${activeOrderData.splitPayments.cash ? ' + ' : ''}UPI ₹${activeOrderData.splitPayments.upi}` : ''}
+                          {activeOrderData.splitPayments.card ? `${(activeOrderData.splitPayments.cash || activeOrderData.splitPayments.upi) ? ' + ' : ''}Card ₹${activeOrderData.splitPayments.card}` : ''})
+                        </span>
+                      )}
+                    </div>
+                    {activeOrderData.discount > 0 && (
+                      <p className="text-[10px] text-emerald-500 mt-1 font-semibold">
+                        🏷️ {t('Discount Applied')}: ₹{activeOrderData.discount}
+                        {activeOrderData.discountType === 'percentage' ? ` (${activeOrderData.discountValue}%)` : ''}
+                        {activeOrderData.discountType === 'complimentary' ? ` (${t('Complimentary')})` : ''}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-emerald-500 mt-1 font-semibold">{t('Thank you for dining with us!')} 🙏</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeOrderData.status === 'Billed' && (
+              <div className="mx-3 sm:mx-4 mt-2.5 mb-1 rounded-2xl bg-gradient-to-r from-purple-50 to-violet-50 border border-purple-200 px-3.5 py-3 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Receipt size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-purple-800">{t('Your Bill Has Been Generated')}</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                      {activeOrderData.billNumber && (
+                        <span className="text-[10px] font-bold text-purple-600 flex items-center gap-1">
+                          <Receipt size={10} /> Bill #{activeOrderData.billNumber}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-black text-purple-700">₹{activeOrderData.total}</span>
+                    </div>
+                    <p className="text-[10px] text-purple-500 mt-1 font-semibold">
+                      💳 {t('Please settle at the counter or request your waiter.')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Items list */}
             <div className="divide-y divide-slate-100">
@@ -1153,24 +1320,29 @@ const CustomerMenu = () => {
                 const isPreparing = item.kdsStatus === 'Preparing' || item.status === 'Preparing';
 
                 return (
-                  <div key={item._id || idx} className="flex items-center justify-between px-3.5 sm:px-5 py-2.5 gap-2.5 sm:gap-4">
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-1">
-                      <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-orange-50 text-orange-600 text-xs sm:text-sm font-black flex items-center justify-center shrink-0">
-                        {effectiveQty}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-0.5 whitespace-nowrap">
-                            🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
-                          </span>
-                          {item.specialNote && (
-                            <span className="text-[10px] text-slate-400 truncate">📝 {item.specialNote}</span>
-                          )}
+                  <div key={item._id || idx} className="px-3 sm:px-5 py-2.5">
+                    {/* Top row: Qty badge + Item name + Price */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 flex-1 min-w-0">
+                        <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-orange-50 text-orange-600 text-xs sm:text-sm font-black flex items-center justify-center shrink-0 mt-0.5">
+                          {effectiveQty}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">{item.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-0.5 whitespace-nowrap">
+                              🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
+                            </span>
+                            {item.specialNote && (
+                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">📝 {item.specialNote}</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <span className="text-xs sm:text-sm font-black text-orange-600 shrink-0 whitespace-nowrap mt-0.5">₹{itemTotal}</span>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Bottom row: Status badges */}
+                    <div className="flex items-center gap-1.5 mt-1.5 ml-8 sm:ml-9 flex-wrap">
                       {(() => {
                         const rawEffective = parseInt(effectiveQty || 0, 10) || 0;
                         const safeEffectiveQty = Math.max(0, rawEffective);
@@ -1189,7 +1361,7 @@ const CustomerMenu = () => {
 
                         if (item.cancellationRequested) {
                           return (
-                            <div className="flex items-center gap-1.5">
+                            <>
                               <span className="text-[9px] sm:text-[10px] bg-red-50 text-red-500 border border-red-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">Cancel Pending</span>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
@@ -1198,13 +1370,13 @@ const CustomerMenu = () => {
                               >
                                 ↩️ {t("Withdraw")}
                               </button>
-                            </div>
+                            </>
                           );
                         }
 
                         if (item.cancellationRejected) {
                           return (
-                            <div className="flex items-center gap-1.5">
+                            <>
                               <span className="text-[9px] sm:text-[10px] bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                                 ✕ {t("Cancel Rejected")}
                               </span>
@@ -1219,39 +1391,39 @@ const CustomerMenu = () => {
                                   <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
                                 </span>
                               )}
-                            </div>
+                            </>
                           );
                         }
 
                         if (hasMixedStatus) {
                           return (
-                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                            <>
                               {preparedCount > 0 && (
-                                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
-                                  <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                                <span className="text-[9px] sm:text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 sm:px-2 py-0.5 rounded-full font-black flex items-center gap-0.5 sm:gap-1 shadow-2xs whitespace-nowrap">
+                                  <Check size={9} strokeWidth={3} className="text-emerald-600 shrink-0" />
                                   <span>{preparedCount}x {t("Prepared")}</span>
                                 </span>
                               )}
                               {preparingCount > 0 && (
-                                <span className="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
-                                  <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
+                                <span className="text-[9px] sm:text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 sm:px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 sm:gap-1 shadow-2xs whitespace-nowrap">
+                                  <Loader2 size={9} className="animate-spin text-amber-600 shrink-0" />
                                   <span>{preparingCount}x 👨‍🍳 {t("Preparing")}</span>
                                 </span>
                               )}
                               {pendingCount > 0 && (
-                                <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                <span className="text-[9px] sm:text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 sm:px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 sm:gap-1 shadow-2xs whitespace-nowrap">
                                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                                   <span>{pendingCount}x ⏳ {t("Pending")}</span>
                                 </span>
                               )}
-                            </div>
+                            </>
                           );
                         }
 
                         if (isPrepared) {
                           return (
-                            <span className="text-[10px] sm:text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
-                              <Check size={11} strokeWidth={3} className="text-emerald-600 shrink-0" />
+                            <span className="text-[9px] sm:text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <Check size={10} strokeWidth={3} className="text-emerald-600 shrink-0" />
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}{t("Prepared")}</span>
                             </span>
                           );
@@ -1259,16 +1431,16 @@ const CustomerMenu = () => {
 
                         if (isPreparing) {
                           return (
-                            <span className="text-[10px] sm:text-[11px] bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
-                              <Loader2 size={11} className="animate-spin text-amber-600 shrink-0" />
+                            <span className="text-[9px] sm:text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                              <Loader2 size={10} className="animate-spin text-amber-600 shrink-0" />
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
                             </span>
                           );
                         }
 
                         return (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                          <>
+                            <span className="text-[9px] sm:text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
                               <span>{effectiveQty > 1 ? `${effectiveQty}x ` : ''}⏳ {t("Pending")}</span>
                             </span>
@@ -1279,10 +1451,9 @@ const CustomerMenu = () => {
                             >
                               {t("Cancel")}
                             </button>
-                          </div>
+                          </>
                         );
                       })()}
-                      <span className="text-xs sm:text-sm font-black text-orange-600 shrink-0 whitespace-nowrap">₹{itemTotal}</span>
                     </div>
                   </div>
                 );
@@ -1686,140 +1857,147 @@ const CustomerMenu = () => {
                   {activeOrderData.items && activeOrderData.items.length > 0 && (
                     <div className="mt-2 bg-white/10 rounded-2xl p-3 sm:p-4 max-h-[46vh] overflow-y-auto custom-scrollbar flex flex-col gap-2.5">
                       <h3 className="font-bold text-sm border-b border-white/20 pb-2 mb-1">{t("Order Details")}</h3>
-                      {activeOrderData.items.map(item => (
-                        <div key={item._id} className={`flex items-center justify-between gap-2.5 py-1.5 border-b border-white/10 last:border-0 ${item.isCancelled ? 'opacity-50' : ''}`}>
-                          <div className="flex-1 min-w-0 pr-1">
-                            <p className={`font-bold text-sm text-white leading-snug break-words ${item.isCancelled ? 'line-through' : ''}`}>
-                              {item.quantity - (item.cancelledQuantity || 0)}x {item.name}
-                              {item.cancelledQuantity > 0 && !item.isCancelled && <span className="text-[10px] ml-1.5 bg-red-500/20 px-1.5 py-0.5 rounded text-red-100 font-normal">({item.cancelledQuantity} Cancelled)</span>}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="text-[10.5px] text-white/80 font-medium flex items-center gap-0.5 whitespace-nowrap">
-                                🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
-                              </span>
-                              {item.specialNote && <span className="text-[10.5px] text-white/80">📝 {item.specialNote}</span>}
-                            </div>
-                            {(() => {
-                              const cd = getPrepCountdown(item);
-                              if (!cd || item.isCancelled) return null;
-                              return (
-                                <div className="mt-1 bg-amber-500/20 border border-amber-500/40 rounded-xl p-2 text-amber-200 text-[11px] flex flex-col gap-1 w-full">
-                                  <div className="flex justify-between items-center font-bold">
-                                    <span>⏱️ Est. Prep: {item.prepTimeMinutes}m</span>
-                                    <span className={cd.isOverdue ? 'text-amber-300 font-extrabold animate-pulse' : 'text-amber-300 font-extrabold'}>
-                                      {cd.isOverdue ? '⚡ Ready Soon!' : `⏳ ${cd.remainingMins}m ${cd.remainingSecs}s left`}
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-slate-900/80 rounded-full h-1.5 overflow-hidden">
-                                    <div 
-                                      className="bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-1000" 
-                                      style={{ width: `${cd.percent}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className={`font-black text-sm ${item.isCancelled ? 'line-through' : ''}`}>
-                              ₹{item.price * (item.quantity - (item.cancelledQuantity || 0))}
-                            </span>
-                            {item.isCancelled ? (
-                              <span className="text-[10px] font-bold bg-red-500/50 px-2 py-1 rounded-full text-white/90">{t("Cancelled")}</span>
-                            ) : item.cancellationRejected ? (
-                              <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-1 rounded-full text-white/90">{t("Rejected")}</span>
-                            ) : item.cancellationRequested ? (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold bg-white/20 px-2 py-1 rounded-full text-center">
-                                  {item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}
+                      {activeOrderData.items.map(item => {
+                        const rawQty = parseInt(item.quantity || 0, 10) || 0;
+                        const cancelledQty = parseInt(item.cancelledQuantity || 0, 10) || 0;
+                        const safeEffectiveQty = Math.max(0, rawQty - cancelledQty);
+                        const itemTotal = item.price * safeEffectiveQty;
+
+                        return (
+                        <div key={item._id} className={`py-2 border-b border-white/10 last:border-0 ${item.isCancelled ? 'opacity-50' : ''}`}>
+                          {/* Row 1: Name + Price */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className={`font-bold text-sm text-white leading-snug ${item.isCancelled ? 'line-through' : ''}`}>
+                                {safeEffectiveQty}x {item.name}
+                                {item.cancelledQuantity > 0 && !item.isCancelled && <span className="text-[10px] ml-1.5 bg-red-500/20 px-1.5 py-0.5 rounded text-red-100 font-normal">({item.cancelledQuantity} Cancelled)</span>}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-[10.5px] text-white/80 font-medium flex items-center gap-0.5 whitespace-nowrap">
+                                  🕒 {format12HourTime(item.orderedAt || item.createdAt || item.time || activeOrderData.createdAt)}
                                 </span>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
-                                  className="text-[10px] font-black bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-900 px-2.5 py-1 rounded-full flex items-center gap-1 transition-all shadow-sm cursor-pointer"
-                                  title={t("Withdraw Cancel Request")}
-                                >
-                                  ↩️ {t("Withdraw")}
-                                </button>
+                                {item.specialNote && <span className="text-[10.5px] text-white/80 truncate max-w-[120px]">📝 {item.specialNote}</span>}
                               </div>
-                            ) : (() => {
-                              const rawQty = parseInt(item.quantity || 0, 10) || 0;
-                              const cancelledQty = parseInt(item.cancelledQuantity || 0, 10) || 0;
-                              const safeEffectiveQty = Math.max(0, rawQty - cancelledQty);
-
-                              const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === safeEffectiveQty && safeEffectiveQty > 0
-                                ? item.unitStatuses
-                                : Array.from({ length: safeEffectiveQty }, () => item.kdsStatus || item.status || 'Pending');
-
-                              const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
-                              const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
-                              const pendingCount = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
-
-                              const hasMixedStatus = safeEffectiveQty > 1 && (
-                                (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
-                                (preparingCount > 0 && pendingCount > 0)
-                              );
-
-                              if (hasMixedStatus) {
+                              {(() => {
+                                const cd = getPrepCountdown(item);
+                                if (!cd || item.isCancelled) return null;
                                 return (
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    {preparedCount > 0 && (
-                                      <span className="text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-                                        <Check size={11} strokeWidth={3} className="shrink-0" />
-                                        <span>{preparedCount}x {t("Prepared")}</span>
+                                  <div className="mt-1 bg-amber-500/20 border border-amber-500/40 rounded-xl p-2 text-amber-200 text-[11px] flex flex-col gap-1 w-full">
+                                    <div className="flex justify-between items-center font-bold">
+                                      <span>⏱️ Est. Prep: {item.prepTimeMinutes}m</span>
+                                      <span className={cd.isOverdue ? 'text-amber-300 font-extrabold animate-pulse' : 'text-amber-300 font-extrabold'}>
+                                        {cd.isOverdue ? '⚡ Ready Soon!' : `⏳ ${cd.remainingMins}m ${cd.remainingSecs}s left`}
                                       </span>
-                                    )}
-                                    {preparingCount > 0 && (
-                                      <span className="text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
-                                        <Loader2 size={11} className="animate-spin text-amber-200 shrink-0" />
-                                        <span>{preparingCount}x 👨‍🍳 {t("Preparing...")}</span>
-                                      </span>
-                                    )}
-                                    {pendingCount > 0 && (
-                                      <span className="text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
-                                        <span>{pendingCount}x ⏳ {t("Pending")}</span>
-                                      </span>
-                                    )}
+                                    </div>
+                                    <div className="w-full bg-slate-900/80 rounded-full h-1.5 overflow-hidden">
+                                      <div 
+                                        className="bg-gradient-to-r from-amber-400 to-orange-500 h-full transition-all duration-1000" 
+                                        style={{ width: `${cd.percent}%` }}
+                                      />
+                                    </div>
                                   </div>
                                 );
-                              }
-
-                              if (item.kdsStatus === 'Ready' || item.status === 'Ready' || item.kdsStatus === 'Prepared' || item.status === 'Prepared') {
-                                return (
-                                  <span className="text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                                    <Check size={11} strokeWidth={3} className="shrink-0" />
-                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}{t("Prepared")}</span>
-                                  </span>
-                                );
-                              }
-
-                              if (item.kdsStatus === 'Preparing' || item.status === 'Preparing') {
-                                return (
-                                  <span className="text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                                    <Loader2 size={11} className="animate-spin text-amber-200 shrink-0" />
-                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}👨‍🍳 {t("Preparing...")}</span>
-                                  </span>
-                                );
-                              }
-
-                              return (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
-                                    <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                              })()}
+                            </div>
+                            <span className={`font-black text-sm shrink-0 ${item.isCancelled ? 'line-through' : ''}`}>
+                              ₹{itemTotal}
+                            </span>
+                          </div>
+                          {/* Row 2: Status badges */}
+                          {!item.isCancelled && (
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                              {item.cancellationRejected ? (
+                                <span className="text-[10px] font-bold bg-slate-500/50 px-2 py-0.5 rounded-full text-white/90">{t("Rejected")}</span>
+                              ) : item.cancellationRequested ? (
+                                <>
+                                  <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full text-center">
+                                    {item.cancellationRequestedQty > 1 ? `${item.cancellationRequestedQty} Pending...` : t("Pending...")}
                                   </span>
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
-                                    className="text-[10px] font-bold bg-red-500/80 hover:bg-red-500 px-2 py-1 rounded-full transition-colors cursor-pointer"
+                                    onClick={(e) => { e.stopPropagation(); handleWithdrawItemCancel(item); }}
+                                    className="text-[10px] font-black bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-900 px-2.5 py-0.5 rounded-full flex items-center gap-1 transition-all shadow-sm cursor-pointer"
+                                    title={t("Withdraw Cancel Request")}
                                   >
-                                    {t("Cancel")}
+                                    ↩️ {t("Withdraw")}
                                   </button>
-                                </div>
-                              );
-                            })()}
-                          </div>
+                                </>
+                              ) : (() => {
+                                const unitStatuses = Array.isArray(item.unitStatuses) && item.unitStatuses.length === safeEffectiveQty && safeEffectiveQty > 0
+                                  ? item.unitStatuses
+                                  : Array.from({ length: safeEffectiveQty }, () => item.kdsStatus || item.status || 'Pending');
+
+                                const preparedCount = unitStatuses.filter(s => s === 'Ready' || s === 'Prepared').length;
+                                const preparingCount = unitStatuses.filter(s => s === 'Preparing').length;
+                                const pendingCount = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
+
+                                const hasMixedStatus = safeEffectiveQty > 1 && (
+                                  (preparedCount > 0 && (preparingCount > 0 || pendingCount > 0)) ||
+                                  (preparingCount > 0 && pendingCount > 0)
+                                );
+
+                                if (hasMixedStatus) {
+                                  return (
+                                    <>
+                                      {preparedCount > 0 && (
+                                        <span className="text-[9px] sm:text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-1.5 sm:px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm whitespace-nowrap">
+                                          <Check size={9} strokeWidth={3} className="shrink-0" />
+                                          <span>{preparedCount}x {t("Prepared")}</span>
+                                        </span>
+                                      )}
+                                      {preparingCount > 0 && (
+                                        <span className="text-[9px] sm:text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-1.5 sm:px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm whitespace-nowrap">
+                                          <Loader2 size={9} className="animate-spin text-amber-200 shrink-0" />
+                                          <span>{preparingCount}x 👨‍🍳 {t("Preparing")}</span>
+                                        </span>
+                                      )}
+                                      {pendingCount > 0 && (
+                                        <span className="text-[9px] sm:text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-1.5 sm:px-2 py-0.5 rounded-full flex items-center gap-0.5 whitespace-nowrap">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
+                                          <span>{pendingCount}x ⏳ {t("Pending")}</span>
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                }
+
+                                if (item.kdsStatus === 'Ready' || item.status === 'Ready' || item.kdsStatus === 'Prepared' || item.status === 'Prepared') {
+                                  return (
+                                    <span className="text-[9px] sm:text-[10px] font-bold bg-emerald-500/70 text-white border border-emerald-400/50 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm whitespace-nowrap">
+                                      <Check size={10} strokeWidth={3} className="shrink-0" />
+                                      <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}{t("Prepared")}</span>
+                                    </span>
+                                  );
+                                }
+
+                                if (item.kdsStatus === 'Preparing' || item.status === 'Preparing') {
+                                  return (
+                                    <span className="text-[9px] sm:text-[10px] font-bold bg-amber-500/60 text-white border border-amber-400/40 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm whitespace-nowrap">
+                                      <Loader2 size={10} className="animate-spin text-amber-200 shrink-0" />
+                                      <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}👨‍🍳 {t("Preparing")}</span>
+                                    </span>
+                                  );
+                                }
+
+                                return (
+                                  <>
+                                    <span className="text-[9px] sm:text-[10px] font-bold bg-blue-500/40 text-white border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse shrink-0"></span>
+                                      <span>{safeEffectiveQty > 1 ? `${safeEffectiveQty}x ` : ''}⏳ {t("Pending")}</span>
+                                    </span>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleRequestItemCancel(item); }}
+                                      className="text-[9px] sm:text-[10px] font-bold bg-red-500/80 hover:bg-red-500 px-2 py-0.5 rounded-full transition-colors cursor-pointer whitespace-nowrap"
+                                    >
+                                      {t("Cancel")}
+                                    </button>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                       
                       <div className="border-t border-white/20 pt-2 mt-1 space-y-1">
                         <div className="flex justify-between text-xs">

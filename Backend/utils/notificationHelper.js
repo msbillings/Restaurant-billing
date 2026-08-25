@@ -36,6 +36,26 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
     const tenantDb = getTenantDbFromReq(req);
 
     if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
+      const notifId = data.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const immediateNotification = {
+        id: notifId,
+        title,
+        message,
+        time: new Date().toISOString(),
+        type,
+        targetRoles,
+        tenantDb,
+        data
+      };
+
+      // ⚡ FAST-PATH: Broadcast immediately with 0ms delay to all connected sockets
+      if (io) {
+        io.to(tenantDb).emit('new_notification', immediateNotification);
+        io.emit('new_notification', immediateNotification); // Universal tenant fallback
+        console.log(`[Notification] ⚡ INSTANT broadcast (${title}) to tenant: ${tenantDb}`);
+      }
+
+      // ⚡ ASYNC-PATH: Save to MongoDB and FCM in the background without blocking the broadcast
       try {
         const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
         NotificationModel.create({
@@ -46,41 +66,12 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
           targetRoles,
           data
         }).then(savedDoc => {
-          const notification = {
-            id: savedDoc._id.toString(),
-            title,
-            message,
-            time: savedDoc.createdAt ? savedDoc.createdAt.toISOString() : new Date().toISOString(),
-            type,
-            targetRoles,
-            tenantDb,
-            data
-          };
-
-          if (io) {
-            io.to(tenantDb).emit('new_notification', notification);
-            console.log(`[Notification] Broadcasted real-time notification (${title}) strictly to tenant room: ${tenantDb}`);
-          }
-
           sendFcmPushNotification(tenantDb, title, message, targetRoles, data);
         }).catch(err => {
-          console.error('[Notification] Failed to save to DB:', err);
-          const fallbackId = Date.now().toString();
-          if (io) {
-            io.to(tenantDb).emit('new_notification', {
-              id: fallbackId,
-              title,
-              message,
-              time: new Date().toISOString(),
-              type,
-              targetRoles,
-              tenantDb,
-              data
-            });
-          }
+          console.error('[Notification] Background DB save error:', err.message);
         });
       } catch (dbErr) {
-        console.error('[Notification] DB save setup error:', dbErr);
+        console.error('[Notification] DB save setup error:', dbErr.message);
       }
     } else {
       console.warn(`[Notification] Blocked global emit for (${title}): No tenant database resolved`);

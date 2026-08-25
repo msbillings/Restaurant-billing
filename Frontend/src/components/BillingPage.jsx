@@ -7,8 +7,9 @@ import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
+import api from '../api/axios';
 import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder } from '../db/offlineDb';
-import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock } from 'lucide-react';
+import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
 import CancelOrderModal from './CancelOrderModal';
@@ -360,7 +361,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         newlyGeneratedTables.current.add(generatedOrderNo);
         setActiveTable(generatedOrderNo);
       } else {
-        // eslint-disable-next-line
+
         setActiveTable(initialTable);
         if (initialTable.startsWith('DEL-')) {
           setBillType('Delivery');
@@ -379,7 +380,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
       const existingOrder = openOrdersList.find((o) => o.tableNo?.startsWith(prefix) && (o.status === 'Open' || o.status === 'Billed'));
       if (existingOrder && !initialTable) {
-        // eslint-disable-next-line
+
         setActiveTable(existingOrder.tableNo);
       } else {
         const generatedOrderNo = generateSequentialOrderNo(billType);
@@ -409,7 +410,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setDeliveryCharge('');
       setContainerCharge('');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billType, openOrdersList]);
 
   useEffect(() => {
@@ -421,7 +421,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       fetchActiveOrder(activeTable, true);
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
       if (cart.length === 0) {
-        // eslint-disable-next-line
         setOrderId(null);
         setOrderStatus('Open');
         setBillNumber(null);
@@ -476,7 +475,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       window.removeEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
       clearInterval(pollInterval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTable, showInvoice, showPayment]);
 
   useEffect(() => {
@@ -545,7 +543,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       };
       fetchCustomer();
     } else {
-      // eslint-disable-next-line
       setCustomerInfo(null);
     }
   }, [customerPhone]);
@@ -1622,8 +1619,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     <div className="h-full flex flex-col overflow-hidden bg-background">
       <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 relative z-30">
 
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer z-30">
+        {/* Left Section: Select Table */}
+        <div className="flex items-center gap-2 shrink-0 z-30">
+          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer">
             <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
             <div className="flex items-center pointer-events-none">
               <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
@@ -1675,6 +1673,30 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 reservations={reservations}
               />
             }
+          </div>
+        </div>
+
+        {/* Center Section: Search Bar (Desktop only, centered with Cancel/Clear button) */}
+        <div className="hidden md:flex flex-1 items-center justify-center px-4 max-w-2xl mx-auto z-20">
+          <div className="relative w-full items-center">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={15} />
+            <input
+              type="text"
+              placeholder={t('Search all menu items (dishes, codes)...')}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-9 py-1.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-xs sm:text-sm text-text-main transition-all shadow-xs"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-full p-1 transition-all cursor-pointer shadow-2xs"
+                title={t("Clear search")}
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -1921,9 +1943,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       }
 
-      {showInvoice &&
-      <Invoice
-        bill={completedBill || {
+      {showInvoice && (() => {
+        const billToShow = completedBill || {
           _id: orderId,
           billNumber: billNumber,
           status: orderStatus,
@@ -1936,11 +1957,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           tableNo: activeTable,
           orderSource: orderSource,
           createdAt: new Date()
-        }}
-        onClose={handleFinish}
-        onSave={handleFinish} />
-
-      }
+        };
+        // Do NOT show invoice for zero-value / empty bills
+        const billTotal = billToShow.total ?? billToShow.grandTotal ?? 0;
+        const billItems = billToShow.items ?? [];
+        if (billTotal <= 0 || billItems.length === 0) return null;
+        return (
+          <Invoice
+            bill={billToShow}
+            onClose={handleFinish}
+            onSave={handleFinish} />
+        );
+      })()}
 
       {showKOT && activeKOTData &&
       <KOT

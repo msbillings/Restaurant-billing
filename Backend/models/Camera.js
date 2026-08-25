@@ -20,5 +20,7 @@ const cameraSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+cameraSchema.index({ name: 1 });
+
 const CameraDefault = mongoose.model('Camera', cameraSchema);
 export default CameraDefault;

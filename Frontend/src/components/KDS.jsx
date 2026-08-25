@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLanguage } from "../context/LanguageContext";
-import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer, Loader2 } from 'lucide-react';
+import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer, Loader2, ChevronLeft, ChevronRight, ChevronDown, Layers, Flame, Utensils } from 'lucide-react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
 import Toast from './Toast';
@@ -590,11 +590,19 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
         if (isCancelled) {
           aggItem.isCancelled = true;
+          const cancelQty = Math.max(1, parseInt(item.cancelledQuantity || item.quantity || 1, 10));
+          aggItem.cancelledQuantity = Math.max(aggItem.cancelledQuantity || 0, cancelQty);
+          if (item.specialNote) {
+            aggItem.specialNote = item.specialNote;
+          }
+          if (kot.kotNumber && !aggItem.kotNumbers.includes(kot.kotNumber)) {
+            aggItem.kotNumbers.push(kot.kotNumber);
+          }
         } else {
           aggItem.quantity += qty;
           const itemReduced = Math.max(0, parseInt(item.reducedQuantity || item.cancelledQuantity || 0, 10));
           if (itemReduced > 0) {
-            aggItem.reducedQuantity = (aggItem.reducedQuantity || 0) + itemReduced;
+            aggItem.reducedQuantity = Math.max(aggItem.reducedQuantity || 0, itemReduced);
           }
           if (item.specialNote) {
             aggItem.specialNote = item.specialNote;
@@ -629,15 +637,18 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
     const result = Object.values(tableGroups).map(group => {
       const items = Object.values(group.itemsMap)
-        .filter(item => item.quantity > 0 && !item.isCancelled)
+        .filter(item => (item.quantity > 0 && !item.isCancelled) || (item.isCancelled && (item.cancelledQuantity > 0 || item.quantity === 0)))
         .map(item => {
+          const isCancelled = item.isCancelled === true || item.status === 'Cancelled';
           const qty = item.quantity;
           const units = item.unitStatuses;
           const preparedCount = units.filter(s => s === 'Ready' || s === 'Prepared').length;
           const preparingCount = units.filter(s => s === 'Preparing').length;
           
           let overallStatus = 'Pending';
-          if (preparedCount === qty && qty > 0) {
+          if (isCancelled) {
+            overallStatus = 'Cancelled';
+          } else if (preparedCount === qty && qty > 0) {
             overallStatus = 'Ready';
           } else if (preparingCount > 0 || preparedCount > 0) {
             overallStatus = 'Preparing';
@@ -646,14 +657,17 @@ const KDS = ({ onNavigate, onGoBack }) => {
           return {
             ...item,
             status: overallStatus,
-            preparedQuantity: preparedCount,
-            preparingQuantity: preparingCount,
-            pendingQuantity: Math.max(0, qty - preparedCount - preparingCount),
+            isCancelled,
+            preparedQuantity: isCancelled ? 0 : preparedCount,
+            preparingQuantity: isCancelled ? 0 : preparingCount,
+            pendingQuantity: isCancelled ? 0 : Math.max(0, qty - preparedCount - preparingCount),
             kotNumber: item.kotNumbers.join(', ')
           };
         });
 
       items.sort((a, b) => {
+        if (a.isCancelled && !b.isCancelled) return 1;
+        if (!a.isCancelled && b.isCancelled) return -1;
         if (a.status === 'Preparing' && b.status !== 'Preparing') return -1;
         if (b.status === 'Preparing' && a.status !== 'Preparing') return 1;
         return new Date(a.itemCreatedAt) - new Date(b.itemCreatedAt);
@@ -665,7 +679,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
         createdAt: group.createdAt,
         items
       };
-    }).filter(g => g.items.some(item => item.status === 'Pending' || item.status === 'Preparing'));
+    }).filter(g => g.items.some(item => !item.isCancelled && (item.status === 'Pending' || item.status === 'Preparing')));
 
     result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     return result;
@@ -674,8 +688,26 @@ const KDS = ({ onNavigate, onGoBack }) => {
   // Apply scroll sync when groupedKOTs changes
   useEffect(() => {
     const cleanup = setupScrollSync(groupedKOTs);
-    return cleanup;
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, [groupedKOTs, setupScrollSync]);
+
+  const [selectedTable, setSelectedTable] = useState('ALL');
+
+  // Filter groupedKOTs to single table if selected
+  const displayedGroups = useMemo(() => {
+    if (!selectedTable || selectedTable === 'ALL') return groupedKOTs;
+    const match = groupedKOTs.filter(g => g.tableNo === selectedTable);
+    return match.length > 0 ? match : groupedKOTs;
+  }, [groupedKOTs, selectedTable]);
+
+  // Calculate total pending items across all active tables
+  const totalPendingItems = useMemo(() => {
+    return groupedKOTs.reduce((acc, g) => {
+      return acc + g.items.filter(i => !i.isCancelled && (i.status === 'Pending' || i.status === 'Preparing')).length;
+    }, 0);
+  }, [groupedKOTs]);
 
   if (loading) return (
     <div className="h-full flex flex-col items-center justify-center bg-slate-950 text-amber-500 font-bold p-8">
@@ -686,77 +718,116 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
   return (
     <div className="h-full flex flex-col bg-slate-950 text-slate-100 p-3 sm:p-4 overflow-hidden w-full">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 border-b border-slate-800 pb-3 gap-2.5 sm:gap-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <BackButton onClick={onGoBack} />
-          <h1 className="text-xl sm:text-2xl font-black text-amber-500 flex items-center gap-2 tracking-tight">
-            <ChefHat className="text-amber-500 shrink-0" size={24} />
-            <span>{t("KITCHEN DISPLAY SYSTEM")}</span>
-          </h1>
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          height: 8px;
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(15, 23, 42, 0.8);
+          border-radius: 9999px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: linear-gradient(90deg, #f59e0b, #ea580c);
+          border-radius: 9999px;
+          box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(90deg, #fbbf24, #f97316);
+        }
+      `}</style>
+      {/* Unified Responsive Top Header Bar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between mb-2.5 sm:mb-3.5 border-b border-slate-800 pb-2 sm:pb-3 gap-2 sm:gap-3 shrink-0">
+        {/* Row 1: Back button + Title + Active counter */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <BackButton onClick={onGoBack} />
+            <h1 className="text-sm sm:text-xl md:text-2xl font-black text-amber-500 flex items-center gap-1.5 sm:gap-2 tracking-tight whitespace-nowrap">
+              <ChefHat className="text-amber-500 shrink-0 w-4 h-4 sm:w-6 sm:h-6" />
+              <span>{t("KITCHEN DISPLAY")}</span>
+            </h1>
+          </div>
+
+          {/* Active Orders Count Badge */}
+          {groupedKOTs.length > 0 && (
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 px-2 sm:px-2.5 py-1 rounded-xl shadow-inner shrink-0">
+              <Flame size={13} className="text-amber-400 animate-pulse" />
+              <span className="text-[11px] sm:text-xs font-black text-amber-300 font-mono">
+                {groupedKOTs.length}T • {totalPendingItems} {t("Items")}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 self-end sm:self-auto">
+
+        {/* Row 2 on Mobile / Right side on Desktop: Select Table Dropdown + KOT Button + Clock in SAME ROW */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          {/* Custom Select Dropdown Field */}
+          {groupedKOTs.length > 0 && (
+            <div className="relative flex-1 md:flex-initial md:w-auto inline-flex items-center min-w-0">
+              <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-amber-400">
+                <Utensils size={13} />
+              </div>
+              <select
+                value={selectedTable}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedTable(val);
+                  if (val !== 'ALL') {
+                    const idx = groupedKOTs.findIndex(g => g.tableNo === val);
+                    if (idx !== -1) {
+                      setActiveTableIndex(idx);
+                    }
+                  } else {
+                    setActiveTableIndex(-1);
+                    if (scrollContainerRef.current) {
+                      scrollContainerRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+                    }
+                  }
+                }}
+                className="w-full sm:w-auto bg-slate-900 border border-slate-700 hover:border-amber-500/80 focus:border-amber-500 text-amber-300 font-bold text-xs sm:text-sm rounded-xl pl-7 pr-7 py-1.5 sm:py-2 focus:outline-none focus:ring-2 focus:ring-amber-500/40 shadow-sm appearance-none cursor-pointer transition-all truncate"
+              >
+                <option value="ALL" className="bg-slate-900 text-amber-400 font-bold">
+                  {t("All Active Tables")} ({groupedKOTs.length})
+                </option>
+                {groupedKOTs.map((group) => {
+                  const pendingCount = group.items.filter(i => !i.isCancelled && (i.status === 'Pending' || i.status === 'Preparing')).length;
+                  return (
+                    <option key={group.tableNo} value={group.tableNo} className="bg-slate-900 text-slate-200 font-medium">
+                      {group.tableNo} ({pendingCount} {pendingCount === 1 ? 'item' : 'items'})
+                    </option>
+                  );
+                })}
+              </select>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <ChevronDown size={13} />
+              </div>
+            </div>
+          )}
+
+          {/* KOT Page / History Button (visible next to select field) */}
           {onNavigate && (
             <button
               onClick={() => onNavigate('kothistory')}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
               title={t("Open KOT Page / History")}
             >
-              <Printer size={15} />
-              <span>{t("KOT Page / History")}</span>
+              <Printer size={14} />
+              <span className="hidden sm:inline">{t("KOT Page / History")}</span>
+              <span className="sm:hidden">{t("KOTs")}</span>
             </button>
           )}
-          <div className="text-slate-400 font-mono text-xs sm:text-sm bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl font-bold">
-            {new Date().toLocaleTimeString()}
+
+          {/* Clock (visible next to KOT button) */}
+          <div className="text-slate-400 font-mono text-[11px] sm:text-sm bg-slate-900 border border-slate-800 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold shrink-0">
+            {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
         </div>
       </div>
 
-      {/* Mobile Swipe Guidance Banner & Table Quick-Select */}
-      {groupedKOTs.length > 1 && (
-        <div className="flex flex-col sm:hidden gap-2 mb-3 shrink-0">
-          {/* Swipe hint banner */}
-          <div className="flex items-center justify-between bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/15 border border-amber-500/40 rounded-2xl px-3.5 py-2 shadow-lg shadow-amber-950/40 backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              {/* Right-pointing swipe arrow */}
-              <span className="text-lg animate-[nudge_1.5s_ease-in-out_infinite]">👉</span>
-              <span className="text-xs font-black text-amber-300 tracking-wide">
-                {t("Swipe left / right to switch tables")}
-              </span>
-            </div>
-            <span className="text-[10px] font-mono font-black bg-amber-500/30 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/40">
-              {groupedKOTs.length} {t("Tables")}
-            </span>
-          </div>
-
-          {/* Quick Table Switch Pills — highlight follows swipe automatically */}
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {groupedKOTs.map((group, idx) => {
-              const pendingCount = group.items.filter(i => !i.isCancelled && (i.status === 'Pending' || i.status === 'Preparing')).length;
-              const isSelected = activeTableIndex === idx;
-              return (
-                <button
-                  key={`pill-${group.tableNo}`}
-                  onClick={() => scrollToTable(group.tableNo, idx)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 border ${
-                    isSelected
-                      ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-md font-black ring-2 ring-amber-400/50'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <span>{group.tableNo}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
-                    isSelected ? 'bg-slate-950 text-amber-400 font-black' : 'bg-slate-800 text-slate-400 font-bold'
-                  }`}>
-                    {pendingCount}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div ref={scrollContainerRef} className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory scroll-smooth custom-scrollbar">
+      <div 
+        ref={scrollContainerRef} 
+        className="flex-1 overflow-x-auto overflow-y-hidden pb-4 snap-x snap-mandatory scroll-smooth custom-scrollbar"
+      >
         <div className="flex gap-3.5 sm:gap-4 h-full">
           {loading ? (
             <div className="w-full flex flex-col items-center justify-center p-16 text-slate-400 gap-4">
@@ -774,13 +845,13 @@ const KDS = ({ onNavigate, onGoBack }) => {
                 </span>
               </div>
             </div>
-          ) : groupedKOTs.length === 0 ? (
+          ) : displayedGroups.length === 0 ? (
             <div className="w-full flex flex-col items-center justify-center text-slate-500 font-bold text-lg sm:text-xl p-8">
               <ChefHat size={48} className="mb-3 opacity-30 text-amber-500" />
               <span>{t("No Active Tickets")}</span>
             </div>
           ) : (
-            groupedKOTs.map((group, idx) => {
+            displayedGroups.map((group, idx) => {
               const tableMinutesOld = Math.floor((new Date() - new Date(group.createdAt)) / 60000);
               let cardColor = 'bg-slate-900 border-slate-800';
               if (tableMinutesOld > 15) cardColor = 'bg-red-950/40 border-red-900/60';
@@ -790,7 +861,12 @@ const KDS = ({ onNavigate, onGoBack }) => {
                 <div key={group.tableNo} id={`kds-table-${group.tableNo}`} className={`w-[88vw] sm:w-80 md:w-88 shrink-0 rounded-2xl border-2 flex flex-col overflow-hidden shadow-2xl snap-center ${cardColor}`}>
                   <div className="bg-slate-900/90 p-3 flex justify-between items-center border-b border-inherit backdrop-blur-md">
                     <div>
-                      <h3 className="font-bold text-base sm:text-lg text-white tracking-wide">{group.tableNo}</h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-base sm:text-lg text-white tracking-wide">{group.tableNo}</h3>
+                        <span className="text-[10px] font-black bg-amber-500/25 text-amber-300 border border-amber-500/50 px-2 py-0.5 rounded-md font-mono shadow-xs">
+                          Queue #{idx + 1}
+                        </span>
+                      </div>
                       <p className="text-xs text-slate-400 font-medium">{t(group.billType)}</p>
                     </div>
                     <span className="text-xs font-mono text-slate-400 bg-slate-950/80 px-2 py-1 rounded-md border border-slate-800 flex items-center gap-1">
@@ -819,12 +895,18 @@ const KDS = ({ onNavigate, onGoBack }) => {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className={`font-black text-sm sm:text-base leading-snug ${isCancelled ? 'line-through text-red-400' : 'text-white'}`}>
-                                  {item.quantity}x {item.name}
+                                  {isCancelled ? `${item.cancelledQuantity || 1}x ${item.name}` : `${item.quantity}x ${item.name}`}
                                 </p>
                                 {item.reducedQuantity > 0 && !isCancelled && (
                                   <span className="text-[11px] font-black bg-red-500/25 text-red-300 border border-red-500/50 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-sm animate-pulse">
                                     <span>🔻</span>
                                     <span>-{item.reducedQuantity}x {t("Reduced")}</span>
+                                  </span>
+                                )}
+                                {isCancelled && (
+                                  <span className="text-[11px] font-black bg-red-600/30 text-red-300 border border-red-500/60 px-2 py-0.5 rounded-md inline-flex items-center gap-1 shadow-sm">
+                                    <Ban size={12} className="text-red-400" />
+                                    <span>-{item.cancelledQuantity || 1}x {t("Cancelled")}</span>
                                   </span>
                                 )}
                               </div>

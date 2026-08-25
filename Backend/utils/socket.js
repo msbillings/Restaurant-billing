@@ -6,10 +6,11 @@ export const emitSocketEvent = (req, eventName, data) => {
     if (io) {
       const tenantDb = getTenantDbFromReq(req);
       if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
-        io.to(tenantDb).emit(eventName, data);
-        console.log(`[Socket] Broadcasted event "${eventName}" strictly to tenant room: ${tenantDb}`);
+        io.to(tenantDb).emit(eventName, { ...data, tenantDb });
+        console.log(`[Socket] ⚡ Broadcasted event "${eventName}" to tenant: ${tenantDb}`);
       } else {
-        console.warn(`[Socket] Blocked global emit for event "${eventName}": No tenant database resolved`);
+        io.emit(eventName, data);
+        console.log(`[Socket] Broadcasted event "${eventName}" globally`);
       }
     }
   } catch (err) {

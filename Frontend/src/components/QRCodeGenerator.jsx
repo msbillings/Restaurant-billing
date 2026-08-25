@@ -177,7 +177,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             setCustomIpInput(data.ip);
           }
         }
-        if (data.port && !isDev) {
+        if (data.port && !isDevMode) {
           setLocalPort(String(data.port));
         }
       }
@@ -383,7 +383,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     // Determine correct port for development testing:
     // When testing via Vite dev server, Vite serves the frontend on window.location.port (e.g. 5173)
     let port = '';
-    if (isDev) {
+    if (isDevMode) {
       port = (window.location.port && window.location.port !== '80' && window.location.port !== '443') ? window.location.port : '5173';
     } else {
       port = isElectron ? '5002' : (localPort || '5002');
@@ -600,7 +600,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             <div>
               <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Development Wi-Fi IP Address")}</div>
               <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
-                <span>{localIP}:{isDev ? (window.location.port || '5173') : localPort}</span>
+                <span>{localIP}:{isDevMode ? (window.location.port || '5173') : localPort}</span>
                 {isLoopback ? (
                   <span className="text-[8px] sm:text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase border border-amber-500/20">
                     {t("Local Only (127.0.0.1)")}

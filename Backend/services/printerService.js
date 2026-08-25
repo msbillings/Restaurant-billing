@@ -112,6 +112,10 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) =
   content += CMD.ALIGN_CENTER;
   content += CMD.TEXT_LARGE + CMD.BOLD_ON + 'KITCHEN ORDER (KOT)' + CMD.LINE_FEED;
   content += CMD.TEXT_DOUBLE_HEIGHT + `KOT NO: ${kotNumber}` + CMD.LINE_FEED;
+  if (kotNumber && !kotNumber.toUpperCase().includes('UPDATE')) {
+    const queueNo = kotNumber.replace(/[^0-9]/g, '') || '1';
+    content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `QUEUE NO: #${queueNo}` + CMD.LINE_FEED;
+  }
   content += CMD.TEXT_NORMAL + CMD.BOLD_OFF;
   content += lineDivider + CMD.LINE_FEED;
   
@@ -127,8 +131,15 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) =
 
   // Items list
   items.forEach((item) => {
-    const qtyStr = `${item.quantity}`.padStart(3, ' ');
-    const itemName = item.name || item.itemName;
+    const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+    const isReduced = !isCancelled && (item.reducedQuantity > 0);
+    const cancelQty = item.cancelledQuantity || item.quantity || 1;
+    const qtyNum = isCancelled ? `-${cancelQty}` : `${item.quantity || 0}`;
+    const qtyStr = qtyNum.padStart(3, ' ');
+    let itemName = item.name || item.itemName || 'Item';
+    if (isCancelled) itemName += ' [CANCELLED]';
+    else if (isReduced) itemName += ` [-${item.reducedQuantity}x REDUCED]`;
+
     content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `${qtyStr}  ${itemName}` + CMD.LINE_FEED + CMD.TEXT_NORMAL + CMD.BOLD_OFF;
     if (item.specialNote) {
       content += `     * Note: ${item.specialNote}` + CMD.LINE_FEED;

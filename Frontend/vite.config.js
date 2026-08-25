@@ -107,7 +107,11 @@ export default defineConfig({
         manualChunks: {
           'react-vendor': ['react', 'react-dom'],
           'ui-vendor': ['lucide-react'],
-          'utils-vendor': ['axios']
+          'utils-vendor': ['axios'],
+          'vendor-animations': ['framer-motion'],
+          'vendor-charts': ['recharts'],
+          'vendor-socket': ['socket.io-client'],
+          'vendor-query': ['@tanstack/react-query', '@tanstack/react-query-devtools']
         }
       }
     }

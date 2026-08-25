@@ -287,7 +287,14 @@ export const formatPublicBillPayload = (bill, taxSettings) => {
     subTotal,
     subtotal: subTotal,
     itemsCount: activeProcessed.reduce((acc, item) => acc + (item.quantity - (item.cancelledQuantity || 0)), 0),
-    items: processedItems
+    items: processedItems,
+    // Payment settlement fields for customer-facing status tracking
+    paymentMode: bill.paymentMode || null,
+    splitPayments: bill.splitPayments || null,
+    upiApp: bill.upiApp || null,
+    discount: bill.discount || 0,
+    discountType: bill.discountType || null,
+    discountValue: bill.discountValue || 0
   };
 };
 

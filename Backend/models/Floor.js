@@ -17,5 +17,7 @@ const floorSchema = new mongoose.Schema({
   spaces: [spaceItemSchema]
 }, { timestamps: true });
 
+floorSchema.index({ name: 1 });
+
 // We export the model so it can be dynamically compiled per-tenant
 export default mongoose.model('Floor', floorSchema);

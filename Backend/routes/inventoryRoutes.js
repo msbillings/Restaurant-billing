@@ -14,7 +14,10 @@ import {
   staffWithdraw
 } from '../controllers/inventoryController.js';
 
+import { authenticateToken } from '../middleware/auth.js';
+
 const router = express.Router();
+router.use(authenticateToken);
 
 // Stock Items & Raw Materials
 router.get('/', getItems);
