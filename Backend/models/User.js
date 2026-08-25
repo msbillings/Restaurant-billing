@@ -22,7 +22,8 @@ const userSchema = new mongoose.Schema({
     refreshToken: { type: String, required: true },
     deviceId: { type: String }, // Optional
     lastActive: { type: Date, default: Date.now }
-  }]
+  }],
+  fcmTokens: [{ type: String }] // Store Firebase Cloud Messaging tokens for Push Notifications
 }, {
   timestamps: true
 });

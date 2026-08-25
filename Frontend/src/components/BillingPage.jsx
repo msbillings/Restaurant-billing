@@ -1355,7 +1355,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         status: 'Paid',
         paymentMode: paymentData.mode,
         billNumber: currentBillNum || settledOrder?.billNumber,
-        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable
+        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable,
+        subtotal: subtotal,
+        tax: taxVal,
+        discount: discountAmount,
+        discountType: discount.type,
+        total: total,
+        billType: billType
       };
 
       setCompletedBill(finalBill);

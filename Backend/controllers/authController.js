@@ -282,6 +282,38 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+export const updateFcmToken = async (req, res) => {
+  const { token } = req.body;
+  try {
+    let User;
+    try { User = getTenantModel(req, 'User', UserDefault); } catch (err) { return handleTenantError(err, res); }
+    const userId = req.user.id || req.user._id;
+
+    if (!token) {
+      return res.status(400).json({ message: 'FCM token is required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.fcmTokens) {
+      user.fcmTokens = [];
+    }
+
+    if (!user.fcmTokens.includes(token)) {
+      user.fcmTokens.push(token);
+      await user.save();
+    }
+
+    res.status(200).json({ message: 'FCM token updated successfully' });
+  } catch (error) {
+    console.error('Error updating FCM token:', error);
+    res.status(500).json({ message: error.message || 'Internal server error' });
+  }
+};
+
 export const register = async (req, res) => {
   const { username, password, role } = req.body;
   try {

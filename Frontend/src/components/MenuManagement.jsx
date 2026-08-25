@@ -4,7 +4,7 @@ import { getAllCategories, createCategory, updateCategory, deleteCategory } from
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 import { getInventory } from '../api/inventory';
 import Papa from 'papaparse';
-import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft, Loader2, RefreshCw, MoreVertical } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
@@ -86,6 +86,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [currentPage, setCurrentPage] = useState(1);
   const [sortBy, setSortBy] = useState('latest');
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
+  const [showMobileActions, setShowMobileActions] = useState(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -621,16 +622,24 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   if (loading) return <div className="flex items-center justify-center h-full text-text-muted">{t("Loading...")}</div>;
 
   return (
-    <div className="h-full flex flex-col bg-background px-2.5 py-4 sm:p-6 overflow-hidden">
+    <div className="h-full flex flex-col bg-background p-2 sm:p-3 overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 p-3 sm:p-4 bg-gradient-to-r from-primary/5 to-accent/5 rounded-xl border border-border/50 shrink-0">
-        <div className="flex items-start gap-3">
-          <BackButton onClick={onGoBack} className="mt-0.5 shrink-0" />
-          <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-text-main">{t("Menu Management")}</h1>
-            <p className="text-[10px] sm:text-sm text-text-muted">{t("Manage your restaurant's menu items and categories")}</p>
+        <div className="flex items-start justify-between w-full sm:w-auto gap-3">
+          <div className="flex items-start gap-3">
+            <BackButton onClick={onGoBack} className="mt-0.5 shrink-0" />
+            <div>
+              <h1 className="text-lg sm:text-2xl font-bold text-text-main">{t("Menu Management")}</h1>
+              <p className="text-[10px] sm:text-sm text-text-muted">{t("Manage your restaurant's menu items and categories")}</p>
+            </div>
           </div>
+          <button 
+            onClick={() => setShowMobileActions(!showMobileActions)}
+            className="sm:hidden p-2 bg-surface hover:bg-surface-hover border border-border rounded-lg text-text-main transition-colors shrink-0"
+          >
+            <MoreVertical size={20} />
+          </button>
         </div>
-        <div className="flex flex-wrap gap-1.5 sm:gap-3 w-full sm:w-auto">
+        <div className={`${showMobileActions ? 'flex' : 'hidden sm:flex'} flex-wrap gap-1.5 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0 bg-surface sm:bg-transparent p-3 sm:p-0 rounded-xl sm:rounded-none border border-border sm:border-0 shadow-sm sm:shadow-none animate-in fade-in slide-in-from-top-2 sm:animate-none`}>
           <input
             type="file"
             accept=".csv"
@@ -689,26 +698,63 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <span>{t("Add Category")}</span>
             </button>
           }
+          {activeTab === 'items' && (
+            <select 
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="sm:hidden w-full mt-2 px-3 py-2 border border-border rounded-lg bg-background text-text-main text-sm focus:outline-none focus:border-primary transition-colors shadow-sm cursor-pointer"
+            >
+              <option value="latest">{t("Added: Latest")}</option>
+              <option value="oldest">{t("Added: Old to New")}</option>
+              <option value="alphaAsc">{t("Alphabetical (A-Z)")}</option>
+              <option value="alphaDesc">{t("Alphabetical (Z-A)")}</option>
+              <option value="priceAsc">{t("Price: Low to High")}</option>
+              <option value="priceDesc">{t("Price: High to Low")}</option>
+            </select>
+          )}
         </div>
       </div>
 
       {/* Search and Sort */}
       <div className="mb-4 flex flex-col sm:flex-row gap-3 items-center shrink-0">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-          <input
-            type="text"
-            placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-sm bg-surface text-text-main shadow-sm" />
+        <div className="flex w-full gap-2 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+            <input
+              type="text"
+              placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-sm bg-surface text-text-main shadow-sm" />
+          </div>
+          
+          {/* Mobile Pagination */}
+          {(activeTab === 'items' && itemsTotalPages > 1 || activeTab === 'categories' && categoriesTotalPages > 1) && (
+            <div className="sm:hidden flex gap-1 shrink-0">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-border bg-surface text-text-main disabled:opacity-50 hover:bg-surface-hover shadow-sm"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(activeTab === 'items' ? itemsTotalPages : categoriesTotalPages, p + 1))}
+                disabled={currentPage === (activeTab === 'items' ? itemsTotalPages : categoriesTotalPages)}
+                className="p-2 rounded-xl border border-border bg-surface text-text-main disabled:opacity-50 hover:bg-surface-hover shadow-sm"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
         </div>
         
+        {/* Desktop Sort Filter */}
         {activeTab === 'items' && (
           <select 
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="w-full sm:w-auto px-4 py-2 border border-border rounded-xl bg-surface text-text-main text-sm focus:outline-none focus:border-primary transition-colors shadow-sm cursor-pointer"
+            className="hidden sm:block w-full sm:w-auto px-4 py-2 border border-border rounded-xl bg-surface text-text-main text-sm focus:outline-none focus:border-primary transition-colors shadow-sm cursor-pointer"
           >
             <option value="latest">{t("Added: Latest")}</option>
             <option value="oldest">{t("Added: Old to New")}</option>
@@ -798,7 +844,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                         </span>
                       </td>
                       <td className="p-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                        <span className={`whitespace-nowrap px-2 py-1 rounded-full text-xs font-medium ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                           {item.type === 'veg' ? 'Veg' : 'Non-Veg'}
                         </span>
                       </td>
@@ -906,7 +952,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
 
         {/* Pagination Controls */}
         {(activeTab === 'items' && itemsTotalPages > 1 || activeTab === 'categories' && categoriesTotalPages > 1) &&
-        <div className="p-4 border-t border-border flex items-center justify-between bg-background">
+        <div className="hidden sm:flex p-4 border-t border-border items-center justify-between bg-background">
             <div className="text-sm text-text-muted">{t("Showing")}
             {activeTab === 'items' ? itemsStartIndex + 1 : categoriesStartIndex + 1}{t("to")}{' '}
               {activeTab === 'items' ?

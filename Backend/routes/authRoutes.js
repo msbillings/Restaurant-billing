@@ -1,6 +1,6 @@
 import express from 'express';
 const router = express.Router();
-import { login, logout, logoutAll, refreshToken, createAdmin, setupAdmin, updateProfile, register, getUsers, deleteUser } from '../controllers/authController.js';
+import { login, logout, logoutAll, refreshToken, createAdmin, setupAdmin, updateProfile, register, getUsers, deleteUser, updateFcmToken } from '../controllers/authController.js';
 import sessionManager from '../utils/sessionManager.js';
 import { authenticateToken, requireAdmin, optionalAuthenticateToken } from '../middleware/auth.js';
 
@@ -26,6 +26,7 @@ router.post('/clear-sessions', authenticateToken, requireAdmin, (req, res) => {
 router.post('/logout', authenticateToken, logout);
 router.post('/logout-all', authenticateToken, logoutAll);
 router.put('/profile', authenticateToken, updateProfile);
+router.post('/fcm-token', authenticateToken, updateFcmToken);
 
 // Staff management (Admin only)
 router.get('/users', authenticateToken, requireAdmin, getUsers);

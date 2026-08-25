@@ -25,12 +25,18 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
+import cronJobs from './utils/cronJobs.js';
+import { setupSocket } from './utils/socket.js';
+import { initFirebase } from './utils/firebase.js';
 
 // __dirname is not available in ES modules — polyfill it
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+
+// Initialize Firebase Admin for Push Notifications
+initFirebase();
 
 const app = express();
 app.use(compression());

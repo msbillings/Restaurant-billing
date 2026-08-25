@@ -3,6 +3,7 @@ import realtimeService from '../services/realtimeService';
 import api from '../api/axios';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { App } from '@capacitor/app';
 
 // ── 1. BULLETPROOF OFFLINE WEB AUDIO CHIME ENGINE ────────────────────────────
@@ -115,8 +116,40 @@ export const initCapacitorNotifications = async () => {
       lights: true,
       lightColor: '#EA580C'
     });
+
+    // 3. Initialize Firebase Push Notifications
+    let pushPermStatus = await PushNotifications.checkPermissions();
+    if (pushPermStatus.receive !== 'granted') {
+      pushPermStatus = await PushNotifications.requestPermissions();
+    }
+    
+    if (pushPermStatus.receive === 'granted') {
+      PushNotifications.register();
+    }
+
+    // Add listeners once
+    PushNotifications.addListener('registration', (token) => {
+      console.log('[useNotifications] Push registration success, token:', token.value);
+      // Send token to backend
+      api.post('/auth/fcm-token', { token: token.value })
+        .catch(err => console.error('[useNotifications] Failed to register FCM token with backend', err));
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+      console.error('[useNotifications] Error on FCM registration:', error);
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      console.log('[useNotifications] Push received:', notification);
+      playNotificationSound(); // Local chime fallback if app is open
+    });
+
+    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+      console.log('[useNotifications] Push action performed:', notification);
+    });
+
     isChannelInitialized = true;
-    console.log('[useNotifications] Native High-Priority Notification Channel initialized');
+    console.log('[useNotifications] Native High-Priority Notification Channel & FCM initialized');
   } catch (err) {
     console.warn('[useNotifications] Capacitor notification init:', err);
   }

@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 
 import { getTenantModel } from './tenantHelper.js';
 import { NotificationDefault } from '../models/Notification.js';
+import UserDefault from '../models/User.js';
 
 /**
  * Utility to reliably extract the tenant database ID from any Express request
@@ -66,7 +67,7 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
           targetRoles,
           data
         }).then(savedDoc => {
-          sendFcmPushNotification(tenantDb, title, message, targetRoles, data);
+          sendFcmPushNotification(req, tenantDb, title, message, targetRoles, data);
         }).catch(err => {
           console.error('[Notification] Background DB save error:', err.message);
         });
@@ -81,14 +82,81 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
   }
 };
 
-/**
- * Optional FCM Push Notification Dispatcher (Free Google Firebase Cloud Messaging)
- * Non-blocking: only executes if Firebase credentials are provided in environment
- */
-export const sendFcmPushNotification = async (tenantDb, title, message, targetRoles = ['Admin'], data = {}) => {
+export const isNotificationForRole = (notification, role = 'Admin') => {
+  if (!notification) return false;
+  const userRole = (role || 'Admin').trim().toLowerCase();
+  if (userRole === 'admin' || userRole === 'manager') return true;
+
+  const targetRoles = Array.isArray(notification.targetRoles)
+    ? notification.targetRoles.map(r => String(r).toLowerCase())
+    : [];
+
+  const title = (notification.title || '').toLowerCase();
+  const msg = (notification.message || '').toLowerCase();
+  const notifType = (notification.data?.type || notification.type || '').toLowerCase();
+
+  if (userRole === 'chef' || userRole === 'kds') {
+    if (title.includes('water') || title.includes('call waiter') || title.includes('pay the bill') || title.includes('cancel') || title.includes('withdrawn') || msg.includes('need water') || msg.includes('call waiter') || msg.includes('pay the bill') || msg.includes('cancel') || msg.includes('withdrawn') || notifType === 'service_request' || notifType === 'cancel_item_request' || notifType === 'cancel_item_withdrawn') {
+      return false;
+    }
+    if (targetRoles.includes('chef') || targetRoles.includes('kds') || title.includes('kot') || title.includes('order placed') || title.includes('order updated') || title.includes('item quantity') || title.includes('kitchen') || title.includes('food') || notifType.includes('kot') || notifType.includes('kitchen') || notifType.includes('order')) {
+      return true;
+    }
+    return false;
+  }
+
+  if (userRole === 'captain' || userRole === 'waiter') {
+    if (targetRoles.includes('captain') || targetRoles.includes('waiter') || title.includes('service') || title.includes('waiter') || title.includes('water') || title.includes('cutlery') || title.includes('food ready') || title.includes('kot accepted') || title.includes('cancel') || title.includes('withdrawn') || notifType.includes('cancel') || notifType.includes('service')) {
+      return true;
+    }
+    return false;
+  }
+
+  if (userRole === 'cashier') {
+    if (targetRoles.includes('cashier') || title.includes('pay the bill') || title.includes('bill') || title.includes('payment') || title.includes('settle') || title.includes('due') || title.includes('cancel') || msg.includes('pay the bill') || notifType.includes('bill') || notifType.includes('cancel')) {
+      return true;
+    }
+    return false;
+  }
+
+  return targetRoles.length === 0 || targetRoles.includes(userRole);
+};
+
+export const sendFcmPushNotification = async (req, tenantDb, title, message, targetRoles = ['Admin'], data = {}) => {
   try {
-    // If Firebase Admin is configured in environment
     if (global.firebaseAdmin) {
+      // Find all users in the specified tenant database that match the target roles
+      let User;
+      try {
+        User = getTenantModel(req, 'User', UserDefault);
+      } catch (e) {
+        console.warn('[FCM Push] Could not resolve User model for tenant:', tenantDb);
+        return;
+      }
+
+      // Fetch ALL users who have FCM tokens
+      const users = await User.find({ fcmTokens: { $exists: true, $not: { $size: 0 } } }).select('fcmTokens role');
+      let tokens = [];
+
+      // Create a mock notification object to pass to the filtering logic
+      const mockNotification = { title, message, targetRoles, data };
+
+      users.forEach(u => {
+        // Evaluate if THIS specific user should receive the push notification based on their role
+        if (isNotificationForRole(mockNotification, u.role)) {
+          if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
+            tokens.push(...u.fcmTokens);
+          }
+        }
+      });
+
+      // Filter out invalid/empty tokens
+      tokens = [...new Set(tokens.filter(t => t && t.trim() !== ''))];
+
+      if (tokens.length === 0) {
+        return; // No devices to notify
+      }
+
       const payload = {
         notification: {
           title,
@@ -102,13 +170,32 @@ export const sendFcmPushNotification = async (tenantDb, title, message, targetRo
             return acc;
           }, {})
         },
-        topic: `tenant_${tenantDb}`
+        tokens: tokens
       };
-      await global.firebaseAdmin.messaging().send(payload);
-      console.log(`[FCM Push] Sent push notification to topic tenant_${tenantDb}`);
+
+      const response = await global.firebaseAdmin.messaging().sendEachForMulticast(payload);
+      
+      // Optional: Cleanup invalid tokens (NotRegistered)
+      if (response.failureCount > 0) {
+        const failedTokens = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const errCode = resp.error?.code;
+            if (errCode === 'messaging/invalid-registration-token' || errCode === 'messaging/registration-token-not-registered') {
+              failedTokens.push(tokens[idx]);
+            }
+          }
+        });
+
+        if (failedTokens.length > 0) {
+          await User.updateMany(
+            { fcmTokens: { $in: failedTokens } },
+            { $pull: { fcmTokens: { $in: failedTokens } } }
+          );
+        }
+      }
     }
   } catch (fcmErr) {
-    // Safe error suppression so server operation is NEVER disrupted
     console.warn('[FCM Push] Optional push dispatch warning:', fcmErr.message);
   }
 };

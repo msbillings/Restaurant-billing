@@ -1,17 +1,9 @@
 import mongoose from 'mongoose';
 import BillDefault from '../models/Bill.js';
-import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
-import cache from '../utils/cache.js';
-import { deductStockForBillItems } from './inventoryController.js';
-import { updateTableStatusHelper } from './floorController.js';
+import { NotificationDefault } from '../models/Notification.js';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
-import { updateCustomerFromBill, syncCustomer } from './customerController.js';
-import { emitNotification, emitDismissNotification } from '../utils/notificationHelper.js';
-import { emitSocketEvent } from '../utils/socket.js';
-import { printKOTToPrinters } from '../services/printerService.js';
-import { getTableMatchCondition, getDynamicTaxRate, getTenantShopName } from '../utils/billHelpers.js';
 
 export const getActiveNotifications = async (req, res) => {
   try {

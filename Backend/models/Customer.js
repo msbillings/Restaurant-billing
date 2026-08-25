@@ -43,7 +43,6 @@ const customerSchema = new mongoose.Schema({
 });
 
 // Indexes for fast customer search and leaderboards
-customerSchema.index({ phone: 1 });
 customerSchema.index({ lastVisit: -1 });
 customerSchema.index({ totalSpend: -1 });
 

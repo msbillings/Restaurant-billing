@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "654510354027",
+    "project_id": "ms-billing-4ac20",
+    "storage_bucket": "ms-billing-4ac20.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:654510354027:android:e45af8655d64585dc3cb2e",
+        "android_client_info": {
+          "package_name": "com.msbilling.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9chCeLbEHShr_gap7XO4PV7nSbBP_qmE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
