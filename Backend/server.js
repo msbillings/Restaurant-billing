@@ -25,7 +25,6 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
-import cronJobs from './utils/cronJobs.js';
 import { setupSocket } from './utils/socket.js';
 import { initFirebase } from './utils/firebase.js';
 
