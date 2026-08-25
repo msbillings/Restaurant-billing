@@ -25,7 +25,6 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
-import { setupSocket } from './utils/socket.js';
 import { initFirebase } from './utils/firebase.js';
 
 // __dirname is not available in ES modules — polyfill it
