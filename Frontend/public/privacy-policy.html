@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy – MS Billing Restaurant</title>
+  <meta name="description" content="Privacy Policy for MS Billing Restaurant – how we collect, use, and protect your data." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #fff8f0;
+      --surface:   #ffffff;
+      --border:    #f5e6d3;
+      --primary:   #d2691e;
+      --primary-h: #b8571f;
+      --secondary: #f4a261;
+      --accent:    #e76f51;
+      --text:      #2d1810;
+      --muted:     #8b5a3c;
+      --light:     #fef7f0;
+      --radius:    12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      min-height: 100vh;
+      font-size: 15px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: var(--primary);
+      padding: 18px 20px 16px;
+      text-align: center;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .logo-icon {
+      width: 30px; height: 30px;
+      border-radius: 7px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .logo-icon img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .logo-text {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.2px;
+    }
+
+    header h1 {
+      font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    header p {
+      color: rgba(255,255,255,0.85);
+      font-size: 0.82rem;
+      max-width: 400px;
+      margin: 0 auto 10px;
+      line-height: 1.5;
+    }
+    .eff-date {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      border-radius: 999px;
+      padding: 3px 12px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    @media (max-width: 480px) {
+      header {
+        padding: 14px 16px 12px;
+      }
+    }
+
+    /* ── LAYOUT ── */
+    .wrap {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 16px 60px;
+    }
+
+    /* ── INTRO BOX ── */
+    .intro-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    /* ── SECTION ── */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 24px;
+      margin-bottom: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .s-icon {
+      width: 36px; height: 36px;
+      background: var(--light);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .section p {
+      color: var(--muted);
+      font-size: 0.91rem;
+      margin-bottom: 10px;
+    }
+    .section p:last-child { margin-bottom: 0; }
+
+    .section ul {
+      padding-left: 18px;
+      margin-top: 8px;
+    }
+    .section li {
+      color: var(--muted);
+      font-size: 0.91rem;
+      margin: 5px 0;
+    }
+    .section li strong { color: var(--text); font-weight: 600; }
+
+    /* ── NOTE ── */
+    .note {
+      background: var(--light);
+      border-left: 3px solid var(--secondary);
+      border-radius: 0 8px 8px 0;
+      padding: 10px 16px;
+      margin-top: 12px;
+      font-size: 0.87rem;
+      color: var(--muted);
+    }
+
+    /* ── CONTACT GRID ── */
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .contact-card {
+      background: var(--light);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .contact-card .clabel {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    .contact-card .cval {
+      font-size: 0.9rem;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .contact-card a { color: var(--primary); text-decoration: none; }
+    .contact-card a:hover { text-decoration: underline; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      text-align: center;
+      padding: 24px 20px;
+      color: var(--muted);
+      font-size: 0.83rem;
+    }
+    footer strong { color: var(--primary); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 500px) {
+      .section { padding: 18px 16px; }
+      .contact-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">
+      <img src="icon.png" alt="MS Billing Restaurant" />
+    </div>
+    <span class="logo-text">MS Billing Restaurant</span>
+  </div>
+  <h1>Privacy Policy</h1>
+  <p>We respect your privacy and are committed to protecting your personal data.</p>
+  <span class="eff-date">Effective: August 26, 2026</span>
+</header>
+
+<!-- CONTENT -->
+<div class="wrap">
+
+  <div class="intro-box">
+    This Privacy Policy explains how <strong>MS Billing Restaurant</strong> (Package: <code>com.msbilling.app</code>) collects, uses, and protects your information. By using our app, you agree to this policy.
+  </div>
+
+  <!-- 1. Information We Collect -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">📋</div>
+      <h2>1. Information We Collect</h2>
+    </div>
+    <ul>
+      <li><strong>Account Info:</strong> Business name, owner name, email, and phone number.</li>
+      <li><strong>Transaction Data:</strong> Orders, bills, invoices, and payment records you create.</li>
+      <li><strong>Menu & Inventory:</strong> Food items, prices, categories, and stock you enter.</li>
+      <li><strong>Device Info:</strong> Device model and OS version for troubleshooting.</li>
+    </ul>
+    <div class="note">We do <strong>not</strong> sell your data to third parties or advertisers.</div>
+  </div>
+
+  <!-- 2. Camera & Microphone -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">📷</div>
+      <h2>2. Camera &amp; Microphone</h2>
+    </div>
+    <ul>
+      <li><strong>Camera:</strong> Used for scanning QR codes for table orders and barcode scanning for inventory.</li>
+      <li><strong>Microphone:</strong> Used for voice command input for hands-free order entry.</li>
+    </ul>
+    <div class="note">These are only activated when you trigger the feature. We do <strong>not</strong> record or store audio or video.</div>
+  </div>
+
+  <!-- 3. Location -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">📍</div>
+      <h2>3. Location Data</h2>
+    </div>
+    <p>Location is used to auto-fill your restaurant's address during setup and assist with delivery zone management. Location data is <strong>not shared</strong> with any third party. You can deny this permission and still use core billing features.</p>
+  </div>
+
+  <!-- 4. Notifications -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">🔔</div>
+      <h2>4. Push Notifications</h2>
+    </div>
+    <p>With your permission, we send notifications for new orders, payment confirmations, low stock alerts, and app updates. You can manage or disable notifications anytime via <strong>Android Settings → Apps → MS Billing Restaurant → Notifications</strong>.</p>
+  </div>
+
+  <!-- 5. Data Security -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">🔒</div>
+      <h2>5. Data Security</h2>
+    </div>
+    <ul>
+      <li><strong>Encryption in Transit:</strong> All data is sent over HTTPS/TLS.</li>
+      <li><strong>Secure Servers:</strong> Data is stored on secured cloud servers with access controls.</li>
+      <li><strong>Local Storage:</strong> Offline data is stored securely on your device.</li>
+    </ul>
+  </div>
+
+  <!-- 6. Third-Party Services -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">🔗</div>
+      <h2>6. Third-Party Services</h2>
+    </div>
+    <ul>
+      <li><strong>Firebase (Google):</strong> Push notifications and crash analytics.</li>
+      <li><strong>Google APIs:</strong> Location and maps services.</li>
+      <li><strong>Socket.IO:</strong> Real-time order updates (no personal data stored).</li>
+    </ul>
+  </div>
+
+  <!-- 7. Data Retention -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">🗄️</div>
+      <h2>7. Data Retention &amp; Deletion</h2>
+    </div>
+    <ul>
+      <li><strong>Transaction Records:</strong> Retained for 7 years per Indian GST regulations.</li>
+      <li><strong>Account Data:</strong> Retained until account deletion is requested.</li>
+    </ul>
+    <p>To delete your account and data, contact us at the email below. We process deletion requests within 30 days.</p>
+  </div>
+
+  <!-- 8. Children -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">👤</div>
+      <h2>8. Children's Privacy</h2>
+    </div>
+    <p>MS Billing Restaurant is a <strong>business app for users 18 and above</strong>. We do not knowingly collect data from children under 13. If you believe a child has provided us data, contact us immediately.</p>
+  </div>
+
+  <!-- 9. Policy Changes -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">📝</div>
+      <h2>9. Changes to This Policy</h2>
+    </div>
+    <p>We may update this policy from time to time. When material changes are made, we will update the "Effective Date" above and notify you via an in-app notice on the next app launch.</p>
+  </div>
+
+  <!-- 10. Contact -->
+  <div class="section">
+    <div class="section-header">
+      <div class="s-icon">📬</div>
+      <h2>10. Contact Us</h2>
+    </div>
+    <p>Questions or requests about your data? Reach us at:</p>
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="clabel">Email</div>
+        <div class="cval"><a href="mailto:msbillings@gmail.com">msbillings@gmail.com</a></div>
+      </div>
+      <div class="contact-card">
+        <div class="clabel">App</div>
+        <div class="cval">MS Billing Restaurant</div>
+      </div>
+      <div class="contact-card">
+        <div class="clabel">Package</div>
+        <div class="cval">com.msbilling.app</div>
+      </div>
+      <div class="contact-card">
+        <div class="clabel">Website</div>
+        <div class="cval"><a href="https://msbilling.app" target="_blank" rel="noopener">msbilling.app</a></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /wrap -->
+
+<!-- FOOTER -->
+<footer>
+  <p>© 2026 <strong>MS Billing Restaurant</strong>. All rights reserved.</p>
+  <p style="margin-top:4px;">com.msbilling.app &nbsp;·&nbsp; Version 6.0.65 &nbsp;·&nbsp; Last updated: August 26, 2026</p>
+</footer>
+
+</body>
+</html>
