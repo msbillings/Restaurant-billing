@@ -102,8 +102,8 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {const { t } = useLanguage
   };
 
   return (
-    <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 shrink-0">
+    <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-hidden">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2.5 sm:mb-3 gap-2.5 shrink-0">
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} className="shrink-0" />
           <h1 className="text-lg sm:text-2xl font-black text-text-main flex items-center gap-2">

@@ -307,8 +307,8 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   }, [reservations, searchTerm, statusFilter, dateFilter, timeFilter, customDateStart, customDateEnd]);
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 p-3 sm:p-6 overflow-y-auto custom-scrollbar w-full">
-      <div className="bg-white p-3 sm:p-4 rounded-xl shadow-xs border border-slate-200 mb-4 sm:mb-6 shrink-0 w-full flex flex-col xl:flex-row items-start xl:items-center gap-3 sm:gap-4">
+    <div className="h-full flex flex-col bg-slate-50 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto custom-scrollbar w-full">
+      <div className="bg-white p-2 sm:p-2.5 rounded-2xl shadow-xs border border-slate-200 mb-2 sm:mb-2.5 shrink-0 w-full flex flex-col xl:flex-row items-start xl:items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-3 shrink-0">
           <BackButton onClick={onGoBack} />
           <div>

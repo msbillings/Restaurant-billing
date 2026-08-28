@@ -8,6 +8,8 @@ import {
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
+import realtimeService from '../services/realtimeService';
+import { flyItemToCart } from '../utils/animations';
 
 const getCategoryIcon = (catName, isSelected = false) => {
   const name = catName.toLowerCase();
@@ -106,10 +108,9 @@ const LazyMenuImage = ({ src, alt, className }) => {
       <img
         src={src}
         alt={alt}
-        loading="lazy"
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
-        className={`w-full h-full object-cover transition-all duration-500 ease-out ${loaded ? 'opacity-100 scale-100 filter-none' : 'opacity-0 scale-95 blur-xs'
+        className={`w-full h-full object-cover transition-all duration-200 ease-out ${loaded ? 'opacity-100 scale-100 filter-none' : 'opacity-0 scale-95 blur-xs'
           } ${className || ''}`}
       />
     </div>
@@ -121,6 +122,8 @@ import useDebounce from "../hooks/useDebounce";
 
 const MenuGrid = ({
   onSelectItem,
+  activeTable,
+  billType = 'Dine-In',
   searchTerm = '',
   onSearchChange,
   isLayoutLocked = false,
@@ -277,7 +280,7 @@ const MenuGrid = ({
       setLoading(true);
     }
     try {
-      const data = await getMenuItems();
+      const data = await getMenuItems(true);
       setItems(data);
     } catch (error) {
       console.error('Error fetching menu:', error);
@@ -303,9 +306,21 @@ const MenuGrid = ({
       }
     }).catch(() => { });
 
-    // 2. Background Revalidation
+    // 2. Background Revalidation with fresh data
     fetchCategories();
     fetchItems(true);
+
+    // 3. Real-time menu synchronization (when items are added, updated, or imported)
+    const handleMenuUpdated = () => {
+      console.log('[MenuGrid] Realtime menuUpdated event caught, refreshing dishes...');
+      fetchItems(true);
+      fetchCategories();
+    };
+    const unsubMenu = realtimeService.subscribe('menuUpdated', handleMenuUpdated);
+
+    return () => {
+      unsubMenu();
+    };
   }, []);
 
   const validCategories = categories.filter((cat) => {
@@ -491,27 +506,27 @@ const MenuGrid = ({
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
 
         {/* Filter & Sort Controls Row */}
-        <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 py-2 px-3 gap-2 shrink-0 flex-nowrap">
+        <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 py-1.5 px-2 sm:px-3 gap-1.5 sm:gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
           {/* Mobile Favorite Items Toggle Button (Left side on mobile) */}
           <button
             type="button"
             onClick={() => setCategory(category === '⭐ Favourites' ? 'All' : '⭐ Favourites')}
-            className={`flex sm:hidden items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${category === '⭐ Favourites'
+            className={`flex sm:hidden items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${category === '⭐ Favourites'
                 ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                 : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200 shadow-xs'
               }`}
           >
-            <Star size={13} className={category === '⭐ Favourites' ? 'fill-white text-white' : 'text-amber-500 fill-amber-500'} />
+            <Star size={12} className={category === '⭐ Favourites' ? 'fill-white text-white' : 'text-amber-500 fill-amber-500'} />
             <span>{t("Favorite Items")}</span>
           </button>
 
           {/* Veg / Non-Veg / All Segmented Filter Tabs */}
-          <div className="hidden sm:flex items-center bg-white p-1 rounded-xl border border-gray-200 shadow-xs shrink-0 gap-1">
+          <div className="hidden sm:flex items-center bg-white p-0.5 rounded-xl border border-gray-200 shadow-xs shrink-0 gap-0.5">
             {/* All */}
             <button
               type="button"
               onClick={() => setFoodTypeFilter('all')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'all'
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'all'
                   ? 'bg-gray-900 text-white shadow-xs'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                 }`}
@@ -523,12 +538,12 @@ const MenuGrid = ({
             <button
               type="button"
               onClick={() => setFoodTypeFilter('veg')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'veg'
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'veg'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-emerald-700 hover:bg-emerald-50'
                 }`}
             >
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 border border-white shrink-0"></span>
               <span>{t("Veg")}</span>
             </button>
 
@@ -536,22 +551,22 @@ const MenuGrid = ({
             <button
               type="button"
               onClick={() => setFoodTypeFilter('non-veg')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${foodTypeFilter === 'non-veg'
+              className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'non-veg'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-rose-700 hover:bg-rose-50'
                 }`}
             >
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
+              <span className="w-2 h-2 rounded-full bg-rose-500 border border-white shrink-0"></span>
               <span>{t("Non-Veg")}</span>
             </button>
           </div>
 
           {/* Right Controls: Sort, Add Item, Image Toggle */}
-          <div className="flex items-center gap-2 shrink-0 ml-auto justify-end">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto justify-end">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="h-9 px-2.5 sm:px-3 border border-gray-200 rounded-xl bg-white text-gray-700 text-xs font-bold focus:outline-none focus:border-red-500 transition-all shadow-xs cursor-pointer"
+              className="h-8 px-1.5 sm:px-2 border border-gray-200 rounded-lg bg-white text-gray-700 text-xs font-bold focus:outline-none focus:border-red-500 transition-all shadow-xs cursor-pointer max-w-[100px] sm:max-w-[130px]"
             >
               <option value="latest">{t("Latest")}</option>
               <option value="oldest">{t("Oldest")}</option>
@@ -564,24 +579,24 @@ const MenuGrid = ({
             {userRole === 'Admin' && (
               <button
                 onClick={() => onNavigate && onNavigate('menu')}
-                className="flex items-center justify-center h-9 px-2.5 sm:px-3 rounded-xl bg-red-500 text-white shadow-xs hover:bg-red-600 active:scale-95 transition-all gap-1.5 font-bold text-xs whitespace-nowrap cursor-pointer"
+                className="flex items-center justify-center h-8 px-2 sm:px-2.5 rounded-lg bg-red-500 text-white shadow-xs hover:bg-red-600 active:scale-95 transition-all gap-1 font-bold text-xs whitespace-nowrap cursor-pointer shrink-0"
                 title={t("Add Item")}
               >
-                <Plus size={15} />
-                <span className="hidden sm:inline">{t("Add Item")}</span>
+                <Plus size={14} />
+                <span className="hidden xl:inline">{t("Add Item")}</span>
               </button>
             )}
 
             <button
               onClick={() => setShowImages(!showImages)}
-              className={`flex items-center justify-center h-9 px-2.5 sm:px-3.5 rounded-xl border shadow-xs active:scale-95 transition-all gap-1.5 font-bold text-xs cursor-pointer ${showImages
+              className={`flex items-center justify-center h-8 px-2 sm:px-2.5 rounded-lg border shadow-xs active:scale-95 transition-all gap-1 font-bold text-xs cursor-pointer shrink-0 ${showImages
                   ? 'bg-red-50 text-red-600 border-red-200'
                   : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                 }`}
               title={showImages ? t('Images: On') : t('Images: Off')}
             >
-              <ImageIcon size={15} />
-              <span className="hidden sm:inline">{showImages ? t('Images: On') : t('Images: Off')}</span>
+              <ImageIcon size={14} />
+              <span className="hidden xl:inline">{showImages ? t('Images: On') : t('Images: Off')}</span>
             </button>
           </div>
         </div>
@@ -628,12 +643,31 @@ const MenuGrid = ({
                     key={item._id}
                     style={{ animationDelay: `${Math.min(idx * 25, 300)}ms` }}
                     className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
-                    onClick={() => {
+                    onClick={(e) => {
                       if (!isAvailable) return;
+                      
+                      const isDineInWithoutTable = (billType === 'Dine-In' || !billType) && !activeTable;
+
+                      // If in Dine-In mode and no table is selected, do NOT fly the animation.
+                      if (isDineInWithoutTable) {
+                        if (item.variants && item.variants.length > 0) {
+                          setSelectedItemVariants(item);
+                        } else {
+                          onSelectItem(item);
+                        }
+                        return;
+                      }
+
                       if (item.variants && item.variants.length > 0) {
                         setSelectedItemVariants(item);
                       } else {
+                        // 1. Add to cart immediately (instant 0ms response)
                         onSelectItem(item);
+
+                        // 2. Play 3D flying animation simultaneously as visual feedback
+                        const targetElement = document.querySelector('.bill-summary-container');
+                        const imgUrl = formatImageUrl(item.image);
+                        flyItemToCart(e.currentTarget, targetElement, imgUrl);
                       }
                     }}>
 
@@ -852,13 +886,25 @@ const MenuGrid = ({
                   key={idx}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onSelectItem({
+                    const isDineInWithoutTable = (billType === 'Dine-In' || !billType) && !activeTable;
+                    
+                    const itemToAdd = {
                       ...selectedItemVariants,
                       _id: `${selectedItemVariants._id}-${variant.name}`,
                       originalId: selectedItemVariants._id,
                       name: `${selectedItemVariants.name} (${variant.name})`,
                       price: variant.price
-                    });
+                    };
+
+                    // 1. Add variant to cart immediately (instant 0ms response)
+                    onSelectItem(itemToAdd);
+
+                    // 2. Play 3D flying animation simultaneously as visual feedback
+                    if (!isDineInWithoutTable) {
+                      const targetElement = document.querySelector('.bill-summary-container');
+                      const imgUrl = formatImageUrl(selectedItemVariants.image);
+                      flyItemToCart(e.currentTarget, targetElement, imgUrl);
+                    }
                     setSelectedItemVariants(null);
                   }}
                   className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md"

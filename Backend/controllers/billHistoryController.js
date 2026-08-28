@@ -43,7 +43,7 @@ export const getBills = async (req, res) => {
     }
 
     // Order source filter (e.g. Swiggy, Zomato, Direct)
-    if (orderSource && orderSource !== 'all') {
+    if (orderSource && orderSource !== 'all' && orderSource !== 'All') {
       if (orderSource === 'Other') {
         query.orderSource = { $nin: ['Swiggy', 'Zomato', 'Direct'] };
       } else {
@@ -56,11 +56,23 @@ export const getBills = async (req, res) => {
       query.paymentMode = paymentMode.trim();
     }
 
-    // Date range filter
+    // Date range filter (inclusive of full days)
     if (startDate || endDate) {
       query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
+      if (startDate) {
+        const s = new Date(startDate);
+        if (!isNaN(s.getTime())) {
+          s.setHours(0, 0, 0, 0);
+          query.createdAt.$gte = s;
+        }
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        if (!isNaN(e.getTime())) {
+          e.setHours(23, 59, 59, 999);
+          query.createdAt.$lte = e;
+        }
+      }
     }
 
     // Search filter
@@ -110,10 +122,7 @@ export const getBills = async (req, res) => {
   }
 };
 
-
 // Get a single bill by ID (with all details for invoice)
-
-
 export const getBillById = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
@@ -130,8 +139,6 @@ export const getBillById = async (req, res) => {
 };
 
 // Delete a bill with password verification
-
-
 export const deleteBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
@@ -190,9 +197,7 @@ export const deleteBill = async (req, res) => {
   }
 };
 
-// Get all open/billed orders (optimized for performance with caching disabled for real-time)
-
-
+// Get all edited bills
 export const getEditedBills = async (req, res) => {
   try {
     const TenantBill = getTenantModel(req, 'Bill', BillDefault);
@@ -224,7 +229,3 @@ export const getEditedBills = async (req, res) => {
     res.status(500).json({ message: 'Server error while fetching edited bills' });
   }
 };
-
-
-
-

@@ -168,7 +168,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const { summary, dailyRevenue, paymentModeStats } = analytics;
   const maxRevenue = getMaxRevenue();
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 px-2.5 py-4 md:p-6 overflow-y-auto">
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
       {/* Analytics Container - Forcing dark mode */}
       <style>{`
         .glass-card {
@@ -177,115 +177,118 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           border: 1px solid rgba(255, 255, 255, 0.05);
           border-radius: 16px;
         }
-      `}</style>
-      <div className="space-y-4 sm:space-y-5">
+      `}</style>      <div className="space-y-3 sm:space-y-4">
         {/* Period Selector */}
-        <div className="glass-card p-3 sm:p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-              <div className="flex items-center gap-2">
+        <div className="glass-card p-2.5 sm:p-3.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+            {/* Left Controls: Back + Period Tabs + Date Selector */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <BackButton onClick={onGoBack} className="shrink-0" />
-                <div className="flex items-center gap-1 bg-[#1e1e24] rounded-lg p-1 border border-white/10 w-full sm:w-auto justify-around">
-                <button
-                  onClick={() => {
-                    setViewMode('month');
-                    setDays(null);
-                  }}
-                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex-1 sm:flex-initial text-center ${
-                  viewMode === 'month' ?
-                  'bg-[#f97316] text-white shadow-md font-bold' :
-                  'text-gray-400 hover:text-white hover:bg-white/5'}`
-                  }>{t("Month")}
-                </button>
-                <button
-                  onClick={() => {
-                    setViewMode('days');
-                    setDays(7);
-                  }}
-                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex-1 sm:flex-initial text-center ${
-                  viewMode === 'days' ?
-                  'bg-[#f97316] text-white shadow-md font-bold' :
-                  'text-gray-400 hover:text-white hover:bg-white/5'}`
-                  }>{t("Days")}
-                </button>
-                <button
-                  onClick={() => {
-                    setViewMode('day');
-                    setDays(null);
-                  }}
-                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex-1 sm:flex-initial text-center ${
-                  viewMode === 'day' ?
-                  'bg-[#f97316] text-white shadow-md font-bold' :
-                  'text-gray-400 hover:text-white hover:bg-white/5'}`
-                  }>{t("Day")}
-                </button>
-              </div>
+                <div className="flex-1 sm:flex-initial flex items-center gap-0.5 bg-[#1e1e24] rounded-lg p-1 border border-white/10">
+                  <button
+                    onClick={() => {
+                      setViewMode('month');
+                      setDays(null);
+                    }}
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                      viewMode === 'month' ?
+                      'bg-[#f97316] text-white shadow-md font-bold' :
+                      'text-gray-400 hover:text-white hover:bg-white/5'}`
+                    }>{t("Month")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('days');
+                      setDays(7);
+                    }}
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                      viewMode === 'days' ?
+                      'bg-[#f97316] text-white shadow-md font-bold' :
+                      'text-gray-400 hover:text-white hover:bg-white/5'}`
+                    }>{t("Days")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('day');
+                      setDays(null);
+                    }}
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                      viewMode === 'day' ?
+                      'bg-[#f97316] text-white shadow-md font-bold' :
+                      'text-gray-400 hover:text-white hover:bg-white/5'}`
+                    }>{t("Day")}
+                  </button>
+                </div>
               </div>
               
-              {viewMode === 'month' ?
-              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs sm:text-sm">
-                  <Calendar size={14} className="text-[#f97316]" />
-                  <select
-                  value={`${selectedYear}-${selectedMonth}`}
-                  onChange={(e) => {
-                    const [year, month] = e.target.value.split('-').map(Number);
-                    setSelectedYear(year);
-                    setSelectedMonth(month);
-                  }}
-                  className="bg-transparent font-medium text-white focus:outline-none cursor-pointer">
-                  
-                    {getAvailableMonths().map((m) =>
-                  <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`} className="bg-[#1e1e24] text-white">
-                        {m.label}
-                      </option>
-                  )}
-                  </select>
-                </div> :
-
-              viewMode === 'days' ?
-              <div className="flex items-center gap-1 bg-[#1e1e24] rounded-lg p-1 border border-white/10 w-full sm:w-auto justify-around">
-                  {[7, 30].map((d) =>
-                <button
-                  key={d}
-                  onClick={() => setDays(d)}
-                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex-1 sm:flex-initial text-center ${
-                  days === d ?
-                  'bg-[#f97316] text-white shadow-md font-bold' :
-                  'text-gray-400 hover:text-white hover:bg-white/5'}`
-                  }>
-                      {d}{t("Days")}
-                </button>
-                )}
-                </div> :
-
-              <div className="flex items-center gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs sm:text-sm">
-                  <Calendar size={14} className="text-[#f97316]" />
-                  <input
-                  type="date"
-                  value={selectedDate}
-                  max={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent font-medium text-white focus:outline-none cursor-pointer [color-scheme:dark]" />
+              {viewMode === 'month' ? (
+                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
+                  <div className="flex items-center gap-2">
+                    <Calendar size={13} className="text-[#f97316]" />
+                    <select
+                      value={`${selectedYear}-${selectedMonth}`}
+                      onChange={(e) => {
+                        const [year, month] = e.target.value.split('-').map(Number);
+                        setSelectedYear(year);
+                        setSelectedMonth(month);
+                      }}
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs">
+                      {getAvailableMonths().map((m) => (
+                        <option key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`} className="bg-[#1e1e24] text-white">
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              }
+              ) : viewMode === 'days' ? (
+                <div className="flex items-center gap-1 bg-[#1e1e24] rounded-lg p-1 border border-white/10 w-full sm:w-auto">
+                  {[7, 30].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDays(d)}
+                      className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                        days === d ?
+                        'bg-[#f97316] text-white shadow-md font-bold' :
+                        'text-gray-400 hover:text-white hover:bg-white/5'}`
+                      }>
+                      {d} {t("Days")}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
+                  <div className="flex items-center gap-2 w-full">
+                    <Calendar size={13} className="text-[#f97316]" />
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
+                  </div>
+                </div>
+              )}
             </div>
             
-            <div className="flex flex-wrap gap-1.5 sm:gap-2 w-full sm:w-auto">
+            {/* Action Buttons: 3 equal-width columns on mobile, auto on tablet/desktop */}
+            <div className="grid grid-cols-3 gap-1.5 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto shrink-0">
               <button
                 onClick={handleDownloadReport}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 bg-[#22c55e] hover:bg-[#16a34a] rounded-lg transition-all text-white shadow-sm font-medium text-xs sm:text-sm">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] rounded-xl transition-all text-white shadow-sm font-bold text-xs">
                 <FileSpreadsheet size={14} />
                 <span>{t("Report")}</span>
               </button>
               <button
                 onClick={fetchAnalytics}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 bg-[#1e1e24] hover:bg-white/10 rounded-lg border border-white/10 transition-all text-white shadow-sm font-medium text-xs sm:text-sm">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs">
                 <RefreshCw size={14} />
                 <span>{t("Refresh")}</span>
               </button>
               <button
                 onClick={() => fetchFraudAnalysis()}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/20 transition-all font-bold text-xs sm:text-sm">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs">
                 <ShieldAlert size={14} />
                 <span>{t("Auditor")}</span>
               </button>
@@ -294,74 +297,78 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 sm:gap-3.5">
           {/* Total Bills */}
-          <div className="glass-card p-3.5 sm:p-5 hover:border-white/20 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                <Receipt className="text-blue-500" size={20} />
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <Receipt className="text-blue-500" size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
-              <p className="text-lg sm:text-2xl font-bold text-white leading-tight">{summary.totalBills.toLocaleString()}</p>
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">{summary.totalBills.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Total Orders */}
-          <div className="glass-card p-3.5 sm:p-5 hover:border-white/20 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
-                <ShoppingBag className="text-purple-500" size={20} />
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <ShoppingBag className="text-purple-500" size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
-              <p className="text-lg sm:text-2xl font-bold text-white leading-tight">{summary.totalOrders.toLocaleString()}</p>
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">{summary.totalOrders.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Today's Revenue */}
-          <div className="glass-card p-3.5 sm:p-5 hover:border-white/20 transition-all duration-300 col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#22c55e]/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="text-[#22c55e]" size={20} />
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center">
+                <TrendingUp className="text-[#22c55e]" size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Today's Revenue")}</p>
-              <p className="text-lg sm:text-2xl font-bold text-white leading-tight">{formatCurrency(summary.today.revenue)}</p>
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Today's Revenue")}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">{formatCurrency(summary.today.revenue)}</p>
             </div>
           </div>
 
           {/* Period Revenue */}
-          <div className="glass-card p-3.5 sm:p-5 hover:border-white/20 transition-all duration-300">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-[#f97316]/10 rounded-lg flex items-center justify-center">
-                <DollarSign className="text-[#f97316]" size={20} />
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="w-8 h-8 rounded-lg bg-[#f97316]/10 flex items-center justify-center">
+                <DollarSign className="text-[#f97316]" size={16} />
               </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear}` : `${days} Days`}{t("Revenue")}
+            <div className="space-y-0.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate" title={viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ${t("Revenue")}` : `${days} Days ${t("Revenue")}`}>
+                {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ` : `${days} Days `}{t("Revenue")}
               </p>
-              <p className="text-2xl font-bold text-white leading-tight">{formatCurrency(summary.period.revenue)}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">{formatCurrency(summary.period.revenue)}</p>
             </div>
           </div>
 
           {/* Delivery Orders */}
-          <div className="glass-card p-5 hover:border-white/20 transition-all duration-300">
-            <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-                <Truck className="text-yellow-500" size={20} />
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300 col-span-2 md:col-span-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 sm:block">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0 sm:mb-1.5">
+                  <Truck className="text-yellow-500" size={16} />
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Delivery Orders")}</p>
+                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
+                </div>
               </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Delivery Orders")}</p>
-              <p className="text-2xl font-bold text-white leading-tight">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
+              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
             </div>
           </div>
         </div>
+
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

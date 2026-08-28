@@ -161,25 +161,52 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
           
-          {bill.customerName &&
-          <>
-              <div style={{ fontSize: '14px', fontWeight: 'normal' }}>{t("Name:")}
-              {bill.customerName}
-              </div>
-              <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
-            </>
-          }
+          {bill.customerName && (
+            <div style={{ fontSize: '14px', fontWeight: 'normal' }}>
+              {t("Name: ")}<strong>{bill.customerName}</strong>
+            </div>
+          )}
+          {bill.customerPhone && (
+            <div style={{ fontSize: '14px', fontWeight: 'normal' }}>
+              {t("Phone: ")}<strong>{bill.customerPhone}</strong>
+            </div>
+          )}
+          {(bill.customerName || bill.customerPhone) && (
+            <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          )}
 
           {/* Bill Info Grid */}
           <div className="flex justify-between mb-1" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'normal', marginBottom: '4px' }}>
             <div className="flex flex-col gap-0.5" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-              <div>{t("Date:")}{new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
-              <div>{new Date(bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+              <div>{t("Date:")}{new Date(bill.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')}</div>
+              <div>{new Date(bill.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
               <div>{t("Cashier:")}{bill.cashierName || 'admin'}</div>
               {bill.tokenNumber && <div style={{ fontWeight: 'bold' }}>{t("Token No.:")}{bill.tokenNumber}</div>}
             </div>
             <div className="flex flex-col text-right gap-0.5" style={{ display: 'flex', flexDirection: 'column', textAlign: 'right' }}>
-              <div style={{ fontWeight: 'bold' }}>{bill.tableNo ? `Dine-In: ${bill.tableNo}` : bill.billType || 'Dine-In'}</div>
+              {(() => {
+                const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+                if (bType === 'Delivery') {
+                  const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
+                  return (
+                    <div style={{ fontWeight: 'bold', fontSize: '15px' }}>
+                      DELIVERY: {channel.toUpperCase()} {bill.tableNo ? `(${bill.tableNo})` : ''}
+                    </div>
+                  );
+                } else if (bType === 'Takeaway') {
+                  return (
+                    <div style={{ fontWeight: 'bold' }}>
+                      TAKEAWAY {bill.tableNo ? `(${bill.tableNo})` : ''}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div style={{ fontWeight: 'bold' }}>
+                      Dine-In: {bill.tableNo || 'Table'}
+                    </div>
+                  );
+                }
+              })()}
               <div style={{ fontWeight: 'bold' }}>{t("Bill No.:")}{bill.billNumber || 'PREVIEW'}</div>
               {bill.captainName && <div>{t("Assign to:")}{bill.captainName}</div>}
             </div>
@@ -317,16 +344,23 @@ const Invoice = ({ bill, onClose, onSave }) => {
               const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
               const disc = Number(bill.discount || 0);
               const taxable = Math.max(0, sub - disc);
-              let finalTotal = bill.total;
+              let finalTotal = Number(bill.total);
 
-              if (bill.tax === undefined || bill.tax === null) {
-                const s = settings || {};
-                const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
-                const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
-                const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
-                const totRate = cRate + sRate + gRate;
-                const taxRupees = totRate > 0 ? taxable * totRate / 100 : 0;
-                finalTotal = taxable + taxRupees;
+              const s = settings || {};
+              const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+              const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+              const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+              const totRate = cRate + sRate + gRate;
+              
+              const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+
+              const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+
+              // Safeguard: If bill.total is missing, 0, NaN or <= 0 while sub > 0, compute dynamically
+              if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                finalTotal = taxable + taxRupees + addCharges;
               }
 
               const roundedTotal = Math.round(finalTotal);
@@ -334,6 +368,15 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
               return (
                 <>
+                  {addCharges > 0 && (
+                    <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                      <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px', fontWeight: 'normal' }}>
+                        <span className="text-left" style={{ textAlign: 'left' }}>{t("Delivery / Packing")}</span>
+                        <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{addCharges.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
                     <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px', fontWeight: 'normal' }}>

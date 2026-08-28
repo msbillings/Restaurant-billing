@@ -12,8 +12,8 @@ const HelpSupport = ({ onNavigate, onGoBack }) => {
   ];
 
   return (
-    <div className="h-full flex flex-col bg-background p-2.5 sm:p-6 overflow-y-auto w-full">
-      <div className="flex items-center justify-between mb-3 sm:mb-6 shrink-0">
+    <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-y-auto w-full">
+      <div className="flex items-center justify-between mb-2 sm:mb-2.5 shrink-0">
         <div className="flex items-center gap-2.5 sm:gap-4">
           <BackButton onClick={onGoBack} className="shrink-0" />
           <div>

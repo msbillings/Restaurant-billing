@@ -33,7 +33,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
       const tName = tableName.trim().toLowerCase();
       return oTable === tName || oTable.includes(tName) || tName.includes(oTable);
     });
-    
+
     if (isBusyNow) return 'Busy';
 
     // Check reserved for today
@@ -70,7 +70,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
           {customButton}
         </div>
       ) : (
-        <button 
+        <button
           onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
           className="flex items-center justify-center w-full h-full gap-2 bg-transparent font-bold focus:outline-none text-sm py-1 cursor-pointer"
         >

@@ -350,245 +350,245 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
   const foodCostPercent = dishSellingPrice > 0 ? (totalRecipeCost / dishSellingPrice * 100).toFixed(1) : 0;
 
   return (
-    <div className="p-2.5 sm:p-4 w-full mx-auto space-y-3 sm:space-y-4">
+    <div className="p-1.5 sm:p-2.5 md:p-3 w-full mx-auto space-y-2 sm:space-y-2.5">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Header & Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-gradient-to-r from-amber-600 to-amber-700 p-3.5 sm:p-5 rounded-2xl text-white shadow-md">
-        <div className="flex items-start gap-2.5 sm:gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 bg-gradient-to-r from-amber-600 to-amber-700 p-2.5 sm:p-3 rounded-2xl text-white shadow-md">
+        <div className="flex items-start gap-2 sm:gap-2.5">
           <BackButton onClick={onGoBack} className="shrink-0 mt-0.5 invert" />
           <div>
-            <h1 className="text-base sm:text-2xl font-bold flex items-center gap-2">
-              <Package className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
+            <h1 className="text-base sm:text-xl md:text-2xl font-bold flex items-center gap-1.5 sm:gap-2">
+              <Package className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 shrink-0" />
               <span>{t("Inventory & Stock Management")}</span>
             </h1>
-            <p className="text-amber-100 text-[11px] sm:text-xs mt-0.5 line-clamp-2 sm:line-clamp-none">
+            <p className="text-amber-100 text-[10px] sm:text-xs mt-0.5 line-clamp-1 sm:line-clamp-none">
               {t("Track raw ingredients, manage recipe costing, and monitor real-time stock deductions.")}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
           <button
             onClick={fetchInventoryData}
-            className="flex-1 md:flex-none p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            className="flex-1 md:flex-none px-3 py-1.5 sm:py-2 bg-white/10 hover:bg-white/20 rounded-xl transition flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer whitespace-nowrap">
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{t("Refresh")}</span>
           </button>
           <button
             onClick={() => {resetForm();setEditingItem(null);setIsAddModalOpen(true);}}
-            className="flex-1 md:flex-none px-3.5 py-2 sm:py-2.5 bg-white text-amber-700 font-bold rounded-xl hover:bg-amber-50 transition shadow-sm flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap">
-            <Plus className="w-4 h-4" />
+            className="flex-1 md:flex-none px-3.5 py-1.5 sm:py-2 bg-white text-amber-700 font-bold rounded-xl hover:bg-amber-50 transition shadow-sm flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer whitespace-nowrap">
+            <Plus className="w-3.5 h-3.5" />
             <span>{t("Add Raw Material")}</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards - 3 tiles on mobile */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
-        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+      {/* KPI Cards - 3 tiles */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3.5">
+        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
           <div className="min-w-0 w-full">
             <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Total Items")}</p>
-            <h3 className="text-base sm:text-2xl font-black text-gray-900 mt-0.5">{items.length}</h3>
+            <h3 className="text-base sm:text-xl md:text-2xl font-black text-gray-900 mt-0.5">{items.length}</h3>
           </div>
-          <div className="p-1.5 sm:p-3 bg-amber-50 text-amber-600 rounded-lg sm:rounded-xl shrink-0">
-            <Layers className="w-4 h-4 sm:w-6 sm:h-6" />
+          <div className="p-1 sm:p-2.5 bg-amber-50 text-amber-600 rounded-lg sm:rounded-xl shrink-0">
+            <Layers className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
 
-        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
           <div className="min-w-0 w-full">
             <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Low Stock")}</p>
-            <h3 className="text-base sm:text-2xl font-black text-red-600 mt-0.5">{lowStockItems.length}</h3>
+            <h3 className="text-base sm:text-xl md:text-2xl font-black text-red-600 mt-0.5">{lowStockItems.length}</h3>
           </div>
-          <div className="p-1.5 sm:p-3 bg-red-50 text-red-600 rounded-lg sm:rounded-xl shrink-0">
-            <AlertTriangle className={`w-4 h-4 sm:w-6 sm:h-6 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
+          <div className="p-1 sm:p-2.5 bg-red-50 text-red-600 rounded-lg sm:rounded-xl shrink-0">
+            <AlertTriangle className={`w-4 h-4 sm:w-5 sm:h-5 ${lowStockItems.length > 0 ? 'animate-bounce' : ''}`} />
           </div>
         </div>
 
-        <div className="bg-white p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
+        <div className="bg-white p-2 sm:p-3.5 rounded-xl sm:rounded-2xl border border-gray-100 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2">
           <div className="min-w-0 w-full">
             <p className="text-[10px] sm:text-xs font-bold text-gray-400 truncate">{t("Stock Value")}</p>
-            <h3 className="text-xs sm:text-2xl font-black text-emerald-600 mt-0.5 font-mono truncate">₹{totalStockValue.toLocaleString()}</h3>
+            <h3 className="text-xs sm:text-lg md:text-2xl font-black text-emerald-600 mt-0.5 font-mono truncate">₹{totalStockValue.toLocaleString()}</h3>
           </div>
-          <div className="p-1.5 sm:p-3 bg-emerald-50 text-emerald-600 rounded-lg sm:rounded-xl shrink-0">
-            <DollarSign className="w-4 h-4 sm:w-6 sm:h-6" />
+          <div className="p-1 sm:p-2.5 bg-emerald-50 text-emerald-600 rounded-lg sm:rounded-xl shrink-0">
+            <DollarSign className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-2 sm:px-4 rounded-t-2xl overflow-x-auto shrink-0 flex-nowrap">
+      <div className="flex border-b border-gray-200 bg-white px-2 sm:px-3 rounded-t-2xl overflow-x-auto shrink-0 flex-nowrap">
         <button
           onClick={() => setActiveTab('stock')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
+          className={`py-2.5 sm:py-3 px-2.5 sm:px-4 font-semibold text-xs sm:text-sm flex items-center gap-1.5 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'stock' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          <Package className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Stock Room (Raw Materials)")}</span><span className="sm:hidden">{t("Stock")}</span>
+          <Package className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden lg:inline">{t("Stock Room (Raw Materials)")}</span>
+          <span className="lg:hidden">{t("Stock Room")}</span>
         </button>
         <button
           onClick={() => setActiveTab('recipes')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
+          className={`py-2.5 sm:py-3 px-2.5 sm:px-4 font-semibold text-xs sm:text-sm flex items-center gap-1.5 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'recipes' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          <Utensils className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Recipe Mapping & Costing")}</span><span className="sm:hidden">{t("Recipes")}</span>
+          <Utensils className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden lg:inline">{t("Recipe Mapping & Costing")}</span>
+          <span className="lg:hidden">{t("Recipe Costing")}</span>
         </button>
         <button
           onClick={() => setActiveTab('logs')}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
+          className={`py-2.5 sm:py-3 px-2.5 sm:px-4 font-semibold text-xs sm:text-sm flex items-center gap-1.5 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'logs' ?
           'border-amber-600 text-amber-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          <FileText className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("Stock Audit Logs")}</span><span className="sm:hidden">{t("Logs")}</span>
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden lg:inline">{t("Stock Audit Logs")}</span>
+          <span className="lg:hidden">{t("Audit Logs")}</span>
         </button>
         <button
           onClick={() => {setActiveTab('predictions');fetchPredictions();}}
-          className={`py-3 sm:py-4 px-3 sm:px-6 font-semibold text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
+          className={`py-2.5 sm:py-3 px-2.5 sm:px-4 font-semibold text-xs sm:text-sm flex items-center gap-1.5 border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
           activeTab === 'predictions' ?
           'border-purple-600 text-purple-600' :
           'border-transparent text-gray-500 hover:text-gray-700'}`
           }>
-          <Brain className="w-4 h-4 shrink-0" /><span className="hidden sm:inline">{t("🤖 AI Restock")}</span><span className="sm:hidden">{t("AI")}</span>
+          <Brain className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden lg:inline">{t("🤖 AI Restock Prediction")}</span>
+          <span className="lg:hidden">{t("🤖 AI Restock")}</span>
         </button>
       </div>
 
       {/* TAB 1: STOCK ROOM */}
       {activeTab === 'stock' &&
-      <div className="bg-white p-3.5 sm:p-6 rounded-b-2xl shadow-sm border border-gray-100 space-y-4 sm:space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="bg-white p-2.5 sm:p-3.5 rounded-b-2xl shadow-sm border border-gray-100 space-y-2.5 sm:space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+            <div className="relative flex-1 sm:max-w-xs md:max-w-sm">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
-              type="text" placeholder={t("Search raw ingredients...")}
-
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-sm" />
-            
+                type="text"
+                placeholder={t("Search raw ingredients...")}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3.5 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 text-xs sm:text-sm" />
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 shrink-0">
               {categories.map((cat) =>
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition ${
-              selectedCategory === cat ?
-              'bg-amber-600 text-white shadow-sm' :
-              'bg-gray-100 text-gray-600 hover:bg-gray-200'}`
-              }>
-              
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-2.5 sm:px-3 py-1 rounded-xl text-xs font-medium whitespace-nowrap transition ${
+                  selectedCategory === cat ?
+                  'bg-amber-600 text-white shadow-sm' :
+                  'bg-gray-100 text-gray-600 hover:bg-gray-200'}`
+                  }>
                   {t(cat)}
                 </button>
-            )}
+              )}
             </div>
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto overflow-y-auto max-h-[55vh]">
+          <div className="overflow-x-auto overflow-y-auto max-h-[60vh] rounded-xl border border-gray-100">
             <table className="w-full text-left relative">
-              <thead className="bg-gray-50/90 backdrop-blur-sm sticky top-0 shadow-sm z-20">
+              <thead className="bg-gray-50/90 backdrop-blur-sm sticky top-0 shadow-xs z-20">
                 <tr>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider rounded-tl-xl">{t("Item Details")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Current Stock")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Purchased Stock")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Used Stock")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Unit Cost")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Total Value")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">{t("Status")}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right rounded-tr-xl">{t("Actions")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider rounded-tl-xl whitespace-nowrap">{t("Item Details")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Current Stock")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Purchased Stock")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Used Stock")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Unit Cost")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Total Value")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{t("Status")}</th>
+                  <th className="px-2.5 sm:px-3.5 py-2.5 text-[11px] sm:text-xs font-bold text-gray-500 uppercase tracking-wider text-right rounded-tr-xl whitespace-nowrap">{t("Actions")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 text-xs sm:text-sm">
                 {filteredItems.length === 0 ?
-              <tr>
-                    <td colSpan="8" className="px-4 py-8 text-center text-gray-500">{t("No items found matching your filters.")}
-
-                </td>
-                  </tr> :
-
-              filteredItems.map((item) => {
-                const isLowStock = Number(item.currentStock) <= Number(item.minStockAlert);
-                return (
-                  <tr key={item._id} className="hover:bg-gray-50/50 transition-colors group">
-                        <td className="p-4">
-                          <div className="font-bold text-gray-900">{t(item.name)}</div>
-                          <div className="text-xs text-gray-500">{t(item.category)}</div>
-                        </td>
-                        <td className="p-4 font-extrabold text-gray-900">
-                          {item.currentStock} {item.unit}
-                        </td>
-                        <td className="p-4 font-bold text-emerald-600">
-                          {item.totalPurchased || 0} {item.unit}
-                        </td>
-                        <td className="p-4 font-bold text-rose-600">
-                          {item.totalUsed || 0} {item.unit}
-                        </td>
-                        <td className="p-4 text-gray-600">₹{Number(item.unitCost || 0).toFixed(2)} / {item.unit}</td>
-                        <td className="p-4 font-semibold text-gray-900">
-                          ₹{(Number(item.currentStock || 0) * Number(item.unitCost || 0)).toLocaleString()}
-                        </td>
-                        <td className="p-4">
-                          {isLowStock ?
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 font-bold text-xs rounded-full animate-pulse">
-                              <AlertTriangle className="w-3.5 h-3.5" />{t("Low Stock")}
-                      </span> :
-
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-full">
-                              <CheckCircle className="w-3.5 h-3.5" />{t("In Stock")}
-                      </span>
-                      }
-                        </td>
-                        <td className="p-4 text-right space-x-2">
-                          <button
-                        onClick={() => {
-                          setRestockItem(item);
-                          setRestockCost(item.unitCost || '');
-                          setIsRestockModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-xs rounded-lg transition inline-flex items-center gap-1">
-                        
-                            <ArrowUpRight className="w-3.5 h-3.5" />{t("Restock")}
-                      </button>
-                          <button
-                        onClick={() => {
-                          setWithdrawItem(item);
-                          setIsWithdrawModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs rounded-lg transition inline-flex items-center gap-1">
-                        
-                            <ArrowDownRight className="w-3.5 h-3.5" />{t("Take Stock")}
-                      </button>
-                          <button
-                        onClick={() => {
-                          setEditingItem(item);
-                          setFormData({
-                            name: item.name,
-                            category: item.category,
-                            unit: item.unit,
-                            currentStock: item.currentStock,
-                            minStockAlert: item.minStockAlert,
-                            unitCost: item.unitCost
-                          });
-                          setIsAddModalOpen(true);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-amber-600 transition">
-                        
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteItem(item)}
-                            className="p-1.5 text-gray-400 hover:text-red-600 transition cursor-pointer">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>);
-
-              })
-              }
+                <tr>
+                  <td colSpan="8" className="px-4 py-8 text-center text-gray-500">{t("No items found matching your filters.")}</td>
+                </tr> :
+                filteredItems.map((item) => {
+                  const isLowStock = Number(item.currentStock) <= Number(item.minStockAlert);
+                  return (
+                    <tr key={item._id} className="hover:bg-gray-50/50 transition-colors group">
+                      <td className="p-2.5 sm:p-3.5">
+                        <div className="font-bold text-gray-900">{t(item.name)}</div>
+                        <div className="text-[11px] text-gray-500">{t(item.category)}</div>
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 font-extrabold text-gray-900 whitespace-nowrap">
+                        {item.currentStock} {item.unit}
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 font-bold text-emerald-600 whitespace-nowrap">
+                        {item.totalPurchased || 0} {item.unit}
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 font-bold text-rose-600 whitespace-nowrap">
+                        {item.totalUsed || 0} {item.unit}
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 text-gray-600 whitespace-nowrap">₹{Number(item.unitCost || 0).toFixed(2)} / {item.unit}</td>
+                      <td className="p-2.5 sm:p-3.5 font-semibold text-gray-900 whitespace-nowrap">
+                        ₹{(Number(item.currentStock || 0) * Number(item.unitCost || 0)).toLocaleString()}
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 whitespace-nowrap">
+                        {isLowStock ?
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-red-100 text-red-700 font-bold text-[11px] rounded-full animate-pulse whitespace-nowrap">
+                            <AlertTriangle className="w-3 h-3" />{t("Low Stock")}
+                          </span> :
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-100 text-emerald-700 font-semibold text-[11px] rounded-full whitespace-nowrap">
+                            <CheckCircle className="w-3 h-3" />{t("In Stock")}
+                          </span>
+                        }
+                      </td>
+                      <td className="p-2.5 sm:p-3.5 text-right space-x-1 sm:space-x-1.5 whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setRestockItem(item);
+                            setRestockCost(item.unitCost || '');
+                            setIsRestockModalOpen(true);
+                          }}
+                          className="px-2 sm:px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[11px] sm:text-xs rounded-lg transition inline-flex items-center gap-1 cursor-pointer">
+                          <ArrowUpRight className="w-3 h-3" />
+                          <span>{t("Refill")}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setWithdrawItem(item);
+                            setIsWithdrawModalOpen(true);
+                          }}
+                          className="px-2 sm:px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-[11px] sm:text-xs rounded-lg transition inline-flex items-center gap-1 cursor-pointer">
+                          <ArrowDownRight className="w-3 h-3" />
+                          <span>{t("Use")}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setFormData({
+                              name: item.name,
+                              category: item.category,
+                              unit: item.unit,
+                              currentStock: item.currentStock,
+                              minStockAlert: item.minStockAlert,
+                              unitCost: item.unitCost
+                            });
+                            setIsAddModalOpen(true);
+                          }}
+                          className="p-1 text-gray-400 hover:text-amber-600 transition inline-block align-middle cursor-pointer">
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteItem(item)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition cursor-pointer inline-block align-middle">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -597,7 +597,7 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
 
       {/* TAB 2: RECIPE MAPPING */}
       {activeTab === 'recipes' &&
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {/* Left: Dish Selector */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 md:col-span-1 space-y-4">
             <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
@@ -764,60 +764,56 @@ const InventoryManagement = ({ onNavigate, onGoBack }) => {const { t } = useLang
 
       {/* TAB 3: AUDIT LOGS */}
       {activeTab === 'logs' &&
-      <div className="bg-white p-6 rounded-b-2xl shadow-sm border border-gray-100 space-y-4">
-          <h3 className="font-bold text-lg text-gray-900">{t("Stock Movement & Audit Trail")}</h3>
-          <p className="text-xs text-gray-500">{t("Real-time record of vendor deliveries, kitchen wastage adjustments, and automatic POS billing deductions.")}
+      <div className="bg-white p-3 sm:p-4 rounded-b-2xl shadow-sm border border-gray-100 space-y-3 sm:space-y-4">
+          <div>
+            <h3 className="font-bold text-base sm:text-lg text-gray-900">{t("Stock Movement & Audit Trail")}</h3>
+            <p className="text-[11px] sm:text-xs text-gray-500">{t("Real-time record of vendor deliveries, kitchen wastage adjustments, and automatic POS billing deductions.")}</p>
+          </div>
 
-        </p>
-
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-xl border border-gray-100">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-xs uppercase font-semibold text-gray-500">
-                  <th className="p-4 rounded-tl-xl">{t("Date & Time")}</th>
-                  <th className="p-4">{t("Item Name")}</th>
-                  <th className="p-4">{t("Transaction Type")}</th>
-                  <th className="p-4">{t("Qty Change")}</th>
-                  <th className="p-4">{t("Final Stock")}</th>
-                  <th className="p-4">{t("Notes")}</th>
-                  <th className="p-4 rounded-tr-xl">{t("Performed By")}</th>
+                <tr className="border-b border-gray-200 bg-gray-50 text-[11px] sm:text-xs uppercase font-bold text-gray-500">
+                  <th className="px-3 py-2.5 rounded-tl-xl whitespace-nowrap">{t("Date & Time")}</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap">{t("Item Name")}</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap">{t("Transaction Type")}</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap">{t("Qty Change")}</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap">{t("Final Stock")}</th>
+                  <th className="px-3 py-2.5 whitespace-nowrap">{t("Notes")}</th>
+                  <th className="px-3 py-2.5 rounded-tr-xl whitespace-nowrap">{t("Performed By")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-sm">
+              <tbody className="divide-y divide-gray-100 text-xs sm:text-sm">
                 {logs.length === 0 ?
-              <tr>
-                    <td colSpan="7" className="p-8 text-center text-gray-400">{t("No stock movement logs recorded yet.")}
+                <tr>
+                  <td colSpan="7" className="p-8 text-center text-gray-400">{t("No stock movement logs recorded yet.")}</td>
+                </tr> :
+                logs.map((log) => {
+                  let badgeClass = 'bg-gray-100 text-gray-700';
+                  if (log.type === 'Stock-In') badgeClass = 'bg-emerald-100 text-emerald-700';
+                  if (log.type === 'POS Deduction') badgeClass = 'bg-blue-100 text-blue-700';
+                  if (log.type === 'Wastage/Adjustment') badgeClass = 'bg-red-100 text-red-700';
 
-                </td>
-                  </tr> :
-
-              logs.map((log) => {
-                let badgeClass = 'bg-gray-100 text-gray-700';
-                if (log.type === 'Stock-In') badgeClass = 'bg-emerald-100 text-emerald-700';
-                if (log.type === 'POS Deduction') badgeClass = 'bg-blue-100 text-blue-700';
-                if (log.type === 'Wastage/Adjustment') badgeClass = 'bg-red-100 text-red-700';
-
-                return (
-                  <tr key={log._id} className="hover:bg-gray-50 transition">
-                        <td className="p-4 text-gray-500 text-xs whitespace-nowrap">
-                          {new Date(log.createdAt).toLocaleString()}
-                        </td>
-                        <td className="p-4 font-bold text-gray-900">{log.itemName}</td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${badgeClass}`}>
-                            {log.type}
-                          </span>
-                        </td>
-                        <td className={`p-4 font-extrabold ${log.quantityChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {log.quantityChange >= 0 ? `+${log.quantityChange}` : log.quantityChange} {log.unit}
-                        </td>
-                        <td className="p-4 font-bold text-gray-800">{log.finalStock} {log.unit}</td>
-                        <td className="p-4 text-gray-600 text-xs max-w-xs truncate">{log.notes}</td>
-                        <td className="p-4 text-gray-500 text-xs">{log.performedBy}</td>
-                      </tr>);
-
-              })
-              }
+                  return (
+                    <tr key={log._id} className="hover:bg-gray-50 transition">
+                      <td className="p-2.5 sm:p-3 text-gray-500 text-xs whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                      <td className="p-2.5 sm:p-3 font-bold text-gray-900 whitespace-nowrap">{log.itemName}</td>
+                      <td className="p-2.5 sm:p-3 whitespace-nowrap">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap ${badgeClass}`}>
+                          {log.type}
+                        </span>
+                      </td>
+                      <td className={`p-2.5 sm:p-3 font-extrabold whitespace-nowrap ${log.quantityChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {log.quantityChange >= 0 ? `+${log.quantityChange}` : log.quantityChange} {log.unit}
+                      </td>
+                      <td className="p-2.5 sm:p-3 font-bold text-gray-800 whitespace-nowrap">{log.finalStock} {log.unit}</td>
+                      <td className="p-2.5 sm:p-3 text-gray-600 text-xs max-w-xs truncate">{log.notes}</td>
+                      <td className="p-2.5 sm:p-3 text-gray-500 text-xs whitespace-nowrap">{log.performedBy}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

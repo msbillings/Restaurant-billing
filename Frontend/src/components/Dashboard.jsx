@@ -206,7 +206,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 px-2.5 py-4 md:p-6 overflow-y-auto">
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
       {/* Dashboard Header Container - Forcing dark mode on this specific page */}
       <style>{`
         .glass-card {

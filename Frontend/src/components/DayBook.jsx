@@ -56,7 +56,7 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   }
 
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 px-2.5 py-4 md:p-6 overflow-y-auto">
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
       <style>{`
         .glass-card {
           background: rgba(20, 20, 24, 0.6);

@@ -80,7 +80,18 @@ const menuSchema = new mongoose.Schema({
     ingredientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Inventory',
-      required: true
+      required: false,   // optional — may be null for custom/suggestion ingredients
+      default: null
+    },
+    customName: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    unit: {
+      type: String,
+      trim: true,
+      default: ''
     },
     quantityRequired: {
       type: Number,

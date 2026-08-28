@@ -796,7 +796,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   return (
     <div className="h-full flex flex-col bg-white overflow-hidden w-full">
       {/* Top Header */}
-      <div className="px-2.5 sm:px-6 py-2.5 shrink-0 border-b border-gray-100">
+      <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 shrink-0 border-b border-gray-100">
         {/* Row 1: Title + Refresh (always visible) */}
         <div className="flex items-center justify-between mb-2 sm:mb-0">
           <h2 className="text-xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary to-amber-500 tracking-tight">{t('Table View')}</h2>
@@ -806,30 +806,36 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
           </button>
 
-          {/* Desktop: all buttons in one row to the right of title */}
-          <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
+          {/* Desktop/Tablet: all buttons in one row to the right of title */}
+          <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             <button
               onClick={() => setShowAIInsights(!showAIInsights)}
-              className={`px-3 py-1.5 rounded-lg shadow-xs transition-colors text-xs font-bold flex items-center gap-1.5 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
+              className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-xs transition-colors text-xs font-bold flex items-center gap-1.5 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
               {t("✨ AI Predictor")}
             </button>
-            <button onClick={() => { setLoading(true); fetchOrders(); syncSpaces(); }} className="p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center" title={t("Refresh")}>
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <button onClick={() => { setLoading(true); fetchOrders(); syncSpaces(); }} className="p-1 sm:p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center" title={t("Refresh")}>
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
             </button>
 
-            <button onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
+            <button onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })} className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
               {t("Merge Bills")}
             </button>
-            <button onClick={() => onNavigate('reservation')} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
+            <button onClick={() => onNavigate('reservation')} className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
               {t("Reservation")}
             </button>
-            <button onClick={() => onNavigate('billing', 'DEL-NEW')} className="px-3 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
+            <button 
+              onClick={() => onNavigate('billing', 'DEL-NEW')} 
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs cursor-pointer"
+            >
               {t("Delivery")}
             </button>
-            <button onClick={() => onNavigate('billing', 'TAK-NEW')} className="px-3 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
+            <button 
+              onClick={() => onNavigate('billing', 'TAK-NEW')} 
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs cursor-pointer"
+            >
               {t("Pick Up")}
             </button>
-            <button onClick={() => handleAddSpace()} className="px-3 py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
+            <button onClick={() => handleAddSpace()} className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
               {t("+ Add Space")}
             </button>
           </div>
@@ -848,10 +854,16 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           <button onClick={() => onNavigate('reservation')} className="px-2.5 py-1.5 bg-indigo-600 text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">
             {t("Reservation")}
           </button>
-          <button onClick={() => onNavigate('billing', 'DEL-NEW')} className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">
+          <button 
+            onClick={() => onNavigate('billing', 'DEL-NEW')} 
+            className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0"
+          >
             {t("Delivery")}
           </button>
-          <button onClick={() => onNavigate('billing', 'TAK-NEW')} className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">
+          <button 
+            onClick={() => onNavigate('billing', 'TAK-NEW')} 
+            className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0"
+          >
             {t("Pick Up")}
           </button>
           <button onClick={() => handleAddSpace()} className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">

@@ -122,8 +122,8 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="p-4 sm:p-6 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <div className="p-2 sm:p-3 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3">
             {(onGoBack || onNavigate) &&
             <BackButton onClick={onGoBack || (() => onNavigate('dashboard'))} />
@@ -153,7 +153,7 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+      <div className="flex-1 overflow-y-auto p-1.5 sm:p-2.5 md:p-3">
         {orders.filter((o) => {
             if (!o) return false;
             if (filterType === 'All') return true;
@@ -206,7 +206,8 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
             return (
               <div
                 key={order._id}
-                className={`bg-surface rounded-2xl border ${getBorderColor()} shadow-sm hover:shadow-md transition-all overflow-hidden group relative`}>
+                onClick={() => onSelectOrder(order.tableNo)}
+                className={`bg-surface rounded-2xl border ${getBorderColor()} shadow-sm hover:shadow-md transition-all overflow-hidden group relative cursor-pointer`}>
                 
                   {isOnline &&
                 <div className={`absolute top-0 right-0 left-0 h-1.5 ${order.orderSource === 'Zomato' ? 'bg-red-500' : 'bg-orange-500'}`}></div>

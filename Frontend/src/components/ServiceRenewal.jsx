@@ -4,8 +4,8 @@ import { ArrowLeft, Clock, ShieldCheck, CreditCard, ChevronRight } from 'lucide-
 
 const ServiceRenewal = ({ onNavigate, onGoBack }) =>{const { t } = useLanguage();
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto w-full">
-      <div className="flex items-center justify-between mb-4 sm:mb-8 shrink-0">
+    <div className="h-full flex flex-col bg-gray-50 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto w-full">
+      <div className="flex items-center justify-between mb-2 sm:mb-2.5 shrink-0">
         <div className="flex items-center gap-3 sm:gap-4">
           <BackButton onClick={onGoBack} />
           <div>

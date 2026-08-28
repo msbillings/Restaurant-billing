@@ -737,13 +737,13 @@ const KDS = ({ onNavigate, onGoBack }) => {
         }
       `}</style>
       {/* Unified Responsive Top Header Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between mb-2.5 sm:mb-3.5 border-b border-slate-800 pb-2 sm:pb-3 gap-2 sm:gap-3 shrink-0">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between mb-2.5 sm:mb-3.5 border-b border-slate-800 pb-2 sm:pb-3 gap-2 sm:gap-3 shrink-0">
         {/* Row 1: Back button + Title + Active counter */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             <BackButton onClick={onGoBack} />
-            <h1 className="text-sm sm:text-xl md:text-2xl font-black text-amber-500 flex items-center gap-1.5 sm:gap-2 tracking-tight whitespace-nowrap">
-              <ChefHat className="text-amber-500 shrink-0 w-4 h-4 sm:w-6 sm:h-6" />
+            <h1 className="text-base sm:text-lg lg:text-xl font-black text-amber-500 flex items-center gap-1.5 sm:gap-2 tracking-tight whitespace-nowrap">
+              <ChefHat className="text-amber-500 shrink-0 w-4 h-4 sm:w-5 sm:h-5" />
               <span>{t("KITCHEN DISPLAY")}</span>
             </h1>
           </div>
@@ -752,18 +752,18 @@ const KDS = ({ onNavigate, onGoBack }) => {
           {groupedKOTs.length > 0 && (
             <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 px-2 sm:px-2.5 py-1 rounded-xl shadow-inner shrink-0">
               <Flame size={13} className="text-amber-400 animate-pulse" />
-              <span className="text-[11px] sm:text-xs font-black text-amber-300 font-mono">
+              <span className="text-[10px] sm:text-xs font-black text-amber-300 font-mono whitespace-nowrap">
                 {groupedKOTs.length}T • {totalPendingItems} {t("Items")}
               </span>
             </div>
           )}
         </div>
 
-        {/* Row 2 on Mobile / Right side on Desktop: Select Table Dropdown + KOT Button + Clock in SAME ROW */}
-        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+        {/* Row 2 on Mobile / Tablet / Desktop: Select Table Dropdown + KOT Button + Clock in SAME ROW */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full lg:w-auto justify-between lg:justify-end">
           {/* Custom Select Dropdown Field */}
           {groupedKOTs.length > 0 && (
-            <div className="relative flex-1 md:flex-initial md:w-auto inline-flex items-center min-w-0">
+            <div className="relative flex-1 lg:flex-initial max-w-[200px] sm:max-w-xs inline-flex items-center min-w-0">
               <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-amber-400">
                 <Utensils size={13} />
               </div>
@@ -784,7 +784,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
                     }
                   }
                 }}
-                className="w-full sm:w-auto bg-slate-900 border border-slate-700 hover:border-amber-500/80 focus:border-amber-500 text-amber-300 font-bold text-xs sm:text-sm rounded-xl pl-7 pr-7 py-1.5 sm:py-2 focus:outline-none focus:ring-2 focus:ring-amber-500/40 shadow-sm appearance-none cursor-pointer transition-all truncate"
+                className="w-full bg-slate-900 border border-slate-700 hover:border-amber-500/80 focus:border-amber-500 text-amber-300 font-bold text-xs sm:text-sm rounded-xl pl-7 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500/40 shadow-sm appearance-none cursor-pointer transition-all truncate"
               >
                 <option value="ALL" className="bg-slate-900 text-amber-400 font-bold">
                   {t("All Active Tables")} ({groupedKOTs.length})
@@ -804,21 +804,21 @@ const KDS = ({ onNavigate, onGoBack }) => {
             </div>
           )}
 
-          {/* KOT Page / History Button (visible next to select field) */}
+          {/* KOT Page / History Button */}
           {onNavigate && (
             <button
               onClick={() => onNavigate('kothistory')}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+              className="bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 text-amber-400 hover:text-amber-300 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0 whitespace-nowrap"
               title={t("Open KOT Page / History")}
             >
               <Printer size={14} />
-              <span className="hidden sm:inline">{t("KOT Page / History")}</span>
+              <span className="hidden sm:inline">{t("KOT History")}</span>
               <span className="sm:hidden">{t("KOTs")}</span>
             </button>
           )}
 
-          {/* Clock (visible next to KOT button) */}
-          <div className="text-slate-400 font-mono text-[11px] sm:text-sm bg-slate-900 border border-slate-800 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold shrink-0">
+          {/* Clock */}
+          <div className="text-slate-400 font-mono text-[10px] sm:text-xs bg-slate-900 border border-slate-800 px-2 sm:px-2.5 py-1.5 rounded-xl font-bold shrink-0 whitespace-nowrap">
             {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
         </div>
@@ -858,7 +858,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
               else if (tableMinutesOld > 10) cardColor = 'bg-amber-950/40 border-amber-900/60';
 
               return (
-                <div key={group.tableNo} id={`kds-table-${group.tableNo}`} className={`w-[88vw] sm:w-80 md:w-88 shrink-0 rounded-2xl border-2 flex flex-col overflow-hidden shadow-2xl snap-center ${cardColor}`}>
+                <div key={group.tableNo} id={`kds-table-${group.tableNo}`} className={`w-[85vw] sm:w-76 md:w-84 lg:w-88 shrink-0 rounded-2xl border-2 flex flex-col overflow-hidden shadow-2xl snap-center ${cardColor}`}>
                   <div className="bg-slate-900/90 p-3 flex justify-between items-center border-b border-inherit backdrop-blur-md">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">

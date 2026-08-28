@@ -9,7 +9,7 @@ import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
 import api from '../api/axios';
 import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder } from '../db/offlineDb';
-import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X } from 'lucide-react';
+import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X, User, UserPlus, Phone, Loader2 } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
 import CancelOrderModal from './CancelOrderModal';
@@ -291,6 +291,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [activeKOTData, setActiveKOTData] = useState(null);
   const [completedBill, setCompletedBill] = useState(null);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [tempCustomerPhone, setTempCustomerPhone] = useState('');
+  const [tempCustomerName, setTempCustomerName] = useState('');
+  const [crmLoading, setCrmLoading] = useState(false);
+  const [crmSaving, setCrmSaving] = useState(false);
+  const [crmCustomerFound, setCrmCustomerFound] = useState(null);
+
+  const searchInputRef = useRef(null);
+  const isViewingInvoiceRef = useRef(false);
+
   const [toast, setToast] = useState(null);
 
   const showToast = (message, type = 'info') => {
@@ -315,6 +325,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   // When true, background polls and socket events will NEVER clear or overwrite the cart.
   // Only resets to false when the order is explicitly saved, KOT'd, billed, or table is changed.
   const hasPendingLocalChanges = useRef(false);
+  const cartRef = useRef(cart);
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -326,6 +340,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       openOrdersList.forEach((o) => {
         if (o.tableNo && o.tableNo.startsWith(prefix)) {
           existingTableNos.add(o.tableNo);
+        }
+      });
+    }
+
+    if (dailyStats?.recentBills && Array.isArray(dailyStats.recentBills)) {
+      dailyStats.recentBills.forEach((b) => {
+        if (b.tableNo && b.tableNo.startsWith(prefix)) {
+          existingTableNos.add(b.tableNo);
         }
       });
     }
@@ -378,10 +400,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   useEffect(() => {
     if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || activeTable === 'DEL-NEW' || activeTable === 'TAK-NEW' || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
-      const existingOrder = openOrdersList.find((o) => o.tableNo?.startsWith(prefix) && (o.status === 'Open' || o.status === 'Billed'));
+      const isRecentOrder = (o) => {
+        if (!o || !o.createdAt) return true;
+        const diffHours = (Date.now() - new Date(o.createdAt).getTime()) / (1000 * 60 * 60);
+        return diffHours < 24;
+      };
+      const existingOrder = openOrdersList.find((o) => 
+        o.tableNo?.startsWith(prefix) && 
+        (o.status === 'Open' || o.status === 'Billed') && 
+        isRecentOrder(o)
+      );
       if (existingOrder && !initialTable) {
-
+        newlyGeneratedTables.current.delete(existingOrder.tableNo);
         setActiveTable(existingOrder.tableNo);
+        if (existingOrder.orderSource) {
+          setOrderSource(existingOrder.orderSource);
+        }
+        fetchActiveOrder(existingOrder.tableNo, true);
       } else {
         const generatedOrderNo = generateSequentialOrderNo(billType);
         newlyGeneratedTables.current.add(generatedOrderNo);
@@ -417,7 +452,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // This ensures that switching tables doesn't carry over the protection from the previous table.
     hasPendingLocalChanges.current = false;
 
-    if (activeTable && !newlyGeneratedTables.current.has(activeTable)) {
+    const isExistingInOpenOrders = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, activeTable));
+    if (activeTable && (isExistingInOpenOrders || !newlyGeneratedTables.current.has(activeTable))) {
+      newlyGeneratedTables.current.delete(activeTable);
       fetchActiveOrder(activeTable, true);
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
       if (cart.length === 0) {
@@ -429,12 +466,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const handleRemoteOrderUpdate = (e) => {
       // Pause updates if the user is currently viewing the invoice or payment modal
-      if (showInvoice || showPayment) return;
+      if (showInvoice || showPayment || isViewingInvoiceRef.current) return;
       
+      const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
+      if (hasLocalCart) {
+        // Active cart has local unsaved items — protect it from being clobbered by remote socket events
+        return;
+      }
+
       const data = e.detail;
       if (data) {
         if (!data.tableNo || data.tableNo === activeTable) {
-          // Suppress socket-triggered fetch if user just edited the cart
           const msSinceEdit = Date.now() - lastLocalEditTime.current;
           if (msSinceEdit > LOCAL_EDIT_LOCK_MS) {
             fetchActiveOrder(activeTable, false, true);
@@ -454,17 +496,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     window.addEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
 
     // 5-Second polling to guarantee real-time bill summary UI updates
-    // Reduced from 3s to 5s to give local edits more breathing room
     const pollInterval = setInterval(() => {
       // Pause polling if the user is currently viewing the invoice or payment modal
-      // This prevents the polling from receiving a 404 (since the order is now Paid)
-      // and wiping the completedBill state out from under the Invoice modal!
-      if (showInvoice || showPayment) return;
+      if (showInvoice || showPayment || isViewingInvoiceRef.current) return;
 
       if (activeTable) {
-        // Only background-fetch if user hasn't edited cart in the last LOCAL_EDIT_LOCK_MS
-        const msSinceEdit = Date.now() - lastLocalEditTime.current;
-        if (msSinceEdit > LOCAL_EDIT_LOCK_MS) {
+        // If user has unsaved cart items or pending local edits, NEVER fetch or overwrite activeTable!
+        const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
+        if (!hasLocalCart) {
           fetchActiveOrder(activeTable, false, true);
         }
       }
@@ -547,6 +586,222 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   }, [customerPhone]);
 
+  useEffect(() => {
+    if (billType === 'Delivery' || billType === 'Takeaway' || activeTable?.startsWith('DEL-') || activeTable?.startsWith('TAK-')) {
+      setShowTransfer(false);
+    }
+  }, [billType, activeTable]);
+
+  const handleOpenCustomerModal = async () => {
+    // 1. Check local state first
+    let phoneToUse = customerPhone || '';
+    let nameToUse = customerName || '';
+
+    // 2. Fallback to openOrdersList
+    if (!phoneToUse || !nameToUse) {
+      const matchingOrder = openOrdersList.find(o => isTableMatching(o.tableNo, activeTable));
+      if (matchingOrder) {
+        phoneToUse = phoneToUse || matchingOrder.customerPhone || '';
+        nameToUse = nameToUse || matchingOrder.customerName || '';
+      }
+    }
+
+    // 3. Fallback to active order from API if table selected
+    if ((!phoneToUse || !nameToUse) && activeTable) {
+      try {
+        const orderData = await getActiveOrder(activeTable);
+        if (orderData) {
+          phoneToUse = phoneToUse || orderData.customerPhone || '';
+          nameToUse = nameToUse || orderData.customerName || '';
+          if (orderData.customerPhone) setCustomerPhone(orderData.customerPhone);
+          if (orderData.customerName) setCustomerName(orderData.customerName);
+        }
+      } catch (e) {}
+    }
+
+    setTempCustomerPhone(phoneToUse);
+    setTempCustomerName(nameToUse);
+    setCrmCustomerFound(null);
+    if (phoneToUse && phoneToUse.length === 10) {
+      handleCrmPhoneChange(phoneToUse);
+    }
+    setShowCustomerModal(true);
+  };
+
+  const handleCrmPhoneChange = async (val) => {
+    const digits = val.replace(/\D/g, '').slice(0, 10);
+    setTempCustomerPhone(digits);
+    if (digits.length === 10) {
+      setCrmLoading(true);
+      try {
+        const API_BASE_URL = getApiUrl();
+        const res = await fetch(`${API_BASE_URL}/customers/${digits}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
+            'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.isNew && data.customer) {
+            setTempCustomerName(data.customer.name || '');
+            setCrmCustomerFound(data.customer);
+          } else {
+            setCrmCustomerFound(null);
+          }
+        }
+      } catch (err) {
+        console.error('CRM lookup error:', err);
+      } finally {
+        setCrmLoading(false);
+      }
+    } else {
+      setCrmCustomerFound(null);
+    }
+  };
+
+  const handleSaveCustomerCRM = async (e) => {
+    if (e) e.preventDefault();
+    const cleanPhone = tempCustomerPhone.trim().replace(/\D/g, '');
+    const cleanName = tempCustomerName.trim();
+
+    if (!cleanPhone && !cleanName) {
+      showToast(t('Please enter customer name or phone number'), 'warning');
+      return;
+    }
+
+    setCrmSaving(true);
+    try {
+      if (cleanPhone) {
+        await api.post('/customers', {
+          name: cleanName || 'Guest',
+          phone: cleanPhone,
+          orderType: billType
+        });
+      }
+      setCustomerPhone(cleanPhone);
+      setCustomerName(cleanName || 'Guest');
+
+      // Immediately sync customer details to the order in MongoDB!
+      const targetOrderId = orderId || openOrdersList.find(o => isTableMatching(o.tableNo, activeTable))?._id;
+      if (targetOrderId && !targetOrderId.startsWith('offline_')) {
+        try {
+          await api.patch(`/bills/${targetOrderId}/customer`, {
+            customerName: cleanName || 'Guest',
+            customerPhone: cleanPhone,
+            billType
+          });
+        } catch (apiErr) {
+          console.warn('Error patching customer to bill by ID:', apiErr);
+        }
+      } else if (activeTable) {
+        try {
+          await api.patch(`/bills/${encodeURIComponent(activeTable)}/customer`, {
+            customerName: cleanName || 'Guest',
+            customerPhone: cleanPhone,
+            billType
+          });
+        } catch (apiErr) {
+          console.warn('Error patching customer to bill by table:', apiErr);
+        }
+      }
+
+      setOpenOrdersList(prev => prev.map(o => isTableMatching(o.tableNo, activeTable) ? {
+        ...o,
+        customerPhone: cleanPhone,
+        customerName: cleanName || 'Guest'
+      } : o));
+
+      if (activeTable) {
+        upsertCachedOpenOrder({
+          tableNo: activeTable,
+          customerPhone: cleanPhone,
+          customerName: cleanName || 'Guest'
+        }).catch(() => {});
+      }
+
+      showToast(t('Customer details linked to order'), 'success');
+      setShowCustomerModal(false);
+    } catch (err) {
+      console.error('Error saving customer CRM:', err);
+      setCustomerPhone(cleanPhone);
+      setCustomerName(cleanName || 'Guest');
+      setShowCustomerModal(false);
+      showToast(t('Customer linked to order'), 'info');
+    } finally {
+      setCrmSaving(false);
+    }
+  };
+
+  const handleOrderSourceChange = async (newSource) => {
+    setOrderSource(newSource);
+    hasPendingLocalChanges.current = true;
+    lastLocalEditTime.current = Date.now();
+
+    const targetOrderId = orderId || openOrdersList.find(o => isTableMatching(o.tableNo, activeTable))?._id;
+    if (targetOrderId && !targetOrderId.startsWith('offline_')) {
+      try {
+        await saveOrder({
+          id: targetOrderId,
+          tableNo: activeTable,
+          billType: 'Delivery',
+          orderSource: newSource,
+          items: cart && cart.length > 0 ? cart : [{ name: 'Delivery Order', price: 0, quantity: 1 }],
+          skipNotification: true
+        });
+        setOpenOrdersList(prev => prev.map(o => (o._id === targetOrderId || isTableMatching(o.tableNo, activeTable)) ? { ...o, orderSource: newSource } : o));
+      } catch (err) {
+        console.warn('Non-blocking error saving orderSource to DB:', err);
+      }
+    } else {
+      setOpenOrdersList(prev => prev.map(o => isTableMatching(o.tableNo, activeTable) ? { ...o, orderSource: newSource } : o));
+    }
+  };
+
+  // Global Keyboard Auto-Type to Search bar (Issue 7)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // If user is currently typing in an input, textarea, select, or contenteditable, don't intercept
+      const activeEl = document.activeElement;
+      const tag = activeEl?.tagName?.toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || activeEl?.isContentEditable;
+      if (isInput) {
+        if (e.key === 'Escape' && activeEl === searchInputRef.current) {
+          setSearchTerm('');
+          searchInputRef.current?.blur();
+        }
+        return;
+      }
+
+      // If any modal is active or viewing invoice, do not hijack typing
+      if (showInvoice || showPayment || showKOT || showTransfer || showCancelModal || showCustomerModal || isViewingInvoiceRef.current) {
+        return;
+      }
+
+      // Ignore modifier keys, navigation, and function keys
+      if (e.ctrlKey || e.altKey || e.metaKey || e.key.length > 1) {
+        if (e.key === 'Escape') {
+          setSearchTerm('');
+          searchInputRef.current?.blur();
+        }
+        return;
+      }
+
+      // If printable character (letters, numbers, space), auto-type into search bar
+      if (/^[a-zA-Z0-9\s]$/.test(e.key)) {
+        e.preventDefault();
+        setSearchTerm((prev) => prev + e.key);
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [showInvoice, showPayment, showKOT, showTransfer, showCancelModal, showCustomerModal]);
+
   async function fetchActiveOrder(tableToFetch = activeTable, forceReset = false, isBackground = false) {
     if (!tableToFetch) {
       setLoading(false);
@@ -599,7 +854,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setOrderId(cached._id);
           setOrderStatus(cached.status);
           setBillNumber(cached.billNumber);
-          setBillType(cached.billType || 'Dine-In');
+          setBillType(cached.billType || (cached.tableNo?.startsWith('DEL-') ? 'Delivery' : (cached.tableNo?.startsWith('TAK-') ? 'Takeaway' : 'Dine-In')));
+          if (cached.orderSource) {
+            setOrderSource(cached.orderSource);
+          } else if (cached.billType === 'Delivery' || cached.tableNo?.startsWith('DEL-')) {
+            setOrderSource('Direct');
+          }
           setCustomerPhone(cached.customerPhone || '');
           setCustomerName(cached.customerName || '');
           setLoading(false);
@@ -623,85 +883,42 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // Check if this table has an active order in open orders list
-    const hasOrderInList = openOrdersList && Array.isArray(openOrdersList) && openOrdersList.some(o => 
-      o.tableNo && (o.status === 'Open' || o.status === 'Billed') && isTableMatching(o.tableNo, tableToFetch)
-    );
-
-    // If it's an empty table (no open order in list), never show loading spinner
-    if (!hasOrderInList) {
-      setLoading(false);
-
-      // If the user has pending local changes (items added but not yet saved),
-      // NEVER clear the cart from any background/poll fetch. The cart is protected
-      // until the user explicitly saves, KOTs, or switches table.
-      if (hasPendingLocalChanges.current && !forceReset) {
-        return;
-      }
-
-      if (!isEditLocked || forceReset) {
-        setCart([]);
-        setOrderId(null);
-        setOrderStatus('Open');
-        setBillNumber(null);
-        setCompletedBill(null);
-        if (billType !== 'Delivery') {
-          setOrderSource('Direct');
-        }
-        setCustomerPhone('');
-        setCustomerName('');
-        setCustomerInfo(null);
-        setDiscount({ type: 'percentage', value: '' });
-        setDeliveryCharge('');
-        setContainerCharge('');
-      }
-
-      // Silent background fetch to check backend without showing spinner
-      try {
-        const order = await getActiveOrder(tableToFetch);
-        if (order && order.tableNo && isTableMatching(order.tableNo, tableToFetch) && order.items && order.items.length > 0) {
-          const kotStatusMap = {};
-          if (order.kots && Array.isArray(order.kots)) {
-            order.kots.forEach(kot => {
-              (kot.items || []).forEach(kItem => {
-                if (kItem.name) {
-                  kotStatusMap[kItem.name] = kItem.status;
-                  if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
-                }
-              });
-            });
-          }
-
-          const backendItems = (order.items || [])
-            .filter(i => (Number(i.quantity || 0) > 0 || (i.isCancelled && (i.printedQuantity || 0) > 0)))
-            .map(i => ({
-              ...i,
-              specialNote: i.specialNote || '',
-              printedQuantity: i.printedQuantity !== undefined ? i.printedQuantity : (order.status === 'Open' ? (i.quantity || 0) : 0),
-              lastPrintedNote: i.lastPrintedNote !== undefined ? i.lastPrintedNote : (i.specialNote || ''),
-              status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status
-            }));
-
-          if (backendItems.length > 0) {
-            setCart(backendItems);
-            setOrderId(order._id);
-            setOrderStatus(order.status);
-            setBillNumber(order.billNumber);
-            setBillType(order.billType || 'Dine-In');
-            if (order.billType === 'Delivery') {
-              setOrderSource(order.orderSource || 'Direct');
-            }
-            setCustomerPhone(order.customerPhone || '');
-            setCustomerName(order.customerName || '');
-          }
-        }
-      } catch (err) {
-        // Ignore background fetch error for empty tables
-      }
+    // If the user has local cart items or pending changes:
+    // NEVER clear or clobber the cart during any background or poll fetch!
+    const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
+    if (isBackground && !forceReset && hasLocalCart) {
       return;
     }
 
-    // Only set loading for occupied tables that are actively fetching their order items
+    // If this is a brand new empty table generated by user action, don't show loading or fetch
+    const isNewlyGenerated = newlyGeneratedTables.current && newlyGeneratedTables.current.has(tableToFetch);
+    const isKnownOrder = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, tableToFetch));
+    if (isNewlyGenerated && !isKnownOrder) {
+      if (hasLocalCart) {
+        newlyGeneratedTables.current.delete(tableToFetch);
+        return;
+      }
+      newlyGeneratedTables.current.delete(tableToFetch);
+      setLoading(false);
+      setCart([]);
+      setOrderId(null);
+      setOrderStatus('Open');
+      setBillNumber(null);
+      setCompletedBill(null);
+      return;
+    }
+
+    // Never clobber cart or completedBill while invoice or payment is active
+    if (isViewingInvoiceRef.current || showInvoice || showPayment) {
+      return;
+    }
+
+    // If the user has local items in cart, protect them until user saves or navigates away
+    if (hasLocalCart && !forceReset) {
+      return;
+    }
+
+    // Only set loading for tables that are actively fetching their order items
     if (!isBackground) setLoading(true);
 
     try {
@@ -775,16 +992,29 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setTaxRate('');
         }
       } else {
-        const msSinceEdit = Date.now() - lastLocalEditTime.current;
-        const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
-        
-        // If user has pending local changes and this is a background fetch,
-        // NEVER clear the cart — the user may have added items not yet saved.
-        if (hasPendingLocalChanges.current && !forceReset) {
+        // If user has local cart items or pending local changes, NEVER reset cart!
+        const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
+        if (hasLocalCart && !forceReset) {
           return;
         }
 
-        if (isEditLocked && !forceReset) {
+        if (isBackground && !forceReset) {
+          return;
+        }
+
+        // If it's a delivery or takeaway table that has no active order (e.g. already settled/paid),
+        // transition away ONLY on direct navigation when cart is completely empty!
+        if (!isBackground && !hasLocalCart && tableToFetch && (tableToFetch.startsWith('DEL-') || tableToFetch.startsWith('TAK-')) && !newlyGeneratedTables.current.has(tableToFetch)) {
+          newlyGeneratedTables.current.add(tableToFetch); // Mark tableToFetch as used
+          const freshOrderNo = generateSequentialOrderNo(tableToFetch.startsWith('DEL-') ? 'Delivery' : 'Takeaway');
+          newlyGeneratedTables.current.add(freshOrderNo);
+          setActiveTable(freshOrderNo);
+          setCart([]);
+          setOrderId(null);
+          setOrderStatus('Open');
+          setBillNumber(null);
+          setCompletedBill(null);
+          setLoading(false);
           return;
         }
 
@@ -948,10 +1178,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       newCart = [...cart, { ...item, quantity: 1, specialNote: item.specialNote || '', orderedAt: item.orderedAt || new Date().toISOString() }];
     }
     setCart(newCart);
+    cartRef.current = newCart;
     lastLocalEditTime.current = Date.now(); // Mark local edit time
     // Mark that user has pending local changes — prevents any background poll
     // from clearing the cart until the user explicitly saves/KOTs/cancels.
     hasPendingLocalChanges.current = true;
+    if (currentTable) {
+      newlyGeneratedTables.current?.delete(currentTable);
+    }
     // Clear any stale loading state immediately so items appear without any spinner delay
     setLoading(false);
   };
@@ -1000,10 +1234,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }).filter((i) => i.quantity > 0 || (i.printedQuantity || 0) > 0);
 
     setCart(newCart);
+    cartRef.current = newCart;
     lastLocalEditTime.current = Date.now(); // Mark local edit time
     // Mark pending local changes if cart still has items
     if (newCart.length > 0) {
       hasPendingLocalChanges.current = true;
+      if (currentTable) {
+        newlyGeneratedTables.current?.delete(currentTable);
+      }
     } else {
       // Cart emptied — no longer pending
       hasPendingLocalChanges.current = false;
@@ -1200,6 +1438,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
         tax: taxVal,
+        orderSource: billType === 'Delivery' ? orderSource : undefined,
+        customerName,
+        customerPhone,
         taxBreakdown: {
           cgst: cAmt,
           sgst: sAmt,
@@ -1207,15 +1448,28 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
       };
       const billedOrder = await generateBill(orderIdToUse, billData);
-      setOrderId(billedOrder._id);
-      setOrderStatus('Billed');
-      setBillNumber(billedOrder.billNumber);
-      setCompletedBill(billedOrder);
+      const billedData = {
+        ...billedOrder,
+        items: (cart && cart.length > 0) ? cart : (billedOrder.items || []),
+        tableNo: billedOrder.tableNo || activeTable,
+        subtotal: subtotal || billedOrder.subtotal,
+        tax: taxVal || billedOrder.tax,
+        discount: discountAmount || billedOrder.discount,
+        total: total || billedOrder.total,
+        billType: billType || billedOrder.billType,
+        orderSource: orderSource || billedOrder.orderSource,
+        customerName: customerName || billedOrder.customerName,
+        customerPhone: customerPhone || billedOrder.customerPhone,
+        deliveryCharge: deliveryCharge,
+        containerCharge: containerCharge,
+        createdAt: billedOrder.createdAt || new Date()
+      };
+      setCompletedBill(billedData);
+      isViewingInvoiceRef.current = true;
+      setShowInvoice(true);
 
       showToast(t('billSavedAndPrinted', { defaultValue: 'Bill saved & printed successfully' }), 'success');
       if (onOrderUpdate) onOrderUpdate();
-      // Always open Invoice/print modal immediately
-      setShowInvoice(true);
     } catch (error) {
       console.error('Error generating bill:', error);
 
@@ -1238,7 +1492,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             setOrderStatus(order.status);
             setBillNumber(order.billNumber);
             setCompletedBill(order);
-            // Always show Invoice (print modal) for both Billed and Paid orders
+            isViewingInvoiceRef.current = true;
             setShowInvoice(true);
             showToast(t('recoveredExistingBill'), 'info');
             return;
@@ -1322,6 +1576,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           discountType: discount.type,
           discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
           tax: taxVal,
+          orderSource: billType === 'Delivery' ? orderSource : undefined,
+          customerName,
+          customerPhone,
           taxBreakdown: {
             cgst: cAmt,
             sgst: sAmt,
@@ -1339,7 +1596,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const settledOrder = await settleBill(currentId, {
         paymentMode: paymentData.mode,
         splitPayments: paymentData.splitPayments,
-        upiApp: paymentData.upiApp
+        upiApp: paymentData.upiApp,
+        orderSource: billType === 'Delivery' ? orderSource : undefined
       });
       setOrderStatus('Paid');
       setShowPayment(false);
@@ -1351,26 +1609,32 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const finalBill = {
         ...(billDetails || settledOrder),
         ...settledOrder,
-        items: cart,
+        items: (cart && cart.length > 0) ? cart : (settledOrder?.items || billDetails?.items || []),
         status: 'Paid',
         paymentMode: paymentData.mode,
         billNumber: currentBillNum || settledOrder?.billNumber,
         tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable,
-        subtotal: subtotal,
-        tax: taxVal,
-        discount: discountAmount,
-        discountType: discount.type,
-        total: total,
-        billType: billType
+        subtotal: subtotal || settledOrder?.subtotal,
+        tax: taxVal || settledOrder?.tax,
+        discount: discountAmount || settledOrder?.discount,
+        discountType: discount.type || settledOrder?.discountType,
+        total: total || settledOrder?.total,
+        billType: billType || settledOrder?.billType,
+        orderSource: orderSource || settledOrder?.orderSource,
+        customerName: customerName || settledOrder?.customerName,
+        customerPhone: customerPhone || settledOrder?.customerPhone,
+        deliveryCharge: deliveryCharge,
+        containerCharge: containerCharge,
+        createdAt: new Date()
       };
 
+      isViewingInvoiceRef.current = true;
       setCompletedBill(finalBill);
+      setShowInvoice(true);
       showToast(t('billSettled'), 'success');
-      // Bill settled = order fully completed, clear pending local changes
       hasPendingLocalChanges.current = false;
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
-      setShowInvoice(true);
     } catch (error) {
       console.error('Error settling bill:', error);
       setToast({ message: error.response?.data?.message || error.message || t('failedToSettle'), type: 'error' });
@@ -1486,6 +1750,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const handleFinish = () => {
+    isViewingInvoiceRef.current = false;
     if (completedBill && completedBill.status === 'Paid') {
       showToast(`${t('billSaved')} ${completedBill.billNumber || ''}`, 'success');
     }
@@ -1508,13 +1773,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     
     if (billType === 'Dine-In') {
       setActiveTable('');
+      fetchActiveOrder('');
     } else {
+      if (activeTable) newlyGeneratedTables.current.add(activeTable);
       const generatedOrderNo = generateSequentialOrderNo(billType);
       newlyGeneratedTables.current.add(generatedOrderNo);
       setActiveTable(generatedOrderNo);
+      fetchActiveOrder(generatedOrderNo);
     }
-    
-    fetchActiveOrder();
 
     fetchDailyStats();
 
@@ -1623,19 +1889,19 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background">
-      <div className="h-14 flex items-center justify-between px-3 sm:px-6 bg-surface border-b border-border/50 shrink-0 relative z-30">
+      <div className="h-12 sm:h-14 flex items-center justify-between px-2 sm:px-3 lg:px-6 bg-surface border-b border-border/50 shrink-0 relative z-30 gap-1 sm:gap-2">
 
         {/* Left Section: Select Table */}
-        <div className="flex items-center gap-2 shrink-0 z-30">
-          <div className="relative flex items-center gap-2 bg-background border border-border rounded-xl px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer">
-            <LayoutGrid size={16} className="text-text-muted shrink-0 pointer-events-none" />
-            <div className="flex items-center pointer-events-none">
-              <span className="font-bold text-text-main text-sm truncate max-w-[180px]">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 z-30">
+          <div className="relative flex items-center gap-1.5 sm:gap-2 bg-background border border-border rounded-xl px-2 sm:px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer max-w-[130px] sm:max-w-[170px] lg:max-w-[200px]">
+            <LayoutGrid size={15} className="text-text-muted shrink-0 pointer-events-none" />
+            <div className="flex items-center pointer-events-none min-w-0">
+              <span className="font-bold text-text-main text-xs sm:text-sm truncate">
                 {activeTable ?
                 activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable :
                 t('selectTable', { defaultValue: 'Select Table' })}
               </span>
-              <ChevronDown size={14} className="text-text-muted ml-1 shrink-0" />
+              <ChevronDown size={13} className="text-text-muted ml-0.5 shrink-0" />
             </div>
 
             {billType === 'Delivery' || billType === 'Takeaway' ?
@@ -1647,26 +1913,49 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                     newlyGeneratedTables.current.add(generatedOrderNo);
                     setActiveTable(generatedOrderNo);
                   } else {
-                    setActiveTable(e.target.value);
+                    const chosenTable = e.target.value;
+                    setActiveTable(chosenTable);
+                    const matchingOrder = openOrdersList.find(o => isTableMatching(o.tableNo, chosenTable));
+                    if (matchingOrder && matchingOrder.orderSource) {
+                      setOrderSource(matchingOrder.orderSource);
+                    } else if (chosenTable.startsWith('DEL-')) {
+                      setOrderSource('Direct');
+                    }
                   }
                 }}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-0">
-                
-                  <option value="NEW_ORDER" className="bg-surface text-primary font-bold">+ {t('newOrder')}</option>
-                  {openOrdersList.
-                filter((o) => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-')).
-                map((o) =>
-                <option key={o._id} value={o.tableNo} className="bg-surface text-white">
-                        {o.tableNo} ({o.status} - ₹{o.total || 0})
-                      </option>
-                )
-                }
-                  {activeTable && !openOrdersList.some((o) => isTableMatching(o.tableNo, activeTable)) &&
-                <option value={activeTable} className="bg-surface text-white">
-                      {activeTable} ({t('newCurrent')})
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                style={{ backgroundColor: '#ffffff', color: '#111827' }}
+              >
+                <option
+                  value="NEW_ORDER"
+                  style={{ backgroundColor: '#ffffff', color: '#ea580c', fontWeight: 'bold' }}
+                  className="bg-white text-orange-600 font-bold"
+                >
+                  + {t('newOrder')}
+                </option>
+                {openOrdersList
+                  .filter((o) => o.tableNo?.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))
+                  .map((o) => (
+                    <option
+                      key={o._id}
+                      value={o.tableNo}
+                      style={{ backgroundColor: '#ffffff', color: '#111827', fontWeight: '500' }}
+                      className="bg-white text-gray-900 font-medium"
+                    >
+                      {o.tableNo} ({o.status === 'Billed' ? t('Billed') : t('Open')} - ₹{o.total || 0})
                     </option>
+                  ))
                 }
-                </select> :
+                {activeTable && !openOrdersList.some((o) => isTableMatching(o.tableNo, activeTable)) && (
+                  <option
+                    value={activeTable}
+                    style={{ backgroundColor: '#ffffff', color: '#111827', fontWeight: '500' }}
+                    className="bg-white text-gray-900 font-medium"
+                  >
+                    {activeTable} ({t('newCurrent')})
+                  </option>
+                )}
+              </select> :
 
               <TableDropdown
                 floors={floors}
@@ -1682,37 +1971,38 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           </div>
         </div>
 
-        {/* Center Section: Search Bar (Desktop only, centered with Cancel/Clear button) */}
-        <div className="hidden md:flex flex-1 items-center justify-center px-4 max-w-2xl mx-auto z-20">
+        {/* Center Section: Search Bar (Desktop/Tablet, centered with Cancel/Clear button) */}
+        <div className="hidden md:flex flex-1 items-center justify-center px-1 sm:px-2 lg:px-4 max-w-xs lg:max-w-md xl:max-w-xl mx-auto z-20 min-w-[100px]">
           <div className="relative w-full items-center">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={15} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={14} />
             <input
+              ref={searchInputRef}
               type="text"
-              placeholder={t('Search all menu items (dishes, codes)...')}
+              placeholder={t('Search all menu items...')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-9 py-1.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-xs sm:text-sm text-text-main transition-all shadow-xs"
+              className="w-full pl-8 pr-8 py-1.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 text-xs sm:text-sm text-text-main transition-all shadow-xs"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-full p-1 transition-all cursor-pointer shadow-2xs"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-full p-1 transition-all cursor-pointer shadow-2xs"
                 title={t("Clear search")}
               >
-                <X size={12} />
+                <X size={11} />
               </button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Mobile-only Veg / Non-Veg / All Segmented Filter next to Select Table */}
           <div className="flex sm:hidden items-center bg-background p-0.5 rounded-xl border border-border shadow-xs shrink-0 gap-0.5 z-30">
             <button
               type="button"
               onClick={() => setFoodTypeFilter('all')}
-              className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
                 foodTypeFilter === 'all'
                   ? 'bg-gray-900 text-white shadow-xs'
                   : 'text-text-muted hover:text-text-main'
@@ -1723,7 +2013,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setFoodTypeFilter('veg')}
-              className={`px-1.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 foodTypeFilter === 'veg'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-emerald-600 hover:bg-emerald-50/50'
@@ -1735,7 +2025,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setFoodTypeFilter('non-veg')}
-              className={`px-1.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                 foodTypeFilter === 'non-veg'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-rose-600 hover:bg-rose-50/50'
@@ -1746,39 +2036,82 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             </button>
           </div>
 
-          <div className="items-center gap-6 hidden sm:flex">
-            {activeTable && activeTable !== 'NEW_ORDER' && billType !== 'Delivery' && billType !== 'Takeaway' && orderId && (
+          <div className="items-center gap-1.5 sm:gap-2 lg:gap-3 hidden sm:flex shrink-0">
+            {activeTable && activeTable !== 'NEW_ORDER' && billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-') && orderId && (
               <button
                 onClick={() => setShowTransfer(true)}
-                className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-3 py-1.5 rounded-xl font-bold text-sm transition-colors flex items-center gap-1.5 relative z-20 cursor-pointer border border-primary/20 shadow-sm"
+                className="bg-primary/10 text-primary hover:bg-primary hover:text-white px-2.5 sm:px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-colors flex items-center gap-1 relative z-20 cursor-pointer border border-primary/20 shadow-sm shrink-0"
                 title={t('transferTable', { defaultValue: 'Transfer Table' })}
               >
-                <ArrowRightLeft size={16} />
-                <span className="hidden sm:inline">{t('Transfer')}</span>
+                <ArrowRightLeft size={14} />
+                <span className="hidden lg:inline">{t('Transfer')}</span>
               </button>
             )}
 
-            <div className="flex items-center gap-4 bg-background px-3 py-1.5 rounded-xl border border-border/50">
+            {/* Customer CRM button beside Transfer Table */}
+            <div className="relative flex items-center shrink-0">
+              {customerPhone || customerName ? (
+                <div className="flex items-center gap-1 bg-orange-50 border border-orange-200/90 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shadow-xs">
+                  <User size={13} className="text-orange-600 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={handleOpenCustomerModal}
+                    className="text-xs font-bold text-orange-950 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[100px] sm:max-w-[130px]"
+                    title={t("Click to edit customer details")}
+                  >
+                    <span className="truncate">{customerName || 'Customer'}</span>
+                    {customerPhone && <span className="text-[10px] text-orange-600 font-mono hidden md:inline">({customerPhone})</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCustomerPhone('');
+                      setCustomerName('');
+                      setCustomerInfo(null);
+                    }}
+                    className="p-0.5 hover:bg-orange-200/80 rounded-full text-orange-400 hover:text-orange-800 transition-colors ml-0.5 cursor-pointer"
+                    title={t("Clear customer")}
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenCustomerModal}
+                  className="bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 sm:px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 shrink-0"
+                  title={t("Customer CRM - Add Name & Phone")}
+                >
+                  <UserPlus size={14} className="text-orange-600 shrink-0" />
+                  <span className="hidden lg:inline">{t("Customer CRM")}</span>
+                  <span className="lg:hidden">{t("CRM")}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Sales stat badge - visible on large screens */}
+            <div className="hidden lg:flex items-center gap-2 bg-background px-2.5 py-1 rounded-xl border border-border/50 shrink-0">
               <div className="flex flex-col items-end">
-                <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1">
+                <p className="text-[9px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1 leading-none">
                   {t('sales')} <TrendingUp size={10} className="text-success" />
                 </p>
-                <p className="text-sm font-bold text-text-main font-mono">₹{dailyStats.sales.toLocaleString()}</p>
+                <p className="text-xs font-bold text-text-main font-mono leading-tight">₹{dailyStats.sales.toLocaleString()}</p>
               </div>
             </div>
             
             <button
               onClick={() => setIsLayoutLocked(!isLayoutLocked)}
-              className={`p-2 rounded-lg transition-all ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
+              className={`p-1.5 rounded-lg transition-all shrink-0 ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
               title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}>
               
-              {isLayoutLocked ? <Lock size={20} /> : <Unlock size={20} />}
+              {isLayoutLocked ? <Lock size={16} /> : <Unlock size={16} />}
             </button>
             <button
               onClick={toggleFullScreen}
-              className="p-2 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
+              className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0">
               
-              {isFullScreen ? <Minimize size={20} /> : <Maximize size={20} />}
+              {isFullScreen ? <Minimize size={16} /> : <Maximize size={16} />}
             </button>
           </div>
         </div>
@@ -1834,6 +2167,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }>
             <MenuGrid 
               onSelectItem={addToCart} 
+              activeTable={activeTable}
+              billType={billType}
               searchTerm={searchTerm} 
               onSearchChange={setSearchTerm} 
               foodTypeFilter={foodTypeFilter}
@@ -1870,7 +2205,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               
               {isCartCollapsed ? <ChevronLeft size={14} className="ml-0.5" /> : <ChevronRight size={14} className="mr-0.5" />}
             </button>
-            <div className={`w-full h-full flex flex-col overflow-hidden ${isCartCollapsed ? 'hidden' : 'flex'}`}>
+            <div className={`bill-summary-container w-full h-full flex flex-col overflow-hidden ${isCartCollapsed ? 'hidden' : 'flex'}`}>
               <BillSummary
                 orderId={orderId}
                 cart={cart}
@@ -1892,9 +2227,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 onPrintKOT={handlePrintKOT}
                 onPrintBill={() => setShowInvoice(true)}
                 onReopenOrder={handleReopenOrder}
-                onCancelOrder={handleCancelOrder}
-                onTransferTable={() => setShowTransfer(true)}
-                floors={floors}
+                onTransferTable={() => {
+                  if (billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-')) {
+                    setShowTransfer(true);
+                  }
+                }}
                 onSelectTable={setActiveTable}
 
                 discount={discount}
@@ -1907,7 +2244,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 actionLoading={actionLoading}
 
                 orderSource={orderSource}
-                setOrderSource={setOrderSource}
+                setOrderSource={handleOrderSourceChange}
 
                 customerPhone={customerPhone}
                 setCustomerPhone={setCustomerPhone}
@@ -1962,12 +2299,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           billType: billType,
           tableNo: activeTable,
           orderSource: orderSource,
+          customerName: customerName,
+          customerPhone: customerPhone,
+          deliveryCharge: deliveryCharge,
+          containerCharge: containerCharge,
           createdAt: new Date()
         };
-        // Do NOT show invoice for zero-value / empty bills
-        const billTotal = billToShow.total ?? billToShow.grandTotal ?? 0;
-        const billItems = billToShow.items ?? [];
-        if (billTotal <= 0 || billItems.length === 0) return null;
         return (
           <Invoice
             bill={billToShow}
@@ -1986,7 +2323,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       }
 
-      {showTransfer &&
+      {showTransfer && billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-') &&
       <TransferTableModal
         floors={floors}
         currentTable={activeTable}
@@ -2017,6 +2354,102 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           JSON.parse(localStorage.getItem('restaurantSettings') || '{}').ownerPin,
           '1234'
         ].filter(Boolean)} />
+
+      {/* Customer CRM Modal (Only Name and Phone Number) */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-orange-500/10 to-amber-500/10">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-orange-500 text-white rounded-xl shadow-xs">
+                  <User size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-gray-900 dark:text-white">{t("Customer CRM")}</h3>
+                  <p className="text-[11px] text-gray-500">{t("Add customer name & phone number")}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCustomerModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCustomerCRM} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
+                  {t("Phone Number (10 Digits)")}
+                </label>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    placeholder="e.g. 9876543210"
+                    value={tempCustomerPhone}
+                    onChange={(e) => handleCrmPhoneChange(e.target.value)}
+                    autoFocus
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
+                  />
+                </div>
+                {crmLoading && (
+                  <p className="text-[11px] text-orange-600 mt-1 flex items-center gap-1 font-medium animate-pulse">
+                    Checking CRM records...
+                  </p>
+                )}
+                {crmCustomerFound && (
+                  <p className="text-[11px] text-emerald-600 mt-1 flex items-center gap-1 font-bold">
+                    ✓ Existing customer found ({crmCustomerFound.totalVisits || 1} visits)
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">
+                  {t("Customer Name")}
+                </label>
+                <div className="relative">
+                  <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Rahul Sharma"
+                    value={tempCustomerName}
+                    onChange={(e) => setTempCustomerName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(false)}
+                  className="flex-1 py-2.5 border border-gray-200 dark:border-zinc-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                >
+                  {t("Cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={crmSaving}
+                  className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  {crmSaving ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{t("Save to Order")}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       
     </div>);
 

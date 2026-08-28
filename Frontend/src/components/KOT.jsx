@@ -99,8 +99,40 @@ const KOT = ({ order, onClose }) => {
                 {t("Queue No:")} #{order.tokenNo || order.queueNumber || order.kotNumber?.replace(/[^0-9]/g, '') || '1'}
               </div>
             )}
-            <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{order.billType || order.orderType || 'Dine In'}</div>
-            {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No:")}{order.tableNo}</div>}
+            {(() => {
+              const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+              if (bType === 'Delivery') {
+                const partner = (order.orderSource || '').trim() || 'DIRECT';
+                return (
+                  <>
+                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626' }}>
+                      DELIVERY: {partner.toUpperCase()}
+                    </div>
+                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                      Order #{order.tableNo}
+                    </div>
+                  </>
+                );
+              } else if (bType === 'Takeaway') {
+                return (
+                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#2563eb' }}>
+                    TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
+                  </div>
+                );
+              } else {
+                return (
+                  <>
+                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>Dine In</div>
+                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
+                  </>
+                );
+              }
+            })()}
+            {order.customerName && (
+              <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>
+                Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
+              </div>
+            )}
           </div>
 
           <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>

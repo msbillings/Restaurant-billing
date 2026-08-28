@@ -273,51 +273,51 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
   }, [kots]);
 
   return (
-    <div className="h-full flex flex-col bg-background p-4 sm:p-6 overflow-hidden">
+    <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-hidden">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
       {/* Header and Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 shrink-0 bg-surface p-4 sm:p-6 border border-border rounded-2xl shadow-xs">
-        <div className="flex items-center gap-3">
-          {onNavigate && <BackButton onClick={onGoBack} />}
-          <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 shadow-xs border border-orange-200 shrink-0">
-            <Printer size={20} />
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 mb-2 sm:mb-2.5 shrink-0 bg-surface p-2 sm:p-2.5 border border-border rounded-2xl shadow-xs">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {onNavigate && <BackButton onClick={onGoBack} className="shrink-0" />}
+          <div className="w-8 h-8 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 shadow-xs border border-orange-200 shrink-0">
+            <Printer size={16} />
           </div>
           <div>
-            <h1 className="text-lg sm:text-xl font-bold text-text-main font-mono tracking-tight">{t("KOT History")}</h1>
-            <p className="text-xs text-text-muted font-medium">{t("Kitchen Order Tickets")}</p>
+            <h1 className="text-base sm:text-lg font-black text-text-main tracking-tight whitespace-nowrap leading-tight">{t("KOT History")}</h1>
+            <p className="text-[10px] sm:text-xs text-text-muted font-medium leading-tight">{t("Kitchen Order Tickets")}</p>
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-2.5 sm:gap-4 w-full md:w-auto">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 sm:gap-2 w-full lg:w-auto">
           {onNavigate && (
             <button
               onClick={() => onNavigate('kds')}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
             >
-              <ChefHat size={16} />
+              <ChefHat size={14} />
               <span>{t("Kitchen Display (KDS)")}</span>
             </button>
           )}
 
           {/* Search Bar */}
-          <div className="relative w-full sm:w-64">
+          <div className="relative flex-1 sm:w-36 md:w-44 lg:w-56">
             <input
               type="text" 
               placeholder={t("Search KOT or Table...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-xl text-xs sm:text-sm text-text-main focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 font-medium" />
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              className="w-full pl-8 pr-3 py-1.5 bg-background border border-border rounded-xl text-xs text-text-main focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 font-medium" />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
           </div>
 
           {/* Date Picker */}
-          <div className="flex items-center gap-1.5 bg-background px-3 py-2 rounded-xl border border-border text-xs shrink-0 shadow-2xs w-full sm:w-auto justify-center">
+          <div className="flex items-center gap-1 bg-background px-2 py-1 rounded-xl border border-border text-xs shrink-0 shadow-2xs">
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => handleDateChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[128px] sm:w-[138px] border-none"
+              className="bg-transparent text-[11px] sm:text-xs font-bold text-text-main outline-none cursor-pointer w-[105px] sm:w-[115px] border-none"
               style={{ colorScheme: 'light' }}
               title={t("Select Date")}
             />
@@ -352,17 +352,17 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-background sticky top-0 z-10 shadow-xs border-b border-border">
                   <tr>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider">
                       <div className="flex items-center gap-2">
                         {t("KOT No")}
                         {refreshing && <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" title="Updating..."></span>}
                       </div>
                     </th>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Time")}</th>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Table / Order")}</th>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Items Summary")}</th>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Status")}</th>
-                    <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider text-right">{t("Action")}</th>
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Time")}</th>
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Table / Order")}</th>
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Items Summary")}</th>
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider">{t("Status")}</th>
+                    <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider text-right">{t("Action")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -371,29 +371,29 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                       <tr 
                         onClick={() => setExpandedRow(expandedRow === group.id ? null : group.id)}
                         className="hover:bg-background/50 transition-colors cursor-pointer group-row">
-                        <td className="p-4 whitespace-nowrap">
+                        <td className="px-3 py-2.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             {expandedRow === group.id ? <ChevronUp size={16} className="text-text-muted" /> : <ChevronDown size={16} className="text-text-muted" />}
-                            <span className="px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-xs border bg-slate-50 text-slate-700 border-slate-200">
+                            <span className="px-2.5 py-1 text-xs font-bold rounded-lg font-mono shadow-xs border bg-slate-50 text-slate-700 border-slate-200 whitespace-nowrap">
                               {group.kots.length} KOT{group.kots.length !== 1 ? 's' : ''}
                             </span>
                           </div>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className="font-mono font-medium text-text-main text-sm">
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="font-mono font-medium text-text-main text-xs sm:text-sm">
                             {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className="font-bold text-text-main text-sm">{t(group.tableNo)}</span>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className="font-bold text-text-main text-xs sm:text-sm">{t(group.tableNo)}</span>
                         </td>
-                        <td className="p-4 w-full max-w-xs">
+                        <td className="px-3 py-2.5 w-full max-w-xs">
                           <p className="text-xs font-medium text-text-muted truncate">
                             {getItemsSummary(group.items)}
                           </p>
                         </td>
-                        <td className="p-4 whitespace-nowrap">
-                          <span className={`px-2.5 py-1 text-xs font-bold rounded-lg font-mono border ${
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
                             getKOTStatus(group.items) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
                             getKOTStatus(group.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
                             getKOTStatus(group.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
@@ -402,37 +402,37 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                             {t(getKOTStatus(group.items))}
                           </span>
                         </td>
-                        <td className="p-4 whitespace-nowrap text-right">
+                        <td className="px-3 py-2.5 whitespace-nowrap text-right">
                           <button
                             onClick={(e) => { e.stopPropagation(); setExpandedRow(expandedRow === group.id ? null : group.id); }}
-                            className="px-3 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-xs rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-1.5">
+                            className="px-2.5 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-xs rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-1">
                             {expandedRow === group.id ? t("Close") : t("View Actions")}
                           </button>
                         </td>
                       </tr>
                       {expandedRow === group.id && group.kots.map(kot => (
                         <tr key={`${kot.billId}-${kot.kotNumber}`} className="bg-surface/30">
-                          <td className="p-4 whitespace-nowrap pl-10">
-                            <span className={`px-2.5 py-1 text-xs font-bold rounded-lg font-mono border ${
+                          <td className="px-3 py-2.5 whitespace-nowrap pl-8">
+                            <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
                               kot.kotNumber.startsWith('CANCEL') || getKOTStatus(kot.items) === 'Cancelled' ?
                               'bg-red-50 text-red-700 border-red-200' :
                               'bg-orange-50 text-orange-700 border-orange-200'}`}>
                               {kot.kotNumber}
                             </span>
                           </td>
-                          <td className="p-4 whitespace-nowrap">
+                          <td className="px-3 py-2.5 whitespace-nowrap">
                             <span className="font-mono font-medium text-text-muted text-xs">
                               {new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </td>
-                          <td className="p-4 whitespace-nowrap"></td>
-                          <td className="p-4 w-full max-w-xs">
+                          <td className="px-3 py-2.5 whitespace-nowrap"></td>
+                          <td className="px-3 py-2.5 w-full max-w-xs">
                             <p className="text-xs font-medium text-text-muted truncate">
                               {getItemsSummary(kot.items)}
                             </p>
                           </td>
-                          <td className="p-4 whitespace-nowrap">
-                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-lg font-mono border ${
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg font-mono border whitespace-nowrap ${
                               getKOTStatus(kot.items) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
                               getKOTStatus(kot.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
                               getKOTStatus(kot.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
@@ -441,11 +441,11 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                               {t(getKOTStatus(kot.items))}
                             </span>
                           </td>
-                          <td className="p-4 whitespace-nowrap text-right">
+                          <td className="px-3 py-2.5 whitespace-nowrap text-right">
                             <button
                               onClick={(e) => { e.stopPropagation(); handleReprint(kot); }}
-                              className="px-3 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-xs rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-1.5">
-                              <Printer size={14} />{t("Reprint")}
+                              className="px-2.5 py-1.5 bg-background hover:bg-orange-50 text-orange-600 font-bold text-xs rounded-lg border border-border hover:border-orange-200 transition-all inline-flex items-center gap-1">
+                              <Printer size={13} />{t("Reprint")}
                             </button>
                           </td>
                         </tr>

@@ -910,9 +910,7 @@ function App() {
   }, []);
 
   const handleViewChange = (newView, tableSelection = null) => {
-    if (tableSelection) {
-      setSelectedTable(tableSelection);
-    }
+    setSelectedTable(tableSelection);
     setView(newView);
     setViewHistory(prev => {
       // Don't push duplicate sequential views
@@ -1176,7 +1174,7 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className={`min-h-[60px] h-auto py-2 flex items-center justify-between px-2 sm:px-6 border-b shadow-xs shrink-0 gap-1 sm:gap-4 w-full z-40 relative overflow-visible ${
+      <header className={`min-h-[56px] sm:min-h-[58px] lg:min-h-[62px] xl:min-h-[66px] py-1 sm:py-1.5 flex items-center justify-between px-2 sm:px-3 lg:px-4 border-b shadow-xs shrink-0 gap-1 sm:gap-2 lg:gap-3 w-full z-40 relative overflow-visible ${
         view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
       }`}>
         {/* Left: Hamburger & Logo */}
@@ -1186,34 +1184,34 @@ function App() {
             className={`p-1 rounded-lg transition-colors shrink-0 flex items-center justify-center ${
               view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-text-main hover:bg-surface-hover'
             }`}>
-            <Menu size={22} className="sm:w-6 sm:h-6" />
+            <Menu size={20} className="sm:w-5 sm:h-5" />
           </button>
           <button
             onClick={() => handleViewChange('floor')}
-            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-1 px-1 min-w-[100px] sm:min-w-[210px] md:min-w-[250px] hover:opacity-90 transition-opacity overflow-visible"
+            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-0.5 px-0.5 min-w-[105px] sm:min-w-[135px] md:min-w-[160px] lg:min-w-[210px] xl:min-w-[250px] 2xl:min-w-[270px] hover:opacity-90 transition-opacity overflow-visible"
             title={t("Go to Table View / Floor Management")}>
             <img
               src={logoImg}
               alt="msbillings"
-              className="h-11 sm:h-13 md:h-15 w-auto object-contain block transform scale-165 sm:scale-170 md:scale-190 origin-left"
+              className="h-9.5 sm:h-10.5 md:h-11 lg:h-12 xl:h-14 2xl:h-15 w-auto object-contain block transform scale-145 sm:scale-150 md:scale-155 lg:scale-175 xl:scale-190 origin-left"
               style={{ objectFit: 'contain' }}
             />
           </button>
         </div>
 
-        {/* Desktop Search & Actions */}
-        <div className="hidden md:flex items-center gap-4 flex-1 max-w-xl ml-4">
+        {/* Desktop / Tablet Search & Actions */}
+        <div className="hidden md:flex items-center gap-1.5 lg:gap-2.5 flex-1 max-w-lg min-w-0 mx-1 lg:mx-2">
           {!isChef && (
             <>
               <button
                 onClick={() => handleViewChange('billing')}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors whitespace-nowrap text-sm">
+                className="px-2.5 lg:px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors whitespace-nowrap text-xs lg:text-sm shrink-0">
                 {t('New Order')}
               </button>
 
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search size={16} className="text-gray-400" />
+              <div className="relative flex-1 min-w-[70px] max-w-xs">
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <Search size={14} className="text-gray-400" />
                 </div>
                 <input
                   type="text"
@@ -1221,7 +1219,7 @@ function App() {
                   value={searchBillNo}
                   onChange={(e) => setSearchBillNo(e.target.value)}
                   onKeyDown={handleSearchKeyPress}
-                  className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 text-sm text-gray-800" />
+                  className="w-full pl-8 pr-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 text-xs lg:text-sm text-gray-800" />
               </div>
             </>
           )}
@@ -1230,7 +1228,7 @@ function App() {
           {daysRemaining !== null && (
             <button
               onClick={() => setShowExpiryPopup(true)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap ${daysRemaining <= 0 ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
+              className={`hidden lg:flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0 ${daysRemaining <= 0 ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
                   daysRemaining <= 15 ? 'bg-amber-50 text-amber-600 border border-amber-200' :
                     'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
               <CalendarClock size={12} />
@@ -1242,8 +1240,8 @@ function App() {
         </div>
 
         {/* Right Section Header Controls */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
             <PhoneCall size={16} className="text-red-500" />
             <div className="flex flex-col leading-none">
               <span className="text-[9px] text-gray-500 font-semibold uppercase">{t('Call For Support')}</span>
@@ -1255,12 +1253,12 @@ function App() {
           {view !== 'kds' && !isChef && (
             <button
               onClick={() => handleViewChange('orders')}
-              className="flex items-center gap-1 px-2 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0 max-w-[80px] sm:max-w-none"
+              className="flex items-center gap-1 px-1.5 sm:px-2 py-1.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-lg text-xs font-bold hover:bg-orange-100 transition-all shadow-xs relative shrink-0"
               title={t("View Hold Bills (Active Orders)")}>
-              <ClipboardList size={16} className="shrink-0" />
-              <span className="hidden sm:inline truncate">{t('Hold Bills')}</span>
+              <ClipboardList size={15} className="shrink-0" />
+              <span className="hidden xl:inline truncate">{t('Hold Bills')}</span>
               {activeOrdersCount > 0 && (
-                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black ml-0.5 shrink-0 leading-none">
+                <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black ml-0.5 shrink-0 leading-none">
                   {activeOrdersCount > 99 ? '99+' : activeOrdersCount}
                 </span>
               )}
@@ -1280,9 +1278,9 @@ function App() {
               className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${
                 view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
               }`}>
-              <Bell size={20} />
+              <Bell size={18} />
               {totalUnreadCount > 0 && (
-                <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center font-bold">
+                <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[9px] rounded-full h-3.5 min-w-[14px] px-1 flex items-center justify-center font-bold">
                   {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
                 </span>
               )}
@@ -1553,27 +1551,27 @@ function App() {
             </button>
           )}
 
-          {/* Desktop-only Quick Icons */}
-          <button onClick={() => setShowCalculator(true)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative text-gray-600" title={t("Calculator")}>
-            <Calculator size={20} />
+          {/* Desktop/Tablet Quick Icons */}
+          <button onClick={() => setShowCalculator(true)} className="p-1 sm:p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:flex items-center justify-center text-gray-600 shrink-0" title={t("Calculator")}>
+            <Calculator size={18} />
           </button>
 
-          <button onClick={() => setProfileOpen(!profileOpen)} className="p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:block relative text-gray-600">
-            <User size={20} />
+          <button onClick={() => setProfileOpen(!profileOpen)} className="p-1 sm:p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:flex items-center justify-center text-gray-600 shrink-0" title={t("User Profile")}>
+            <User size={18} />
           </button>
 
-          <button onClick={() => setShowLogoutConfirm(true)} className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 hidden sm:block">
-            <Power size={20} />
+          <button onClick={() => setShowLogoutConfirm(true)} className="p-1 sm:p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 hidden sm:flex items-center justify-center shrink-0" title={t("Logout")}>
+            <Power size={18} />
           </button>
 
           {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}
           <button
             onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
-            className={`md:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border ${
+            className={`sm:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border shrink-0 ${
               view === 'kds' ? 'text-slate-300 border-slate-800 hover:bg-slate-800' : 'text-gray-700 hover:bg-surface-hover border-border/60'
             }`}
             title="More Actions">
-            <MoreVertical size={20} />
+            <MoreVertical size={18} />
           </button>
         </div>
 
@@ -2074,7 +2072,7 @@ function App() {
             <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
           </Suspense>
 
-          <main className={`flex-1 overflow-y-auto overflow-x-hidden ${['floor', 'billing', 'dashboard', 'analytics', 'kds'].includes(view) ? 'p-0' : 'p-2 sm:p-4 md:p-6'} ${view === 'kds' ? 'bg-slate-950' : ''}`}>
+          <main className={`flex-1 overflow-y-auto overflow-x-hidden p-0 ${view === 'kds' ? 'bg-slate-950' : ''}`}>
             <Suspense fallback={
               <div className="flex items-center justify-center h-full">
                 <div className="flex flex-col items-center gap-4">
@@ -2185,8 +2183,7 @@ function App() {
                   {view === 'orders' &&
                     <ActiveOrders
                       onSelectOrder={(tableNo) => {
-                        setSelectedTable(tableNo);
-                        handleViewChange('billing');
+                        handleViewChange('billing', tableNo);
                       }}
                       onOrderUpdate={fetchActiveOrdersCount}
                       onNavigate={handleViewChange} onGoBack={handleGoBack} />

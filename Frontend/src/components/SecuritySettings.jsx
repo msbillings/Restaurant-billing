@@ -151,8 +151,8 @@ const SecuritySettings = ({ onGoBack }) => {
   const availableToAdd = AVAILABLE_FEATURES.filter(f => !customLocks[f.id]);
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-4 sm:p-6 overflow-y-auto">
-      <div className="flex items-center gap-3 mb-6 shrink-0">
+    <div className="h-full flex flex-col bg-gray-50 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
+      <div className="flex items-center gap-3 mb-2.5 sm:mb-3 shrink-0">
         <BackButton onClick={onGoBack} />
         <div>
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Shield className="text-primary" /> {t("Security & Passwords")}</h2>

@@ -21,3 +21,4 @@ tools/
 Backend/backups/
 firebase-service-account.json
 Backend/firebase-service-account.json
+scratch_img/

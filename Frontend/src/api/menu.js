@@ -65,6 +65,17 @@ export const addMenuItem = async (itemData) => {
   }
 };
 
+export const bulkAddMenuItems = async (items) => {
+  try {
+    const response = await api.post('/menu/bulk', { items });
+    menuCache = null; // Invalidate cache so fresh data is retrieved
+    return response.data;
+  } catch (err) {
+    console.error('[Menu API] Bulk menu import error:', err);
+    throw err;
+  }
+};
+
 export const updateMenuItem = async (id, itemData) => {
   try {
     const response = await api.put(`/menu/${id}`, itemData);

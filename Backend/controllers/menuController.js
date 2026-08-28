@@ -10,9 +10,9 @@ export const getAllMenuItems = async (req, res) => {
     const Menu = getTenantModel(req, 'Menu', MenuDefault);
     const Category = getTenantModel(req, 'Category', CategoryDefault);
 
-    // Fetch items and categories in parallel with lean() for maximum speed (<100ms)
+    const query = req.query.availableOnly === 'true' ? { isAvailable: { $ne: false } } : {};
     const [rawItems, allCats] = await Promise.all([
-      Menu.find({ isAvailable: { $ne: false } }).lean(),
+      Menu.find(query).sort({ createdAt: -1, updatedAt: -1 }).lean(),
       Category.find({}).lean()
     ]);
 
@@ -57,6 +57,21 @@ export const addMenuItem = async (req, res) => {
         await category.save();
       }
       categoryData = category._id;
+    }
+
+    // Check if item with this name already exists in this tenant to prevent duplicates
+    const cleanName = (req.body.name || '').trim();
+    const existing = await Menu.findOne({
+      name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+    });
+    if (existing) {
+      const updatedItem = await Menu.findByIdAndUpdate(
+        existing._id,
+        { ...req.body, category: categoryData },
+        { new: true }
+      ).populate('category', 'name');
+      emitSocketEvent(req, 'menuUpdated', { action: 'update', item: updatedItem });
+      return res.status(200).json(updatedItem);
     }
 
     const newItem = new Menu({ ...req.body, category: categoryData });
@@ -179,3 +194,164 @@ export const deleteAllMenuItems = async (req, res) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+export const bulkAddMenuItems = async (req, res) => {
+  try {
+    const Menu = getTenantModel(req, 'Menu', MenuDefault);
+    const Category = getTenantModel(req, 'Category', CategoryDefault);
+    const rawItems = req.body.items || [];
+
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      return res.status(400).json({ message: 'No items provided for bulk import' });
+    }
+
+    // 1. Gather all unique category names
+    const categoryNameMap = new Map();
+    for (const item of rawItems) {
+      const catName = typeof item.category === 'string'
+        ? item.category.trim()
+        : (item.category?.name || 'General').trim();
+      if (catName) {
+        categoryNameMap.set(catName.toLowerCase(), catName);
+      }
+    }
+
+    // Ensure 'General' category exists in map
+    if (!categoryNameMap.has('general')) {
+      categoryNameMap.set('general', 'General');
+    }
+
+    // 2. Fetch existing categories in one query
+    const existingCategories = await Category.find({}).lean();
+    const catDbMap = new Map();
+    for (const cat of existingCategories) {
+      if (cat && cat.name) {
+        catDbMap.set(cat.name.trim().toLowerCase(), cat._id);
+      }
+    }
+
+    // 3. Create any missing categories in bulk
+    const missingCategories = [];
+    for (const [lowerName, origName] of categoryNameMap.entries()) {
+      if (!catDbMap.has(lowerName)) {
+        missingCategories.push({ name: origName, description: '', isActive: true });
+      }
+    }
+
+    if (missingCategories.length > 0) {
+      try {
+        const createdCategories = await Category.insertMany(missingCategories, { ordered: false });
+        for (const cat of createdCategories) {
+          catDbMap.set(cat.name.trim().toLowerCase(), cat._id);
+        }
+      } catch (catErr) {
+        // If duplicates hit on category unique index, re-fetch categories
+        const refreshedCats = await Category.find({}).lean();
+        for (const cat of refreshedCats) {
+          catDbMap.set(cat.name.trim().toLowerCase(), cat._id);
+        }
+      }
+    }
+
+    // 4. Fetch existing menu items in this tenant to match by name (case-insensitive deduplication)
+    const existingMenuItems = await Menu.find({}, { name: 1 }).lean();
+    const existingMenuMap = new Map();
+    for (const mi of existingMenuItems) {
+      if (mi && mi.name) {
+        existingMenuMap.set(mi.name.trim().toLowerCase(), mi._id);
+      }
+    }
+
+    // 5. Build bulkWrite operations
+    const seenBatchNames = new Set();
+    const bulkOps = [];
+    let insertedCount = 0;
+    let updatedCount = 0;
+
+    for (const row of rawItems) {
+      const cleanName = (row.name || '').trim();
+      if (!cleanName) continue;
+      const lowerName = cleanName.toLowerCase();
+
+      // Avoid creating duplicates inside the same uploaded batch
+      if (seenBatchNames.has(lowerName)) {
+        continue;
+      }
+      seenBatchNames.add(lowerName);
+
+      const catName = typeof row.category === 'string'
+        ? row.category.trim().toLowerCase()
+        : (row.category?.name || '').trim().toLowerCase();
+      const resolvedCategoryId = catDbMap.get(catName) || catDbMap.get('general') || null;
+
+      const itemPayload = {
+        name: cleanName,
+        price: Math.max(0, parseFloat(row.price) || 0),
+        category: resolvedCategoryId,
+        type: (row.type && String(row.type).toLowerCase().includes('non')) ? 'non-veg' : 'veg',
+        description: (row.description || '').trim(),
+        isAvailable: row.isAvailable !== false,
+        taxRate: Math.max(0, parseFloat(row.taxRate) || 0),
+        hsnCode: (row.hsnCode || '').trim(),
+        image: (row.image || '').trim(),
+        variants: Array.isArray(row.variants) ? row.variants : []
+      };
+
+      if (existingMenuMap.has(lowerName)) {
+        // Update existing item
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: existingMenuMap.get(lowerName) },
+            update: { $set: itemPayload }
+          }
+        });
+        updatedCount++;
+      } else {
+        // Insert new item
+        bulkOps.push({
+          insertOne: {
+            document: itemPayload
+          }
+        });
+        insertedCount++;
+      }
+    }
+
+    if (bulkOps.length > 0) {
+      await Menu.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    // 6. Emit single socket event to notify POS & screens
+    emitSocketEvent(req, 'menuUpdated', { action: 'bulk', count: bulkOps.length });
+
+    // 7. Auto-translate top items in non-blocking background queue
+    const itemsToTranslate = rawItems.slice(0, 30);
+    setTimeout(async () => {
+      try {
+        for (const item of itemsToTranslate) {
+          if (item.name) {
+            try {
+              const trans = await translateMenuItem(item.name, item.description);
+              await Menu.updateOne(
+                { name: item.name },
+                { $set: { nameTranslations: trans.nameTranslations, descriptionTranslations: trans.descriptionTranslations } }
+              );
+            } catch (e) {}
+          }
+        }
+      } catch (err) {}
+    }, 200);
+
+    return res.status(200).json({
+      success: true,
+      message: `Bulk import complete: ${insertedCount} items added, ${updatedCount} items updated.`,
+      inserted: insertedCount,
+      updated: updatedCount,
+      total: bulkOps.length
+    });
+  } catch (error) {
+    console.error('[BulkImport] Error during bulk menu import:', error);
+    return res.status(500).json({ message: error.message || 'Failed to bulk import menu items' });
+  }
+};
+

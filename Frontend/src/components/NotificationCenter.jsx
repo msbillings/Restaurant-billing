@@ -308,7 +308,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     return t("System alerts, kitchen orders, service requests, and broadcasts");
   };
   return (
-    <div className="h-full flex flex-col bg-background p-2 sm:p-6 overflow-hidden w-full max-w-full">
+    <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-hidden w-full max-w-full">
       <div className="flex flex-col mb-2.5 sm:mb-4 shrink-0 gap-2 sm:gap-3 w-full">
         <div className="flex items-center justify-between gap-2 w-full">
           <div className="flex items-center gap-2 min-w-0 flex-1">

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import TableDropdown from './TableDropdown';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2 } from 'lucide-react';
 
 const BillSummary = ({
@@ -56,7 +55,7 @@ const BillSummary = ({
   const cartEndRef = React.useRef(null);
   useEffect(() => {
     if (cartEndRef.current) {
-      cartEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      cartEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [cart.length]);
 
@@ -80,6 +79,47 @@ const BillSummary = ({
 
   const [showSplitCalcModal, setShowSplitCalcModal] = useState(false);
   const [splitWays, setSplitWays] = useState(pax > 1 ? pax : 2);
+
+  // Custom Delivery Platforms State (Full CRUD per shop)
+  const [customPlatforms, setCustomPlatforms] = useState(() => {
+    try {
+      const saved = localStorage.getItem('msbillings_custom_delivery_platforms');
+      return saved ? JSON.parse(saved) : ['Dunzo', 'Magicpin', 'Shadowfax'];
+    } catch {
+      return ['Dunzo', 'Magicpin', 'Shadowfax'];
+    }
+  });
+  const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const [newPlatformName, setNewPlatformName] = useState('');
+
+  const handleAddPlatform = (e) => {
+    if (e) e.preventDefault();
+    const cleanName = (newPlatformName || '').trim();
+    if (!cleanName) return;
+
+    const allPlatforms = ['Direct', 'Swiggy', 'Zomato', ...customPlatforms];
+    const exists = allPlatforms.some(p => p.toLowerCase() === cleanName.toLowerCase());
+    if (exists) {
+      alert(t('Platform already exists!'));
+      return;
+    }
+
+    const updated = [...customPlatforms, cleanName];
+    setCustomPlatforms(updated);
+    localStorage.setItem('msbillings_custom_delivery_platforms', JSON.stringify(updated));
+    setOrderSource(cleanName);
+    setNewPlatformName('');
+    setShowPlatformModal(false);
+  };
+
+  const handleDeletePlatform = (platformToDelete) => {
+    const updated = customPlatforms.filter(p => p !== platformToDelete);
+    setCustomPlatforms(updated);
+    localStorage.setItem('msbillings_custom_delivery_platforms', JSON.stringify(updated));
+    if (orderSource === platformToDelete) {
+      setOrderSource('Direct');
+    }
+  };
 
   useEffect(() => {
     if (total > 0) {
@@ -159,6 +199,9 @@ const BillSummary = ({
   };
 
   const handleTableClick = () => {
+    if (billType === 'Delivery' || billType === 'Takeaway' || activeTable?.startsWith('DEL-') || activeTable?.startsWith('TAK-')) {
+      return;
+    }
     if (onTransferTable) {
       onTransferTable();
     }
@@ -187,38 +230,52 @@ const BillSummary = ({
         </button>
       </div>
 
-      {/* Delivery Platform Selection */}
+      {/* Delivery Platform Selection with Full CRUD */}
       {billType === 'Delivery' && (
-        <div className="flex w-[calc(100%-24px)] mx-3 mt-1 mb-1 items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="flex w-[calc(100%-24px)] mx-3 mt-1 mb-1 items-center gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
           <select
-            value={['Direct', 'Swiggy', 'Zomato'].includes(orderSource) ? orderSource : 'Custom'}
+            value={orderSource || 'Direct'}
             onChange={(e) => {
-              if (e.target.value === 'Custom') {
-                setOrderSource('');
+              if (e.target.value === '__ADD_NEW__') {
+                setShowPlatformModal(true);
               } else {
                 setOrderSource(e.target.value);
               }
             }}
             disabled={isLocked}
-            className="flex-1 bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
+            className="flex-1 bg-gray-50 border border-gray-200 text-gray-800 text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-2xs cursor-pointer"
           >
             <option value="Direct">{t("Direct Delivery")}</option>
             <option value="Swiggy">{t("Swiggy")}</option>
             <option value="Zomato">{t("Zomato")}</option>
-            <option value="Custom">{t("Custom / Other")}</option>
+            
+            {customPlatforms.length > 0 && (
+              <optgroup label={t("Custom Platforms")}>
+                {customPlatforms.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </optgroup>
+            )}
+
+            {orderSource && !['Direct', 'Swiggy', 'Zomato', ...customPlatforms].includes(orderSource) && (
+              <option value={orderSource}>{orderSource}</option>
+            )}
+
+            <option value="__ADD_NEW__" className="text-orange-600 font-bold">
+              + {t("Add Custom Platform...")}
+            </option>
           </select>
 
-          {!['Direct', 'Swiggy', 'Zomato'].includes(orderSource) && (
-            <input
-              type="text"
-              placeholder={t("Platform Name")}
-              value={orderSource}
-              onChange={(e) => setOrderSource(e.target.value)}
-              disabled={isLocked}
-              className="flex-1 bg-white border border-gray-200 text-gray-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
-              autoFocus
-            />
-          )}
+          {/* Manage / Add / Delete Platforms Button */}
+          <button
+            type="button"
+            onClick={() => setShowPlatformModal(true)}
+            disabled={isLocked}
+            className="p-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 rounded-lg transition-all shadow-2xs cursor-pointer shrink-0"
+            title={t("Manage Delivery Platforms (Add / Delete)")}
+          >
+            <Plus size={14} />
+          </button>
         </div>
       )}
 
@@ -252,6 +309,12 @@ const BillSummary = ({
 
               if (foundType) {
                 catName = foundType;
+              } else if (tablePart.startsWith('DEL-') || billType === 'Delivery') {
+                catName = 'DELIVERY';
+                displayVal = tablePart.startsWith('DEL-') ? `#${tablePart.replace('DEL-', '')}` : tablePart;
+              } else if (tablePart.startsWith('TAK-') || billType === 'Takeaway') {
+                catName = 'PICK UP';
+                displayVal = tablePart.startsWith('TAK-') ? `#${tablePart.replace('TAK-', '')}` : tablePart;
               } else {
                 const wordMatch = tablePart.match(/^([A-Za-z]+)/);
                 if (wordMatch) {
@@ -260,63 +323,56 @@ const BillSummary = ({
               }
             }
 
+            const isDineIn = billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-');
             return (
               <div 
-                onClick={handleTableClick} 
-                title={`${catName} - ${displayVal}`} 
-                className="flex flex-col items-center justify-center min-w-[34px] max-w-[56px] h-8 bg-red-50 border border-red-100 rounded-lg text-red-600 overflow-hidden px-1 shadow-sm cursor-pointer hover:bg-red-100 transition-colors"
+                onClick={isDineIn ? handleTableClick : undefined} 
+                title={isDineIn ? `${t(catName)} - ${displayVal} (${t("Click to Transfer")})` : `${t(catName)} - ${displayVal}`} 
+                className={`flex flex-col items-center justify-center min-w-[28px] max-w-[56px] h-7 bg-red-50 border border-red-100 rounded-lg text-red-600 overflow-hidden px-1 shadow-sm transition-colors ${
+                  isDineIn ? 'cursor-pointer hover:bg-red-100' : 'cursor-default'
+                }`}
               >
-                <span className="text-[6px] font-bold opacity-80 leading-tight uppercase truncate max-w-full text-center">
+                <span className="text-[5.5px] font-bold opacity-80 leading-tight uppercase truncate max-w-full text-center">
                   {t(catName)}
                 </span>
-                <span className="text-[10px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
+                <span className="text-[9px] font-black whitespace-nowrap truncate w-full text-center leading-tight">
                   {displayVal}
                 </span>
               </div>
             );
           })()}
-          <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <Users size={11} className="mb-0.5 opacity-80" />
-            <span className="text-[8px] font-bold leading-none">{pax}</span>
+          <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
+            <Users size={10} className="mb-0.5 opacity-80" />
+            <span className="text-[7.5px] font-bold leading-none">{pax}</span>
           </div>
-          <div onClick={handleWaiterClick} className="flex items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <UserCheck size={12} className="opacity-80" />
+          <div onClick={handleWaiterClick} className="flex items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
+            <UserCheck size={11} className="opacity-80" />
           </div>
-          <div onClick={handleNoteClick} className="flex items-center justify-center w-8 h-8 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors">
-            <Clipboard size={12} className="opacity-80" />
+          <div onClick={handleNoteClick} className="flex items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
+            <Clipboard size={11} className="opacity-80" />
           </div>
         </div>
 
         <div className="flex-1 flex justify-end min-w-0">
-          {activeTable ?
+          {activeTable && (
             <div className="flex flex-col items-end">
-              <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{t("Current Table")}</span>
-              <span className="text-[10px] font-black text-gray-700 truncate max-w-[100px]" title={activeTable}>{activeTable}</span>
-            </div> :
-            <div className="relative h-7 w-full min-w-[100px] max-w-[140px]">
-              <TableDropdown
-                floors={floors}
-                activeTable={null}
-                align="right"
-                onSelect={(val) => onSelectTable && onSelectTable(val)}
-                openOrders={openOrders}
-                reservations={reservations}
-                customButton={
-                  <button className="w-full h-full bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-md flex items-center justify-center px-1.5 animate-pulse gap-0.5">
-                    {t("Select Table")}
-                    <ChevronDown size={11} />
-                  </button>
-                }
-              />
+              <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">
+                {billType === 'Delivery' || activeTable.startsWith('DEL-')
+                  ? t("Delivery No.")
+                  : billType === 'Takeaway' || activeTable.startsWith('TAK-')
+                  ? t("Pick Up No.")
+                  : t("Current Table")}
+              </span>
+              <span className="text-[10px] font-black text-gray-700 truncate max-w-[85px] sm:max-w-[100px]" title={activeTable}>{activeTable}</span>
             </div>
-          }
+          )}
         </div>
       </div>
 
       {/* Table Headers */}
-      <div className="flex items-center px-3 py-0.5 bg-gray-100 border-b border-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wider shrink-0">
-        <div className="w-[42%]">{t("Items")}</div>
-        <div className="w-[16%] text-center hidden sm:block">{t("Check")}</div>
+      <div className="flex items-center px-2 py-0.5 bg-gray-100 border-b border-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wider shrink-0">
+        <div className="w-[44%]">{t("Items")}</div>
+        <div className="w-[14%] text-center hidden xl:block">{t("Check")}</div>
         <div className="w-[26%] text-center">{t("Qty.")}</div>
         <div className="w-[16%] text-right pr-1">{t("Price")}</div>
       </div>
@@ -327,12 +383,46 @@ const BillSummary = ({
       {/* Cart Items List */}
       <div className="bg-white p-0.5 relative">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 py-12 gap-2.5">
-            <Loader2 className="animate-spin text-primary" size={26} />
-            <span className="text-xs font-bold text-gray-600 animate-pulse">{t("Loading table order...")}</span>
+          <div className="p-3 space-y-2.5 animate-in fade-in duration-150">
+            {/* Dynamic Status Header */}
+            <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                </span>
+                <span className="text-[11px] font-bold text-gray-700 animate-pulse tracking-wide">
+                  {t("Loading order items...")}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+            </div>
+
+            {/* Dynamic Shimmering Item Rows */}
+            {[1, 2, 3].map((rowIdx) => (
+              <div
+                key={rowIdx}
+                className="flex items-center justify-between py-2 px-2.5 rounded-xl bg-gradient-to-r from-gray-50 via-orange-50/20 to-gray-50 border border-gray-100 animate-pulse"
+                style={{ animationDelay: `${rowIdx * 120}ms` }}
+              >
+                <div className="flex-1 min-w-0 pr-2 space-y-1.5">
+                  <div
+                    className="h-3.5 bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 rounded-md"
+                    style={{ width: rowIdx === 1 ? '70%' : rowIdx === 2 ? '50%' : '60%' }}
+                  />
+                  <div className="h-2 bg-gray-200/70 rounded-md w-1/3" />
+                </div>
+                <div className="w-12 h-5 bg-gray-200/80 rounded-lg mx-2 shrink-0" />
+                <div className="w-10 h-4 bg-gray-200 rounded shrink-0" />
+              </div>
+            ))}
           </div>
         ) : cart.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 py-10">
             <span className="text-xs">{t("No items added")}</span>
           </div>
         ) : (
@@ -576,15 +666,15 @@ const BillSummary = ({
           }
         </div>
 
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
-          <div className="flex items-center gap-2 shrink-0">
-            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Bogo Offer")}</button>
+        <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 overflow-x-auto no-scrollbar w-full gap-1">
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap">{t("Bogo Offer")}</button>
             <button
               onClick={() => {
                 setSplitWays(pax > 1 ? pax : 2);
                 setShowSplitCalcModal(true);
               }}
-              className="bg-red-50 text-red-600 px-2.5 py-1 rounded-md text-xs font-bold border border-red-100 hover:bg-red-100 transition-colors">{t("Split")}
+              className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap">{t("Split")}
             </button>
             <button
               onClick={() => {
@@ -594,26 +684,30 @@ const BillSummary = ({
                   setDiscount({ type: 'complimentary', value: '' });
                 }
               }}
-              className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2.5 py-1 rounded-md text-xs font-bold border transition-colors whitespace-nowrap`}>
+              className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap`}>
               {t("Complimentary")}
             </button>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider">{t("Total")}</span>
-            <span className="text-primary text-xl font-black">{currencySymbol}{total.toFixed(0)}</span>
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            <span className="text-gray-500 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">{t("Total")}</span>
+            {loading ? (
+              <div className="h-5 w-14 bg-orange-100/80 rounded-md animate-pulse" />
+            ) : (
+              <span className="text-primary text-base sm:text-lg font-black">{currencySymbol}{total.toFixed(0)}</span>
+            )}
           </div>
         </div>
 
         {/* Row 3: Settlement */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 overflow-x-auto no-scrollbar w-full">
-          <span className="text-gray-600 text-[11px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
-          <div className="flex items-center gap-2 ml-1 shrink-0">
+        <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 overflow-x-auto no-scrollbar w-full gap-1">
+          <span className="text-gray-600 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
+          <div className="flex items-center gap-1.5 ml-1 shrink-0">
             <input
               type="number"
               value={settlementAmount}
               onChange={(e) => setSettlementAmount(e.target.value)}
               disabled={isLocked || cart.length === 0}
-              className="w-[90px] h-8 bg-white border border-gray-200 text-gray-800 text-right px-2 rounded-lg outline-none focus:border-primary font-bold text-sm disabled:opacity-50" />
+              className="w-[75px] sm:w-[85px] h-7 bg-white border border-gray-200 text-gray-800 text-right px-1.5 rounded-lg outline-none focus:border-primary font-bold text-xs sm:text-sm disabled:opacity-50" />
             <button
               onClick={(e) => {
                 e.preventDefault();
@@ -621,10 +715,10 @@ const BillSummary = ({
                 if (onSettleBill) onSettleBill();
               }}
               disabled={cart.length === 0 || orderStatus === 'Paid' || loading}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1">
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1">
               {actionLoading === 'settle' ? (
                 <>
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={11} className="animate-spin" />
                   <span>{t("Settling...")}</span>
                 </>
               ) : (
@@ -635,10 +729,10 @@ const BillSummary = ({
         </div>
 
         {/* Row 4: Checkboxes */}
-        <div className="flex items-center justify-center gap-6 py-2 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
+        <div className="flex items-center justify-center gap-4 py-1.5 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
           <label className="flex items-center gap-1.5 text-gray-600 text-xs font-bold cursor-pointer">
-            <div className={`w-4 h-4 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
-              {isPaid && <CheckCircle size={10} className="text-white shrink-0" strokeWidth={3} />}
+            <div className={`w-3.5 h-3.5 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+              {isPaid && <CheckCircle size={9} className="text-white shrink-0" strokeWidth={3} />}
             </div>
             <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />{t("It's Paid")}
           </label>
@@ -648,14 +742,14 @@ const BillSummary = ({
       </div>
 
       {/* Action Buttons - ALWAYS PINNED at bottom, outside scroll area */}
-      <div className="grid grid-cols-3 gap-2 px-3 py-3 bg-white border-t border-gray-200 w-full shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
+      <div className="grid grid-cols-3 gap-1.5 px-2 py-2 bg-white border-t border-gray-200 w-full shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         <button
           onClick={onSaveOrder}
           disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-          className="col-span-1 bg-red-50 text-red-600 py-3 rounded-xl text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          className="col-span-1 bg-red-50 text-red-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'save' ? (
             <>
-              <Loader2 size={16} className="animate-spin text-red-600" />
+              <Loader2 size={14} className="animate-spin text-red-600" />
               <span>{orderId ? t("Updating...") : t("Saving...")}</span>
             </>
           ) : (
@@ -665,10 +759,10 @@ const BillSummary = ({
         <button
           onClick={onHoldOrder}
           disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-          className="col-span-1 bg-orange-50 text-orange-600 py-3 rounded-xl text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          className="col-span-1 bg-orange-50 text-orange-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'hold' ? (
             <>
-              <Loader2 size={16} className="animate-spin text-orange-600" />
+              <Loader2 size={14} className="animate-spin text-orange-600" />
               <span>{t("Holding...")}</span>
             </>
           ) : (
@@ -678,10 +772,10 @@ const BillSummary = ({
         <button
           onClick={onGenerateBill}
           disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
-          className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-3 rounded-xl text-xs sm:text-sm font-black tracking-wide hover:shadow-lg active:scale-95 transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center gap-1.5">
+          className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black tracking-wide hover:shadow-lg active:scale-95 transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center gap-1">
           {actionLoading === 'print' ? (
             <>
-              <Loader2 size={16} className="animate-spin text-white" />
+              <Loader2 size={14} className="animate-spin text-white" />
               <span>{t("Printing...")}</span>
             </>
           ) : (
@@ -695,15 +789,15 @@ const BillSummary = ({
               onClick={onPrintKOT}
               disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
               title={!hasUnprintedItems && cart.length > 0 ? t("All items already sent to kitchen. No changes detected.") : (isKotAlreadyFired ? t("KOT UPDATE", { defaultValue: "KOT UPDATE" }) : t("KOT"))}
-              className={`col-span-1 py-3 rounded-xl text-sm font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1.5 ${
+              className={`col-span-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1 ${
                 hasUnprintedItems
                   ? 'bg-amber-500 hover:bg-amber-600 text-white font-black hover:shadow-lg cursor-pointer border border-amber-600'
                   : 'bg-gray-100 text-gray-400 border border-gray-200 disabled:opacity-50'
               }`}>
               {actionLoading === 'kot' ? (
                 <>
-                  <Loader2 size={16} className="animate-spin text-white" />
-                  <span>{isKotAlreadyFired ? t("Updating KOT...", { defaultValue: "Updating KOT..." }) : t("Sending...")}</span>
+                  <Loader2 size={14} className="animate-spin text-white" />
+                  <span>{isKotAlreadyFired ? t("Updating...", { defaultValue: "Updating..." }) : t("Sending...")}</span>
                 </>
               ) : (
                 isKotAlreadyFired ? t("KOT UPDATE", { defaultValue: "KOT UPDATE" }) : t("KOT")
@@ -714,23 +808,23 @@ const BillSummary = ({
         <button
           onClick={onReopenOrder}
           disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}
-          className="col-span-1 bg-blue-50 text-blue-600 py-3 rounded-xl text-sm font-bold hover:bg-blue-100 active:scale-95 transition-all shadow-sm border border-blue-100 disabled:opacity-50 flex items-center justify-center gap-1.5">
+          className="col-span-1 bg-blue-50 text-blue-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold hover:bg-blue-100 active:scale-95 transition-all shadow-sm border border-blue-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'edit' ? (
             <>
-              <Loader2 size={16} className="animate-spin text-blue-600" />
-              <span>{t("Opening...")}</span>
+              <Loader2 size={14} className="animate-spin text-blue-600" />
+              <span>{t("Editing...")}</span>
             </>
           ) : (
             t("EDIT")
           )}
         </button>
         <button
-          onClick={() => onCancelOrder && onCancelOrder('Cancelled by user')}
-          disabled={loading || cart.length === 0}
-          className="col-span-1 bg-white text-gray-400 border border-gray-200 py-3 rounded-xl text-sm font-bold hover:bg-gray-50 hover:text-red-500 active:scale-95 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
+          onClick={onCancelOrder}
+          disabled={loading || orderStatus === 'Paid' || (!orderId && cart.length === 0)}
+          className="col-span-1 bg-gray-50 text-gray-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold hover:bg-gray-100 active:scale-95 transition-all shadow-sm border border-gray-200 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'cancel' ? (
             <>
-              <Loader2 size={16} className="animate-spin text-red-500" />
+              <Loader2 size={14} className="animate-spin text-gray-600" />
               <span>{t("Cancelling...")}</span>
             </>
           ) : (
@@ -893,6 +987,134 @@ const BillSummary = ({
           </div>
         </div>
       }
+
+      {/* Delivery Platforms Manager Modal (Full CRUD) */}
+      {showPlatformModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-orange-500/10 to-amber-500/10">
+              <div>
+                <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>🛵</span> {t("Delivery Platforms")}
+                </h3>
+                <p className="text-[11px] text-gray-500">{t("Add, select, or delete custom delivery channels")}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPlatformModal(false);
+                  setNewPlatformName('');
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Add New Platform Form */}
+              <form onSubmit={handleAddPlatform} className="space-y-2">
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                  {t("Add New Platform Name")}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. Dunzo, Magicpin, UberEats"
+                    value={newPlatformName}
+                    onChange={(e) => setNewPlatformName(e.target.value)}
+                    autoFocus
+                    className="flex-1 px-3 py-2 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newPlatformName.trim()}
+                    className="px-3.5 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    <Plus size={14} />
+                    <span>{t("Add")}</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* List of Platforms with Delete buttons */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  {t("Active Platforms")}
+                </label>
+                <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+                  {/* Built-in Platforms */}
+                  {['Direct Delivery', 'Swiggy', 'Zomato'].map((name) => {
+                    const rawVal = name.startsWith('Direct') ? 'Direct' : name;
+                    const isSelected = orderSource === rawVal;
+                    return (
+                      <div
+                        key={name}
+                        onClick={() => {
+                          setOrderSource(rawVal);
+                          setShowPlatformModal(false);
+                        }}
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-orange-50 border-orange-200 text-orange-700'
+                            : 'bg-gray-50/50 hover:bg-gray-100/80 border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                          <span>{t(name)}</span>
+                          <span className="text-[9px] text-gray-400 font-normal">({t("Default")})</span>
+                        </div>
+                        {isSelected && <span className="text-[10px] text-orange-600 font-bold">✓ {t("Active")}</span>}
+                      </div>
+                    );
+                  })}
+
+                  {/* Custom Added Platforms with Delete button */}
+                  {customPlatforms.map((p) => {
+                    const isSelected = orderSource === p;
+                    return (
+                      <div
+                        key={p}
+                        className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-orange-50 border-orange-200 text-orange-700'
+                            : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-800'
+                        }`}
+                      >
+                        <div
+                          onClick={() => {
+                            setOrderSource(p);
+                            setShowPlatformModal(false);
+                          }}
+                          className="flex-1 flex items-center gap-2 cursor-pointer truncate mr-2"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
+                          <span className="truncate">{p}</span>
+                          {isSelected && <span className="text-[10px] text-orange-600 font-bold">✓ {t("Active")}</span>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`${t("Delete custom platform")} "${p}"?`)) {
+                              handleDeletePlatform(p);
+                            }
+                          }}
+                          className="p-1 hover:bg-red-50 text-gray-400 hover:text-red-600 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title={t("Delete Platform")}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

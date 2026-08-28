@@ -37,6 +37,11 @@ const customerSchema = new mongoose.Schema({
   walletBalance: {
     type: Number,
     default: 0
+  },
+  lastOrderType: {
+    type: String,
+    enum: ['Dine-In', 'Delivery', 'Takeaway', 'Pick Up', ''],
+    default: 'Dine-In'
   }
 }, {
   timestamps: true

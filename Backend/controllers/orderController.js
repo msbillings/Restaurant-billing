@@ -340,8 +340,11 @@ export const saveOrder = async (req, res) => {
       }
 
       order.items = updatedItems;
-      order.customerName = customerName;
-      order.customerPhone = customerPhone;
+      if (customerName !== undefined) order.customerName = customerName;
+      if (customerPhone !== undefined) order.customerPhone = customerPhone;
+      if (order.customerPhone) {
+        syncCustomer(req, order.customerPhone, order.customerName, billType || order.billType).catch(() => {});
+      }
       order.kitchenNotes = kitchenNotes;
       order.billType = billType || order.billType;
       order.discountType = dType;
@@ -379,8 +382,8 @@ export const saveOrder = async (req, res) => {
           const freshOrder = await Bill.findById(order._id);
           if (freshOrder) {
             freshOrder.items = updatedItems;
-            freshOrder.customerName = customerName;
-            freshOrder.customerPhone = customerPhone;
+            if (customerName !== undefined) freshOrder.customerName = customerName;
+            if (customerPhone !== undefined) freshOrder.customerPhone = customerPhone;
             freshOrder.kitchenNotes = kitchenNotes;
             freshOrder.billType = billType || freshOrder.billType;
             freshOrder.discountType = dType;
@@ -503,7 +506,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, discountType, discountValue, tax, taxBreakdown } = req.body;
+    const { discount, discountType, discountValue, tax, taxBreakdown, orderSource, customerName, customerPhone } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -519,6 +522,9 @@ export const generateBill = async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status === 'Paid') return res.status(400).json({ message: 'Order already paid' });
     if (order.status === 'Billed') {
+      if (orderSource) order.orderSource = orderSource;
+      if (customerName) order.customerName = customerName;
+      if (customerPhone) order.customerPhone = customerPhone;
       if (discount !== undefined) order.discount = Number(discount) || 0;
       if (discountType) order.discountType = discountType;
       if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
@@ -530,8 +536,6 @@ export const generateBill = async (req, res) => {
       await order.save();
       cache.clear('dailyStats');
       cache.clear('openOrders');
-      emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
-      emitNotification(req, 'Bill Saved & Printed', `Bill #${order.billNumber || ''} saved and printed for Table ${order.tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
       return res.json(order);
     }
 
@@ -552,6 +556,12 @@ export const generateBill = async (req, res) => {
 
     order.status = 'Billed';
     order.billNumber = billNumber;
+    if (orderSource) order.orderSource = orderSource;
+    if (customerName) order.customerName = customerName;
+    if (customerPhone) order.customerPhone = customerPhone;
+    if (order.customerPhone) {
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
+    }
     order.discount = Number(discount) || 0;
     order.discountType = discountType || 'flat';
     order.discountValue = Number(discountValue) || 0;
@@ -559,11 +569,17 @@ export const generateBill = async (req, res) => {
     if (taxBreakdown) {
       order.taxBreakdown = taxBreakdown;
     }
+    // Ensure subtotal is valid and recomputed from active items if missing/0
+    if (!order.subtotal || order.subtotal <= 0) {
+      order.subtotal = (order.items || []).reduce((acc, i) => 
+        acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
+    }
 
-    // Calculate final total
-    const taxableAmount = order.subtotal - order.discount;
-    const taxAmount = (taxableAmount * order.tax) / 100;
-    order.total = Math.round(taxableAmount + taxAmount);
+    // Calculate final total with delivery & container charges
+    const taxableAmount = Math.max(0, (order.subtotal || 0) - (order.discount || 0));
+    const taxAmount = (taxableAmount * (order.tax || 0)) / 100;
+    const computedTotal = Math.round(taxableAmount + taxAmount + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
+    order.total = (req.body.total !== undefined && Number(req.body.total) > 0) ? Number(req.body.total) : computedTotal;
 
     try {
       await order.save();
@@ -612,7 +628,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal } = req.body;
+    const { paymentMode, splitPayments, upiApp, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -632,6 +648,13 @@ export const settleBill = async (req, res) => {
       return res.json(order);
     }
 
+    if (orderSource) order.orderSource = orderSource;
+    if (customerName) order.customerName = customerName;
+    if (customerPhone) order.customerPhone = customerPhone;
+    if (order.customerPhone) {
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
+    }
+
     // Apply optional pricing/discount adjustments if sent directly
     if (discount !== undefined) order.discount = Number(discount) || 0;
     if (discountType) order.discountType = discountType;
@@ -640,6 +663,17 @@ export const settleBill = async (req, res) => {
     if (taxBreakdown) order.taxBreakdown = taxBreakdown;
     if (total !== undefined && Number(total) > 0) order.total = Number(total);
     if (subtotal !== undefined && Number(subtotal) > 0) order.subtotal = Number(subtotal);
+
+    // Safeguard against zero total/subtotal
+    if (!order.subtotal || order.subtotal <= 0) {
+      order.subtotal = (order.items || []).reduce((acc, i) => 
+        acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
+    }
+    if (!order.total || order.total <= 0) {
+      const taxable = Math.max(0, (order.subtotal || 0) - (order.discount || 0));
+      const taxAmt = (taxable * (order.tax || 0)) / 100;
+      order.total = Math.round(taxable + taxAmt + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
+    }
 
     // Set status to 'Paid' - this makes it appear in billing history
     order.status = 'Paid';
@@ -973,4 +1007,49 @@ export const reopenOrder = async (req, res) => {
   }
 };
 
-// Cancel an entire order
+// Update customer details directly on a bill/order
+export const updateBillCustomer = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { id } = req.params;
+    const { customerName, customerPhone, billType } = req.body;
+
+    let order = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      order = await Bill.findById(id);
+    }
+    if (!order) {
+      order = await Bill.findOne({
+        tableNo: getTableMatchCondition(id),
+        status: { $in: ['Open', 'Billed'] }
+      });
+    }
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    order.customerName = customerName || 'Guest';
+    order.customerPhone = customerPhone || '';
+    await order.save();
+
+    cache.clear('dailyStats');
+    cache.clear('openOrders');
+
+    if (order.customerPhone) {
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType || billType).catch(() => {});
+    }
+
+    emitSocketEvent(req, 'orderUpdated', { 
+      tableNo: order.tableNo, 
+      orderId: order._id, 
+      customerName: order.customerName, 
+      customerPhone: order.customerPhone 
+    });
+
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error('Error updating bill customer:', err);
+    res.status(500).json({ message: err.message });
+  }
+};

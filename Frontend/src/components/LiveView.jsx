@@ -58,8 +58,8 @@ const LiveView = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-gray-100 p-3 sm:p-6 overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-3 shrink-0">
+    <div className="h-full flex flex-col bg-gray-900 text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 sm:mb-2.5 gap-2.5 shrink-0">
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>

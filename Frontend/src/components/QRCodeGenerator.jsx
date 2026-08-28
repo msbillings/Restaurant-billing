@@ -436,9 +436,9 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   ];
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col p-1.5 sm:p-2.5 md:p-3 overflow-hidden">
       {/* Top Navigation */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 shrink-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 sm:mb-2.5 gap-2.5 shrink-0">
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
@@ -452,13 +452,13 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           {/* Table filter selector */}
           <select
             value={selectedTable}
             onChange={(e) => setSelectedTable(e.target.value)}
             disabled={isLoading}
-            className="w-full sm:w-64 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium shadow-xs disabled:opacity-60">
+            className="flex-1 sm:w-64 min-w-0 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium shadow-xs disabled:opacity-60 truncate">
             {isLoading ? (
               <option value="ALL">{t("Fetching tables & statuses...")}</option>
             ) : (
@@ -484,19 +484,22 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           <button
             onClick={handleManualRefresh}
             disabled={isLoading || isRefreshing}
-            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-bold transition-all text-xs sm:text-sm shrink-0"
-            title="Refresh table occupancy & status"
+            className="p-2 sm:px-3 sm:py-2 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-bold transition-all text-xs sm:text-sm shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+            title={t("Refresh table occupancy & status")}
           >
-            <RefreshCw size={15} className={`text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw size={16} className={`text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
             <span className="hidden md:inline">{t("Sync Status")}</span>
           </button>
 
-          {/* Print button */}
+          {/* Print button (icon only on mobile, with label on desktop) */}
           <button
             onClick={printQRCodes}
             disabled={isLoading}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-opacity text-xs sm:text-sm disabled:opacity-60 shrink-0">
-            <Printer size={16} /> <span>{t("Print QRs")}</span>
+            className="p-2 sm:px-4 sm:py-2 bg-primary text-white rounded-xl font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-opacity text-xs sm:text-sm disabled:opacity-60 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
+            title={t("Print QRs")}
+          >
+            <Printer size={16} />
+            <span className="hidden sm:inline">{t("Print QRs")}</span>
           </button>
         </div>
       </div>

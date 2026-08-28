@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 
 import { 
-  getActiveOrder, saveOrder, generateBill, settleBill, getOpenOrders, reopenOrder, cancelOrder, refundOrder 
+  getActiveOrder, saveOrder, generateBill, settleBill, getOpenOrders, reopenOrder, cancelOrder, refundOrder, updateBillCustomer 
 } from '../controllers/orderController.js';
 import { 
   generateKOT, getTodayKOTs, getActiveKOTs, updateKOTItemStatus, updateItemPrepTime, resolveItemCancel 
@@ -47,6 +47,8 @@ router.post('/kot/item/status', authenticateToken, updateKOTItemStatus);
 router.post('/kot/item/prep-time', authenticateToken, updateItemPrepTime);
 router.post('/refund/:id', authenticateToken, refundOrder);
 router.post('/resolve-item-cancel', authenticateToken, resolveItemCancel);
+router.patch('/:id/customer', authenticateToken, updateBillCustomer);
+router.put('/:id/customer', authenticateToken, updateBillCustomer);
 
 // DELETE notification routes - authenticated users
 router.delete('/notifications/all', authenticateToken, deleteAllNotifications);

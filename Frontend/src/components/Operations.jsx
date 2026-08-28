@@ -98,9 +98,9 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
 
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-3 sm:p-6 overflow-y-auto">
+    <div className="h-full flex flex-col bg-gray-50 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
       {/* Header & Dynamic Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2.5 sm:mb-3 gap-2.5 shrink-0">
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
@@ -148,15 +148,15 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
       ) : (
         <>
           {filteredOperations.length > 0 && (
-            <div className="mb-8">
-              <h2 className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mb-3 uppercase">{t("Operations")} ({filteredOperations.length})</h2>
+            <div className="mb-4">
+              <h2 className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mb-2.5 uppercase">{t("Operations")} ({filteredOperations.length})</h2>
               {renderGrid(filteredOperations)}
             </div>
           )}
 
           {filteredConfig.length > 0 && (
-            <div className="mb-8 mt-2">
-              <h2 className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mb-3 uppercase">{t("Configurations & Settings")} ({filteredConfig.length})</h2>
+            <div className="mb-4 mt-2">
+              <h2 className="text-xs sm:text-sm font-bold text-gray-700 tracking-wide mb-2.5 uppercase">{t("Configurations & Settings")} ({filteredConfig.length})</h2>
               {renderGrid(filteredConfig)}
             </div>
           )}

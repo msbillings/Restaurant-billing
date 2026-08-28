@@ -204,10 +204,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="w-full space-y-6">
+    <div className="h-full overflow-y-auto p-1.5 sm:p-2.5 md:p-3">
+      <div className="w-full space-y-2.5 sm:space-y-3">
         {/* Header */}
-        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-4 sm:p-6 border border-border">
+        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-secondary/10 rounded-2xl p-2 sm:p-3 border border-border">
           <div className="flex items-center gap-3 sm:gap-4">
             <BackButton onClick={onGoBack} className="shrink-0" />
             <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">

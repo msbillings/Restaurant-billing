@@ -121,7 +121,7 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         </div>
       </div>
 
-      <div className="px-3 sm:px-6 py-2.5 sm:py-3 border-b border-border bg-background flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4 shrink-0">
+      <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 border-b border-border bg-background flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
         <div className="flex bg-surface-hover p-1 rounded-xl overflow-x-auto shrink-0 justify-between sm:justify-start">
           {['today', 'week', 'month', 'all'].map((filter) =>
           <button
@@ -148,7 +148,7 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6 bg-background">
+      <div className="flex-1 overflow-y-auto p-1.5 sm:p-2.5 md:p-3 bg-background">
         {loading ?
         <div className="flex justify-center items-center h-40">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>

@@ -31,7 +31,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
   useEffect(() => {
     fetchBills();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentPage, debouncedSearchTerm, filterType]);
 
   // Refresh bills when component mounts to show latest bills first
@@ -72,7 +72,6 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
       unsubSettled();
       unsubOrderUpdated();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchBills = async (isBackground = false) => {
@@ -219,75 +218,113 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
 
   return (
-    <div className="h-full flex flex-col bg-background p-3 sm:p-4 lg:p-6 overflow-hidden w-full">
+    <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-hidden w-full">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-4 shrink-0 bg-surface p-4 sm:p-6 border border-border rounded-2xl shadow-xs">
-        <div className="flex items-start gap-3">
-          <BackButton onClick={onGoBack} className="mt-0.5 shrink-0" />
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-text-main">{t("Bill History")}</h1>
-            <p className="text-xs sm:text-sm text-text-muted font-medium">{t("View and manage past transactions")}</p>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full md:w-auto">
-          {/* Date Range Picker */}
-          <div className="flex items-center gap-1 bg-background px-2.5 py-1.5 rounded-xl border border-border text-xs shrink-0 shadow-2xs">
-            <input
-              type="date"
-              max={endDate || undefined}
-              value={startDate}
-              onChange={(e) => handleStartDateChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[122px] sm:w-[132px] px-0.5 border-none"
-              style={{ colorScheme: 'light' }}
-              title={t("Start Date")}
-            />
-            <span className="text-text-muted font-bold text-xs">-</span>
-            <input
-              type="date"
-              min={startDate || undefined}
-              value={endDate}
-              onChange={(e) => handleEndDateChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-text-main outline-none cursor-pointer w-[122px] sm:w-[132px] px-0.5 border-none"
-              style={{ colorScheme: 'light' }}
-              title={t("End Date")}
-            />
-            {(startDate || endDate) && (
-              <button
-                onClick={() => { setStartDate(''); setEndDate(''); }}
-                className="text-[10px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1.5 py-0.5 rounded-md transition-colors ml-0.5"
-                title={t("Reset Dates")}
-              >
-                ✕
-              </button>
-            )}
+      <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between mb-2 sm:mb-2.5 gap-2 shrink-0 bg-surface p-2 sm:p-2.5 border border-border rounded-2xl shadow-xs">
+        {/* Row 1 on Smaller Screens / Left on Large Screens: Back + Title + Date Range + Filter */}
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full xl:w-auto shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <BackButton onClick={onGoBack} className="shrink-0" />
+            <div>
+              <h1 className="text-sm sm:text-lg font-black text-text-main leading-tight whitespace-nowrap">{t("Bill History")}</h1>
+              <p className="text-[10px] sm:text-xs text-text-muted font-medium leading-tight hidden xs:block">{t("View and manage past transactions")}</p>
+            </div>
           </div>
 
-          <div className="relative flex-1 sm:w-48">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+          {/* Date Range Picker + Filter */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Ultra-compact Date Range Picker */}
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-background px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xl border border-border text-xs shadow-2xs shrink-0">
+              <input
+                type="date"
+                max={endDate || undefined}
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                className="bg-transparent text-[9px] xs:text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer w-[60px] xs:w-[68px] sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.65] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
+                style={{ colorScheme: 'light' }}
+                title={t("Start Date")}
+              />
+              <span className="text-text-muted font-bold text-[9px] sm:text-xs">-</span>
+              <input
+                type="date"
+                min={startDate || undefined}
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                className="bg-transparent text-[9px] xs:text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer w-[60px] xs:w-[68px] sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.65] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
+                style={{ colorScheme: 'light' }}
+                title={t("End Date")}
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => { setStartDate(''); setEndDate(''); }}
+                  className="text-[8px] sm:text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1 py-0.5 rounded transition-colors ml-0.5"
+                  title={t("Reset Dates")}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Compact Filter Dropdown */}
+            <div className="relative shrink-0">
+              <Filter className="absolute left-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={10} />
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="pl-4 pr-3 py-0.5 sm:py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-[10px] sm:text-xs text-text-main appearance-none cursor-pointer font-medium">
+                <option value="All">{t("All")}</option>
+                <option value="Dine-In">{t("Dine-In")}</option>
+                <option value="Takeaway">{t("Takeaway")}</option>
+                <option value="Cash">{t("Cash")}</option>
+                <option value="UPI">{t("UPI")}</option>
+                <option value="Card">{t("Card")}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2 on Smaller Screens: Search Bar (taking remaining width) + Pagination on SAME ROW */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full xl:w-auto flex-1 xl:flex-initial min-w-0">
+          {/* Search Input: Takes remaining width */}
+          <div className="relative flex-1 min-w-0 xl:w-44">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={13} />
             <input
               type="text" 
               placeholder={t("Search Bill #...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main w-full font-medium" />
+              className="pl-7 pr-3 py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main w-full font-medium" />
           </div>
 
-          <div className="relative w-auto">
-            <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="w-auto pl-10 pr-8 py-2 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs sm:text-sm text-text-main appearance-none cursor-pointer font-medium">
-              <option value="All">{t("All")}</option>
-              <option value="Dine-In">{t("Dine-In")}</option>
-              <option value="Takeaway">{t("Takeaway")}</option>
-              <option value="Cash">{t("Cash")}</option>
-              <option value="UPI">{t("UPI")}</option>
-              <option value="Card">{t("Card")}</option>
-            </select>
-          </div>
+          {/* Top Pagination Controls on same row */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center gap-0.5 bg-background border border-border rounded-xl px-1.5 py-0.5 shrink-0 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || loading}
+                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                title={t("Previous Page")}
+              >
+                <ChevronLeft size={13} />
+              </button>
+
+              <span className="text-[10px] sm:text-[11px] font-bold text-text-main px-1 select-none whitespace-nowrap">
+                {currentPage} / {pagination.totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={currentPage >= pagination.totalPages || loading}
+                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                title={t("Next Page")}
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -297,37 +334,37 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
           <table className="w-full text-left border-collapse">
             <thead className="bg-background sticky top-0 z-10 shadow-xs">
               <tr>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Bill #")}</th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">
-                  <div className="flex items-center gap-2">
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Bill #")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">
+                  <div className="flex items-center gap-1.5">
                     {t("Date & Time")}
                     <span className="text-[10px] text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Type")}</th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Status")}</th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Payment")}</th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-right">{t("Total")}</th>
-                <th className="p-4 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-center">{t("Action")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Type")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Status")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Payment")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-right">{t("Total")}</th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border text-center">{t("Action")}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 [...Array(8)].map((_, i) => (
                   <tr key={i} className="border-b border-border animate-pulse">
-                    <td className="p-4"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4">
+                    <td className="px-3 py-2.5"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="px-3 py-2.5">
                       <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
                       <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
                     </td>
-                    <td className="p-4"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="p-4">
-                      <div className="flex justify-center gap-2">
-                        <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
-                        <div className="w-8 h-8 bg-text-muted/20 rounded"></div>
+                    <td className="px-3 py-2.5"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
+                    <td className="px-3 py-2.5"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="px-3 py-2.5"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="px-3 py-2.5"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex justify-center gap-1.5">
+                        <div className="w-7 h-7 bg-text-muted/20 rounded"></div>
+                        <div className="w-7 h-7 bg-text-muted/20 rounded"></div>
                       </div>
                     </td>
                   </tr>
@@ -339,45 +376,45 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               ) : (
                 filteredBills.map((bill) => (
                   <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
-                    <td className="p-4 font-bold text-text-main font-mono text-sm">
+                    <td className="px-3 py-2.5 font-bold text-text-main font-mono text-xs sm:text-sm whitespace-nowrap">
                       #{bill.billNumber || 'CANCELLED'}
                       {bill.status === 'Cancelled' && bill.cancelReason && (
                         <div className="text-[10px] text-danger mt-0.5">{t("Reason:")} {bill.cancelReason}</div>
                       )}
                     </td>
-                    <td className="p-4 text-text-muted">
+                    <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
                       <div className="flex flex-col text-xs">
                         <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()}</span>
-                        <span className="font-mono text-text-muted">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${
                         bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
                         {t(bill.billType)}
                       </span>
                     </td>
-                    <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${
                         bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
                       }`}>
                         {t(bill.status || 'Paid')}
                       </span>
                     </td>
-                    <td className="p-4">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-xs text-text-main font-medium">
-                        <CreditCard size={15} className="text-text-muted shrink-0" />
+                        <CreditCard size={14} className="text-text-muted shrink-0" />
                         <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
                       </div>
                     </td>
-                    <td className="p-4 font-black text-text-main text-right text-sm">
+                    <td className="px-3 py-2.5 font-black text-text-main text-right text-xs sm:text-sm whitespace-nowrap">
                       <span className={bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}>
                         ₹{(bill.total || 0).toFixed(2)}
                       </span>
                     </td>
-                    <td className="p-4 text-center">
-                      <div className="flex justify-center gap-1.5">
+                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                      <div className="flex justify-center items-center gap-1">
                         <button
                           onClick={async () => {
                             setLoadingBill(true);
@@ -505,9 +542,9 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
           )}
         </div>
         
-        {/* Pagination Controls */}
+        {/* Pagination Controls - Visible on desktop, mobile uses compact top toolbar pagination */}
         {pagination.totalPages > 1 && (
-          <div className="p-3 sm:p-4 border-t border-border flex flex-col sm:flex-row gap-2 items-center justify-between bg-background shrink-0 text-xs sm:text-sm">
+          <div className="hidden md:flex p-3 sm:p-4 border-t border-border flex-col sm:flex-row gap-2 items-center justify-between bg-background shrink-0 text-xs sm:text-sm">
             <div className="text-text-muted font-medium">
               {t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("bills")}
             </div>
