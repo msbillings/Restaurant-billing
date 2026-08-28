@@ -868,15 +868,89 @@ const CustomerMenu = () => {
     setTimeout(doScroll, 100);
   };
 
+  // Re-verify location whenever customer returns to the browser tab
+  useEffect(() => {
+    if (!restaurantSettings?.enableGeoFencing) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        verifyLocation(restaurantSettings);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [restaurantSettings, verifyLocation]);
+
   const placeOrder = async () => {
     if (cart.length === 0 || orderStatus === 'placing') return;
 
-    // Strict location enforcement before placing order
-    if (restaurantSettings?.enableGeoFencing && geoState.status !== 'granted') {
-      verifyLocation(restaurantSettings);
-      setServiceMessage(t('⚠️ Please allow and verify your location before placing an order.'));
-      setTimeout(() => setServiceMessage(null), 4000);
-      return;
+    let liveCoords = geoState.userCoords;
+
+    // Strict live GPS verification at the exact second of placing order
+    if (restaurantSettings?.enableGeoFencing) {
+      const restLat = parseFloat(restaurantSettings.latitude);
+      const restLng = parseFloat(restaurantSettings.longitude);
+      const allowedRadius = parseInt(restaurantSettings.geoFencingRadius, 10) || 50;
+
+      if (!isNaN(restLat) && !isNaN(restLng) && restLat !== 0 && restLng !== 0) {
+        setOrderStatus('placing');
+        try {
+          const freshPos = await new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 7000,
+              maximumAge: 0 // 0ms: Forces 100% fresh live GPS fix (cannot use old location from when scanned)
+            });
+          });
+
+          const uLat = freshPos.coords.latitude;
+          const uLng = freshPos.coords.longitude;
+          const accuracy = Math.round(freshPos.coords.accuracy || 0);
+          const rawDistance = calculateDistanceInMeters(uLat, uLng, restLat, restLng);
+          const effectiveDistance = Math.max(0, rawDistance - Math.min(accuracy, 25));
+
+          // If customer has walked outside the restaurant radius
+          if (rawDistance > allowedRadius && effectiveDistance > allowedRadius) {
+            setOrderStatus('menu');
+            setGeoState({
+              status: 'out_of_range',
+              distance: rawDistance,
+              accuracy,
+              allowedRadius,
+              userCoords: { latitude: uLat, longitude: uLng, accuracy },
+              restaurantCoords: { latitude: restLat, longitude: restLng },
+              message: t(`You appear to be ${rawDistance}m away from the restaurant. Ordering is strictly blocked outside the restaurant.`)
+            });
+            setServiceMessage(`🚫 ${t("Order blocked: You are outside the restaurant area")} (~${rawDistance}m ${t("away")}).`);
+            setTimeout(() => setServiceMessage(null), 5000);
+            return;
+          }
+
+          liveCoords = {
+            latitude: uLat,
+            longitude: uLng,
+            accuracy,
+            distance: rawDistance
+          };
+
+          setGeoState({
+            status: 'granted',
+            distance: rawDistance,
+            accuracy,
+            allowedRadius,
+            userCoords: liveCoords,
+            restaurantCoords: { latitude: restLat, longitude: restLng },
+            message: ''
+          });
+        } catch (gpsErr) {
+          console.warn("Live order GPS check failed:", gpsErr);
+          setOrderStatus('menu');
+          verifyLocation(restaurantSettings);
+          setServiceMessage(t('⚠️ Live location verification required to place order.'));
+          setTimeout(() => setServiceMessage(null), 4000);
+          return;
+        }
+      }
     }
 
     setOrderStatus('placing');
@@ -901,11 +975,11 @@ const CustomerMenu = () => {
         taxes: 0,
         total: total,
         tenant: tenant,
-        customerLocation: geoState.userCoords ? {
-          latitude: geoState.userCoords.latitude,
-          longitude: geoState.userCoords.longitude,
-          accuracy: geoState.accuracy,
-          distance: geoState.distance
+        customerLocation: liveCoords ? {
+          latitude: liveCoords.latitude,
+          longitude: liveCoords.longitude,
+          accuracy: liveCoords.accuracy,
+          distance: liveCoords.distance
         } : null
       }, {
         headers: {
