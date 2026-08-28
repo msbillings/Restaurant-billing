@@ -431,7 +431,7 @@ router.post('/order', async (req, res) => {
                     Math.cos(toRad(restLat)) * Math.cos(toRad(custLat)) *
                     Math.sin(dLon / 2) * Math.sin(dLon / 2);
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const distance = Math.round(R * c);
+          const distance = Math.max(0, Math.round(R * c));
 
           // Allow a 40m GPS accuracy buffer on the backend for indoor phones
           const effectiveDistance = Math.max(0, distance - Math.min(accuracy, 30));

@@ -17,19 +17,48 @@ const apiClient = axios.create({
   }
 });
 
-// Haversine formula to compute exact distance in meters between two GPS coordinates
-const calculateDistanceInMeters = (lat1, lon1, lat2, lon2) => {
+// Authoritative Location Verification Status Machine
+const LOCATION_STATUS = {
+  INITIALIZING: 'INITIALIZING',
+  REQUESTING: 'REQUESTING',
+  VERIFIED: 'VERIFIED',
+  OUTSIDE: 'OUTSIDE',
+  LOW_ACCURACY: 'LOW_ACCURACY',
+  PERMISSION_DENIED: 'PERMISSION_DENIED',
+  TIMEOUT: 'TIMEOUT',
+  ERROR: 'ERROR'
+};
+
+// Mathematically authoritative Haversine distance calculation in meters
+const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
   if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+
+  // Validate coordinates before calculation
+  if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return null;
+  if (nLat1 < -90 || nLat1 > 90 || nLat2 < -90 || nLat2 > 90) return null;
+  if (nLon1 < -180 || nLon1 > 180 || nLon2 < -180 || nLon2 > 180) return null;
+
   const R = 6371000; // Earth radius in meters
-  const toRad = (deg) => (deg * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+  const toRadians = (deg) => (deg * Math.PI) / 180;
+
+  const dLat = toRadians(nLat2 - nLat1);
+  const dLon = toRadians(nLon2 - nLon1);
+
   const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(nLat1)) *
+    Math.cos(toRadians(nLat2)) *
+    Math.sin(dLon / 2) ** 2;
+
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c);
+  const calculatedDistanceMeters = R * c;
+
+  // Physical distance is strictly non-negative
+  return Math.max(0, calculatedDistanceMeters);
 };
 
 const getCustomerParams = () => {
@@ -89,17 +118,45 @@ const CustomerMenu = () => {
   const [isCheckingOrder, setIsCheckingOrder] = useState(() => !cachedActiveOrder);
   const [hasConfirmedTableStatus, setHasConfirmedTableStatus] = useState(() => !!cachedActiveOrder);
   const [error, setError] = useState(null);
-  const [geoError, setGeoError] = useState(null);
-  const [verifyingLocation, setVerifyingLocation] = useState(false);
-  const [geoState, setGeoState] = useState({
-    status: 'idle', // 'idle' | 'verifying' | 'granted' | 'denied' | 'out_of_range' | 'error'
-    distance: null,
-    accuracy: null,
-    allowedRadius: 50,
-    userCoords: null,
-    restaurantCoords: null,
-    message: ''
+
+  // Authoritative Location Verification State Machine
+  const [locationState, setLocationState] = useState(() => {
+    const isGeoEnabled = cachedMenu?.restaurantSettings?.enableGeoFencing;
+    return {
+      status: isGeoEnabled ? LOCATION_STATUS.INITIALIZING : LOCATION_STATUS.VERIFIED,
+      latitude: null,
+      longitude: null,
+      accuracy: null,
+      distanceMeters: null,
+      allowedRadius: parseInt(cachedMenu?.restaurantSettings?.geoFencingRadius, 10) || 50,
+      restaurantCoords: null,
+      errorMessage: null,
+      timestamp: null
+    };
   });
+
+  // Dedicated refs to guarantee single watchers, prevent race conditions, and decouple from re-renders
+  const isMountedRef = useRef(true);
+  const watchIdRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const restaurantSettingsRef = useRef(restaurantSettings);
+
+  useEffect(() => {
+    restaurantSettingsRef.current = restaurantSettings;
+  }, [restaurantSettings]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (watchIdRef.current != null && typeof navigator !== 'undefined' && navigator.geolocation) {
+        console.log("[LOCATION] Component unmounted - Watch cleared");
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+    };
+  }, []);
+
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [orderStatus, setOrderStatus] = useState('menu'); // menu, placing, success
 
@@ -412,24 +469,27 @@ const CustomerMenu = () => {
     }
   }, [tenant]);
 
-  // Strict Geolocation verification with dynamic radius from settings & GPS accuracy compensation
-  const verifyLocation = useCallback((settings, silent = false) => {
-    const s = settings || restaurantSettings;
-    if (s) setRestaurantSettings(s);
+  // Primary Location Verification Request (Initial or User Retry)
+  const requestLocationVerification = useCallback((overrideSettings = null) => {
+    const s = overrideSettings || restaurantSettingsRef.current;
+    if (overrideSettings) {
+      setRestaurantSettings(overrideSettings);
+      restaurantSettingsRef.current = overrideSettings;
+    }
 
-    // If Geo-Fencing is disabled for this restaurant
     if (!s || !s.enableGeoFencing) {
-      setGeoState({
-        status: 'granted',
-        distance: 0,
-        accuracy: 0,
+      console.log("[LOCATION] Geofencing disabled - VERIFIED");
+      setLocationState({
+        status: LOCATION_STATUS.VERIFIED,
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        distanceMeters: 0,
         allowedRadius: 0,
-        userCoords: null,
         restaurantCoords: null,
-        message: ''
+        errorMessage: null,
+        timestamp: Date.now()
       });
-      setGeoError(null);
-      setVerifyingLocation(false);
       return;
     }
 
@@ -437,145 +497,171 @@ const CustomerMenu = () => {
     const restLng = parseFloat(s.longitude);
     const allowedRadius = parseInt(s.geoFencingRadius, 10) || 50;
 
-    // If coordinates are not configured in settings when geo-fencing is active, block ordering strictly
-    if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0)) {
-      const msg = t('Restaurant GPS coordinates are not configured yet. Please ask restaurant staff to set location in Settings.');
-      if (!silent) {
-        setGeoState({
-          status: 'error',
-          distance: null,
-          accuracy: null,
-          allowedRadius,
-          userCoords: null,
-          restaurantCoords: null,
-          message: msg
-        });
-        setGeoError(msg);
-      }
-      setVerifyingLocation(false);
-      return;
-    }
-
-    // Only show full-screen verification modal if user is NOT yet verified and not in silent mode
-    if (!silent) {
-      setVerifyingLocation(true);
-      setGeoState(prev => ({
-        status: prev.status === 'granted' ? 'granted' : 'verifying',
-        distance: prev.distance,
-        accuracy: prev.accuracy,
+    // Validate admin coordinates
+    if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0) || restLat < -90 || restLat > 90 || restLng < -180 || restLng > 180) {
+      console.warn("[LOCATION] Invalid Admin coordinates in settings:", { restLat, restLng });
+      setLocationState({
+        status: LOCATION_STATUS.ERROR,
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        distanceMeters: null,
         allowedRadius,
-        userCoords: prev.userCoords,
-        restaurantCoords: { latitude: restLat, longitude: restLng },
-        message: t('Verifying your table location...')
-      }));
+        restaurantCoords: null,
+        errorMessage: t('Restaurant GPS coordinates are not configured properly in Admin Settings. Please ask staff for assistance.'),
+        timestamp: Date.now()
+      });
+      return;
     }
 
     if (!navigator.geolocation) {
-      setVerifyingLocation(false);
-      if (!silent) {
-        const msg = t('Geolocation is not supported by your browser. Please use Chrome or Safari.');
-        setGeoState({
-          status: 'error',
-          distance: null,
-          accuracy: null,
-          allowedRadius,
-          restaurantCoords: { latitude: restLat, longitude: restLng },
-          message: msg
-        });
-        setGeoError(msg);
-      }
+      setLocationState({
+        status: LOCATION_STATUS.ERROR,
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        distanceMeters: null,
+        allowedRadius,
+        restaurantCoords: { latitude: restLat, longitude: restLng },
+        errorMessage: t('Geolocation is not supported by your browser. Please use Chrome or Safari.'),
+        timestamp: Date.now()
+      });
       return;
     }
 
+    const currentReqId = ++requestIdRef.current;
+    console.log(`[LOCATION] Request started (Session ID ${currentReqId})`);
+
+    setLocationState(prev => ({
+      ...prev,
+      status: LOCATION_STATUS.REQUESTING,
+      allowedRadius,
+      restaurantCoords: { latitude: restLat, longitude: restLng },
+      errorMessage: null
+    }));
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (!isMountedRef.current || requestIdRef.current !== currentReqId) return;
+
         const uLat = position.coords.latitude;
         const uLng = position.coords.longitude;
-        const accuracy = Math.round(position.coords.accuracy || 0);
-        const rawDistance = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
+        const accuracy = position.coords.accuracy != null ? Math.round(position.coords.accuracy) : null;
+        const timestamp = position.timestamp || Date.now();
+        const rawDistance = calculateDistanceMeters(uLat, uLng, restLat, restLng);
 
-        // Account for GPS accuracy tolerance (e.g. indoor phone GPS can have 15-25m variance)
-        const effectiveDistance = Math.max(0, rawDistance - Math.min(accuracy, 25));
-        const isInside = rawDistance <= allowedRadius || effectiveDistance <= allowedRadius;
+        console.log("[LOCATION] Initial GPS Fix received:", {
+          latitude: uLat,
+          longitude: uLng,
+          accuracy,
+          distanceMeters: rawDistance,
+          allowedRadius
+        });
+
+        if (rawDistance == null) {
+          setLocationState({
+            status: LOCATION_STATUS.ERROR,
+            latitude: uLat,
+            longitude: uLng,
+            accuracy,
+            distanceMeters: null,
+            allowedRadius,
+            restaurantCoords: { latitude: restLat, longitude: restLng },
+            errorMessage: t('Invalid GPS coordinates calculated. Please retry.'),
+            timestamp
+          });
+          return;
+        }
+
+        const roundedDist = Math.max(0, Math.round(rawDistance));
+
+        // Accuracy policy: if accuracy > 80m and calculated distance is outside radius, mark as LOW_ACCURACY
+        if (accuracy != null && accuracy > 80 && roundedDist > allowedRadius) {
+          console.log("[LOCATION] Accuracy is low (>80m):", accuracy);
+          setLocationState({
+            status: LOCATION_STATUS.LOW_ACCURACY,
+            latitude: uLat,
+            longitude: uLng,
+            accuracy,
+            distanceMeters: roundedDist,
+            allowedRadius,
+            restaurantCoords: { latitude: restLat, longitude: restLng },
+            errorMessage: t('GPS accuracy is low. Trying to acquire a more accurate location...'),
+            timestamp
+          });
+          return;
+        }
+
+        const isInside = roundedDist <= allowedRadius;
 
         if (isInside) {
-          setGeoState({
-            status: 'granted',
-            distance: rawDistance,
+          console.log(`[LOCATION] Status transition: VERIFIED (~${roundedDist}m)`);
+          setLocationState({
+            status: LOCATION_STATUS.VERIFIED,
+            latitude: uLat,
+            longitude: uLng,
             accuracy,
+            distanceMeters: roundedDist,
             allowedRadius,
-            userCoords: { latitude: uLat, longitude: uLng, accuracy },
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: ''
+            errorMessage: null,
+            timestamp
           });
-          setGeoError(null);
-          setVerifyingLocation(false);
         } else {
-          const msg = t(`You appear to be ${rawDistance}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`);
-          setGeoState({
-            status: 'out_of_range',
-            distance: rawDistance,
+          console.log(`[LOCATION] Status transition: OUTSIDE (${roundedDist}m > ${allowedRadius}m)`);
+          setLocationState({
+            status: LOCATION_STATUS.OUTSIDE,
+            latitude: uLat,
+            longitude: uLng,
             accuracy,
+            distanceMeters: roundedDist,
             allowedRadius,
-            userCoords: { latitude: uLat, longitude: uLng, accuracy },
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: msg
+            errorMessage: t(`You appear to be ${roundedDist}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`),
+            timestamp
           });
-          setGeoError(msg);
-          setVerifyingLocation(false);
         }
       },
       (err) => {
-        console.warn("Geolocation check notice:", err);
-        setVerifyingLocation(false);
-
-        // In silent mode if already granted, do not unblock or disrupt the user
-        if (silent) return;
+        if (!isMountedRef.current || requestIdRef.current !== currentReqId) return;
+        console.warn("[LOCATION] Geolocation error:", err);
 
         if (err.code === 1) { // PERMISSION_DENIED
-          const msg = t('Location permission is required to verify you are at Table ') + (table || '') + t('. Please allow location access to order.');
-          setGeoState({
-            status: 'denied',
-            distance: null,
+          setLocationState({
+            status: LOCATION_STATUS.PERMISSION_DENIED,
+            latitude: null,
+            longitude: null,
             accuracy: null,
+            distanceMeters: null,
             allowedRadius,
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: msg
+            errorMessage: t('Location permission is required to verify you are seated at Table ') + (table || '') + t('. Please allow location access to order.'),
+            timestamp: Date.now()
           });
-          setGeoError(msg);
-        } else if (err.code === 2) { // POSITION_UNAVAILABLE
-          const msg = t('GPS location unavailable. Please make sure Location / GPS is turned ON on your phone and try again.');
-          setGeoState({
-            status: 'error',
-            distance: null,
-            accuracy: null,
-            allowedRadius,
-            restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: msg
-          });
-          setGeoError(msg);
         } else if (err.code === 3) { // TIMEOUT
-          const msg = t('Location request timed out. Please tap retry to verify table location.');
-          setGeoState({
-            status: 'error',
-            distance: null,
+          setLocationState({
+            status: LOCATION_STATUS.TIMEOUT,
+            latitude: null,
+            longitude: null,
             accuracy: null,
+            distanceMeters: null,
             allowedRadius,
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: msg
+            errorMessage: t('Location request timed out. Please tap retry to verify table location.'),
+            timestamp: Date.now()
           });
-          setGeoError(msg);
         } else {
-          const msg = err.message || t('Could not verify table location.');
-          setGeoState({
-            status: 'error',
-            distance: null,
+          setLocationState({
+            status: LOCATION_STATUS.ERROR,
+            latitude: null,
+            longitude: null,
             accuracy: null,
+            distanceMeters: null,
             allowedRadius,
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: msg
+            errorMessage: err.message || t('GPS location unavailable. Please make sure Location / GPS is turned ON in phone settings and try again.'),
+            timestamp: Date.now()
           });
-          setGeoError(msg);
         }
       },
       {
@@ -584,62 +670,104 @@ const CustomerMenu = () => {
         maximumAge: 0
       }
     );
-  }, [restaurantSettings, table, t]);
+  }, [table, t]);
 
-  // Real-Time Background Movement Tracking: If customer walks outside the radius, automatically block immediately!
+  // Exactly ONE Background Location Watcher: Updates coordinates & distance smoothly without unmounting UI
   useEffect(() => {
-    if (!restaurantSettings?.enableGeoFencing || !navigator.geolocation) return;
-    const restLat = parseFloat(restaurantSettings.latitude);
-    const restLng = parseFloat(restaurantSettings.longitude);
-    const allowedRadius = parseInt(restaurantSettings.geoFencingRadius, 10) || 50;
+    const settings = restaurantSettings;
+    if (!settings?.enableGeoFencing || !navigator.geolocation) {
+      if (watchIdRef.current != null) {
+        console.log("[LOCATION] Watch stopped (Geofencing disabled)");
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
+
+    const restLat = parseFloat(settings.latitude);
+    const restLng = parseFloat(settings.longitude);
+    const allowedRadius = parseInt(settings.geoFencingRadius, 10) || 50;
     if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0)) return;
 
-    if (geoState.status !== 'granted') return;
+    // Only monitor when in VERIFIED or OUTSIDE states
+    if (locationState.status !== LOCATION_STATUS.VERIFIED && locationState.status !== LOCATION_STATUS.OUTSIDE) {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
 
-    const watchId = navigator.geolocation.watchPosition(
+    // Prevent duplicate watchers
+    if (watchIdRef.current != null) return;
+
+    console.log("[LOCATION] Background Watcher started");
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        if (!isMountedRef.current) return;
         const uLat = pos.coords.latitude;
         const uLng = pos.coords.longitude;
-        const accuracy = Math.round(pos.coords.accuracy || 0);
-        const rawDist = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
-        const effectiveDist = Math.max(0, rawDist - Math.min(accuracy, 25));
+        const accuracy = pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : null;
+        const rawDist = calculateDistanceMeters(uLat, uLng, restLat, restLng);
+        if (rawDist == null) return;
 
-        // If customer walked out of restaurant range
-        if (rawDist > allowedRadius && effectiveDist > allowedRadius) {
-          setGeoState({
-            status: 'out_of_range',
-            distance: rawDist,
-            accuracy,
-            allowedRadius,
-            userCoords: { latitude: uLat, longitude: uLng, accuracy },
-            restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: t(`You appear to be ${rawDist}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`)
+        const roundedDist = Math.max(0, Math.round(rawDist));
+
+        // If customer has walked outside restaurant radius
+        if (roundedDist > allowedRadius) {
+          setLocationState(prev => {
+            if (prev.status === LOCATION_STATUS.OUTSIDE && prev.distanceMeters === roundedDist) return prev;
+            console.log(`[LOCATION] Background watcher moved OUTSIDE: ${roundedDist}m > ${allowedRadius}m`);
+            return {
+              ...prev,
+              status: LOCATION_STATUS.OUTSIDE,
+              latitude: uLat,
+              longitude: uLng,
+              accuracy,
+              distanceMeters: roundedDist,
+              allowedRadius,
+              restaurantCoords: { latitude: restLat, longitude: restLng },
+              errorMessage: t(`You appear to be ${roundedDist}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`),
+              timestamp: pos.timestamp || Date.now()
+            };
           });
         } else {
-          // Inside restaurant: update live distance smoothly without interrupting UI
-          setGeoState(prev => ({
-            ...prev,
-            status: 'granted',
-            distance: rawDist,
-            accuracy,
-            userCoords: { latitude: uLat, longitude: uLng, accuracy }
-          }));
+          // Inside restaurant: update live distance smoothly WITHOUT unmounting or resetting UI
+          setLocationState(prev => {
+            return {
+              ...prev,
+              status: LOCATION_STATUS.VERIFIED,
+              latitude: uLat,
+              longitude: uLng,
+              accuracy,
+              distanceMeters: roundedDist,
+              allowedRadius,
+              restaurantCoords: { latitude: restLat, longitude: restLng },
+              errorMessage: null,
+              timestamp: pos.timestamp || Date.now()
+            };
+          });
         }
       },
       (watchErr) => {
-        console.warn("watchPosition background notice:", watchErr);
+        console.warn("[LOCATION] Background watcher notice:", watchErr);
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,
+        maximumAge: 3000,
         timeout: 15000
       }
     );
 
     return () => {
-      navigator.geolocation.clearWatch(watchId);
+      if (watchIdRef.current != null) {
+        console.log("[LOCATION] Background Watcher cleared");
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
     };
-  }, [restaurantSettings, geoState.status, t]);
+  }, [restaurantSettings, locationState.status, t]);
 
   const hasLoadedInitialOrderRef = useRef(false);
 
@@ -736,9 +864,27 @@ const CustomerMenu = () => {
           localStorage.setItem(`customer_menu_${tenant}`, JSON.stringify(menuRes.data));
         } catch (e) {}
 
-        // Never block menu viewing; verify location in parallel
         setLoading(false);
-        verifyLocation(menuRes.data.restaurantSettings);
+
+        if (menuRes.data.restaurantSettings) {
+          setRestaurantSettings(menuRes.data.restaurantSettings);
+          restaurantSettingsRef.current = menuRes.data.restaurantSettings;
+          if (menuRes.data.restaurantSettings.enableGeoFencing) {
+            requestLocationVerification(menuRes.data.restaurantSettings);
+          } else {
+            setLocationState({
+              status: LOCATION_STATUS.VERIFIED,
+              latitude: null,
+              longitude: null,
+              accuracy: null,
+              distanceMeters: 0,
+              allowedRadius: 0,
+              restaurantCoords: null,
+              errorMessage: null,
+              timestamp: Date.now()
+            });
+          }
+        }
         return;
       }
     } catch (err) {
@@ -757,7 +903,7 @@ const CustomerMenu = () => {
     } finally {
       setLoading(false);
     }
-  }, [tenant, table, verifyLocation]);
+  }, [tenant, table, requestLocationVerification]);
 
   useEffect(() => {
     fetchMenu();
@@ -818,7 +964,7 @@ const CustomerMenu = () => {
       if (socket) socket.disconnect();
       clearInterval(interval);
     };
-  }, [tenant, table, checkOrderStatus, verifyLocation]);
+  }, [tenant, table, checkOrderStatus, fetchMenu]);
 
   const addToCart = (item, variant = null, note = '', quantityToAdd = 1) => {
     const qty = Math.max(1, parseInt(quantityToAdd, 10) || 1);
@@ -933,22 +1079,77 @@ const CustomerMenu = () => {
     setTimeout(doScroll, 100);
   };
 
-  // Re-verify location whenever customer returns to the browser tab (silent check)
+  // Re-verify location whenever customer returns to the browser tab (silent check in background)
   useEffect(() => {
     if (!restaurantSettings?.enableGeoFencing) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        verifyLocation(restaurantSettings, true);
+        const settings = restaurantSettingsRef.current;
+        if (settings?.enableGeoFencing && navigator.geolocation) {
+          const restLat = parseFloat(settings.latitude);
+          const restLng = parseFloat(settings.longitude);
+          const allowedRadius = parseInt(settings.geoFencingRadius, 10) || 50;
+          if (!isNaN(restLat) && !isNaN(restLng) && restLat !== 0 && restLng !== 0) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                if (!isMountedRef.current) return;
+                const uLat = pos.coords.latitude;
+                const uLng = pos.coords.longitude;
+                const accuracy = pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : null;
+                const dist = calculateDistanceMeters(uLat, uLng, restLat, restLng);
+                if (dist == null) return;
+                const roundedDist = Math.max(0, Math.round(dist));
+
+                if (roundedDist > allowedRadius) {
+                  setLocationState(prev => ({
+                    ...prev,
+                    status: LOCATION_STATUS.OUTSIDE,
+                    latitude: uLat,
+                    longitude: uLng,
+                    accuracy,
+                    distanceMeters: roundedDist,
+                    allowedRadius,
+                    restaurantCoords: { latitude: restLat, longitude: restLng },
+                    errorMessage: t(`You appear to be ${roundedDist}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`),
+                    timestamp: pos.timestamp || Date.now()
+                  }));
+                } else {
+                  setLocationState(prev => ({
+                    ...prev,
+                    status: LOCATION_STATUS.VERIFIED,
+                    latitude: uLat,
+                    longitude: uLng,
+                    accuracy,
+                    distanceMeters: roundedDist,
+                    allowedRadius,
+                    restaurantCoords: { latitude: restLat, longitude: restLng },
+                    errorMessage: null,
+                    timestamp: pos.timestamp || Date.now()
+                  }));
+                }
+              },
+              () => {},
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+            );
+          }
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [restaurantSettings, verifyLocation]);
+  }, [restaurantSettings, t]);
 
   const placeOrder = async () => {
     if (cart.length === 0 || orderStatus === 'placing') return;
 
-    let liveCoords = geoState.userCoords;
+    if (restaurantSettings?.enableGeoFencing && locationState.status !== LOCATION_STATUS.VERIFIED) {
+      requestLocationVerification();
+      setServiceMessage(t('⚠️ Location verification is required to place an order.'));
+      setTimeout(() => setServiceMessage(null), 4000);
+      return;
+    }
+
+    let liveCoords = null;
 
     // Strict live GPS verification at the exact second of placing order
     if (restaurantSettings?.enableGeoFencing) {
@@ -970,50 +1171,64 @@ const CustomerMenu = () => {
 
           const uLat = freshPos.coords.latitude;
           const uLng = freshPos.coords.longitude;
-          const accuracy = Math.round(freshPos.coords.accuracy || 0);
-          const rawDistance = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
-          const effectiveDistance = Math.max(0, rawDistance - Math.min(accuracy, 25));
+          const accuracy = freshPos.coords.accuracy != null ? Math.round(freshPos.coords.accuracy) : null;
+          const rawDistance = calculateDistanceMeters(uLat, uLng, restLat, restLng);
 
-          // If customer has walked outside the restaurant radius
-          if (rawDistance > allowedRadius && effectiveDistance > allowedRadius) {
+          if (rawDistance != null && rawDistance > allowedRadius) {
+            const roundedDist = Math.max(0, Math.round(rawDistance));
             setOrderStatus('menu');
-            setGeoState({
-              status: 'out_of_range',
-              distance: rawDistance,
+            setLocationState({
+              status: LOCATION_STATUS.OUTSIDE,
+              latitude: uLat,
+              longitude: uLng,
               accuracy,
+              distanceMeters: roundedDist,
               allowedRadius,
-              userCoords: { latitude: uLat, longitude: uLng, accuracy },
               restaurantCoords: { latitude: restLat, longitude: restLng },
-              message: t(`You appear to be ${rawDistance}m away from the restaurant. Ordering is strictly blocked outside the restaurant.`)
+              errorMessage: t(`You appear to be ${roundedDist}m away from the restaurant. Ordering is strictly blocked outside the restaurant.`),
+              timestamp: freshPos.timestamp || Date.now()
             });
-            setServiceMessage(`🚫 ${t("Order blocked: You are outside the restaurant area")} (~${rawDistance}m ${t("away")}).`);
+            setServiceMessage(`🚫 ${t("Order blocked: You are outside the restaurant area")} (~${roundedDist}m ${t("away")}).`);
             setTimeout(() => setServiceMessage(null), 5000);
             return;
           }
 
+          const roundedDist = rawDistance != null ? Math.max(0, Math.round(rawDistance)) : 0;
           liveCoords = {
             latitude: uLat,
             longitude: uLng,
             accuracy,
-            distance: rawDistance
+            distance: roundedDist
           };
 
-          setGeoState({
-            status: 'granted',
-            distance: rawDistance,
+          setLocationState({
+            status: LOCATION_STATUS.VERIFIED,
+            latitude: uLat,
+            longitude: uLng,
             accuracy,
+            distanceMeters: roundedDist,
             allowedRadius,
-            userCoords: liveCoords,
             restaurantCoords: { latitude: restLat, longitude: restLng },
-            message: ''
+            errorMessage: null,
+            timestamp: freshPos.timestamp || Date.now()
           });
         } catch (gpsErr) {
-          console.warn("Live order GPS check failed:", gpsErr);
-          setOrderStatus('menu');
-          verifyLocation(restaurantSettings, true);
-          setServiceMessage(t('⚠️ Live location verification required to place order.'));
-          setTimeout(() => setServiceMessage(null), 4000);
-          return;
+          console.warn("[LOCATION] Live order GPS check fallback:", gpsErr);
+          // If fresh position timed out but state is already verified within reasonable time, use last verified coords
+          if (locationState.latitude && locationState.longitude) {
+            liveCoords = {
+              latitude: locationState.latitude,
+              longitude: locationState.longitude,
+              accuracy: locationState.accuracy,
+              distance: locationState.distanceMeters
+            };
+          } else {
+            setOrderStatus('menu');
+            requestLocationVerification();
+            setServiceMessage(t('⚠️ Live location verification required to place order.'));
+            setTimeout(() => setServiceMessage(null), 4000);
+            return;
+          }
         }
       }
     }
@@ -1177,9 +1392,9 @@ const CustomerMenu = () => {
   }, [categories, items, dietaryFilter, searchQuery]);
 
   // Strict Location Access Screens (Clean Light Digital Menu Theme)
-  // IMPORTANT: If geoState.status is 'granted', NEVER unmount the digital menu!
-  if (restaurantSettings?.enableGeoFencing && geoState.status !== 'granted') {
-    if (geoState.status === 'verifying' || verifyingLocation) {
+  // IMPORTANT: When locationState.status is VERIFIED, the digital menu remains mounted with ZERO flashing!
+  if (restaurantSettings?.enableGeoFencing && locationState.status !== LOCATION_STATUS.VERIFIED) {
+    if (locationState.status === LOCATION_STATUS.INITIALIZING || locationState.status === LOCATION_STATUS.REQUESTING || locationState.status === LOCATION_STATUS.LOW_ACCURACY) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans relative overflow-hidden">
           {/* Subtle warm decorative background blurs */}
@@ -1214,25 +1429,33 @@ const CustomerMenu = () => {
               </div>
               <div className="text-right">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Allowed Radius")}</div>
-                <div className="text-xs font-bold text-orange-600">{geoState.allowedRadius || 50}m {t("(Strict)")}</div>
+                <div className="text-xs font-bold text-orange-600">{locationState.allowedRadius || 50}m {t("(Strict)")}</div>
               </div>
             </div>
 
+            {/* Low Accuracy Notice */}
+            {locationState.status === LOCATION_STATUS.LOW_ACCURACY && (
+              <div className="w-full mb-4 px-3.5 py-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs font-semibold text-amber-800">
+                {locationState.errorMessage || t("GPS accuracy is low. Trying to acquire a more accurate location...")}
+                {locationState.accuracy && <span className="block text-[10px] text-amber-600 mt-0.5">±{Math.round(locationState.accuracy)}m {t("accuracy")}</span>}
+              </div>
+            )}
+
             {/* Live Distance Detected Display */}
-            {geoState.distance != null && (
+            {locationState.distanceMeters != null && (
               <div className="w-full mb-4 px-3.5 py-2.5 bg-orange-50/80 rounded-xl border border-orange-200 text-xs font-bold text-orange-700 flex items-center justify-center gap-1.5">
                 <LocateFixed size={14} className="text-orange-600" />
-                <span>{t("Detected Distance:")} {Math.abs(Math.round(geoState.distance))}m {t("from restaurant")}</span>
+                <span>{t("Detected Distance:")} {Math.max(0, Math.round(locationState.distanceMeters))}m {t("from restaurant")}</span>
               </div>
             )}
 
             {/* Direct Allow Button */}
             <button
               type="button"
-              onClick={() => verifyLocation(restaurantSettings)}
+              onClick={() => requestLocationVerification(restaurantSettings)}
               className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer mb-3"
             >
-              {verifyingLocation ? (
+              {locationState.status === LOCATION_STATUS.REQUESTING ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
                   <span>{t("Checking GPS Location...")}</span>
@@ -1254,7 +1477,7 @@ const CustomerMenu = () => {
       );
     }
 
-    if (geoState.status === 'denied') {
+    if (locationState.status === LOCATION_STATUS.PERMISSION_DENIED) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
           <div className="max-w-md w-full bg-white border border-red-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
@@ -1293,7 +1516,7 @@ const CustomerMenu = () => {
 
             <button
               type="button"
-              onClick={() => verifyLocation(restaurantSettings)}
+              onClick={() => requestLocationVerification(restaurantSettings)}
               className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <LocateFixed size={18} />
@@ -1304,7 +1527,7 @@ const CustomerMenu = () => {
       );
     }
 
-    if (geoState.status === 'out_of_range') {
+    if (locationState.status === LOCATION_STATUS.OUTSIDE) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
           <div className="max-w-md w-full bg-white border border-amber-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
@@ -1328,17 +1551,19 @@ const CustomerMenu = () => {
               <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Your Distance")}</div>
                 <div className="text-base sm:text-lg font-black text-red-600 mt-0.5">
-                  {geoState.distance != null ? `${Math.abs(Math.round(geoState.distance))}m` : t("Far")}
+                  {locationState.distanceMeters != null ? `${Math.max(0, Math.round(locationState.distanceMeters))}m` : t("Far")}
                 </div>
-                <div className="text-[9px] text-slate-400 font-mono">
-                  ±{geoState.accuracy || 10}m {t("accuracy")}
-                </div>
+                {locationState.accuracy != null && (
+                  <div className="text-[9px] text-slate-400 font-mono">
+                    ±{Math.round(locationState.accuracy)}m {t("accuracy")}
+                  </div>
+                )}
               </div>
 
               <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Allowed Radius")}</div>
                 <div className="text-base sm:text-lg font-black text-green-600 mt-0.5">
-                  {geoState.allowedRadius}m
+                  {locationState.allowedRadius}m
                 </div>
                 <div className="text-[9px] text-slate-400">
                   {t("Strict Security")}
@@ -1349,16 +1574,16 @@ const CustomerMenu = () => {
             <div className="flex flex-col gap-2.5 w-full">
               <button
                 type="button"
-                onClick={() => verifyLocation(restaurantSettings)}
+                onClick={() => requestLocationVerification(restaurantSettings)}
                 className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RefreshCw size={18} />
                 <span>{t("Re-check My Location")}</span>
               </button>
 
-              {geoState.restaurantCoords?.latitude && (
+              {locationState.restaurantCoords?.latitude && (
                 <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${geoState.restaurantCoords.latitude},${geoState.restaurantCoords.longitude}`}
+                  href={`https://www.google.com/maps/search/?api=1&query=${locationState.restaurantCoords.latitude},${locationState.restaurantCoords.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
@@ -1373,7 +1598,7 @@ const CustomerMenu = () => {
       );
     }
 
-    if (geoState.status === 'error') {
+    if (locationState.status === LOCATION_STATUS.ERROR || locationState.status === LOCATION_STATUS.TIMEOUT) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
           <div className="max-w-md w-full bg-white border border-amber-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
@@ -1382,16 +1607,16 @@ const CustomerMenu = () => {
             </div>
 
             <span className="text-[11px] uppercase tracking-widest text-amber-700 font-extrabold bg-amber-50 px-3 py-1 rounded-full mb-2 border border-amber-200">
-              {t("Location Error")}
+              {locationState.status === LOCATION_STATUS.TIMEOUT ? t("Location Timeout") : t("Location Error")}
             </span>
             <h2 className="text-2xl font-black text-slate-900 mb-2">{t("Could Not Verify Location")}</h2>
             <p className="text-xs sm:text-sm text-slate-600 mb-6 leading-relaxed">
-              {geoState.message || t("Please ensure your device GPS / Location is turned ON in phone settings and try again.")}
+              {locationState.errorMessage || t("Please ensure your device GPS / Location is turned ON in phone settings and try again.")}
             </p>
 
             <button
               type="button"
-              onClick={() => verifyLocation(restaurantSettings)}
+              onClick={() => requestLocationVerification(restaurantSettings)}
               className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <RefreshCw size={18} />
@@ -1528,29 +1753,20 @@ const CustomerMenu = () => {
         </div>
 
         {/* Dynamic Location Verified Badge */}
-        {restaurantSettings?.enableGeoFencing && geoState.status === 'granted' && (
+        {restaurantSettings?.enableGeoFencing && locationState.status === LOCATION_STATUS.VERIFIED && (
           <div className="flex items-center gap-1.5 bg-emerald-600/30 border border-emerald-400/40 text-emerald-100 text-[11px] font-bold px-3 py-1 rounded-full mt-2 backdrop-blur-sm shadow-xs animate-fade-in">
             <ShieldCheck size={13} className="text-emerald-300" />
-            <span>{t("Location Verified • Seated at Table")} {geoState.distance != null ? `(${Math.abs(Math.round(geoState.distance))}m away)` : ''}</span>
+            <span>
+              {t("Location Verified • Seated at Table")} {locationState.distanceMeters != null ? `(~${Math.max(0, Math.round(locationState.distanceMeters))}m)` : ''}
+            </span>
+            {locationState.accuracy != null && locationState.accuracy > 0 && (
+              <span className="text-[9px] opacity-80 border-l border-emerald-400/40 pl-1.5 ml-0.5 font-mono">
+                ±{Math.round(locationState.accuracy)}m
+              </span>
+            )}
           </div>
         )}
       </header>
-
-      {/* Non-Blocking Geo-Fencing Warning Banner — menu is always accessible */}
-      {geoError && (
-        <div className="mx-4 mt-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-start gap-3 shadow-sm">
-          <MapPin size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <p className="text-amber-800 text-xs font-semibold leading-snug flex-1">{geoError}</p>
-          <button
-            type="button"
-            onClick={() => setGeoError(null)}
-            className="text-amber-500 hover:text-amber-700 shrink-0 cursor-pointer transition-colors"
-            title={t("Dismiss")}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      )}
 
       {/* Search and Filters */}
       <div className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md px-3 sm:px-4 py-3 shadow-sm border-b border-slate-200">
