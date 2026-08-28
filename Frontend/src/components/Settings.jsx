@@ -9,6 +9,14 @@ import BackButton from './common/BackButton';
 
 const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const { t } = useLanguage();
+
+  // Production vs Dev mode detection
+  const isDevPort = typeof window !== 'undefined' && ['5173', '5174', '5175', '3000'].includes(window.location.port);
+  const isDevMode = Boolean(
+    import.meta.env.DEV && isDevPort && !window.location.hostname?.includes('vercel.app')
+  );
+  const isProduction = !isDevMode;
+
   const [settings, setSettings] = useState({
     restaurantName: '',
     restaurantType: '',
@@ -176,31 +184,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const handleGetLocation = () => {
     setLoading(true);
 
-    const fallbackToIP = async () => {
-      try {
-        const response = await fetch('https://get.geojs.io/v1/ip/geo.json');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (data && data.latitude && data.longitude) {
-          setSettings((prev) => ({
-            ...prev,
-            latitude: parseFloat(data.latitude),
-            longitude: parseFloat(data.longitude)
-          }));
-          setToast({ message: t("Location captured successfully!"), type: 'success' });
-        } else {
-          setToast({ message: `IP Geolocation failed: No coordinates in response.`, type: 'error' });
-        }
-      } catch (err) {
-        console.error('IP Geolocation error:', err);
-        setToast({ message: `IP Fallback Error: ${err.message}`, type: 'error' });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (!navigator.geolocation) {
-      fallbackToIP();
+      setLoading(false);
+      setToast({ message: t("Geolocation is not supported by your browser. Please use Chrome or Edge."), type: 'error' });
       return;
     }
 
@@ -212,12 +198,20 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
           longitude: position.coords.longitude
         }));
         setLoading(false);
-        setToast({ message: t("Location captured successfully!"), type: 'success' });
+        setToast({ message: t("Location captured successfully via GPS!"), type: 'success' });
       },
       (err) => {
         console.error('Geolocation error:', err);
-        // Fallback to IP based geolocation for Desktop/Electron
-        fallbackToIP();
+        setLoading(false);
+        if (err.code === 1) {
+          setToast({ message: t("Location permission denied. Please allow location access in your browser settings."), type: 'error' });
+        } else if (err.code === 2) {
+          setToast({ message: t("GPS position unavailable. Please ensure location is enabled on your device."), type: 'error' });
+        } else if (err.code === 3) {
+          setToast({ message: t("Location request timed out. Please try again."), type: 'error' });
+        } else {
+          setToast({ message: err.message || t("Could not capture GPS location."), type: 'error' });
+        }
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
@@ -784,105 +778,130 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 )}
               </div>
 
-              {/* QR Code Menu & URL Routing Configuration (Shop-to-Shop Dynamic) */}
+              {/* QR Code Menu & URL Routing Configuration */}
               <div className="space-y-4 md:col-span-2 mt-4 pt-4 border-t border-border">
                 <div className="flex flex-col">
                   <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    <Globe size={14} className="text-primary" />{t("Digital Menu QR Code URLs & Routing")}
+                    <Globe size={14} className="text-primary" />{t("Digital Menu Cloud URL")}
                   </label>
-                  <span className="text-xs text-text-muted mt-1">{t("Configure whether table QR codes route to your Cloud (Vercel) domain or Local Wi-Fi IP.")}</span>
+                  <span className="text-xs text-text-muted mt-1">
+                    {isProduction
+                      ? t("Table QR codes automatically route to your secure Vercel cloud domain.")
+                      : t("Configure whether table QR codes route to your Cloud (Vercel) domain or Local Wi-Fi IP.")}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-hover p-4 rounded-xl border border-border">
-                  {/* Mode Selector */}
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-xs font-semibold text-text-main">{t("Default QR Menu Mode")}</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('qrMenuMode', 'cloud')}
-                        className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                          settings.qrMenuMode === 'cloud' || !settings.qrMenuMode
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-background text-text-muted border-border hover:bg-surface'
-                        }`}
-                      >
-                        <Globe size={14} />
-                        <span>{t("Cloud / Vercel Menu")}</span>
-                        <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">4G/5G</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleInputChange('qrMenuMode', 'wifi')}
-                        className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                          settings.qrMenuMode === 'wifi'
-                            ? 'bg-primary text-white border-primary shadow-sm'
-                            : 'bg-background text-text-muted border-border hover:bg-surface'
-                        }`}
-                      >
-                        <Wifi size={14} />
-                        <span>{t("Local Wi-Fi / LAN")}</span>
-                        <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">Offline</span>
-                      </button>
+                {isProduction ? (
+                  /* Production: Clean, locked Vercel URL with no edit option and no IP fields */
+                  <div className="bg-surface-hover p-4 rounded-xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                        <Globe size={20} />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{t("Active Cloud Menu Domain")}</div>
+                        <div className="text-sm font-black text-text-main font-mono mt-0.5">
+                          {settings.vercelUrl || 'https://restaurant-billing-seven.vercel.app'}
+                        </div>
+                      </div>
                     </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                      <ShieldCheck size={12} /> {t("Production Active (4G/5G/Wi-Fi)")}
+                    </span>
                   </div>
+                ) : (
+                  /* Development Mode: Local IP & URL options */
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-hover p-4 rounded-xl border border-border">
+                    {/* Mode Selector */}
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-xs font-semibold text-text-main">{t("Default QR Menu Mode")}</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleInputChange('qrMenuMode', 'cloud')}
+                          className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                            settings.qrMenuMode === 'cloud' || !settings.qrMenuMode
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-background text-text-muted border-border hover:bg-surface'
+                          }`}
+                        >
+                          <Globe size={14} />
+                          <span>{t("Cloud / Vercel Menu")}</span>
+                          <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">4G/5G</span>
+                        </button>
 
-                  {/* Cloud / Vercel Domain Input */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
-                      <Globe size={12} className="text-blue-500" />
-                      <span>{t("Cloud / Vercel Menu Base URL")}</span>
-                    </label>
-                    <input
-                      type="url"
-                      value={settings.vercelUrl || ''}
-                      onChange={(e) => handleInputChange('vercelUrl', e.target.value)}
-                      placeholder="https://restaurant-billing-seven.vercel.app"
-                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
-                    />
-                    <p className="text-[10px] text-text-muted">{t("Target web address where customer digital menu is hosted.")}</p>
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => handleInputChange('qrMenuMode', 'wifi')}
+                          className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                            settings.qrMenuMode === 'wifi'
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-background text-text-muted border-border hover:bg-surface'
+                          }`}
+                        >
+                          <Wifi size={14} />
+                          <span>{t("Local Wi-Fi / LAN")}</span>
+                          <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">Offline</span>
+                        </button>
+                      </div>
+                    </div>
 
-                  {/* Local Server IP / Port Input */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    {/* Cloud / Vercel Domain Input */}
+                    <div className="space-y-2">
                       <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
-                        <Server size={12} className="text-emerald-500" />
-                        <span>{t("Local Server IP / Wi-Fi Address")}</span>
+                        <Globe size={12} className="text-blue-500" />
+                        <span>{t("Cloud / Vercel Menu Base URL")}</span>
                       </label>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            const res = await fetch(`${getApiUrl()}/public/system-ip`);
-                            if (res.ok) {
-                              const d = await res.json();
-                              if (d.ip) {
-                                handleInputChange('serverIp', d.ip);
-                                setToast({ message: `Detected LAN IP: ${d.ip}`, type: 'success' });
-                              }
-                            }
-                          } catch (e) {
-                            setToast({ message: 'Could not auto-detect IP', type: 'error' });
-                          }
-                        }}
-                        className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <RefreshCw size={10} />
-                        <span>{t("Auto-Detect IP")}</span>
-                      </button>
+                      <input
+                        type="url"
+                        value={settings.vercelUrl || ''}
+                        onChange={(e) => handleInputChange('vercelUrl', e.target.value)}
+                        placeholder="https://restaurant-billing-seven.vercel.app"
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
+                      />
+                      <p className="text-[10px] text-text-muted">{t("Target web address where customer digital menu is hosted.")}</p>
                     </div>
-                    <input
-                      type="text"
-                      value={settings.serverIp || ''}
-                      onChange={(e) => handleInputChange('serverIp', e.target.value)}
-                      placeholder="e.g. 192.168.1.100"
-                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
-                    />
-                    <p className="text-[10px] text-text-muted">{t("Used when QR codes are in Local Wi-Fi mode.")}</p>
+
+                    {/* Local Server IP / Port Input */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                          <Server size={12} className="text-emerald-500" />
+                          <span>{t("Local Server IP / Wi-Fi Address")}</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${getApiUrl()}/public/system-ip`);
+                              if (res.ok) {
+                                const d = await res.json();
+                                if (d.ip) {
+                                  handleInputChange('serverIp', d.ip);
+                                  setToast({ message: `Detected LAN IP: ${d.ip}`, type: 'success' });
+                                }
+                              }
+                            } catch (e) {
+                              setToast({ message: 'Could not auto-detect IP', type: 'error' });
+                            }
+                          }}
+                          className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <RefreshCw size={10} />
+                          <span>{t("Auto-Detect IP")}</span>
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={settings.serverIp || ''}
+                        onChange={(e) => handleInputChange('serverIp', e.target.value)}
+                        placeholder="e.g. 192.168.1.100"
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
+                      />
+                      <p className="text-[10px] text-text-muted">{t("Used when QR codes are in Local Wi-Fi mode.")}</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

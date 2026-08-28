@@ -437,18 +437,19 @@ const CustomerMenu = () => {
     const restLng = parseFloat(s.longitude);
     const allowedRadius = parseInt(s.geoFencingRadius, 10) || 50;
 
-    // If coordinates are not configured in settings, allow access
+    // If coordinates are not configured in settings when geo-fencing is active, block ordering strictly
     if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0)) {
+      const msg = t('Restaurant GPS coordinates are not configured yet. Please ask restaurant staff to set location in Settings.');
       setGeoState({
-        status: 'granted',
-        distance: 0,
-        accuracy: 0,
+        status: 'error',
+        distance: null,
+        accuracy: null,
         allowedRadius,
         userCoords: null,
         restaurantCoords: null,
-        message: ''
+        message: msg
       });
-      setGeoError(null);
+      setGeoError(msg);
       setVerifyingLocation(false);
       return;
     }

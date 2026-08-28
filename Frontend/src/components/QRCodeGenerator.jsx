@@ -542,147 +542,152 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       </div>
 
-      {/* Mode Switcher: Toggle between Cloud (Vercel) and Local Wi-Fi (IP) */}
-      <div className="bg-surface border border-border p-2 sm:p-2.5 rounded-2xl mb-3 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs shrink-0 print:hidden">
-        <div className="flex items-center gap-1.5 p-1 bg-background rounded-xl border border-border/60 w-full sm:w-auto">
-          {/* Cloud / Vercel Menu Button */}
-          <button
-            onClick={() => handleSelectQrMode('cloud')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              qrMode === 'cloud'
-                ? 'bg-primary text-white shadow-xs'
-                : 'text-text-muted hover:text-text-main hover:bg-surface'
-            }`}
-          >
-            <Globe size={14} /> {t("Cloud / Vercel Menu")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">4G/5G/Online</span>
-          </button>
+      {/* Dev Mode Only: Mode Switcher and URL/IP Configuration Bars (Hidden in Production) */}
+      {!isProduction && (
+        <>
+          {/* Mode Switcher: Toggle between Cloud (Vercel) and Local Wi-Fi (IP) */}
+          <div className="bg-surface border border-border p-2 sm:p-2.5 rounded-2xl mb-3 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs shrink-0 print:hidden">
+            <div className="flex items-center gap-1.5 p-1 bg-background rounded-xl border border-border/60 w-full sm:w-auto">
+              {/* Cloud / Vercel Menu Button */}
+              <button
+                onClick={() => handleSelectQrMode('cloud')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  qrMode === 'cloud'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'text-text-muted hover:text-text-main hover:bg-surface'
+                }`}
+              >
+                <Globe size={14} /> {t("Cloud / Vercel Menu")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">4G/5G/Online</span>
+              </button>
 
-          {/* Local Wi-Fi IP Button */}
-          <button
-            onClick={() => handleSelectQrMode('wifi')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              qrMode === 'wifi'
-                ? 'bg-primary text-white shadow-xs'
-                : 'text-text-muted hover:text-text-main hover:bg-surface'
-            }`}
-          >
-            <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN Mode</span>
-          </button>
-        </div>
-
-        {/* Dynamic Shop Network Indicator */}
-        <div className="flex items-center gap-2 text-[10px] sm:text-xs text-text-muted">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
-            <Server size={13} /> {qrMode === 'cloud' ? t("Routing via Cloud Domain") : t("Routing via Local Wi-Fi IP")}
-          </span>
-        </div>
-      </div>
-
-      {/* Cloud / Vercel URL Configuration Bar */}
-      {qrMode === 'cloud' && (
-        <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 text-blue-500">
-              <Globe size={18} />
+              {/* Local Wi-Fi IP Button */}
+              <button
+                onClick={() => handleSelectQrMode('wifi')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  qrMode === 'wifi'
+                    ? 'bg-primary text-white shadow-xs'
+                    : 'text-text-muted hover:text-text-main hover:bg-surface'
+                }`}
+              >
+                <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN Mode</span>
+              </button>
             </div>
-            <div>
-              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Vercel Menu Domain / Cloud URL")}</div>
-              <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
-                <span className="text-primary">{vercelUrl}</span>
-                <span className="text-[8px] sm:text-[10px] bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded-full font-bold uppercase border border-blue-500/20">
-                  {t("Active Online")}
-                </span>
+
+            {/* Dynamic Shop Network Indicator */}
+            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-text-muted">
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
+                <Server size={13} /> {qrMode === 'cloud' ? t("Routing via Cloud Domain") : t("Routing via Local Wi-Fi IP")}
+              </span>
+            </div>
+          </div>
+
+          {/* Cloud / Vercel URL Configuration Bar */}
+          {qrMode === 'cloud' && (
+            <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                  <Globe size={18} />
+                </div>
+                <div>
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Vercel Menu Domain / Cloud URL")}</div>
+                  <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
+                    <span className="text-primary">{vercelUrl}</span>
+                    <span className="text-[8px] sm:text-[10px] bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded-full font-bold uppercase border border-blue-500/20">
+                      {t("Active Online")}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <input
+                  type="text"
+                  value={customVercelInput}
+                  onChange={(e) => setCustomVercelInput(e.target.value)}
+                  placeholder="e.g. https://restaurant-billing-seven.vercel.app"
+                  className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-64 focus:outline-none focus:border-primary"
+                />
+                <button
+                  onClick={() => handleSaveVercelUrl(customVercelInput)}
+                  className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
+                >
+                  <Save size={12} /> {t("Save URL")}
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('resto_vercel_url');
+                    setVercelUrl(DEFAULT_VERCEL_URL);
+                    setCustomVercelInput(DEFAULT_VERCEL_URL);
+                    handleSaveVercelUrl(DEFAULT_VERCEL_URL);
+                  }}
+                  className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
+                  title="Reset to default Vercel URL"
+                >
+                  <RefreshCw size={12} />
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <input
-              type="text"
-              value={customVercelInput}
-              onChange={(e) => setCustomVercelInput(e.target.value)}
-              placeholder="e.g. https://restaurant-billing-seven.vercel.app"
-              className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-64 focus:outline-none focus:border-primary"
-            />
-            <button
-              onClick={() => handleSaveVercelUrl(customVercelInput)}
-              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
-            >
-              <Save size={12} /> {t("Save URL")}
-            </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem('resto_vercel_url');
-                setVercelUrl(DEFAULT_VERCEL_URL);
-                setCustomVercelInput(DEFAULT_VERCEL_URL);
-                handleSaveVercelUrl(DEFAULT_VERCEL_URL);
-              }}
-              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
-              title="Reset to default Vercel URL"
-            >
-              <RefreshCw size={12} />
-            </button>
-          </div>
-        </div>
-      )}
+          {/* Local Wi-Fi IP Configuration Bar */}
+          {qrMode === 'wifi' && (
+            <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-1.5 sm:p-2 rounded-xl ${isLoopback ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                  <Wifi size={18} />
+                </div>
+                <div>
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Development / Local Wi-Fi IP Address")}</div>
+                  <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
+                    <span>{localIP}:{isDevMode ? (window.location.port || '5173') : localPort}</span>
+                    {isLoopback ? (
+                      <span className="text-[8px] sm:text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase border border-amber-500/20">
+                        {t("Local Only (127.0.0.1)")}
+                      </span>
+                    ) : (
+                      <span className="text-[8px] sm:text-[10px] bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full font-bold uppercase border border-emerald-500/20">
+                        {t("Wi-Fi Ready")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-      {/* Local Wi-Fi IP Configuration Bar */}
-      {qrMode === 'wifi' && (
-        <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
-          <div className="flex items-center gap-2.5">
-            <div className={`p-1.5 sm:p-2 rounded-xl ${isLoopback ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-              <Wifi size={18} />
-            </div>
-            <div>
-              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Development / Local Wi-Fi IP Address")}</div>
-              <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
-                <span>{localIP}:{isDevMode ? (window.location.port || '5173') : localPort}</span>
-                {isLoopback ? (
-                  <span className="text-[8px] sm:text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase border border-amber-500/20">
-                    {t("Local Only (127.0.0.1)")}
-                  </span>
-                ) : (
-                  <span className="text-[8px] sm:text-[10px] bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full font-bold uppercase border border-emerald-500/20">
-                    {t("Wi-Fi Ready")}
-                  </span>
-                )}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                <input
+                  type="text"
+                  value={customIpInput}
+                  onChange={(e) => setCustomIpInput(e.target.value)}
+                  placeholder="e.g. 192.168.29.249"
+                  className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-44 focus:outline-none focus:border-primary"
+                />
+                <button
+                  onClick={() => handleSaveCustomIp(customIpInput)}
+                  className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
+                >
+                  <Save size={12} /> {t("Save IP")}
+                </button>
+                <button
+                  onClick={() => { localStorage.removeItem('resto_server_ip'); fetchIP(); }}
+                  className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
+                  title="Auto-detect Wi-Fi IP"
+                >
+                  <RefreshCw size={12} />
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
-            <input
-              type="text"
-              value={customIpInput}
-              onChange={(e) => setCustomIpInput(e.target.value)}
-              placeholder="e.g. 192.168.29.249"
-              className="px-3 py-1.5 bg-background border border-border rounded-xl text-[11px] font-mono font-bold text-text-main w-full sm:w-44 focus:outline-none focus:border-primary"
-            />
-            <button
-              onClick={() => handleSaveCustomIp(customIpInput)}
-              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
-            >
-              <Save size={12} /> {t("Save IP")}
-            </button>
-            <button
-              onClick={() => { localStorage.removeItem('resto_server_ip'); fetchIP(); }}
-              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
-              title="Auto-detect Wi-Fi IP"
-            >
-              <RefreshCw size={12} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Warning Alert if Loopback IP when in Wi-Fi mode in Development */}
-      {!isProduction && qrMode === 'wifi' && isLoopback && (
-        <div className="bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 px-3 py-2 sm:px-4 sm:py-3 rounded-2xl mb-4 text-[10px] sm:text-xs font-medium flex items-start gap-2 shrink-0 print:hidden">
-          <AlertTriangle size={16} className="shrink-0 text-amber-500 mt-0.5" />
-          <div>
-            <span className="font-bold">{t("Localhost Notice:")}</span> {t("QR codes currently point to 127.0.0.1. Mobile phones cannot open localhost directly. Enter your computer's Wi-Fi IP address (e.g. 192.168.29.249) or switch to 'Cloud / Vercel Menu' mode above to test.")}
-          </div>
-        </div>
+          {/* Warning Alert if Loopback IP when in Wi-Fi mode in Development */}
+          {qrMode === 'wifi' && isLoopback && (
+            <div className="bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-300 px-3 py-2 sm:px-4 sm:py-3 rounded-2xl mb-4 text-[10px] sm:text-xs font-medium flex items-start gap-2 shrink-0 print:hidden">
+              <AlertTriangle size={16} className="shrink-0 text-amber-500 mt-0.5" />
+              <div>
+                <span className="font-bold">{t("Localhost Notice:")}</span> {t("QR codes currently point to 127.0.0.1. Mobile phones cannot open localhost directly. Enter your computer's Wi-Fi IP address (e.g. 192.168.29.249) or switch to 'Cloud / Vercel Menu' mode above to test.")}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Toast Notifications */}
