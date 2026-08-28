@@ -111,12 +111,11 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   // Show Dev Mode switcher ONLY in active browser localhost development (npm run dev)
   const isDevMode = Boolean(import.meta.env.DEV && isDevPort && !isCapacitor && !isElectron);
 
-  // Production mode: Vercel, Production .exe, Production .apk
+  // Production mode detection
   const isProduction = !isDevMode;
 
-  // QR Mode: In production (.apk, .exe, Vercel), force 'cloud' (Vercel URL). In development mode, allow 'cloud' or 'wifi'
+  // QR Mode: Allow dynamic switching between 'cloud' (Vercel URL) and 'wifi' (Local IP) across all environments
   const [qrMode, setQrMode] = useState(() => {
-    if (isProduction) return 'cloud';
     return localStorage.getItem('resto_qr_mode') || 'cloud';
   });
 
@@ -164,8 +163,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   };
 
   const fetchIP = async () => {
-    if (isProduction) return;
-
     try {
       const API_BASE_URL = getApiUrl();
       const response = await fetch(`${API_BASE_URL}/public/system-ip`);
@@ -216,6 +213,40 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
     // Fallback if no floors exist
     setFloors(extracted.length > 0 ? extracted : [{ floorName: 'Ground Floor', tables: ['Table 1', 'Table 2', 'Table 3', 'Table 4'] }]);
+
+    // Dynamic Shop-to-Shop Settings Fetch
+    try {
+      const API_BASE_URL = getApiUrl();
+      const tenantDb = localStorage.getItem('resto_db_name') || '';
+      if (tenantDb) {
+        const res = await fetch(`${API_BASE_URL}/config/info`, {
+          headers: { 'X-Tenant-DB': tenantDb }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.restaurantSettings) {
+            const s = data.restaurantSettings;
+            if (s.restaurantName) setRestaurantName(s.restaurantName);
+            if (s.vercelUrl) {
+              setVercelUrl(s.vercelUrl);
+              setCustomVercelInput(s.vercelUrl);
+              localStorage.setItem('resto_vercel_url', s.vercelUrl);
+            }
+            if (s.serverIp) {
+              setLocalIP(s.serverIp);
+              setCustomIpInput(s.serverIp);
+              localStorage.setItem('resto_server_ip', s.serverIp);
+            }
+            if (s.qrMenuMode) {
+              setQrMode(s.qrMenuMode);
+              localStorage.setItem('resto_qr_mode', s.qrMenuMode);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch remote settings for QR page:", err);
+    }
 
     try {
       const settings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -308,16 +339,39 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     return { isBusy: false, statusText: t('Empty') };
   };
 
+  const syncSettingsToBackend = async (partialSettings) => {
+    try {
+      const API_BASE_URL = getApiUrl();
+      const tenantDb = localStorage.getItem('resto_db_name') || '';
+      const token = localStorage.getItem('accessToken') || '';
+      if (tenantDb) {
+        await fetch(`${API_BASE_URL}/config/info`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Tenant-DB': tenantDb,
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ restaurantSettings: partialSettings })
+        });
+      }
+    } catch (e) {
+      console.warn("Could not sync settings to backend:", e);
+    }
+  };
+
   const handleSaveCustomIp = (ipToSave) => {
     let cleanIp = ipToSave.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
     if (cleanIp) {
       localStorage.setItem('resto_server_ip', cleanIp);
       setLocalIP(cleanIp);
       setCustomIpInput(cleanIp);
+      syncSettingsToBackend({ serverIp: cleanIp });
     } else {
       localStorage.removeItem('resto_server_ip');
       setLocalIP(window.location.hostname);
       setCustomIpInput('');
+      syncSettingsToBackend({ serverIp: '' });
     }
     setIpSavedToast(true);
     setTimeout(() => setIpSavedToast(false), 2500);
@@ -332,19 +386,21 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       localStorage.setItem('resto_vercel_url', cleanUrl);
       setVercelUrl(cleanUrl);
       setCustomVercelInput(cleanUrl);
+      syncSettingsToBackend({ vercelUrl: cleanUrl });
     } else {
       localStorage.removeItem('resto_vercel_url');
       setVercelUrl(DEFAULT_VERCEL_URL);
       setCustomVercelInput(DEFAULT_VERCEL_URL);
+      syncSettingsToBackend({ vercelUrl: DEFAULT_VERCEL_URL });
     }
     setVercelSavedToast(true);
     setTimeout(() => setVercelSavedToast(false), 2500);
   };
 
   const handleSelectQrMode = (mode) => {
-    if (isProduction && mode === 'wifi') return; // Strict lock in production
     setQrMode(mode);
     localStorage.setItem('resto_qr_mode', mode);
+    syncSettingsToBackend({ qrMenuMode: mode });
   };
 
   const handleCopyMenuLink = (url, table) => {
@@ -358,30 +414,20 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const getQRUrl = (table) => {
     const dbName = localStorage.getItem('resto_db_name') || 'default';
 
-    // 1. In Production (or Cloud mode), always use the Vercel / Cloud Menu URL
-    if (isProduction || qrMode === 'cloud') {
-      const targetVercel = (localStorage.getItem('resto_vercel_url') || vercelUrl || DEFAULT_VERCEL_URL).trim().replace(/\/+$/, '');
+    // 1. Cloud / Vercel Menu URL
+    if (qrMode === 'cloud') {
+      const targetVercel = (vercelUrl || localStorage.getItem('resto_vercel_url') || DEFAULT_VERCEL_URL).trim().replace(/\/+$/, '');
       return `${targetVercel}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
     }
 
-    // 2. Capacitor APK fallback
-    if (isCapacitorApp()) {
-      const apiUrl = getApiUrl();
-      const baseApiUrl = apiUrl.replace(/\/api$/, '');
-      return `${baseApiUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
-    }
-
-    // 3. Local Wi-Fi IP Mode (Development testing for mobile phones on local network)
+    // 2. Local Wi-Fi IP Mode
     const storedIp = localStorage.getItem('resto_server_ip') || localIP;
-    const isIpAddress = (h) => /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(h);
-
     let host = storedIp;
     if (!host || host === 'localhost' || host === '127.0.0.1') {
       host = isElectron ? '127.0.0.1' : (window.location.hostname || '127.0.0.1');
     }
+    host = host.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
 
-    // Determine correct port for development testing:
-    // When testing via Vite dev server, Vite serves the frontend on window.location.port (e.g. 5173)
     let port = '';
     if (isDevMode) {
       port = (window.location.port && window.location.port !== '80' && window.location.port !== '443') ? window.location.port : '5173';
@@ -389,16 +435,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       port = isElectron ? '5002' : (localPort || '5002');
     }
 
-    let baseUrl = '';
-    if (host.includes('://')) {
-      baseUrl = host;
-    } else {
-      const protocol = isIpAddress(host) ? 'http:' : (window.location.protocol || 'http:');
-      const portPart = port ? `:${port}` : '';
-      baseUrl = `${protocol}//${host}${portPart}`;
-    }
-
-    return `${baseUrl}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
+    const portPart = port && port !== '80' && port !== '443' ? `:${port}` : '';
+    return `http://${host}${portPart}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
   };
 
   const printQRCodes = () => {
@@ -504,14 +542,13 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       </div>
 
-      {/* Mode Switcher: In Development show both tabs; in Production hide entirely */}
-      {!isProduction && (
+      {/* Mode Switcher: Toggle between Cloud (Vercel) and Local Wi-Fi (IP) */}
       <div className="bg-surface border border-border p-2 sm:p-2.5 rounded-2xl mb-3 flex flex-col sm:flex-row items-center justify-between gap-2 shadow-xs shrink-0 print:hidden">
         <div className="flex items-center gap-1.5 p-1 bg-background rounded-xl border border-border/60 w-full sm:w-auto">
           {/* Cloud / Vercel Menu Button */}
           <button
             onClick={() => handleSelectQrMode('cloud')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               qrMode === 'cloud'
                 ? 'bg-primary text-white shadow-xs'
                 : 'text-text-muted hover:text-text-main hover:bg-surface'
@@ -520,32 +557,29 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             <Globe size={14} /> {t("Cloud / Vercel Menu")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">4G/5G/Online</span>
           </button>
 
-          {/* Local Wi-Fi IP Button: Available ONLY in local development / testing, hidden in production */}
-          {!isProduction && (
-            <button
-              onClick={() => handleSelectQrMode('wifi')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                qrMode === 'wifi'
-                  ? 'bg-primary text-white shadow-xs'
-                  : 'text-text-muted hover:text-text-main hover:bg-surface'
-              }`}
-            >
-              <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">Dev LAN</span>
-            </button>
-          )}
+          {/* Local Wi-Fi IP Button */}
+          <button
+            onClick={() => handleSelectQrMode('wifi')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              qrMode === 'wifi'
+                ? 'bg-primary text-white shadow-xs'
+                : 'text-text-muted hover:text-text-main hover:bg-surface'
+            }`}
+          >
+            <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN Mode</span>
+          </button>
         </div>
 
-        {/* Environment Badge - dev only */}
+        {/* Dynamic Shop Network Indicator */}
         <div className="flex items-center gap-2 text-[10px] sm:text-xs text-text-muted">
           <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
-            <Server size={13} /> {t("Dev Mode: Test Vercel & Local IP on Phone")}
+            <Server size={13} /> {qrMode === 'cloud' ? t("Routing via Cloud Domain") : t("Routing via Local Wi-Fi IP")}
           </span>
         </div>
       </div>
-      )}
 
-      {/* Cloud / Vercel URL Configuration Bar - Only shown in development */}
-      {!isProduction && (qrMode === 'cloud' || isProduction) && (
+      {/* Cloud / Vercel URL Configuration Bar */}
+      {qrMode === 'cloud' && (
         <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 sm:p-2 rounded-xl bg-blue-500/10 text-blue-500">
@@ -572,7 +606,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             />
             <button
               onClick={() => handleSaveVercelUrl(customVercelInput)}
-              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs"
+              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
             >
               <Save size={12} /> {t("Save URL")}
             </button>
@@ -581,10 +615,9 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                 localStorage.removeItem('resto_vercel_url');
                 setVercelUrl(DEFAULT_VERCEL_URL);
                 setCustomVercelInput(DEFAULT_VERCEL_URL);
-                setVercelSavedToast(true);
-                setTimeout(() => setVercelSavedToast(false), 2500);
+                handleSaveVercelUrl(DEFAULT_VERCEL_URL);
               }}
-              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0"
+              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
               title="Reset to default Vercel URL"
             >
               <RefreshCw size={12} />
@@ -593,15 +626,15 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       )}
 
-      {/* Local Wi-Fi IP Configuration Bar (Only in Development / Local mode) */}
-      {!isProduction && qrMode === 'wifi' && (
+      {/* Local Wi-Fi IP Configuration Bar */}
+      {qrMode === 'wifi' && (
         <div className="bg-surface border border-border p-3 sm:p-4 rounded-2xl mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs shrink-0 print:hidden">
           <div className="flex items-center gap-2.5">
             <div className={`p-1.5 sm:p-2 rounded-xl ${isLoopback ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
               <Wifi size={18} />
             </div>
             <div>
-              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Development Wi-Fi IP Address")}</div>
+              <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Development / Local Wi-Fi IP Address")}</div>
               <div className="text-xs sm:text-sm font-black text-text-main flex items-center gap-1.5 flex-wrap">
                 <span>{localIP}:{isDevMode ? (window.location.port || '5173') : localPort}</span>
                 {isLoopback ? (
@@ -627,13 +660,13 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             />
             <button
               onClick={() => handleSaveCustomIp(customIpInput)}
-              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs"
+              className="px-2.5 py-1.5 bg-primary text-white rounded-xl text-[11px] font-bold flex items-center gap-1 shrink-0 hover:opacity-90 shadow-xs cursor-pointer"
             >
               <Save size={12} /> {t("Save IP")}
             </button>
             <button
               onClick={() => { localStorage.removeItem('resto_server_ip'); fetchIP(); }}
-              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0"
+              className="p-1.5 text-text-muted hover:text-text-main rounded-xl border border-border hover:bg-surface-hover shrink-0 cursor-pointer"
               title="Auto-detect Wi-Fi IP"
             >
               <RefreshCw size={12} />

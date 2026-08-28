@@ -1,12 +1,14 @@
-import { getApiUrl, getSuperadminApiUrl } from "../config.js";
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../config.js';
+import { useLanguage } from '../context/LanguageContext';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
 
-const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = useLanguage();
+const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
+  const { t } = useLanguage();
   const [settings, setSettings] = useState({
     restaurantName: '',
     restaurantType: '',
@@ -31,9 +33,12 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
     logo: '',
     printFormat: '80mm',
     enableGeoFencing: false,
-    geoFencingRadius: 100,
+    geoFencingRadius: 50,
     latitude: '',
-    longitude: ''
+    longitude: '',
+    qrMenuMode: 'cloud',
+    vercelUrl: 'https://restaurant-billing-seven.vercel.app',
+    serverIp: ''
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -43,11 +48,38 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
   const [showOwnerPin, setShowOwnerPin] = useState(false);
 
   useEffect(() => {
-    // Load settings from localStorage
+    // 1. Load settings from localStorage first for instant display
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
-      const parsed = JSON.parse(savedSettings);
-      setSettings((prev) => ({ ...prev, ...parsed }));
+      try {
+        const parsed = JSON.parse(savedSettings);
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch (e) {}
+    }
+
+    // 2. Dynamically fetch latest settings from backend for active tenant/shop
+    const API_BASE_URL = getApiUrl();
+    const tenantDb = localStorage.getItem('resto_db_name') || '';
+    if (tenantDb) {
+      fetch(`${API_BASE_URL}/config/info`, {
+        headers: { 'X-Tenant-DB': tenantDb }
+      })
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          if (data && data.restaurantSettings) {
+            setSettings((prev) => {
+              const updated = { ...prev, ...data.restaurantSettings };
+              try {
+                localStorage.setItem('restaurantSettings', JSON.stringify(updated));
+                if (updated.vercelUrl) localStorage.setItem('resto_vercel_url', updated.vercelUrl);
+                if (updated.serverIp) localStorage.setItem('resto_server_ip', updated.serverIp);
+                if (updated.qrMenuMode) localStorage.setItem('resto_qr_mode', updated.qrMenuMode);
+              } catch (e) {}
+              return updated;
+            });
+          }
+        })
+        .catch((err) => console.warn("Notice: could not load remote shop settings:", err));
     }
 
     // Load available printers if running in Desktop App
@@ -63,6 +95,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
     try {
       // 1. Immediately save restaurant settings locally
       localStorage.setItem('restaurantSettings', JSON.stringify(settings));
+      if (settings.vercelUrl) localStorage.setItem('resto_vercel_url', settings.vercelUrl);
+      if (settings.serverIp) localStorage.setItem('resto_server_ip', settings.serverIp);
+      if (settings.qrMenuMode) localStorage.setItem('resto_qr_mode', settings.qrMenuMode);
       window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settings }));
 
       const API_BASE_URL = getApiUrl();
@@ -747,6 +782,107 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {const { t } = use
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* QR Code Menu & URL Routing Configuration (Shop-to-Shop Dynamic) */}
+              <div className="space-y-4 md:col-span-2 mt-4 pt-4 border-t border-border">
+                <div className="flex flex-col">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    <Globe size={14} className="text-primary" />{t("Digital Menu QR Code URLs & Routing")}
+                  </label>
+                  <span className="text-xs text-text-muted mt-1">{t("Configure whether table QR codes route to your Cloud (Vercel) domain or Local Wi-Fi IP.")}</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-hover p-4 rounded-xl border border-border">
+                  {/* Mode Selector */}
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-semibold text-text-main">{t("Default QR Menu Mode")}</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('qrMenuMode', 'cloud')}
+                        className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          settings.qrMenuMode === 'cloud' || !settings.qrMenuMode
+                            ? 'bg-primary text-white border-primary shadow-sm'
+                            : 'bg-background text-text-muted border-border hover:bg-surface'
+                        }`}
+                      >
+                        <Globe size={14} />
+                        <span>{t("Cloud / Vercel Menu")}</span>
+                        <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">4G/5G</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('qrMenuMode', 'wifi')}
+                        className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                          settings.qrMenuMode === 'wifi'
+                            ? 'bg-primary text-white border-primary shadow-sm'
+                            : 'bg-background text-text-muted border-border hover:bg-surface'
+                        }`}
+                      >
+                        <Wifi size={14} />
+                        <span>{t("Local Wi-Fi / LAN")}</span>
+                        <span className="text-[9px] opacity-80 uppercase px-1 rounded bg-white/20">Offline</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cloud / Vercel Domain Input */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                      <Globe size={12} className="text-blue-500" />
+                      <span>{t("Cloud / Vercel Menu Base URL")}</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={settings.vercelUrl || ''}
+                      onChange={(e) => handleInputChange('vercelUrl', e.target.value)}
+                      placeholder="https://restaurant-billing-seven.vercel.app"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
+                    />
+                    <p className="text-[10px] text-text-muted">{t("Target web address where customer digital menu is hosted.")}</p>
+                  </div>
+
+                  {/* Local Server IP / Port Input */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                        <Server size={12} className="text-emerald-500" />
+                        <span>{t("Local Server IP / Wi-Fi Address")}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`${getApiUrl()}/public/system-ip`);
+                            if (res.ok) {
+                              const d = await res.json();
+                              if (d.ip) {
+                                handleInputChange('serverIp', d.ip);
+                                setToast({ message: `Detected LAN IP: ${d.ip}`, type: 'success' });
+                              }
+                            }
+                          } catch (e) {
+                            setToast({ message: 'Could not auto-detect IP', type: 'error' });
+                          }
+                        }}
+                        className="text-[10px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <RefreshCw size={10} />
+                        <span>{t("Auto-Detect IP")}</span>
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.serverIp || ''}
+                      onChange={(e) => handleInputChange('serverIp', e.target.value)}
+                      placeholder="e.g. 192.168.1.100"
+                      className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:border-primary bg-background text-xs font-mono"
+                    />
+                    <p className="text-[10px] text-text-muted">{t("Used when QR codes are in Local Wi-Fi mode.")}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

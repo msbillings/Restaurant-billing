@@ -402,6 +402,52 @@ router.post('/order', async (req, res) => {
       return res.status(409).json({ message: 'This table is currently reserved. Please speak to staff to order.' });
     }
 
+    // Geofencing verification if enabled in restaurantSettings for this shop
+    try {
+      const Setting = getTenantModel(req, 'Setting', SettingDefault);
+      const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean().catch(() => null);
+      let restSettings = {};
+      if (settingsDoc?.value) {
+        restSettings = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
+      }
+
+      if (restSettings.enableGeoFencing && restSettings.latitude && restSettings.longitude) {
+        const restLat = Number(restSettings.latitude);
+        const restLng = Number(restSettings.longitude);
+        const allowedRadius = Number(restSettings.geoFencingRadius) || 50;
+        const { customerLocation } = req.body;
+
+        if (customerLocation && customerLocation.latitude && customerLocation.longitude) {
+          const custLat = Number(customerLocation.latitude);
+          const custLng = Number(customerLocation.longitude);
+          const accuracy = Number(customerLocation.accuracy) || 0;
+
+          // Haversine calculation
+          const R = 6371000;
+          const toRad = (deg) => (deg * Math.PI) / 180;
+          const dLat = toRad(custLat - restLat);
+          const dLon = toRad(custLng - restLng);
+          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(toRad(restLat)) * Math.cos(toRad(custLat)) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distance = Math.round(R * c);
+
+          // Allow a 40m GPS accuracy buffer on the backend for indoor phones
+          const effectiveDistance = Math.max(0, distance - Math.min(accuracy, 30));
+          if (distance > allowedRadius + 50 && effectiveDistance > allowedRadius) {
+            return res.status(403).json({ 
+              message: `You appear to be ${distance}m away from the restaurant. Orders must be placed inside the restaurant premises (within ${allowedRadius}m).`,
+              distance,
+              allowedRadius
+            });
+          }
+        }
+      }
+    } catch (geoCheckErr) {
+      console.warn("Server geo check warning:", geoCheckErr);
+    }
+
     // Sanitize items format safely (handles item._id, item.menuItem, and item.name)
     const sanitizedItems = items.map(item => ({
       _id: item._id || item.menuItem || item.id,
