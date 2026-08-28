@@ -570,7 +570,7 @@ const CustomerMenu = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000,
         maximumAge: 0
       }
     );
@@ -1087,46 +1087,77 @@ const CustomerMenu = () => {
     });
   }, [categories, items, dietaryFilter, searchQuery]);
 
-  // Strict Location Access Screens
+  // Strict Location Access Screens (Clean Light Digital Menu Theme)
   if (restaurantSettings?.enableGeoFencing) {
     if (geoState.status === 'verifying' || verifyingLocation) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-6 text-center relative overflow-hidden font-sans">
-          {/* Background Radar Waves */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-            <div className="w-96 h-96 rounded-full border-2 border-orange-500 animate-ping" />
-            <div className="w-64 h-64 rounded-full border-2 border-orange-400 animate-pulse" />
-          </div>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans relative overflow-hidden">
+          {/* Subtle warm decorative background blurs */}
+          <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full bg-orange-400/10 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
 
-          <div className="relative z-10 max-w-sm w-full bg-slate-800/90 backdrop-blur-xl border border-slate-700/60 p-8 rounded-3xl shadow-2xl flex flex-col items-center">
-            <div className="w-20 h-20 rounded-2xl bg-orange-500/20 border border-orange-500/40 text-orange-400 flex items-center justify-center mb-5 animate-pulse">
-              <Radio size={38} className="animate-spin" style={{ animationDuration: '4s' }} />
+          <div className="relative z-10 max-w-sm w-full bg-white border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
+            {/* Orange Radar Icon */}
+            <div className="w-18 h-18 rounded-2xl bg-orange-50 text-orange-600 border border-orange-200/80 flex items-center justify-center mb-4 shadow-xs">
+              <Radio size={36} className="animate-spin text-orange-600" style={{ animationDuration: '4s' }} />
             </div>
 
-            <span className="text-[11px] uppercase tracking-widest text-orange-400 font-black mb-1">
+            <span className="text-[11px] uppercase tracking-widest text-orange-600 font-extrabold bg-orange-50 px-3 py-1 rounded-full mb-2 border border-orange-200">
               {restaurantSettings?.restaurantName || t("Restaurant Security")}
             </span>
-            <h2 className="text-2xl font-black text-white mb-2">{t("Verifying Table Location")}</h2>
-            <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-              {t("Please tap")} <strong className="text-white">"{t("Allow")}"</strong> {t("when your browser asks for location access to verify you are seated at")} <span className="text-orange-400 font-bold">{table}</span>.
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t("Verify Table Location")}</h2>
+            <p className="text-xs sm:text-sm text-slate-600 mb-5 leading-relaxed">
+              {t("Please tap below to allow GPS location access and verify you are seated at")}{" "}
+              <strong className="text-orange-600 font-bold">{table}</strong>.
             </p>
 
-            <div className="w-full bg-slate-900/60 rounded-2xl p-4 border border-slate-700/40 flex items-center gap-3 text-left mb-6">
-              <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
-                <MapPin size={18} />
+            {/* Target Table & Security Info Card */}
+            <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-200/80 mb-5 flex items-center justify-between text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0 font-bold">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400">{t("Target Table")}</div>
+                  <div className="text-xs sm:text-sm font-black text-slate-800">{table}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[10px] uppercase font-bold text-slate-400">{t("Target Table")}</div>
-                <div className="text-xs font-black text-white">{table}</div>
-              </div>
-              <div className="ml-auto text-[10px] font-mono px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 font-bold border border-orange-500/30">
-                GPS High Accuracy
+              <div className="text-right">
+                <div className="text-[10px] uppercase font-bold text-slate-400">{t("Allowed Radius")}</div>
+                <div className="text-xs font-bold text-orange-600">{geoState.allowedRadius || 50}m {t("(Strict)")}</div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Loader2 size={16} className="animate-spin text-orange-500" />
-              <span>{t("Requesting device GPS...")}</span>
+            {/* Live Distance Detected Display */}
+            {geoState.distance != null && (
+              <div className="w-full mb-4 px-3.5 py-2.5 bg-orange-50/80 rounded-xl border border-orange-200 text-xs font-bold text-orange-700 flex items-center justify-center gap-1.5">
+                <LocateFixed size={14} className="text-orange-600" />
+                <span>{t("Detected Distance:")} ~{geoState.distance}m {t("from restaurant")}</span>
+              </div>
+            )}
+
+            {/* Direct Allow Button */}
+            <button
+              type="button"
+              onClick={() => verifyLocation(restaurantSettings)}
+              className="w-full py-4 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer mb-3"
+            >
+              {verifyingLocation ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>{t("Checking GPS Location...")}</span>
+                </>
+              ) : (
+                <>
+                  <LocateFixed size={18} />
+                  <span>{t("Allow & Verify Location Access")}</span>
+                </>
+              )}
+            </button>
+
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+              <ShieldCheck size={13} className="text-emerald-500" />
+              <span>{t("Encrypted GPS Table Verification")}</span>
             </div>
           </div>
         </div>
@@ -1135,44 +1166,45 @@ const CustomerMenu = () => {
 
     if (geoState.status === 'denied') {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-5 text-center font-sans">
-          <div className="max-w-md w-full bg-slate-800/90 backdrop-blur-xl border border-red-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl flex flex-col items-center">
-            <div className="w-20 h-20 rounded-2xl bg-red-500/20 border border-red-500/40 text-red-400 flex items-center justify-center mb-4">
-              <ShieldAlert size={40} />
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
+          <div className="max-w-md w-full bg-white border border-red-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
+            <div className="w-18 h-18 rounded-2xl bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mb-4">
+              <ShieldAlert size={36} />
             </div>
 
-            <span className="text-[11px] uppercase tracking-widest text-red-400 font-black mb-1">
+            <span className="text-[11px] uppercase tracking-widest text-red-600 font-extrabold bg-red-50 px-3 py-1 rounded-full mb-2 border border-red-200">
               {t("Permission Required")}
             </span>
-            <h2 className="text-2xl font-black text-white mb-2">{t("Location Access Denied")}</h2>
-            <p className="text-xs sm:text-sm text-slate-300 mb-5 leading-relaxed">
-              {restaurantSettings?.restaurantName || t("This restaurant")} {t("requires strict location permission to confirm you are physically seated at")} <strong className="text-orange-400">{table}</strong> {t("before opening the digital menu.")}
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t("Location Access Denied")}</h2>
+            <p className="text-xs sm:text-sm text-slate-600 mb-5 leading-relaxed">
+              {restaurantSettings?.restaurantName || t("This restaurant")} {t("requires GPS location permission to verify you are physically seated at")}{" "}
+              <strong className="text-orange-600 font-bold">{table}</strong> {t("before ordering.")}
             </p>
 
-            {/* Step-by-step unblock instructions */}
-            <div className="w-full bg-slate-900/80 rounded-2xl p-4 border border-slate-700/60 text-left mb-6 space-y-2.5">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                <Lock size={12} className="text-orange-400" />
-                <span>{t("How to enable location:")}</span>
+            {/* Step-by-step guide in clean light theme */}
+            <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-200 text-left mb-6 space-y-2.5">
+              <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <Lock size={12} className="text-orange-600" />
+                <span>{t("How to enable location in browser:")}</span>
               </div>
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
-                <span>{t("Tap the lock 🔒 or site settings icon in your browser's URL address bar.")}</span>
+              <div className="flex items-start gap-2.5 text-xs text-slate-600">
+                <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                <span>{t("Tap the lock 🔒 or site settings icon in your browser's address bar.")}</span>
               </div>
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
-                <span>{t("Change")} <strong className="text-white">"{t("Location")}"</strong> {t("permission from Blocked to")} <strong className="text-green-400">"{t("Allow")}"</strong>.</span>
+              <div className="flex items-start gap-2.5 text-xs text-slate-600">
+                <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                <span>{t("Change")} <strong className="text-slate-800">"{t("Location")}"</strong> {t("permission from Blocked to")} <strong className="text-green-600">"{t("Allow")}"</strong>.</span>
               </div>
-              <div className="flex items-start gap-2.5 text-xs text-slate-200">
-                <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
-                <span>{t("Tap the button below to retry verification.")}</span>
+              <div className="flex items-start gap-2.5 text-xs text-slate-600">
+                <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                <span>{t("Tap the button below to re-check location.")}</span>
               </div>
             </div>
 
             <button
               type="button"
               onClick={() => verifyLocation(restaurantSettings)}
-              className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <LocateFixed size={18} />
               <span>{t("Allow Location & Retry")}</span>
@@ -1184,25 +1216,28 @@ const CustomerMenu = () => {
 
     if (geoState.status === 'out_of_range') {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-5 text-center font-sans">
-          <div className="max-w-md w-full bg-slate-800/90 backdrop-blur-xl border border-amber-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl flex flex-col items-center">
-            <div className="w-20 h-20 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mb-4">
-              <Compass size={40} />
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
+          <div className="max-w-md w-full bg-white border border-amber-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
+            <div className="w-18 h-18 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mb-4">
+              <Compass size={36} />
             </div>
 
-            <span className="text-[11px] uppercase tracking-widest text-amber-400 font-black mb-1">
+            <span className="text-[11px] uppercase tracking-widest text-amber-700 font-extrabold bg-amber-50 px-3 py-1 rounded-full mb-2 border border-amber-200">
               {t("Geo-Fence Restricted")}
             </span>
-            <h2 className="text-2xl font-black text-white mb-2">{t("Outside Restaurant Area")}</h2>
-            <p className="text-xs sm:text-sm text-slate-300 mb-5 leading-relaxed">
-              {t("You appear to be away from")} <strong className="text-white">{restaurantSettings?.restaurantName || t("the restaurant")}</strong>. {t("To prevent invalid orders, ordering is strictly restricted to customers physically seated at")} <strong className="text-orange-400">{table}</strong>.
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t("Outside Restaurant Area")}</h2>
+            <p className="text-xs sm:text-sm text-slate-600 mb-5 leading-relaxed">
+              {t("You appear to be away from")}{" "}
+              <strong className="text-slate-800 font-bold">{restaurantSettings?.restaurantName || t("the restaurant")}</strong>.{" "}
+              {t("Ordering is strictly restricted to customers physically seated at")}{" "}
+              <strong className="text-orange-600 font-bold">{table}</strong>.
             </p>
 
-            {/* Dynamic Distance Comparison Card */}
-            <div className="w-full bg-slate-900/80 rounded-2xl p-4 border border-slate-700/60 mb-6 grid grid-cols-2 gap-3 text-left">
-              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+            {/* Dynamic Distance Comparison Card in clean light theme */}
+            <div className="w-full bg-slate-50 rounded-2xl p-4 border border-slate-200 mb-6 grid grid-cols-2 gap-3 text-left">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Your Distance")}</div>
-                <div className="text-base sm:text-lg font-black text-red-400 mt-0.5">
+                <div className="text-base sm:text-lg font-black text-red-600 mt-0.5">
                   ~{geoState.distance != null ? `${geoState.distance}m` : t("Far")}
                 </div>
                 <div className="text-[9px] text-slate-400 font-mono">
@@ -1210,9 +1245,9 @@ const CustomerMenu = () => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700/50">
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Allowed Radius")}</div>
-                <div className="text-base sm:text-lg font-black text-green-400 mt-0.5">
+                <div className="text-base sm:text-lg font-black text-green-600 mt-0.5">
                   {geoState.allowedRadius}m
                 </div>
                 <div className="text-[9px] text-slate-400">
@@ -1225,7 +1260,7 @@ const CustomerMenu = () => {
               <button
                 type="button"
                 onClick={() => verifyLocation(restaurantSettings)}
-                className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RefreshCw size={18} />
                 <span>{t("Re-check My Location")}</span>
@@ -1236,10 +1271,10 @@ const CustomerMenu = () => {
                   href={`https://www.google.com/maps/search/?api=1&query=${geoState.restaurantCoords.latitude},${geoState.restaurantCoords.longitude}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
                 >
                   <ExternalLink size={14} />
-                  <span>{t("View Restaurant Location On Map")}</span>
+                  <span>{t("View Restaurant on Google Maps")}</span>
                 </a>
               )}
             </div>
@@ -1250,24 +1285,24 @@ const CustomerMenu = () => {
 
     if (geoState.status === 'error') {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-white p-5 text-center font-sans">
-          <div className="max-w-md w-full bg-slate-800/90 backdrop-blur-xl border border-amber-500/30 p-6 sm:p-8 rounded-3xl shadow-2xl flex flex-col items-center">
-            <div className="w-20 h-20 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mb-4">
-              <AlertTriangle size={40} />
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans">
+          <div className="max-w-md w-full bg-white border border-amber-200 p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 flex flex-col items-center text-center">
+            <div className="w-18 h-18 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mb-4">
+              <AlertTriangle size={36} />
             </div>
 
-            <span className="text-[11px] uppercase tracking-widest text-amber-400 font-black mb-1">
+            <span className="text-[11px] uppercase tracking-widest text-amber-700 font-extrabold bg-amber-50 px-3 py-1 rounded-full mb-2 border border-amber-200">
               {t("Location Error")}
             </span>
-            <h2 className="text-2xl font-black text-white mb-2">{t("Could Not Verify Location")}</h2>
-            <p className="text-xs sm:text-sm text-slate-300 mb-6 leading-relaxed">
-              {geoState.message || t("Please make sure your device GPS / Location is turned ON and try again.")}
+            <h2 className="text-2xl font-black text-slate-900 mb-2">{t("Could Not Verify Location")}</h2>
+            <p className="text-xs sm:text-sm text-slate-600 mb-6 leading-relaxed">
+              {geoState.message || t("Please ensure your device GPS / Location is turned ON in phone settings and try again.")}
             </p>
 
             <button
               type="button"
               onClick={() => verifyLocation(restaurantSettings)}
-              className="w-full py-3.5 px-6 bg-orange-500 hover:bg-orange-600 text-white font-black text-sm rounded-2xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 active:scale-98 text-white font-black text-sm rounded-2xl shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <RefreshCw size={18} />
               <span>{t("Retry GPS Check")}</span>
