@@ -413,7 +413,7 @@ const CustomerMenu = () => {
   }, [tenant]);
 
   // Strict Geolocation verification with dynamic radius from settings & GPS accuracy compensation
-  const verifyLocation = useCallback((settings) => {
+  const verifyLocation = useCallback((settings, silent = false) => {
     const s = settings || restaurantSettings;
     if (s) setRestaurantSettings(s);
 
@@ -440,43 +440,50 @@ const CustomerMenu = () => {
     // If coordinates are not configured in settings when geo-fencing is active, block ordering strictly
     if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0)) {
       const msg = t('Restaurant GPS coordinates are not configured yet. Please ask restaurant staff to set location in Settings.');
-      setGeoState({
-        status: 'error',
-        distance: null,
-        accuracy: null,
-        allowedRadius,
-        userCoords: null,
-        restaurantCoords: null,
-        message: msg
-      });
-      setGeoError(msg);
+      if (!silent) {
+        setGeoState({
+          status: 'error',
+          distance: null,
+          accuracy: null,
+          allowedRadius,
+          userCoords: null,
+          restaurantCoords: null,
+          message: msg
+        });
+        setGeoError(msg);
+      }
       setVerifyingLocation(false);
       return;
     }
 
-    setVerifyingLocation(true);
-    setGeoState({
-      status: 'verifying',
-      distance: null,
-      accuracy: null,
-      allowedRadius,
-      userCoords: null,
-      restaurantCoords: { latitude: restLat, longitude: restLng },
-      message: t('Verifying your table location...')
-    });
+    // Only show full-screen verification modal if user is NOT yet verified and not in silent mode
+    if (!silent) {
+      setVerifyingLocation(true);
+      setGeoState(prev => ({
+        status: prev.status === 'granted' ? 'granted' : 'verifying',
+        distance: prev.distance,
+        accuracy: prev.accuracy,
+        allowedRadius,
+        userCoords: prev.userCoords,
+        restaurantCoords: { latitude: restLat, longitude: restLng },
+        message: t('Verifying your table location...')
+      }));
+    }
 
     if (!navigator.geolocation) {
       setVerifyingLocation(false);
-      const msg = t('Geolocation is not supported by your browser. Please use Chrome or Safari.');
-      setGeoState({
-        status: 'error',
-        distance: null,
-        accuracy: null,
-        allowedRadius,
-        restaurantCoords: { latitude: restLat, longitude: restLng },
-        message: msg
-      });
-      setGeoError(msg);
+      if (!silent) {
+        const msg = t('Geolocation is not supported by your browser. Please use Chrome or Safari.');
+        setGeoState({
+          status: 'error',
+          distance: null,
+          accuracy: null,
+          allowedRadius,
+          restaurantCoords: { latitude: restLat, longitude: restLng },
+          message: msg
+        });
+        setGeoError(msg);
+      }
       return;
     }
 
@@ -485,7 +492,7 @@ const CustomerMenu = () => {
         const uLat = position.coords.latitude;
         const uLng = position.coords.longitude;
         const accuracy = Math.round(position.coords.accuracy || 0);
-        const rawDistance = calculateDistanceInMeters(uLat, uLng, restLat, restLng);
+        const rawDistance = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
 
         // Account for GPS accuracy tolerance (e.g. indoor phone GPS can have 15-25m variance)
         const effectiveDistance = Math.max(0, rawDistance - Math.min(accuracy, 25));
@@ -504,7 +511,7 @@ const CustomerMenu = () => {
           setGeoError(null);
           setVerifyingLocation(false);
         } else {
-          const msg = t("You appear to be away from the restaurant. Ordering is restricted to within allowed radius.");
+          const msg = t(`You appear to be ${rawDistance}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`);
           setGeoState({
             status: 'out_of_range',
             distance: rawDistance,
@@ -521,6 +528,9 @@ const CustomerMenu = () => {
       (err) => {
         console.warn("Geolocation check notice:", err);
         setVerifyingLocation(false);
+
+        // In silent mode if already granted, do not unblock or disrupt the user
+        if (silent) return;
 
         if (err.code === 1) { // PERMISSION_DENIED
           const msg = t('Location permission is required to verify you are at Table ') + (table || '') + t('. Please allow location access to order.');
@@ -575,6 +585,61 @@ const CustomerMenu = () => {
       }
     );
   }, [restaurantSettings, table, t]);
+
+  // Real-Time Background Movement Tracking: If customer walks outside the radius, automatically block immediately!
+  useEffect(() => {
+    if (!restaurantSettings?.enableGeoFencing || !navigator.geolocation) return;
+    const restLat = parseFloat(restaurantSettings.latitude);
+    const restLng = parseFloat(restaurantSettings.longitude);
+    const allowedRadius = parseInt(restaurantSettings.geoFencingRadius, 10) || 50;
+    if (isNaN(restLat) || isNaN(restLng) || (restLat === 0 && restLng === 0)) return;
+
+    if (geoState.status !== 'granted') return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const uLat = pos.coords.latitude;
+        const uLng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        const rawDist = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
+        const effectiveDist = Math.max(0, rawDist - Math.min(accuracy, 25));
+
+        // If customer walked out of restaurant range
+        if (rawDist > allowedRadius && effectiveDist > allowedRadius) {
+          setGeoState({
+            status: 'out_of_range',
+            distance: rawDist,
+            accuracy,
+            allowedRadius,
+            userCoords: { latitude: uLat, longitude: uLng, accuracy },
+            restaurantCoords: { latitude: restLat, longitude: restLng },
+            message: t(`You appear to be ${rawDist}m away from the restaurant. Ordering is restricted to within ${allowedRadius}m.`)
+          });
+        } else {
+          // Inside restaurant: update live distance smoothly without interrupting UI
+          setGeoState(prev => ({
+            ...prev,
+            status: 'granted',
+            distance: rawDist,
+            accuracy,
+            userCoords: { latitude: uLat, longitude: uLng, accuracy }
+          }));
+        }
+      },
+      (watchErr) => {
+        console.warn("watchPosition background notice:", watchErr);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 15000
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [restaurantSettings, geoState.status, t]);
 
   const hasLoadedInitialOrderRef = useRef(false);
 
@@ -868,12 +933,12 @@ const CustomerMenu = () => {
     setTimeout(doScroll, 100);
   };
 
-  // Re-verify location whenever customer returns to the browser tab
+  // Re-verify location whenever customer returns to the browser tab (silent check)
   useEffect(() => {
     if (!restaurantSettings?.enableGeoFencing) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        verifyLocation(restaurantSettings);
+        verifyLocation(restaurantSettings, true);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -906,7 +971,7 @@ const CustomerMenu = () => {
           const uLat = freshPos.coords.latitude;
           const uLng = freshPos.coords.longitude;
           const accuracy = Math.round(freshPos.coords.accuracy || 0);
-          const rawDistance = calculateDistanceInMeters(uLat, uLng, restLat, restLng);
+          const rawDistance = Math.abs(calculateDistanceInMeters(uLat, uLng, restLat, restLng));
           const effectiveDistance = Math.max(0, rawDistance - Math.min(accuracy, 25));
 
           // If customer has walked outside the restaurant radius
@@ -945,7 +1010,7 @@ const CustomerMenu = () => {
         } catch (gpsErr) {
           console.warn("Live order GPS check failed:", gpsErr);
           setOrderStatus('menu');
-          verifyLocation(restaurantSettings);
+          verifyLocation(restaurantSettings, true);
           setServiceMessage(t('⚠️ Live location verification required to place order.'));
           setTimeout(() => setServiceMessage(null), 4000);
           return;
@@ -1003,10 +1068,34 @@ const CustomerMenu = () => {
     }
   };
 
+  const handleOrderMore = () => {
+    // Return to menu mode with active order session retained
+    setOrderStatus('menu');
+  };
+
+  const handleRequestBill = async () => {
+    if (!table) return;
+    try {
+      await apiClient.post(`${API_BASE_URL}/public/service-request`, {
+        tableNumber: table,
+        requestType: 'Bill',
+        tenant: tenant
+      }, {
+        headers: { 'X-Tenant-DB': tenant }
+      });
+      setServiceMessage(`🧾 ${t("Bill requested! Waiter is bringing your bill to Table")} ${table}.`);
+      setTimeout(() => setServiceMessage(null), 4000);
+    } catch (err) {
+      console.error("Bill request failed", err);
+      setServiceMessage(`⚠️ ${t("Could not request bill. Please call waiter.")}`);
+      setTimeout(() => setServiceMessage(null), 4000);
+    }
+  };
+
   const requestService = async (type) => {
     setIsServiceOpen(false);
     try {
-      await apiClient.post(`${API_BASE_URL}/public/request-service`, {
+      await apiClient.post(`${API_BASE_URL}/public/service-request`, {
         tableNumber: table,
         requestType: type,
         tenant: tenant
@@ -1088,7 +1177,8 @@ const CustomerMenu = () => {
   }, [categories, items, dietaryFilter, searchQuery]);
 
   // Strict Location Access Screens (Clean Light Digital Menu Theme)
-  if (restaurantSettings?.enableGeoFencing) {
+  // IMPORTANT: If geoState.status is 'granted', NEVER unmount the digital menu!
+  if (restaurantSettings?.enableGeoFencing && geoState.status !== 'granted') {
     if (geoState.status === 'verifying' || verifyingLocation) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4 sm:p-6 font-sans relative overflow-hidden">
@@ -1132,7 +1222,7 @@ const CustomerMenu = () => {
             {geoState.distance != null && (
               <div className="w-full mb-4 px-3.5 py-2.5 bg-orange-50/80 rounded-xl border border-orange-200 text-xs font-bold text-orange-700 flex items-center justify-center gap-1.5">
                 <LocateFixed size={14} className="text-orange-600" />
-                <span>{t("Detected Distance:")} ~{geoState.distance}m {t("from restaurant")}</span>
+                <span>{t("Detected Distance:")} {Math.abs(Math.round(geoState.distance))}m {t("from restaurant")}</span>
               </div>
             )}
 
@@ -1238,7 +1328,7 @@ const CustomerMenu = () => {
               <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
                 <div className="text-[10px] uppercase font-bold text-slate-400">{t("Your Distance")}</div>
                 <div className="text-base sm:text-lg font-black text-red-600 mt-0.5">
-                  ~{geoState.distance != null ? `${geoState.distance}m` : t("Far")}
+                  {geoState.distance != null ? `${Math.abs(Math.round(geoState.distance))}m` : t("Far")}
                 </div>
                 <div className="text-[9px] text-slate-400 font-mono">
                   ±{geoState.accuracy || 10}m {t("accuracy")}
@@ -1342,10 +1432,11 @@ const CustomerMenu = () => {
           <button 
             type="button"
             onClick={() => setIsServiceOpen(!isServiceOpen)}
-            className="w-10 h-10 rounded-full bg-white text-orange-600 flex items-center justify-center shadow-lg hover:bg-orange-50 active:scale-95 transition-all cursor-pointer border border-orange-200"
-            title={t("Call Waiter / Request Service")}
+            className="w-10 h-10 rounded-full bg-white text-orange-600 flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform cursor-pointer relative"
+            title={t("Call Waiter / Service")}
           >
-            {isServiceOpen ? <X size={18} /> : <span className="bell-ring"><Bell size={19} /></span>}
+            <Bell size={20} className="animate-bounce" style={{ animationDuration: '2s' }} />
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" />
           </button>
           
           <AnimatePresence>
@@ -1408,12 +1499,12 @@ const CustomerMenu = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden min-w-[120px] flex flex-col"
+                className="absolute right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden min-w-[140px] flex flex-col z-50 text-slate-800"
               >
                 {languages.map((lang) => (
                   <button
-                    type="button"
                     key={lang.code}
+                    type="button"
                     onClick={() => {
                       setLanguage(lang.code);
                       setIsLangDropdownOpen(false);
@@ -1440,7 +1531,7 @@ const CustomerMenu = () => {
         {restaurantSettings?.enableGeoFencing && geoState.status === 'granted' && (
           <div className="flex items-center gap-1.5 bg-emerald-600/30 border border-emerald-400/40 text-emerald-100 text-[11px] font-bold px-3 py-1 rounded-full mt-2 backdrop-blur-sm shadow-xs animate-fade-in">
             <ShieldCheck size={13} className="text-emerald-300" />
-            <span>{t("Location Verified • Seated at Table")} {geoState.distance != null ? `(~${geoState.distance}m)` : ''}</span>
+            <span>{t("Location Verified • Seated at Table")} {geoState.distance != null ? `(${Math.abs(Math.round(geoState.distance))}m away)` : ''}</span>
           </div>
         )}
       </header>
