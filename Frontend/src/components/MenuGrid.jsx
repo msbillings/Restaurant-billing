@@ -163,7 +163,8 @@ const MenuGrid = ({
   onNavigate,
   userRole = 'Admin',
   foodTypeFilter: externalFoodTypeFilter,
-  onFoodTypeFilterChange
+  onFoodTypeFilterChange,
+  isLocked = false
 }) => {
   const { t, language } = useLanguage();
   const [items, setItems] = useState([]);
@@ -786,12 +787,9 @@ const MenuGrid = ({
                     className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-48 sm:min-h-52' : 'h-30 p-3'}`}
                     onClick={(e) => {
                       if (!isAvailable) return;
-                      if (typeof document !== 'undefined' && document.querySelector('.modal-portal-overlay')) return;
-                      
                       const isDineInWithoutTable = (billType === 'Dine-In' || !billType) && !activeTable;
 
-                      // If in Dine-In mode and no table is selected, do NOT fly the animation.
-                      if (isDineInWithoutTable) {
+                      if (isDineInWithoutTable || isLocked) {
                         if (item.variants && item.variants.length > 0) {
                           setSelectedItemVariants(item);
                         } else {
@@ -1053,7 +1051,7 @@ const MenuGrid = ({
                     onSelectItem(itemToAdd);
 
                     // 2. Play 3D flying animation simultaneously as visual feedback
-                    if (!isDineInWithoutTable) {
+                    if (!isDineInWithoutTable && !isLocked) {
                       const targetElement = document.querySelector('.bill-summary-container');
                       const imgUrl = formatImageUrl(selectedItemVariants.image);
                       flyItemToCart(e.currentTarget, targetElement, imgUrl);

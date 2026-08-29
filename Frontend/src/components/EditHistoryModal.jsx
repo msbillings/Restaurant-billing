@@ -75,10 +75,24 @@ const EditHistoryModal = ({ bill, onClose }) => {
                         <span>{t("Tax")}</span>
                         <span>₹{edit.previousState.totalTax || 0}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500">
-                        <span>{t("Discount")}</span>
-                        <span>₹{edit.previousState.totalDiscount || 0}</span>
-                      </div>
+                      {(Number(edit.previousState.totalDiscount || 0) > 0 || Number(edit.newState?.totalDiscount || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Discount")}</span>
+                          <span>₹{edit.previousState.totalDiscount || 0}</span>
+                        </div>
+                      )}
+                      {(Number(edit.previousState.deliveryCharge || 0) > 0 || Number(edit.newState?.deliveryCharge || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Delivery Charge")}</span>
+                          <span>₹{edit.previousState.deliveryCharge || 0}</span>
+                        </div>
+                      )}
+                      {(Number(edit.previousState.containerCharge || 0) > 0 || Number(edit.newState?.containerCharge || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Container Charge")}</span>
+                          <span>₹{edit.previousState.containerCharge || 0}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-black text-slate-800 mt-2 text-sm sm:text-base pt-2 border-t border-slate-100">
                         <span>{t("Total")}</span>
                         <span>₹{edit.previousState.total || 0}</span>
@@ -144,16 +158,30 @@ const EditHistoryModal = ({ bill, onClose }) => {
                         <span>{t("Tax")}</span>
                         <span>₹{edit.newState.totalTax || 0}</span>
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500">
-                        <span>{t("Discount")}</span>
-                        <span>₹{edit.newState.totalDiscount || 0}</span>
-                      </div>
+                      {(Number(edit.previousState?.totalDiscount || 0) > 0 || Number(edit.newState?.totalDiscount || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Discount")}</span>
+                          <span>₹{edit.newState.totalDiscount || 0}</span>
+                        </div>
+                      )}
+                      {(Number(edit.previousState?.deliveryCharge || 0) > 0 || Number(edit.newState?.deliveryCharge || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Delivery Charge")}</span>
+                          <span>₹{edit.newState.deliveryCharge || 0}</span>
+                        </div>
+                      )}
+                      {(Number(edit.previousState?.containerCharge || 0) > 0 || Number(edit.newState?.containerCharge || 0) > 0) && (
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>{t("Container Charge")}</span>
+                          <span>₹{edit.newState.containerCharge || 0}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between font-black text-slate-800 mt-2 text-sm sm:text-base pt-2 border-t border-orange-200/50">
                         <span>{t("Total")}</span>
                         <div className="flex items-center gap-2">
                            {edit.newState.total !== edit.previousState.total && (
                              <span className={`text-[10px] sm:text-[11px] px-1.5 py-0.5 rounded font-bold ${edit.newState.total > edit.previousState.total ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                               {edit.newState.total > edit.previousState.total ? '+' : ''}{edit.newState.total - edit.previousState.total}
+                               {edit.newState.total > edit.previousState.total ? '+' : ''}{(edit.newState.total - edit.previousState.total).toFixed(2)}
                              </span>
                            )}
                            <span className="text-primary font-black">₹{edit.newState.total || 0}</span>

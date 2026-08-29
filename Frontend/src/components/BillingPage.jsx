@@ -869,6 +869,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }
           setCustomerPhone(cached.customerPhone || '');
           setCustomerName(cached.customerName || '');
+          setDeliveryCharge(cached.deliveryCharge !== undefined ? String(cached.deliveryCharge) : '0');
+          setContainerCharge(cached.containerCharge !== undefined ? String(cached.containerCharge) : '0');
+          if (cached.discountType || cached.discountValue !== undefined) {
+            setDiscount({
+              type: cached.discountType || 'percentage',
+              value: cached.discountValue !== undefined && cached.discountValue !== null ? cached.discountValue : ''
+            });
+          }
           setLoading(false);
           return true;
         }
@@ -981,10 +989,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
         setCustomerPhone(order.customerPhone || '');
         setCustomerName(order.customerName || '');
+        setDeliveryCharge(order.deliveryCharge !== undefined ? String(order.deliveryCharge) : '0');
+        setContainerCharge(order.containerCharge !== undefined ? String(order.containerCharge) : '0');
         if (!isBackground || forceReset) {
           setDiscount({
             type: order.discountType || 'percentage',
-            value: order.discountValue || ''
+            value: order.discountValue !== undefined && order.discountValue !== null ? order.discountValue : ''
           });
         }
         try {
@@ -1165,15 +1175,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
     }
     if (orderStatus === 'Paid' || orderStatus === 'Cancelled') {
-      showToast(t('orderLocked'), 'error');
+      showToast(t('orderLocked', { defaultValue: 'Order is locked' }), 'error');
       return;
     }
-    // Auto-reopen billed order so user can edit items seamlessly
-    if (orderStatus === 'Billed') {
-      setOrderStatus('Open');
-      if (orderId) {
-        apiReopenOrder(orderId).catch(() => {});
-      }
+    // Strict lock: Billed orders require clicking EDIT first
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
+      return;
     }
     const existing = cart.find((i) => i.name === item.name);
     let newCart;
@@ -1210,15 +1218,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
     }
     if (orderStatus === 'Paid' || orderStatus === 'Cancelled') {
-      showToast(t('orderLocked'), 'error');
+      showToast(t('orderLocked', { defaultValue: 'Order is locked' }), 'error');
       return;
     }
-    // Auto-reopen billed order so user can modify quantities seamlessly
-    if (orderStatus === 'Billed') {
-      setOrderStatus('Open');
-      if (orderId) {
-        apiReopenOrder(orderId).catch(() => {});
-      }
+    // Strict lock: Billed orders require clicking EDIT first
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
+      return;
     }
     const newCart = cart.map((i) => {
       const idStr = String(id || '').trim().toLowerCase();
@@ -1258,7 +1264,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const updateItemNote = async (identifier, specialNote) => {
     if (orderStatus === 'Paid' || orderStatus === 'Cancelled') {
-      showToast(t('orderLocked'), 'error');
+      showToast(t('orderLocked', { defaultValue: 'Order is locked' }), 'error');
+      return;
+    }
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
       return;
     }
     const cleanId = String(identifier || '').trim().toLowerCase();
@@ -1288,18 +1298,19 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         newlyGeneratedTables.current.add(generatedOrderNo);
         setActiveTable(generatedOrderNo);
         setTimeout(() => handleSaveOrderWithTable(generatedOrderNo), 100);
-        return;
       } else {
         showToast(t('pleaseSelectTable'), 'error');
         setActionLoading(null);
         return;
       }
+    } else {
+      handleSaveOrderWithTable(activeTable);
     }
-    handleSaveOrderWithTable(activeTable);
   };
 
   const handleSaveOrderWithTable = async (tableNo) => {
     if (cart.length === 0) {
+      showToast(t('pleaseAddItemsToOrder'), 'warning');
       setActionLoading(null);
       return;
     }
@@ -1315,6 +1326,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
         tax: taxVal,
+        deliveryCharge: parseFloat(deliveryCharge || 0),
+        containerCharge: parseFloat(containerCharge || 0),
         ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
         ...(billType === 'Delivery' && {
           orderSource
@@ -1364,6 +1377,58 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     handleSaveOrder();
   };
 
+  const handleReopenOrder = async () => {
+    if (!orderId && cart.length === 0) return;
+    setActionLoading('edit');
+    try {
+      if (orderId && !orderId.startsWith('offline_')) {
+        await apiReopenOrder(orderId);
+      }
+      setOrderStatus('Open');
+      hasPendingLocalChanges.current = true;
+      lastLocalEditTime.current = Date.now();
+      showToast(t('Order unlocked for editing', { defaultValue: 'Order unlocked for editing' }), 'success');
+      if (onOrderUpdate) onOrderUpdate();
+    } catch (err) {
+      console.error('Error reopening order for edit:', err);
+      setOrderStatus('Open');
+      hasPendingLocalChanges.current = true;
+      lastLocalEditTime.current = Date.now();
+      showToast(t('Order unlocked for editing', { defaultValue: 'Order unlocked for editing' }), 'info');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDiscountChange = (val) => {
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
+      return;
+    }
+    setDiscount(val);
+    hasPendingLocalChanges.current = true;
+    lastLocalEditTime.current = Date.now();
+  };
+
+  const handleDeliveryChargeChange = (val) => {
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
+      return;
+    }
+    setDeliveryCharge(val);
+    hasPendingLocalChanges.current = true;
+    lastLocalEditTime.current = Date.now();
+  };
+
+  const handleContainerChargeChange = (val) => {
+    if (orderStatus === 'Billed' && !hasPendingLocalChanges.current) {
+      showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
+      return;
+    }
+    setContainerCharge(val);
+    hasPendingLocalChanges.current = true;
+    lastLocalEditTime.current = Date.now();
+  };
 
   const handleGenerateBill = async () => {
     let tableToUse = activeTable;
@@ -1383,9 +1448,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // If order is ALREADY billed with the exact same items/state, just display print preview directly!
-    if (orderStatus === 'Billed' && orderId) {
-      showToast(t('billAlreadySavedAndPrinted', { defaultValue: 'Bill already saved and printed' }), 'info');
+    // If order is ALREADY billed and no unsaved local changes exist, open the invoice preview directly!
+    if (orderStatus === 'Billed' && orderId && !hasPendingLocalChanges.current) {
+      showToast(t('Bill already saved and printed'), 'info');
+      if (!completedBill || completedBill._id !== orderId) {
+        try {
+          const resp = await api.get(`/bills/${orderId}`);
+          if (resp.data) setCompletedBill(resp.data);
+        } catch (e) {}
+      }
+      isViewingInvoiceRef.current = true;
       setShowInvoice(true);
       return;
     }
@@ -1445,6 +1517,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
         tax: taxVal,
+        deliveryCharge: parseFloat(deliveryCharge || 0),
+        containerCharge: parseFloat(containerCharge || 0),
+        total: total,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
         customerName,
         customerPhone,
@@ -1472,10 +1547,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         createdAt: billedOrder.createdAt || new Date()
       };
       setCompletedBill(billedData);
+      setOrderStatus('Billed');
+      if (billedOrder?.billNumber) setBillNumber(billedOrder.billNumber);
+      hasPendingLocalChanges.current = false;
       isViewingInvoiceRef.current = true;
       setShowInvoice(true);
 
-      showToast(t('billSavedAndPrinted', { defaultValue: 'Bill saved & printed successfully' }), 'success');
+      showToast(t('Bill saved & printed successfully', { defaultValue: 'Bill saved & printed successfully' }), 'success');
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error generating bill:', error);
@@ -1564,7 +1642,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       let currentBillNum = billNumber;
       let billDetails = null;
-      if (orderStatus !== 'Billed' && orderStatus !== 'Paid') {
+      if (orderStatus !== 'Paid') {
         const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
         const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
         const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
@@ -1834,36 +1912,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   };
 
-  const handleReopenOrder = async () => {
-    if (orderStatus === 'Open') {
-      showToast(t('Order is open for editing. Select or update items in your cart.'), 'info');
-      return;
-    }
-    if (orderStatus === 'Paid' || orderStatus === 'Cancelled') {
-      showToast(t('Cannot edit a settled or cancelled bill.'), 'warning');
-      return;
-    }
-    setActionLoading('edit');
-    // Instantly unlock in 0ms locally
-    setOrderStatus('Open');
-    lastLocalEditTime.current = Date.now();
-    showToast(t('orderReopened'), 'success');
 
-    if (orderId) {
-      try {
-        setLoading(true);
-        await apiReopenOrder(orderId);
-        if (onOrderUpdate) onOrderUpdate();
-      } catch (err) {
-        console.error('Error reopening order in backend:', err);
-      } finally {
-        setLoading(false);
-        setActionLoading(null);
-      }
-    } else {
-      setActionLoading(null);
-    }
-  };
 
   const handleCancelOrder = () => {
     if (!orderId) {
@@ -2221,6 +2270,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               isLayoutLocked={isLayoutLocked} 
               onNavigate={onNavigate} 
               userRole={userRole} 
+              isLocked={orderStatus === 'Paid' || orderStatus === 'Cancelled' || (orderStatus === 'Billed' && !hasPendingLocalChanges.current)}
+              orderStatus={orderStatus}
             />
           </div>
 
@@ -2280,7 +2331,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 onSelectTable={setActiveTable}
 
                 discount={discount}
-                setDiscount={setDiscount}
+                setDiscount={handleDiscountChange}
                 taxRate={taxRate}
                 setTaxRate={setTaxRate}
                 billType={billType}
@@ -2297,9 +2348,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 setCustomerName={setCustomerName}
                 customerInfo={customerInfo}
                 deliveryCharge={deliveryCharge}
-                setDeliveryCharge={setDeliveryCharge}
+                setDeliveryCharge={handleDeliveryChargeChange}
                 containerCharge={containerCharge}
-                setContainerCharge={setContainerCharge}
+                setContainerCharge={handleContainerChargeChange}
+                hasPendingChanges={hasPendingLocalChanges.current}
                 openOrders={openOrdersList}
                 reservations={reservations}
                 onOpenCustomerModal={handleOpenCustomerModal} />

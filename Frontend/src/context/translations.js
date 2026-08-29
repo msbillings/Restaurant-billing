@@ -56,10 +56,19 @@ export const translations = {
     clear: 'Clear',
     searchMenu: 'Search menu items (F2)',
     recentOrders: 'Recent Orders Detail',
-    paymentMethod: 'Payment Method',
     cash: 'Cash',
     card: 'Card',
-    upi: 'UPI'
+    upi: 'UPI',
+    'Bill already saved and printed': 'Bill already saved and printed',
+    'billAlreadySavedAndPrinted': 'Bill already saved and printed',
+    'Bill saved & printed successfully': 'Bill saved & printed successfully',
+    'billSavedAndPrinted': 'Bill saved & printed successfully',
+    'Order is billed. Click EDIT to modify.': 'Order is billed. Click EDIT to modify.',
+    'Order unlocked for editing': 'Order unlocked for editing',
+    'Billed order is locked. Click EDIT to modify.': 'Billed order is locked. Click EDIT to modify.',
+    'PRINT BILL': 'PRINT BILL',
+    'SAVE & PRINT': 'SAVE & PRINT',
+    'BILLED': 'BILLED'
   },
   hi: {
     'mandi': 'मंडी',

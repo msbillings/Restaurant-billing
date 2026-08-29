@@ -21,11 +21,13 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
 
   const filterGenuineEdits = (billList) => {
     return (billList || []).filter(b => {
-      if (!b.editHistory || b.editHistory.length === 0) return false;
+      if (!b.editHistory || b.editHistory.length === 0) return b.isEdited === true;
       return b.editHistory.some(e => {
         const prevItems = (e.previousState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
         const newItems = (e.newState?.items || []).filter(i => (i.quantity || 0) > 0).map(i => `${(i.name || '').trim()}:${i.quantity}`).sort().join(',');
-        return prevItems !== newItems || Math.abs((e.previousState?.total || 0) - (e.newState?.total || 0)) > 0.01;
+        const totalChanged = Math.abs((e.previousState?.total || 0) - (e.newState?.total || 0)) > 0.01;
+        const chargesChanged = Math.abs((e.previousState?.deliveryCharge || 0) - (e.newState?.deliveryCharge || 0)) > 0.01 || Math.abs((e.previousState?.containerCharge || 0) - (e.newState?.containerCharge || 0)) > 0.01;
+        return prevItems !== newItems || totalChanged || chargesChanged;
       });
     });
   };

@@ -71,6 +71,16 @@ const billSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  deliveryCharge: {
+    type: Number,
+    default: 0,
+    min: [0, 'Delivery charge cannot be negative']
+  },
+  containerCharge: {
+    type: Number,
+    default: 0,
+    min: [0, 'Container charge cannot be negative']
+  },
   total: {
     type: Number,
     default: 0,
@@ -184,6 +194,8 @@ const billSchema = new mongoose.Schema({
       subtotal: Number,
       totalDiscount: Number,
       totalTax: Number,
+      deliveryCharge: Number,
+      containerCharge: Number,
       total: Number,
       discountType: String,
       discountValue: Number
@@ -199,6 +211,8 @@ const billSchema = new mongoose.Schema({
       subtotal: Number,
       totalDiscount: Number,
       totalTax: Number,
+      deliveryCharge: Number,
+      containerCharge: Number,
       total: Number,
       discountType: String,
       discountValue: Number

@@ -46,12 +46,14 @@ const BillSummary = ({
   containerCharge,
   setContainerCharge,
   hasUnprintedItems = true,
+  hasPendingChanges = false,
   openOrders = [],
   reservations = [],
   onOpenCustomerModal
 }) => {
   const { t, language } = useLanguage();
-  const isLocked = orderStatus === 'Paid' || orderStatus === 'Cancelled';
+  const isBilledLocked = orderStatus === 'Billed' && !hasPendingChanges;
+  const isLocked = orderStatus === 'Paid' || orderStatus === 'Cancelled' || isBilledLocked;
   const isCaptain = userRole === 'Captain';
 
   const cartEndRef = React.useRef(null);
@@ -453,6 +455,11 @@ const BillSummary = ({
               <span>{cart.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0)} {t("Qty")}</span>
             </div>
           )}
+          {orderStatus === 'Billed' && (
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 border border-amber-300 rounded-md text-amber-800 text-[9px] font-black uppercase tracking-wider shadow-2xs ml-0.5 shrink-0 animate-in fade-in duration-150">
+              <span>{t("BILLED")}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -805,7 +812,7 @@ const BillSummary = ({
                 <span className="w-1/2 flex items-center gap-1">
                   {t("Discount")}
                   {discount?.type === 'percentage' && discount?.value ? ` (${discount.value}%)` : (discount?.type === 'complimentary' ? ' (100%)' : '')}
-                  <button className="text-primary underline text-[11px] ml-1 hover:text-red-700 font-bold" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button>
+                  <button disabled={isLocked} className="text-primary underline text-[11px] ml-1 hover:text-red-700 font-bold disabled:opacity-50" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button>
                 </span>
                 <span className={`w-1/2 text-right ${discountAmount > 0 ? 'text-emerald-700 font-black text-sm' : 'text-green-600'}`}>
                   {discountAmount > 0 ? `-${currencySymbol}${discountAmount.toFixed(2)}` : `(${discountAmount.toFixed(2)})`}
@@ -814,7 +821,8 @@ const BillSummary = ({
               {showDiscountInput &&
                 <div className="flex items-center justify-between bg-gray-200/50 p-2 rounded-lg gap-2 border border-gray-200">
                   <select
-                    className={`${discount?.type === 'complimentary' ? 'w-full' : 'w-1/2'} bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1`}
+                    disabled={isLocked}
+                    className={`${discount?.type === 'complimentary' ? 'w-full' : 'w-1/2'} bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1 disabled:opacity-50`}
                     value={discount?.type || 'percentage'}
                     onChange={(e) => setDiscount({ ...(discount || {}), type: e.target.value })}>
 
@@ -826,9 +834,10 @@ const BillSummary = ({
                     <input
                       type="number"
                       min="0"
+                      disabled={isLocked}
                       onWheel={(e) => e.target.blur()}
                       onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                      className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
+                      className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold disabled:opacity-50"
                       placeholder={t('Value')}
                       value={discount?.value || ''}
                       onChange={(e) => setDiscount({ ...(discount || {}), value: Math.max(0, parseFloat(e.target.value) || 0) })} />
@@ -847,11 +856,12 @@ const BillSummary = ({
                     type="number"
                     min="0"
                     placeholder="0"
+                    disabled={isLocked}
                     onWheel={(e) => e.target.blur()}
                     onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                     value={deliveryCharge === '0' || deliveryCharge === 0 ? '' : deliveryCharge}
                     onChange={(e) => setDeliveryCharge && setDeliveryCharge(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs" />
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs disabled:opacity-50" />
                 </span>
               </div>
               <div className="flex items-center justify-between font-bold">
@@ -861,11 +871,12 @@ const BillSummary = ({
                     type="number"
                     min="0"
                     placeholder="0"
+                    disabled={isLocked}
                     onWheel={(e) => e.target.blur()}
                     onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                     value={containerCharge === '0' || containerCharge === 0 ? '' : containerCharge}
                     onChange={(e) => setContainerCharge && setContainerCharge(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs" />
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs disabled:opacity-50" />
                 </span>
               </div>
             </div>
@@ -878,15 +889,17 @@ const BillSummary = ({
 
         <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 overflow-x-auto no-scrollbar w-full gap-1">
           <div className="flex items-center gap-1 shrink-0">
-            <button onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap">{t("Bogo Offer")}</button>
+            <button disabled={isLocked} onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap disabled:opacity-50">{t("Bogo Offer")}</button>
             <button
+              disabled={isLocked}
               onClick={() => {
                 setSplitWays(pax > 1 ? pax : 2);
                 setShowSplitCalcModal(true);
               }}
-              className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap">{t("Split")}
+              className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap disabled:opacity-50">{t("Split")}
             </button>
             <button
+              disabled={isLocked}
               onClick={() => {
                 if (discount?.type === 'complimentary') {
                   setDiscount({ type: 'flat', value: '' });
@@ -894,7 +907,7 @@ const BillSummary = ({
                   setDiscount({ type: 'complimentary', value: '' });
                 }
               }}
-              className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap`}>
+              className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap disabled:opacity-50`}>
               {t("Complimentary")}
             </button>
           </div>
@@ -964,6 +977,22 @@ const BillSummary = ({
         </div>
 
         {/* User-friendly Unsaved Items & Navigation Reminder */}
+        {isBilledLocked && (
+          <div className="mx-2 my-1 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between text-amber-800 text-[10px] sm:text-[11px] font-bold shadow-2xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-600 font-bold text-xs">🔒</span>
+              <span>{t("Billed order is locked. Click EDIT to modify.")}</span>
+            </div>
+            <button
+              type="button"
+              onClick={onReopenOrder}
+              disabled={loading}
+              className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold transition-all shadow-2xs cursor-pointer ml-1.5"
+            >
+              {t("EDIT")}
+            </button>
+          </div>
+        )}
         {cart.length > 0 && !isLocked && (
           <div className="mx-2 my-1 px-2 py-1.5 bg-gradient-to-r from-amber-50/90 via-orange-50/70 to-amber-50/90 border border-amber-200/90 rounded-lg flex items-start gap-1.5 text-[9.5px] sm:text-[10px] text-amber-900 shadow-2xs animate-in fade-in duration-200">
             <span className="text-amber-600 font-bold shrink-0 text-[11px] leading-tight">⚠️</span>
@@ -980,7 +1009,7 @@ const BillSummary = ({
       <div className="grid grid-cols-3 gap-1.5 px-2 py-2 bg-white border-t border-gray-200 w-full shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         <button
           onClick={onSaveOrder}
-          disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
+          disabled={loading || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked}
           className="col-span-1 bg-red-50 text-red-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'save' ? (
             <>
@@ -993,7 +1022,7 @@ const BillSummary = ({
         </button>
         <button
           onClick={onHoldOrder}
-          disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
+          disabled={loading || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked}
           className="col-span-1 bg-orange-50 text-orange-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'hold' ? (
             <>
@@ -1014,7 +1043,7 @@ const BillSummary = ({
               <span>{t("Printing...")}</span>
             </>
           ) : (
-            t("SAVE & PRINT")
+            (orderStatus === 'Billed' && !hasPendingChanges) ? t("PRINT BILL") : t("SAVE & PRINT")
           )}
         </button>
         {(() => {

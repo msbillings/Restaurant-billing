@@ -65,11 +65,26 @@ export const getActiveOrder = asyncHandler(async (req, res, next) => {
     if (order.status === 'Open') {
       const dynamicTaxRate = await getDynamicTaxRate(req);
       const subtotal = order.subtotal || (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
+      const dVal = order.discountValue || 0;
+      let calculatedDiscount = 0;
+      if (order.discountType === 'percentage') {
+        calculatedDiscount = (subtotal * dVal) / 100;
+      } else if (order.discountType === 'complimentary') {
+        calculatedDiscount = subtotal;
+      } else {
+        calculatedDiscount = dVal;
+      }
+      const taxable = Math.max(0, subtotal - calculatedDiscount);
       const taxRate = dynamicTaxRate;
-      const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
+      const taxAmount = Number(((taxable * taxRate) / 100).toFixed(2));
+      const dCharge = Number(order.deliveryCharge) || 0;
+      const cCharge = Number(order.containerCharge) || 0;
       order.tax = taxRate;
       order.subtotal = subtotal;
-      order.total = Math.round(subtotal + taxAmount);
+      order.discount = calculatedDiscount;
+      order.deliveryCharge = dCharge;
+      order.containerCharge = cCharge;
+      order.total = Math.round(taxable + taxAmount + dCharge + cCharge);
     }
   }
 
@@ -93,7 +108,9 @@ export const saveOrder = async (req, res) => {
       id,
       discountType,
       discountValue,
-      tax
+      tax,
+      deliveryCharge,
+      containerCharge
     } = req.body;
 
     // Validate required fields
@@ -304,7 +321,9 @@ export const saveOrder = async (req, res) => {
         ? Number(tax) 
         : (order.status === 'Billed' && order.tax !== undefined && order.tax !== null ? Number(order.tax) : await getDynamicTaxRate(req));
       const calculatedTax = (taxableAmount * tRate) / 100;
-      const calculatedTotal = Math.round(taxableAmount + calculatedTax);
+      const dCharge = deliveryCharge !== undefined ? (Number(deliveryCharge) || 0) : (Number(order.deliveryCharge) || 0);
+      const cCharge = containerCharge !== undefined ? (Number(containerCharge) || 0) : (Number(order.containerCharge) || 0);
+      const calculatedTotal = Math.round(taxableAmount + calculatedTax + dCharge + cCharge);
 
       // Check if actual items, quantities, or prices changed compared to the previous state
       const cleanOldItems = (order.items || [])
@@ -319,15 +338,21 @@ export const saveOrder = async (req, res) => {
 
       const itemsActuallyChanged = JSON.stringify(cleanOldItems) !== JSON.stringify(cleanNewItems);
       const isAlreadyBilled = !!(order.billNumber || order.status === 'Billed' || order.status === 'Paid');
+      const amountActuallyChanged = Math.abs((order.total || 0) - calculatedTotal) > 0.01 ||
+        Math.abs((order.deliveryCharge || 0) - dCharge) > 0.01 ||
+        Math.abs((order.containerCharge || 0) - cCharge) > 0.01 ||
+        Math.abs((order.discount || 0) - calculatedDiscount) > 0.01;
 
-      // An order is ONLY recorded in editHistory if it was ALREADY BILLED (locked) AND items were added/removed/changed!
-      if (isAlreadyBilled && itemsActuallyChanged) {
+      // An order is recorded in editHistory if it was ALREADY BILLED (locked) AND items OR charges/discounts changed!
+      if (isAlreadyBilled && (itemsActuallyChanged || amountActuallyChanged)) {
         const previousState = {
-          items: order.items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
-          subtotal: order.subtotal,
+          items: (order.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+          subtotal: order.subtotal || 0,
           totalDiscount: order.discount || 0,
-          totalTax: ((order.subtotal - (order.discount || 0)) * (order.tax || 0)) / 100,
-          total: order.total,
+          totalTax: ((Math.max(0, (order.subtotal || 0) - (order.discount || 0))) * (order.tax || 0)) / 100,
+          deliveryCharge: order.deliveryCharge || 0,
+          containerCharge: order.containerCharge || 0,
+          total: order.total || 0,
           discountType: order.discountType || 'flat',
           discountValue: order.discountValue || 0
         };
@@ -337,6 +362,8 @@ export const saveOrder = async (req, res) => {
           subtotal: subtotal,
           totalDiscount: calculatedDiscount,
           totalTax: calculatedTax,
+          deliveryCharge: dCharge,
+          containerCharge: cCharge,
           total: calculatedTotal,
           discountType: dType,
           discountValue: dValue
@@ -362,6 +389,8 @@ export const saveOrder = async (req, res) => {
       order.discountType = dType;
       order.discountValue = dValue;
       order.discount = calculatedDiscount;
+      order.deliveryCharge = dCharge;
+      order.containerCharge = cCharge;
 
       try {
         const activeBills = await Bill.find({
@@ -397,7 +426,9 @@ export const saveOrder = async (req, res) => {
         igst: 0
       };
       order.total = calculatedTotal;
-      order.status = 'Open';
+      if (order.status !== 'Billed' && order.status !== 'Paid') {
+        order.status = 'Open';
+      }
       order.markModified('items');
       order.markModified('kots');
       try {
@@ -418,8 +449,12 @@ export const saveOrder = async (req, res) => {
             freshOrder.subtotal = subtotal;
             freshOrder.tax = tRate;
             freshOrder.taxBreakdown = order.taxBreakdown;
+            freshOrder.deliveryCharge = dCharge;
+            freshOrder.containerCharge = cCharge;
             freshOrder.total = calculatedTotal;
-            freshOrder.status = 'Open';
+            if (freshOrder.status !== 'Billed' && freshOrder.status !== 'Paid') {
+              freshOrder.status = 'Open';
+            }
             await freshOrder.save();
             order = freshOrder;
           } else {
@@ -436,6 +471,8 @@ export const saveOrder = async (req, res) => {
               subtotal,
               tax: tRate,
               taxBreakdown: order.taxBreakdown,
+              deliveryCharge: dCharge,
+              containerCharge: cCharge,
               total: calculatedTotal,
               status: 'Open'
             };
@@ -467,7 +504,9 @@ export const saveOrder = async (req, res) => {
       const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
       const tRate = tax !== undefined ? Number(tax) : 0;
       const calculatedTax = (taxableAmount * tRate) / 100;
-      const calculatedTotal = Math.round(taxableAmount + calculatedTax);
+      const dChargeNew = Number(deliveryCharge) || 0;
+      const cChargeNew = Number(containerCharge) || 0;
+      const calculatedTotal = Math.round(taxableAmount + calculatedTax + dChargeNew + cChargeNew);
 
       // Calculate current active KDS queue position for the new bill
       let nextQueueNo = 1;
@@ -488,6 +527,8 @@ export const saveOrder = async (req, res) => {
         subtotal,
         discount: calculatedDiscount,
         tax: tRate,
+        deliveryCharge: dChargeNew,
+        containerCharge: cChargeNew,
         total: calculatedTotal,
         status: 'Open',
         billType: billType || 'Dine-In',
@@ -518,9 +559,9 @@ export const saveOrder = async (req, res) => {
 
     if (!req.body.skipNotification) {
       if (id) {
-        emitNotification(req, 'Order Updated', `Order updated for Table ${tableNo}`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+        emitNotification(req, 'Order Updated', `Order for Table ${tableNo} was updated`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
       } else {
-        emitNotification(req, 'New Order Placed', `Order placed for Table ${tableNo} (${order.billType})`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+        emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
       }
     }
     
@@ -528,7 +569,7 @@ export const saveOrder = async (req, res) => {
     if (order.status === 'Open' && order.billType === 'Dine-In') {
       updateTableStatusHelper(req, order.tableNo, 'Occupied', order._id).catch(err => console.error('Table status update error:', err));
     }
-    // Sync customer to CRM immediately without modifying visits/spend
+    // Immediate CRM update in background
     if (order.customerPhone) {
       syncCustomer(req, order.customerPhone, order.customerName).catch(err => console.error('Immediate CRM sync error:', err));
     }
@@ -562,57 +603,30 @@ export const generateBill = async (req, res) => {
     }
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status === 'Paid') return res.status(400).json({ message: 'Order already paid' });
+    const isExistingBilled = !!(order.billNumber || order.status === 'Billed');
+    const prevSubtotal = order.subtotal || 0;
+    const prevTotal = order.total || 0;
+    const prevDiscount = order.discount || 0;
+    const prevDeliveryCharge = order.deliveryCharge || 0;
+    const prevContainerCharge = order.containerCharge || 0;
+    const prevItems = (order.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total }));
+
     if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
     if (containerCharge !== undefined) order.containerCharge = Number(containerCharge) || 0;
-
-    if (order.status === 'Billed') {
-      if (orderSource) order.orderSource = orderSource;
-      if (customerName) order.customerName = customerName;
-      if (customerPhone) order.customerPhone = customerPhone;
-      if (discount !== undefined) order.discount = Number(discount) || 0;
-      if (discountType) order.discountType = discountType;
-      if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
-      if (tax !== undefined) order.tax = Number(tax) || 0;
-      if (taxBreakdown) order.taxBreakdown = taxBreakdown;
-      const taxableAmount = Math.max(0, order.subtotal - (order.discount || 0));
-      const taxAmount = (taxableAmount * (order.tax || 0)) / 100;
-      order.total = Math.round(taxableAmount + taxAmount + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
-      await order.save();
-      cache.clear('dailyStats');
-      cache.clear('openOrders');
-      return res.json(order);
-    }
-
-    // Generate Sequential Bill Number (e.g. MS0001, MS0002)
-    let nextNum = 1;
-    const latestBill = await Bill.findOne({ billNumber: /^MS\d+$/ })
-      .sort({ billNumber: -1 })
-      .collation({ locale: 'en_US', numericOrdering: true });
-
-    if (latestBill && latestBill.billNumber) {
-      const currentNum = parseInt(latestBill.billNumber.replace('MS', ''), 10);
-      if (!isNaN(currentNum)) {
-        nextNum = currentNum + 1;
-      }
-    }
-    
-    const billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
-
-    order.status = 'Billed';
-    order.billNumber = billNumber;
     if (orderSource) order.orderSource = orderSource;
     if (customerName) order.customerName = customerName;
     if (customerPhone) order.customerPhone = customerPhone;
     if (order.customerPhone) {
       syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
     }
-    order.discount = Number(discount) || 0;
-    order.discountType = discountType || 'flat';
-    order.discountValue = Number(discountValue) || 0;
-    order.tax = Number(tax) || 0;
+    if (discount !== undefined) order.discount = Number(discount) || 0;
+    if (discountType) order.discountType = discountType;
+    if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
+    if (tax !== undefined) order.tax = Number(tax) || 0;
     if (taxBreakdown) {
       order.taxBreakdown = taxBreakdown;
     }
+
     // Ensure subtotal is valid and recomputed from active items if missing/0
     if (!order.subtotal || order.subtotal <= 0) {
       order.subtotal = (order.items || []).reduce((acc, i) => 
@@ -625,12 +639,67 @@ export const generateBill = async (req, res) => {
     const computedTotal = Math.round(taxableAmount + taxAmount + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
     order.total = (req.body.total !== undefined && Number(req.body.total) > 0) ? Number(req.body.total) : computedTotal;
 
+    const amountChanged = Math.abs(prevTotal - order.total) > 0.01 || 
+      Math.abs(prevDeliveryCharge - (Number(order.deliveryCharge) || 0)) > 0.01 || 
+      Math.abs(prevContainerCharge - (Number(order.containerCharge) || 0)) > 0.01 ||
+      Math.abs(prevDiscount - (Number(order.discount) || 0)) > 0.01;
+
+    let billNumber = order.billNumber;
+    if (!billNumber) {
+      // Generate Sequential Bill Number (e.g. MS0001, MS0002)
+      let nextNum = 1;
+      const latestBill = await Bill.findOne({ billNumber: /^MS\d+$/ })
+        .sort({ billNumber: -1 })
+        .collation({ locale: 'en_US', numericOrdering: true });
+
+      if (latestBill && latestBill.billNumber) {
+        const currentNum = parseInt(latestBill.billNumber.replace('MS', ''), 10);
+        if (!isNaN(currentNum)) {
+          nextNum = currentNum + 1;
+        }
+      }
+      billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+    }
+
+    if (isExistingBilled && amountChanged && billNumber) {
+      order.editHistory = order.editHistory || [];
+      order.editHistory.push({
+        editedAt: new Date(),
+        previousState: {
+          items: prevItems,
+          subtotal: prevSubtotal,
+          totalDiscount: prevDiscount,
+          totalTax: ((Math.max(0, prevSubtotal - prevDiscount)) * (order.tax || 0)) / 100,
+          deliveryCharge: prevDeliveryCharge,
+          containerCharge: prevContainerCharge,
+          total: prevTotal,
+          discountType: order.discountType || 'flat',
+          discountValue: order.discountValue || 0
+        },
+        newState: {
+          items: (order.items || []).map(i => ({ name: i.name, quantity: i.quantity, price: i.price, total: i.total })),
+          subtotal: order.subtotal,
+          totalDiscount: order.discount,
+          totalTax: taxAmount,
+          deliveryCharge: order.deliveryCharge || 0,
+          containerCharge: order.containerCharge || 0,
+          total: order.total,
+          discountType: order.discountType || 'flat',
+          discountValue: order.discountValue || 0
+        }
+      });
+      order.isEdited = true;
+    }
+
+    order.status = 'Billed';
+    order.billNumber = billNumber;
+
     try {
       await order.save();
     } catch (saveErr) {
       if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
         console.warn('[generateBill] VersionError caught, re-fetching fresh document...');
-        const freshOrder = await Bill.findById(id);
+        const freshOrder = await Bill.findById(order._id);
         if (!freshOrder) return res.status(404).json({ message: 'Order not found after retry' });
         freshOrder.status = 'Billed';
         freshOrder.billNumber = billNumber;
@@ -638,6 +707,8 @@ export const generateBill = async (req, res) => {
         freshOrder.discountType = order.discountType;
         freshOrder.discountValue = order.discountValue;
         freshOrder.tax = order.tax;
+        freshOrder.deliveryCharge = order.deliveryCharge;
+        freshOrder.containerCharge = order.containerCharge;
         if (taxBreakdown) freshOrder.taxBreakdown = taxBreakdown;
         freshOrder.total = order.total;
         await freshOrder.save();
@@ -652,7 +723,9 @@ export const generateBill = async (req, res) => {
     cache.clear('openOrders');
     
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
-    emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+    if (!isExistingBilled) {
+      emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+    }
     
     // Update Floor/Table status in DB in background
     if (order.billType === 'Dine-In') {
@@ -869,7 +942,7 @@ export const getOpenOrders = async (req, res) => {
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
     })
-    .select('tableNo items total subtotal tax status billNumber billType orderSource queueNumber tokenNo createdAt')
+    .select('tableNo items total subtotal tax discount discountType discountValue deliveryCharge containerCharge customerName customerPhone status billNumber billType orderSource queueNumber tokenNo createdAt')
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();
@@ -910,14 +983,21 @@ export const getOpenOrders = async (req, res) => {
       })
       .map(order => {
         const subtotal = (order.items || []).reduce((acc, i) => acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
+        const disc = Number(order.discount) || 0;
+        const taxable = Math.max(0, subtotal - disc);
         const taxRate = order.status === 'Open' ? dynamicTaxRate : ((order.tax !== undefined && order.tax !== null) ? Number(order.tax) : dynamicTaxRate);
-        const taxAmount = Number(((subtotal * taxRate) / 100).toFixed(2));
-        const totalWithTax = Math.round(subtotal + taxAmount);
+        const taxAmount = Number(((taxable * taxRate) / 100).toFixed(2));
+        const dCharge = Number(order.deliveryCharge) || 0;
+        const cCharge = Number(order.containerCharge) || 0;
+        const computedTotal = Math.round(taxable + taxAmount + dCharge + cCharge);
+        const finalTotal = (order.total !== undefined && Number(order.total) > 0) ? Number(order.total) : computedTotal;
         return {
           ...order,
           subtotal,
           tax: taxRate,
-          total: totalWithTax
+          deliveryCharge: dCharge,
+          containerCharge: cCharge,
+          total: finalTotal
         };
       });
 
