@@ -208,17 +208,6 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      if (typeof this.sock.onWhatsApp === 'function') {
-        const check = await this.sock.onWhatsApp(cleanPhone);
-        if (check && Array.isArray(check) && check.length > 0 && check[0]?.jid) {
-          jid = check[0].jid;
-        }
-      }
-    } catch (chkErr) {
-      console.warn('[WhatsApp Service] onWhatsApp lookup fallback:', chkErr?.message);
-    }
-
-    try {
       const result = await this.sock.sendMessage(jid, { text: String(text) });
       return result;
     } catch (sendErr) {
@@ -252,16 +241,6 @@ class WhatsAppService {
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
-    try {
-      if (typeof this.sock.onWhatsApp === 'function') {
-        const check = await this.sock.onWhatsApp(cleanPhone);
-        if (check && Array.isArray(check) && check.length > 0 && check[0]?.jid) {
-          jid = check[0].jid;
-        }
-      }
-    } catch (chkErr) {
-      console.warn('[WhatsApp Service] onWhatsApp media lookup fallback:', chkErr?.message);
-    }
 
     const sendAction = async () => {
       if (imageBase64) {
