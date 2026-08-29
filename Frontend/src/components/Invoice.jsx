@@ -852,22 +852,24 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
               return (
                 <>
-                  {addCharges > 0 && (
-                    <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
-                      <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px', fontWeight: 'normal' }}>
-                        <span className="text-left" style={{ textAlign: 'left' }}>{t("Delivery / Packing")}</span>
-                        <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{addCharges.toFixed(2)}</span>
-                      </div>
+                  {Number(bill.deliveryCharge || 0) > 0 && (
+                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Delivery Charge")}</span>
+                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.deliveryCharge).toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
-                    <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px', fontWeight: 'normal' }}>
-                      <span className="text-left" style={{ textAlign: 'left' }}>{t("Round off")}</span>
-                      <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  {Number(bill.containerCharge || 0) > 0 && (
+                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Container Charge")}</span>
+                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.containerCharge).toFixed(2)}</span>
                     </div>
-                  </div>
+                  )}
+                  {roundOff !== 0 && (
+                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Round off")}</span>
+                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center w-full mt-2" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: '24px', fontWeight: 'bold' }}>
                     <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
                     <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>

@@ -371,12 +371,19 @@ class WhatsAppService {
   }
 
   async ensureConnection() {
-    if (!this.sock || this.status === 'DISCONNECTED') {
-      console.log('[WhatsApp Service] Connection inactive. Attempting fast reconnection...');
-      this.isInitializing = false;
-      await this.init();
+    if (!this.sock || this.status !== 'CONNECTED' || !this.sock.ws?.isOpen) {
+      console.log('[WhatsApp Service] Ensuring socket connection is open...');
+      if (!this.sock || this.status === 'DISCONNECTED') {
+        this.isInitializing = false;
+        await this.init();
+      }
+      if (this.sock?.waitForSocketOpen) {
+        try {
+          await this.sock.waitForSocketOpen();
+        } catch (e) {}
+      }
       let count = 0;
-      while (count < 15 && this.status !== 'CONNECTED') {
+      while (count < 25 && this.status !== 'CONNECTED' && !this.sock?.ws?.isOpen) {
         await new Promise(r => setTimeout(r, 200));
         count++;
       }
@@ -395,24 +402,27 @@ class WhatsAppService {
 
     await this.ensureConnection();
 
-    if (!this.sock || !this.sock.user || !this.sock.user.id) {
-      throw new Error('WhatsApp service is not connected. Please scan the QR code in POS Settings.');
+    if (!this.sock || this.status === 'DISCONNECTED') {
+      throw new Error('WhatsApp service is not connected. Please scan the QR code or link via phone code.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
+      if (this.sock.waitForSocketOpen) {
+        try { await this.sock.waitForSocketOpen(); } catch (e) {}
+      }
       const result = await this.sock.sendMessage(jid, { text: String(text) });
       return result;
     } catch (sendErr) {
-      if (sendErr?.message?.includes('Connection Closed') || sendErr?.message?.includes('closed') || sendErr?.message?.includes('output')) {
-        console.warn('[WhatsApp Service] Connection dropped during send. Re-initializing & retrying once...');
-        this.isInitializing = false;
-        await this.init();
-        await new Promise(r => setTimeout(r, 2000));
-        if (this.sock) {
-          return await this.sock.sendMessage(jid, { text: String(text) });
-        }
+      console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr);
+      this.isInitializing = false;
+      await this.init();
+      if (this.sock?.waitForSocketOpen) {
+        try { await this.sock.waitForSocketOpen(); } catch (e) {}
+      }
+      if (this.sock) {
+        return await this.sock.sendMessage(jid, { text: String(text) });
       }
       throw sendErr;
     }
@@ -430,13 +440,16 @@ class WhatsAppService {
 
     await this.ensureConnection();
 
-    if (!this.sock || !this.sock.user || !this.sock.user.id) {
-      throw new Error('WhatsApp service is not connected. Please scan the QR code in POS Settings.');
+    if (!this.sock || this.status === 'DISCONNECTED') {
+      throw new Error('WhatsApp service is not connected. Please scan the QR code or link via phone code.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     const sendAction = async () => {
+      if (this.sock?.waitForSocketOpen) {
+        try { await this.sock.waitForSocketOpen(); } catch (e) {}
+      }
       if (imageBase64) {
         const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(cleanBase64, 'base64');
@@ -467,14 +480,14 @@ class WhatsAppService {
       try {
         return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
       } catch (fallbackErr) {
-        if (fallbackErr?.message?.includes('Connection Closed') || fallbackErr?.message?.includes('closed') || fallbackErr?.message?.includes('output')) {
-          console.warn('[WhatsApp Service] Connection dropped during fallback. Re-initializing & retrying once...');
-          this.isInitializing = false;
-          await this.init();
-          await new Promise(r => setTimeout(r, 2000));
-          if (this.sock) {
-            return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
-          }
+        console.warn('[WhatsApp Service] Connection dropped during fallback. Re-initializing & retrying once...');
+        this.isInitializing = false;
+        await this.init();
+        if (this.sock?.waitForSocketOpen) {
+          try { await this.sock.waitForSocketOpen(); } catch (e) {}
+        }
+        if (this.sock) {
+          return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
         }
         throw fallbackErr;
       }

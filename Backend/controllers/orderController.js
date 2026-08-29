@@ -547,7 +547,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, discountType, discountValue, tax, taxBreakdown, orderSource, customerName, customerPhone } = req.body;
+    const { discount, discountType, discountValue, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -562,6 +562,9 @@ export const generateBill = async (req, res) => {
     }
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (order.status === 'Paid') return res.status(400).json({ message: 'Order already paid' });
+    if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
+    if (containerCharge !== undefined) order.containerCharge = Number(containerCharge) || 0;
+
     if (order.status === 'Billed') {
       if (orderSource) order.orderSource = orderSource;
       if (customerName) order.customerName = customerName;
@@ -573,7 +576,7 @@ export const generateBill = async (req, res) => {
       if (taxBreakdown) order.taxBreakdown = taxBreakdown;
       const taxableAmount = Math.max(0, order.subtotal - (order.discount || 0));
       const taxAmount = (taxableAmount * (order.tax || 0)) / 100;
-      order.total = Math.round(taxableAmount + taxAmount);
+      order.total = Math.round(taxableAmount + taxAmount + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
       await order.save();
       cache.clear('dailyStats');
       cache.clear('openOrders');
@@ -669,7 +672,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -695,6 +698,9 @@ export const settleBill = async (req, res) => {
     if (order.customerPhone) {
       syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
     }
+
+    if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
+    if (containerCharge !== undefined) order.containerCharge = Number(containerCharge) || 0;
 
     // Apply optional pricing/discount adjustments if sent directly
     if (discount !== undefined) order.discount = Number(discount) || 0;

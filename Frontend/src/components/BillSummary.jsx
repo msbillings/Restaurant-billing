@@ -846,11 +846,12 @@ const BillSummary = ({
                   <input
                     type="number"
                     min="0"
+                    placeholder="0"
                     onWheel={(e) => e.target.blur()}
                     onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                    value={deliveryCharge}
-                    onChange={(e) => setDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
+                    value={deliveryCharge === '0' || deliveryCharge === 0 ? '' : deliveryCharge}
+                    onChange={(e) => setDeliveryCharge && setDeliveryCharge(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs" />
                 </span>
               </div>
               <div className="flex items-center justify-between font-bold">
@@ -859,11 +860,12 @@ const BillSummary = ({
                   <input
                     type="number"
                     min="0"
+                    placeholder="0"
                     onWheel={(e) => e.target.blur()}
                     onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
-                    value={containerCharge}
-                    onChange={(e) => setContainerCharge(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
+                    value={containerCharge === '0' || containerCharge === 0 ? '' : containerCharge}
+                    onChange={(e) => setContainerCharge && setContainerCharge(e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary font-bold text-xs" />
                 </span>
               </div>
             </div>

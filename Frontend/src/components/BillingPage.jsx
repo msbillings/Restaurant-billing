@@ -1583,6 +1583,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           discountType: discount.type,
           discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
           tax: taxVal,
+          total,
+          deliveryCharge: parseFloat(deliveryCharge || 0),
+          containerCharge: parseFloat(containerCharge || 0),
           orderSource: billType === 'Delivery' ? orderSource : undefined,
           customerName,
           customerPhone,
@@ -1605,6 +1608,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         splitPayments: paymentData.splitPayments,
         amountPaid: paymentData.amountPaid,
         upiApp: paymentData.upiApp,
+        total,
+        deliveryCharge: parseFloat(deliveryCharge || 0),
+        containerCharge: parseFloat(containerCharge || 0),
         orderSource: billType === 'Delivery' ? orderSource : undefined
       });
       setOrderStatus('Paid');
@@ -2290,6 +2296,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 customerName={customerName}
                 setCustomerName={setCustomerName}
                 customerInfo={customerInfo}
+                deliveryCharge={deliveryCharge}
+                setDeliveryCharge={setDeliveryCharge}
+                containerCharge={containerCharge}
+                setContainerCharge={setContainerCharge}
                 openOrders={openOrdersList}
                 reservations={reservations}
                 onOpenCustomerModal={handleOpenCustomerModal} />

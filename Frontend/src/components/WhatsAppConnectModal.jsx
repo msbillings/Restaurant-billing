@@ -245,16 +245,50 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
         {/* Main Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 sm:pr-1 space-y-3 sm:space-y-4 relative z-10 custom-scrollbar overscroll-contain pb-1">
-          {isConnected ? (
+          {statusData.status === 'CONNECTING' && !isConnected ? (
+            <div className="bg-slate-800/90 rounded-xl sm:rounded-2xl p-6 border border-emerald-500/30 text-center space-y-4 shadow-xl animate-in zoom-in-95">
+              <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-[#25D366]/20 animate-ping"></div>
+                <div className="w-14 h-14 rounded-full bg-[#25D366]/30 border-2 border-[#25D366] flex items-center justify-center text-[#25D366] shadow-[0_0_20px_rgba(37,211,102,0.4)]">
+                  <RefreshCw size={24} className="animate-spin text-[#25D366]" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center justify-center gap-1.5">
+                  <Sparkles size={16} className="text-[#25D366]" />
+                  <span>{t("Connecting to WhatsApp...")}</span>
+                </h3>
+                <p className="text-[11px] sm:text-xs text-gray-300 max-w-xs mx-auto leading-relaxed">
+                  {t("Exchanging secure encryption keys with WhatsApp servers. Connecting in a few seconds...")}
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={fetchStatus}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-md active:scale-95"
+                >
+                  <RefreshCw size={12} />
+                  <span>{t("Check Status Now")}</span>
+                </button>
+              </div>
+            </div>
+          ) : isConnected ? (
             <div className="bg-slate-800/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-emerald-500/30 space-y-3 sm:space-y-4 shadow-lg">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
                   <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-500 animate-ping"></div>
                   <span>{t("Connected & Automated")}</span>
                 </div>
-                <span className="text-[11px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border border-emerald-500/30">
-                  +{statusData.connectedNumber || '9701800140'}
-                </span>
+                {(() => {
+                  const rawNum = String(statusData.connectedNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                  const displayNum = rawNum.length === 12 && rawNum.startsWith('91') ? rawNum.slice(2) : (rawNum || '9701800140');
+                  return (
+                    <span className="text-[11px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border border-emerald-500/30">
+                      +91 {displayNum}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Linked Device Status Card */}
