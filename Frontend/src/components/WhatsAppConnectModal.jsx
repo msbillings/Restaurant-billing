@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
+import { App } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { 
   X, CheckCircle2, RefreshCw, Smartphone, LogOut, Send, 
   AlertCircle, QrCode, Phone, Copy, Check, Info, ShieldCheck, Sparkles, Laptop
@@ -37,13 +39,18 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   const fetchStatus = async () => {
     try {
       const res = await getWhatsAppStatus();
-      setStatusData(res);
-      if (res.connectedNumber) {
-        let num = String(res.connectedNumber).replace(/[^0-9]/g, '');
-        if (num.length === 12 && num.startsWith('91')) {
-          num = num.slice(2);
+      if (res) {
+        setStatusData(res);
+        if (res.status === 'CONNECTED') {
+          setPairingCode(null);
         }
-        setTestPhone(prev => (prev ? prev : num));
+        if (res.connectedNumber) {
+          let num = String(res.connectedNumber).replace(/[^0-9]/g, '');
+          if (num.length === 12 && num.startsWith('91')) {
+            num = num.slice(2);
+          }
+          setTestPhone(prev => (prev ? prev : num));
+        }
       }
     } catch (e) {
       console.warn('Could not fetch WhatsApp status:', e);
@@ -55,8 +62,33 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (!isOpen) return;
     fetchStatus();
-    const interval = setInterval(fetchStatus, 2500);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchStatus, 2000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStatus();
+      }
+    };
+    const handleFocus = () => fetchStatus();
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    let appListener;
+    if (Capacitor.isNativePlatform()) {
+      App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          fetchStatus();
+        }
+      }).then(l => { appListener = l; }).catch(() => {});
+    }
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      if (appListener) appListener.remove();
+    };
   }, [isOpen]);
 
   const handleRefreshQR = async () => {
@@ -434,6 +466,27 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                       <p className="text-[10px] sm:text-[11px] text-gray-400">
                         {copiedCode ? <span className="text-emerald-400 font-bold">{t("Copied to clipboard! ✓")}</span> : t("Code expires in 60 seconds")}
                       </p>
+
+                      {/* Live Sync Status & Manual Verify Button */}
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-2 sm:p-2.5 mt-2">
+                        <div className="flex items-center gap-2 text-left min-w-0 pr-1">
+                          <span className="flex h-2.5 w-2.5 relative shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-300 truncate">
+                            {t("Waiting for WhatsApp approval...")}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={fetchStatus}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg font-bold text-[10px] sm:text-[11px] flex items-center gap-1 shadow-sm shrink-0 cursor-pointer"
+                        >
+                          <RefreshCw size={11} />
+                          <span>{t("Check Status")}</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 

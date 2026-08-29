@@ -2291,7 +2291,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 setCustomerName={setCustomerName}
                 customerInfo={customerInfo}
                 openOrders={openOrdersList}
-                reservations={reservations} />
+                reservations={reservations}
+                onOpenCustomerModal={handleOpenCustomerModal} />
             </div>
             
           </div>

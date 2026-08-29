@@ -127,7 +127,20 @@ class WhatsAppService {
         keepAliveIntervalMs: 30000
       });
 
-      this.sock.ev.on('creds.update', saveCreds);
+      this.sock.ev.on('creds.update', async () => {
+        try {
+          await saveCreds();
+          const meId = state?.creds?.me?.id || this.sock?.user?.id;
+          if (meId) {
+            this.connectedNumber = meId.split(':')[0] || meId.split('@')[0];
+            this.status = 'CONNECTED';
+            this.qrDataUrl = null;
+            this.notifyListeners();
+          }
+        } catch (e) {
+          console.warn('[WhatsApp Service] creds.update error:', e);
+        }
+      });
 
       this.sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -317,7 +330,7 @@ class WhatsAppService {
   getStatus() {
     const rawJid = this.sock?.user?.id || '';
     const phone = this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0];
-    const isConnected = this.status === 'CONNECTED' || Boolean(this.sock?.user);
+    const isConnected = this.status === 'CONNECTED' || Boolean(this.sock?.user) || Boolean(this.connectedNumber);
     const { platformName, deviceName } = this.getPlatformInfo();
 
     return {

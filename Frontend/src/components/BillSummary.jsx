@@ -47,7 +47,8 @@ const BillSummary = ({
   setContainerCharge,
   hasUnprintedItems = true,
   openOrders = [],
-  reservations = []
+  reservations = [],
+  onOpenCustomerModal
 }) => {
   const { t, language } = useLanguage();
   const isLocked = orderStatus === 'Paid' || orderStatus === 'Cancelled';
@@ -319,8 +320,8 @@ const BillSummary = ({
       )}
 
       {/* Info Bar */}
-      <div className="flex items-center gap-1 px-3 py-1 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1 px-2.5 sm:px-3 py-1 border-b border-gray-100 bg-white overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 shrink-0">
           {(() => {
             let catName = 'TABLE';
             let displayVal = activeTable || '--';
@@ -380,6 +381,7 @@ const BillSummary = ({
               </div>
             );
           })()}
+
           {/* PAX Badge */}
           <div 
             onClick={handlePaxClick} 
@@ -406,6 +408,22 @@ const BillSummary = ({
           >
             <UserCheck size={11} className="opacity-80 shrink-0" />
             <span className="text-[9px] font-bold truncate">{waiter || t("Waiter")}</span>
+          </div>
+
+          {/* Customer CRM Badge */}
+          <div 
+            onClick={onOpenCustomerModal} 
+            title={customerPhone || customerName ? `${customerName || 'Customer'} (${customerPhone || 'CRM'}) - ${t("Click to edit")}` : t("Customer CRM - Link Phone & Name")}
+            className={`flex items-center justify-center gap-1 min-w-[30px] max-w-[85px] sm:max-w-[100px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all shrink-0 ${
+              customerPhone || customerName 
+                ? 'bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 font-bold' 
+                : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <User size={11} className={`shrink-0 ${customerPhone || customerName ? 'text-orange-600' : 'opacity-80'}`} />
+            <span className="text-[9px] font-bold truncate">
+              {customerName || customerPhone || t("CRM")}
+            </span>
           </div>
 
           {/* Special Note Badge */}
