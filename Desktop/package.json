@@ -10,7 +10,7 @@
   },
   "build": {
     "appId": "com.mstechhive.msbilling",
-    "productName": "msbilling",
+    "productName": "MS Billings",
     "directories": {
       "output": "dist"
     },
@@ -18,6 +18,8 @@
       "main.js",
       "preload.js",
       "package.json",
+      "icon.ico",
+      "icon.png",
       "frontend/**/*"
     ],
     "extraResources": [
@@ -50,7 +52,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "shortcutName": "MS Billings"
+      "shortcutName": "MS Billings",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
     },
     "publish": [
       {

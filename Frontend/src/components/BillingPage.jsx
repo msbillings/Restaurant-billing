@@ -2167,6 +2167,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <span>🍽️ {t('menuItems')}</span>
           </button>
           <button
+            id="mobile-cart-tab"
+            data-mobile-cart-tab="true"
             onClick={() => setMobileTab('cart')}
             className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 relative ${
             mobileTab === 'cart' ?
@@ -2176,7 +2178,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             
             <span>🛒 {t('currentOrder')}</span>
             {cart.length > 0 &&
-            <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+            <span data-mobile-cart-badge="true" className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
                 {cart.length}
               </span>
             }

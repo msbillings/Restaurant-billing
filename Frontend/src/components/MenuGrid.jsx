@@ -10,7 +10,7 @@ import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 import realtimeService from '../services/realtimeService';
-import { flyItemToCart } from '../utils/animations';
+import { flyItemToCart, getFoodCategoryVisual } from '../utils/animations';
 
 const getCategoryIcon = (catName, isSelected = false) => {
   const name = catName.toLowerCase();
@@ -108,10 +108,16 @@ const LazyMenuImage = ({ src, alt, className }) => {
   }, [src]);
 
   if (!src || error) {
+    const visual = getFoodCategoryVisual(alt || '', '');
     return (
-      <div className="w-full h-full bg-gray-50 flex flex-col items-center justify-center text-gray-400 border-b border-gray-100 border-dashed">
-        <ImageIcon size={22} className="opacity-30 mb-1" />
-        <span className="text-[10px] font-medium opacity-50">No Image</span>
+      <div className="w-full h-full flex flex-col items-center justify-center relative overflow-hidden bg-[#18181b] border-b border-white/5 select-none">
+        <div className={`absolute inset-0 bg-gradient-to-t ${visual.cardBg} opacity-90 pointer-events-none`} />
+        <div className="text-3xl filter drop-shadow-md mb-0.5 relative z-10 transition-transform group-hover:scale-110 duration-300">
+          {visual.icon}
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${visual.textAccent} opacity-85 relative z-10 font-mono`}>
+          {visual.label}
+        </span>
       </div>
     );
   }
@@ -198,6 +204,24 @@ const MenuGrid = ({
 
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(260);
   const isResizingLeft = useRef(false);
+
+  const [isCategorySidebarCollapsed, setIsCategorySidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('resto_category_sidebar_collapsed') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const toggleCategorySidebar = useCallback(() => {
+    setIsCategorySidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('resto_category_sidebar_collapsed', String(next));
+      } catch (e) {}
+      return next;
+    });
+  }, []);
 
   const startResizingLeft = React.useCallback((e) => {
     isResizingLeft.current = true;
@@ -532,41 +556,98 @@ const MenuGrid = ({
       </div>
 
       {/* Desktop Left Sidebar: Categories (Visible on large screens >= 1024px) */}
-      <div
-        style={{ width: leftSidebarWidth }}
-        className="hidden lg:flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3 border-r border-gray-200">
-        <div className="flex flex-col w-full gap-1">
-          {categoryOptions.map((cat) => {
-            const isSelected = category === cat;
-            const bgClass = isSelected ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-md rounded-xl mx-2 font-bold' : 'bg-transparent text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-xl mx-2 font-bold';
-            return (
-              <button
-                key={cat}
-                className={`w-full text-left px-4 py-3 text-[15px] transition-all flex items-center justify-between ${bgClass}`}
-                onClick={() => setCategory(cat)}>
-                <div className="flex items-center gap-3 flex-1 min-w-0 pr-1 truncate">
-                  {getCategoryIcon(cat, isSelected)}
-                  <span className="truncate font-medium">{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
-                </div>
-                {isSelected && <ChevronRight size={18} className="text-white shrink-0 ml-1" />}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {!isCategorySidebarCollapsed && (
+        <div
+          style={{ width: leftSidebarWidth }}
+          className="hidden lg:flex flex-col bg-white shrink-0 h-full overflow-y-auto overflow-x-hidden hide-scrollbar py-3 border-r border-gray-200">
+          <div className="flex flex-col w-full gap-1">
+            {categoryOptions.map((cat) => {
+              const isSelected = category === cat;
+              const isAll = cat.toLowerCase() === 'all';
+              const bgClass = isSelected
+                ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-md rounded-xl mx-2 font-bold'
+                : 'bg-transparent text-gray-700 hover:bg-red-50 hover:text-red-600 rounded-xl mx-2 font-bold';
+              return (
+                <button
+                  key={cat}
+                  className={`w-full text-left px-4 py-3 text-[15px] transition-all flex items-center justify-between group ${bgClass}`}
+                  onClick={() => setCategory(cat)}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0 pr-1 truncate">
+                    {getCategoryIcon(cat, isSelected)}
+                    <span className="truncate font-medium">{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
+                  </div>
 
-      {/* Left Sidebar Drag Handle (Desktop only) */}
-      {!isLayoutLocked && (
+                  {/* Collapse trigger right arrow on the All category row & selected categories */}
+                  {isAll ? (
+                    <span
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCategorySidebar();
+                      }}
+                      className={`p-1 rounded-lg transition-all ml-1 shrink-0 flex items-center justify-center cursor-pointer hover:scale-110 ${
+                        isSelected ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-200 text-gray-500'
+                      }`}
+                      title={t("Close Categories Sidebar")}>
+                      <ChevronRight size={18} />
+                    </span>
+                  ) : (
+                    isSelected && (
+                      <span
+                        role="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCategorySidebar();
+                        }}
+                        className="p-1 rounded-lg hover:bg-white/20 text-white transition-all ml-1 shrink-0 flex items-center justify-center cursor-pointer hover:scale-110"
+                        title={t("Close Categories Sidebar")}>
+                        <ChevronRight size={18} />
+                      </span>
+                    )
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Left Sidebar Drag Handle (Desktop only when not collapsed) */}
+      {!isLayoutLocked && !isCategorySidebarCollapsed && (
         <div
           onMouseDown={startResizingLeft}
           className="hidden lg:block w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent shrink-0 z-40 transition-colors border-r border-gray-200 hover:border-transparent relative" />
       )}
 
       {/* Items Grid Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 relative">
+
+        {/* Floating Re-Open Button when category sidebar is collapsed */}
+        {isCategorySidebarCollapsed && (
+          <button
+            type="button"
+            onClick={toggleCategorySidebar}
+            className="hidden lg:flex absolute top-1/2 -translate-y-1/2 left-0 z-30 bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xl rounded-r-2xl py-3.5 px-2 hover:opacity-95 transition-all items-center gap-1 border-y border-r border-white/25 cursor-pointer group"
+            title={t("Open Categories Sidebar")}>
+            <ChevronRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+          </button>
+        )}
 
         {/* Filter & Sort Controls Row */}
         <div className="flex items-center justify-between bg-gray-50 border-b border-gray-200 py-1.5 px-2 sm:px-3 gap-1.5 sm:gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+          {/* Desktop Categories Open Button when collapsed */}
+          {isCategorySidebarCollapsed && (
+            <button
+              type="button"
+              onClick={toggleCategorySidebar}
+              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-gray-800 hover:bg-gray-100 border border-gray-200 shadow-xs transition-all shrink-0 cursor-pointer"
+              title={t("Open Categories Sidebar")}>
+              <MenuIcon size={14} className="text-red-500" />
+              <span>{t("Categories")}</span>
+              <ChevronRight size={14} className="text-gray-400" />
+            </button>
+          )}
+
           {/* Mobile Favorite Items Toggle Button (Left side on mobile) */}
           <button
             type="button"
@@ -702,7 +783,7 @@ const MenuGrid = ({
                   <div
                     key={item._id}
                     style={{ animationDelay: `${Math.min(idx * 25, 300)}ms` }}
-                    className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
+                    className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-48 sm:min-h-52' : 'h-30 p-3'}`}
                     onClick={(e) => {
                       if (!isAvailable) return;
                       if (typeof document !== 'undefined' && document.querySelector('.modal-portal-overlay')) return;
@@ -732,7 +813,7 @@ const MenuGrid = ({
                       }
                     }}>
 
-                    <div className={`flex items-start justify-between w-full h-4 z-[2] absolute ${showImages ? 'top-2 left-0 px-2' : 'top-3 left-0 px-3'}`}>
+                    <div className={`flex items-start justify-between w-full h-4 z-[2] absolute ${showImages ? 'top-2.5 left-0 px-2.5' : 'top-3 left-0 px-3'}`}>
                       <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
 
                       <div className="flex gap-1.5 items-center">
@@ -750,7 +831,7 @@ const MenuGrid = ({
                     </div>
 
                     {showImages && (
-                      <div className="w-full h-22.5 shrink-0 bg-gray-100 relative overflow-hidden">
+                      <div className="w-full h-28 sm:h-30 shrink-0 bg-gray-100 relative overflow-hidden">
                         <LazyMenuImage src={formatImageUrl(item.image)} alt={item.name} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
                       </div>

@@ -2,13 +2,9 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, shell, Notification } = requi
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 
-// Configure App User Model ID for Windows Toast / Action Center Notifications
+// Configure App User Model ID for Windows Start Menu, Taskbar & Notifications
 if (process.platform === 'win32') {
-  try {
-    app.setAppUserModelId(process.execPath);
-  } catch (e) {
-    app.setAppUserModelId('com.mstechhive.msbilling');
-  }
+  app.setAppUserModelId('com.mstechhive.msbilling');
 }
 
 const path = require('path');
@@ -156,16 +152,18 @@ function createMenu() {
 }
 
 function createWindow() {
+  const appIcon = path.join(__dirname, process.platform === 'win32' ? 'icon.ico' : 'icon.png');
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: appIcon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
       preload: path.join(__dirname, 'preload.js')
     },
-    title: "RestoPOS",
+    title: "MS Billings",
     show: false // Wait until ready to show
   });
 

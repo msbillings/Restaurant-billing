@@ -29,7 +29,44 @@ import {
 'lucide-react';
 import Toast from './Toast';
 
-const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
+const AnimatedNumber = ({ value, duration = 800, isCurrency = false, prefix = '', suffix = '' }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const endVal = typeof value === 'number' ? value : Number(String(value || 0).replace(/[^0-9.-]/g, '')) || 0;
+    if (endVal === 0) {
+      setDisplayValue(0);
+      return;
+    }
+
+    let startTimestamp = null;
+    const startVal = 0;
+
+    const step = (timestamp) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+      const current = Math.round(startVal + easeProgress * (endVal - startVal));
+      setDisplayValue(current);
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        setDisplayValue(endVal);
+      }
+    };
+
+    const animFrame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(animFrame);
+  }, [value, duration]);
+
+  if (isCurrency) {
+    return `₹${displayValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  }
+  return `${prefix}${displayValue.toLocaleString('en-IN')}${suffix}`;
+};
+
+const Analytics = ({ onNavigate, onGoBack }) => {
+  const { t } = useLanguage();
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -43,6 +80,8 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [fraudLoading, setFraudLoading] = useState(false);
   const [fraudDays, setFraudDays] = useState(30);
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [animKey, setAnimKey] = useState(1);
+  const [animateBars, setAnimateBars] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
@@ -50,6 +89,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const fetchAnalytics = async () => {
     setLoading(true);
+    setAnimateBars(false);
     try {
       let data;
       if (viewMode === 'month') {
@@ -60,6 +100,10 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         data = await getAnalytics(null, null, days);
       }
       setAnalytics(data);
+      setAnimKey(prev => prev + 1);
+      setTimeout(() => {
+        setAnimateBars(true);
+      }, 70);
     } catch (error) {
       console.error('Error fetching analytics:', error);
       setToast({ message: 'Failed to load analytics data', type: 'error' });
@@ -125,13 +169,41 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     return Math.max(...analytics.dailyRevenue.map((d) => d.revenue));
   };
 
-  const getPaymentModeIcon = (mode) => {
-    switch (mode) {
-      case 'Cash':return <Wallet size={20} />;
-      case 'UPI':return <Smartphone size={20} />;
-      case 'Card':return <CreditCard size={20} />;
-      default:return <CreditCard size={20} />;
+  const getPaymentModeInfo = (mode) => {
+    const m = (mode || '').toLowerCase();
+    if (m.includes('cash')) {
+      return {
+        icon: <Wallet size={18} />,
+        gradient: 'from-blue-500 to-cyan-400',
+        bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+      };
     }
+    if (m.includes('upi')) {
+      return {
+        icon: <Smartphone size={18} />,
+        gradient: 'from-amber-500 to-orange-400',
+        bg: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+      };
+    }
+    if (m.includes('card')) {
+      return {
+        icon: <CreditCard size={18} />,
+        gradient: 'from-emerald-500 to-teal-400',
+        bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+      };
+    }
+    if (m.includes('mixed')) {
+      return {
+        icon: <BarChart3 size={18} />,
+        gradient: 'from-purple-500 to-indigo-400',
+        bg: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+      };
+    }
+    return {
+      icon: <CreditCard size={18} />,
+      gradient: 'from-rose-500 to-pink-400',
+      bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+    };
   };
 
   const handleDownloadReport = async () => {
@@ -140,7 +212,6 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       if (viewMode === 'month') {
         await downloadMonthlyReportExcel(selectedMonth, selectedYear);
       } else {
-        // For days view, use the monthly Excel endpoint with current month
         await downloadMonthlyReportExcel(new Date().getMonth() + 1, new Date().getFullYear());
       }
       setToast({ message: 'Report downloaded successfully!', type: 'success' });
@@ -155,7 +226,6 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     setToast({ message: t("Fetching WhatsApp connection..."), type: 'info' });
 
     try {
-      // Auto-fetch the scanned/connected owner WhatsApp number
       const statusRes = await getWhatsAppStatus();
       if (!statusRes || statusRes.status !== 'CONNECTED' || !statusRes.connectedNumber) {
         setToast({ message: t("WhatsApp is not connected. Please scan the QR code in WhatsApp settings first."), type: 'error' });
@@ -164,8 +234,6 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       }
 
       let cleanPhone = String(statusRes.connectedNumber).replace(/[^0-9]/g, '');
-      // connectedNumber from WhatsApp is typically in format 919701800140 (country code + number)
-      // Ensure it has country code
       if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
       setToast({ message: t("Generating & sending WhatsApp analytics report..."), type: 'info' });
@@ -257,38 +325,71 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="animate-spin text-primary" size={32} />
-          <p className="text-text-muted">{t("Loading analytics...")}</p>
+          <div className="relative">
+            <RefreshCw className="animate-spin text-[#f97316]" size={36} />
+            <div className="absolute inset-0 rounded-full bg-[#f97316]/20 blur-md animate-pulse" />
+          </div>
+          <p className="text-gray-400 font-medium text-sm">{t("Loading analytics...")}</p>
         </div>
-      </div>);
-
+      </div>
+    );
   }
 
   if (!analytics) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-text-muted">{t("No analytics data available")}</p>
-      </div>);
-
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <p className="text-gray-400">{t("No analytics data available")}</p>
+      </div>
+    );
   }
 
   const { summary, dailyRevenue, paymentModeStats } = analytics;
   const maxRevenue = getMaxRevenue();
+
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto">
-      {/* Analytics Container - Forcing dark mode */}
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto" key={`analytics-view-${animKey}`}>
+      {/* Analytics Dynamic Styles & Keyframe Animations */}
       <style>{`
         .glass-card {
-          background: rgba(20, 20, 24, 0.6);
+          background: rgba(20, 20, 24, 0.65);
           backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 16px;
         }
-      `}</style>      <div className="space-y-3 sm:space-y-4">
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(250%); }
+        }
+        .animate-shimmer {
+          animation: shimmer 2.4s infinite linear;
+        }
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-card-entry {
+          animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes pulseSoft {
+          0%, 100% { transform: scale(1); opacity: 0.9; }
+          50% { transform: scale(1.03); opacity: 1; }
+        }
+        .animate-pulse-soft {
+          animation: pulseSoft 3s infinite ease-in-out;
+        }
+      `}</style>
+
+      <div className="space-y-3 sm:space-y-4">
         {/* Period Selector */}
-        <div className="glass-card p-2.5 sm:p-3.5">
+        <div className="glass-card p-2.5 sm:p-3.5 animate-card-entry" style={{ animationDelay: '0ms' }}>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
             {/* Left Controls: Back + Period Tabs + Date Selector */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -300,7 +401,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                       setViewMode('month');
                       setDays(null);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'month' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -311,7 +412,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                       setViewMode('days');
                       setDays(7);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'days' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -322,7 +423,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                       setViewMode('day');
                       setDays(null);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'day' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -357,7 +458,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                     <button
                       key={d}
                       onClick={() => setDays(d)}
-                      className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-md text-xs font-medium transition-all text-center ${
+                      className={`flex-1 sm:flex-initial px-2.5 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
                         days === d ?
                         'bg-[#f97316] text-white shadow-md font-bold' :
                         'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -385,7 +486,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             <div className="grid grid-cols-4 gap-1.5 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto shrink-0">
               <button
                 onClick={handleDownloadReport}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer"
                 title={t("Download Excel Report")}>
                 <FileSpreadsheet size={14} />
                 <span>{t("Report")}</span>
@@ -393,7 +494,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               <button
                 onClick={() => handleShareWhatsAppReport()}
                 disabled={sendingWhatsApp}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer disabled:opacity-60"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer disabled:opacity-60"
                 title={t("Send Analytics Report on WhatsApp")}>
                 {sendingWhatsApp ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -406,13 +507,13 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               </button>
               <button
                 onClick={fetchAnalytics}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs cursor-pointer">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 active:scale-95 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs cursor-pointer">
                 <RefreshCw size={14} />
                 <span>{t("Refresh")}</span>
               </button>
               <button
                 onClick={() => fetchFraudAnalysis()}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs cursor-pointer">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs cursor-pointer">
                 <ShieldAlert size={14} />
                 <span>{t("Auditor")}</span>
               </button>
@@ -420,88 +521,99 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards with Staggered Entrance & Animated Counter */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 sm:gap-3.5">
           {/* Total Bills */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '50ms' }}>
             <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <Receipt className="text-blue-500" size={16} />
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
+                <Receipt size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">{summary.totalBills.toLocaleString()}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.totalBills} />
+              </p>
             </div>
           </div>
 
           {/* Total Orders */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '100ms' }}>
             <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <ShoppingBag className="text-purple-500" size={16} />
+              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.15)]">
+                <ShoppingBag size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">{summary.totalOrders.toLocaleString()}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.totalOrders} />
+              </p>
             </div>
           </div>
 
           {/* Today's Revenue */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '150ms' }}>
             <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center">
-                <TrendingUp className="text-[#22c55e]" size={16} />
+              <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center text-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.15)]">
+                <TrendingUp size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Today's Revenue")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">{formatCurrency(summary.today.revenue)}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.today.revenue} isCurrency={true} />
+              </p>
             </div>
           </div>
 
           {/* Period Revenue */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300">
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '200ms' }}>
             <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-[#f97316]/10 flex items-center justify-center">
-                <DollarSign className="text-[#f97316]" size={16} />
+              <div className="w-8 h-8 rounded-lg bg-[#f97316]/10 flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)]">
+                <DollarSign size={16} />
               </div>
             </div>
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate" title={viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ${t("Revenue")}` : `${days} Days ${t("Revenue")}`}>
                 {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ` : `${days} Days `}{t("Revenue")}
               </p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">{formatCurrency(summary.period.revenue)}</p>
+              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.period.revenue} isCurrency={true} />
+              </p>
             </div>
           </div>
 
           {/* Delivery Orders */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 transition-all duration-300 col-span-2 md:col-span-1">
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-2 md:col-span-1 animate-card-entry shadow-sm" style={{ animationDelay: '250ms' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5 sm:block">
-                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0 sm:mb-1.5">
-                  <Truck className="text-yellow-500" size={16} />
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0 sm:mb-1.5 text-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.15)]">
+                  <Truck size={16} />
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Delivery Orders")}</p>
-                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
+                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">
+                    <AnimatedNumber value={summary.period.deliveryOrders || 0} />
+                  </p>
                 </div>
               </div>
-              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">{summary.period.deliveryOrders?.toLocaleString() || 0}</p>
+              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.period.deliveryOrders || 0} />
+              </p>
             </div>
           </div>
         </div>
 
-
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Daily Revenue Chart */}
-          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300">
+          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300 animate-card-entry" style={{ animationDelay: '300ms' }}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center">
-                  <BarChart3 className="text-[#f97316]" size={20} />
+                <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]">
+                  <BarChart3 size={20} />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">{t("Daily Revenue & Orders")}</h2>
@@ -514,55 +626,73 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               </div>
             </div>
             
-            {dailyRevenue && dailyRevenue.length > 0 ?
-            <div className="space-y-4">
-                {/* Professional Chart */}
-                <div className="h-64 w-full">
+            {dailyRevenue && dailyRevenue.length > 0 ? (
+              <div className="space-y-4">
+                {/* Professional Animated Chart */}
+                <div className="h-64 w-full" key={`chart-container-${animKey}`}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={dailyRevenue} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="barOrangeGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#fb923c" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#ea580c" stopOpacity={0.85}/>
+                        </linearGradient>
+                      </defs>
                       <XAxis
-                      dataKey="_id"
-                      tickFormatter={(val) => {
-                        const d = new Date(val);
-                        return `${d.getDate()}/${d.getMonth() + 1}`;
-                      }}
-                      tick={{ fontSize: 11, fill: '#8b8d97' }}
-                      axisLine={false}
-                      tickLine={false}
-                      dy={10} />
-                    
+                        dataKey="_id"
+                        tickFormatter={(val) => {
+                          const d = new Date(val);
+                          return `${d.getDate()}/${d.getMonth() + 1}`;
+                        }}
+                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        axisLine={false}
+                        tickLine={false}
+                        dy={10}
+                      />
                       <YAxis
-                      tickFormatter={(val) => {
-                        if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
-                        return `₹${val}`;
-                      }}
-                      tick={{ fontSize: 11, fill: '#8b8d97' }}
-                      axisLine={false}
-                      tickLine={false}
-                      dx={-10} />
-                    
+                        tickFormatter={(val) => {
+                          if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
+                          return `₹${val}`;
+                        }}
+                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        axisLine={false}
+                        tickLine={false}
+                        dx={-10}
+                      />
                       <Tooltip
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                      content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-[#1e1e1e] border border-gray-800 shadow-xl rounded-lg p-3 z-50">
+                        cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-[#18181b] border border-white/15 shadow-2xl rounded-xl p-3 z-50 animate-in zoom-in-95 duration-100">
                                 <p className="font-bold text-gray-200 mb-1">{formatDate(data._id)}</p>
-                                <p className="text-[#f97316] font-bold text-lg">{formatCurrency(data.revenue)}</p>
-                                <p className="text-xs text-gray-400 mt-1 font-medium">{t("Orders:")}
-                                {data.orders} {t("• Bills:")} {data.bills}
+                                <p className="text-[#f97316] font-extrabold text-lg">{formatCurrency(data.revenue)}</p>
+                                <p className="text-xs text-gray-400 mt-1 font-medium">
+                                  {t("Orders:")} {data.orders} {t("• Bills:")} {data.bills}
                                 </p>
-                              </div>);
-
-                        }
-                        return null;
-                      }} />
-                    
-                      <Bar dataKey="revenue" radius={[6, 6, 0, 0]} maxBarSize={50}>
-                        {dailyRevenue.map((entry, index) =>
-                      <Cell key={`cell-${index}`} fill="#f97316" className="hover:opacity-80 transition-opacity" />
-                      )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar 
+                        dataKey="revenue" 
+                        radius={[6, 6, 0, 0]} 
+                        maxBarSize={50}
+                        isAnimationActive={true}
+                        animationDuration={1100}
+                        animationEasing="ease-out"
+                        animationBegin={80}
+                      >
+                        {dailyRevenue.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill="url(#barOrangeGradient)" 
+                            className="hover:opacity-85 transition-all duration-200 cursor-pointer filter drop-shadow-[0_2px_8px_rgba(249,115,22,0.25)]" 
+                          />
+                        ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -573,7 +703,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   <div className="bg-[#1e1e24] px-4 py-3 border-b border-white/10">
                     <h3 className="font-bold text-white text-sm">{t("Daily Breakdown")}</h3>
                   </div>
-                  <div className="max-h-64 overflow-y-auto">
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-left">
                       <thead className="bg-[#1e1e24] sticky top-0">
                         <tr>
@@ -584,8 +714,8 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                         </tr>
                       </thead>
                       <tbody>
-                        {dailyRevenue.map((day, index) =>
-                      <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        {dailyRevenue.map((day, index) => (
+                          <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                             <td className="px-4 py-2 text-sm font-medium text-white">
                               {formatDate(day._id)}
                             </td>
@@ -599,47 +729,49 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                               {day.orders}
                             </td>
                           </tr>
-                      )}
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 </div>
+
                 <div className="flex items-center justify-between pt-4 border-t border-white/10">
                   <div className="text-center">
                     <p className="text-xs text-gray-400">{t("Total Revenue")}</p>
                     <p className="text-lg font-bold text-white">
-                      {formatCurrency(dailyRevenue.reduce((sum, d) => sum + d.revenue, 0))}
+                      <AnimatedNumber value={dailyRevenue.reduce((sum, d) => sum + d.revenue, 0)} isCurrency={true} />
                     </p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-gray-400">{t("Total Bills")}</p>
                     <p className="text-lg font-bold text-white">
-                      {dailyRevenue.reduce((sum, d) => sum + d.bills, 0)}
+                      <AnimatedNumber value={dailyRevenue.reduce((sum, d) => sum + d.bills, 0)} />
                     </p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-gray-400">{t("Avg Daily")}</p>
                     <p className="text-lg font-bold text-white">
-                      {formatCurrency(
-                      dailyRevenue.reduce((sum, d) => sum + d.revenue, 0) / dailyRevenue.length
-                    )}
+                      <AnimatedNumber 
+                        value={dailyRevenue.length > 0 ? dailyRevenue.reduce((sum, d) => sum + d.revenue, 0) / dailyRevenue.length : 0} 
+                        isCurrency={true} 
+                      />
                     </p>
                   </div>
                 </div>
-              </div> :
-
-            <div className="flex items-center justify-center h-64 text-gray-400">
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-400">
                 <p>{t("No revenue data for the selected period")}</p>
               </div>
-            }
+            )}
           </div>
 
-          {/* Payment Mode Breakdown */}
-          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300">
+          {/* Payment Mode Breakdown with Animated Range Bars */}
+          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300 animate-card-entry" style={{ animationDelay: '350ms' }}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center">
-                  <CreditCard className="text-purple-500" size={20} />
+                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
+                  <CreditCard size={20} />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">{t("Payment Methods")}</h2>
@@ -652,24 +784,22 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               </div>
             </div>
             
-            {paymentModeStats && paymentModeStats.length > 0 ?
-            <div className="space-y-2.5">
+            {paymentModeStats && paymentModeStats.length > 0 ? (
+              <div className="space-y-3">
                 {paymentModeStats.map((stat, index) => {
-                const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
-                const percentage = totalRevenue > 0 ? stat.revenue / totalRevenue * 100 : 0;
-                const colors = [
-                'from-orange-500 to-orange-400',
-                'from-blue-500 to-blue-400',
-                'from-green-500 to-green-400'];
+                  const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
+                  const percentage = totalRevenue > 0 ? (stat.revenue / totalRevenue) * 100 : 0;
+                  const modeInfo = getPaymentModeInfo(stat._id);
 
-                const colorClass = colors[index % colors.length];
-
-                return (
-                  <div key={stat._id || index} className="space-y-2 p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/10 transition-all duration-200">
+                  return (
+                    <div 
+                      key={stat._id || index} 
+                      className="space-y-2 p-3 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/5 hover:border-white/15 transition-all duration-300 shadow-sm"
+                    >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-9 h-9 bg-gradient-to-br ${colorClass} rounded-lg flex items-center justify-center text-white shadow-sm`}>
-                            {getPaymentModeIcon(stat._id)}
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-9 h-9 bg-gradient-to-br ${modeInfo.gradient} rounded-xl flex items-center justify-center text-white shadow-md`}>
+                            {modeInfo.icon}
                           </div>
                           <div>
                             <p className="font-bold text-white text-sm">{stat._id || 'Unknown'}</p>
@@ -677,130 +807,145 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-white text-base">{formatCurrency(stat.revenue)}</p>
-                          <p className="text-xs text-gray-400">{percentage.toFixed(1)}%</p>
+                          <p className="font-bold text-white text-base">
+                            <AnimatedNumber value={stat.revenue} isCurrency={true} />
+                          </p>
+                          <p className="text-xs text-gray-400 font-mono">{percentage.toFixed(1)}%</p>
                         </div>
                       </div>
-                      <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden shadow-inner">
-                        <div
-                        className={`h-full bg-gradient-to-r ${colorClass} transition-all duration-500 shadow-sm`}
-                        style={{ width: `${percentage}%` }} />
-                      
-                      </div>
-                    </div>);
 
-              })}
+                      {/* Animated Range Progress Bar with Shimmer Effect */}
+                      <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden shadow-inner p-[1px] relative">
+                        <div
+                          className={`h-full rounded-full bg-gradient-to-r ${modeInfo.gradient} transition-all duration-1000 ease-out shadow-sm relative overflow-hidden`}
+                          style={{ 
+                            width: animateBars ? `${Math.max(percentage, 1)}%` : '0%',
+                            transitionDelay: `${index * 120}ms`
+                          }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-shimmer" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
                 <div className="pt-4 border-t border-white/10 mt-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-gray-400">{t("Total")}</p>
                     <p className="text-lg font-bold text-white">
-                      {formatCurrency(
-                      paymentModeStats.reduce((sum, s) => sum + s.revenue, 0)
-                    )}
+                      <AnimatedNumber 
+                        value={paymentModeStats.reduce((sum, s) => sum + s.revenue, 0)} 
+                        isCurrency={true} 
+                      />
                     </p>
                   </div>
                   
                   {/* Payment Insights */}
                   {paymentModeStats.length > 0 && (() => {
-                  const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
-                  const totalTransactions = paymentModeStats.reduce((sum, s) => sum + s.count, 0);
-                  const mostPopularByCount = paymentModeStats.reduce((max, stat) =>
-                  stat.count > max.count ? stat : max, paymentModeStats[0]
-                  );
-                  const mostRevenue = paymentModeStats.reduce((max, stat) =>
-                  stat.revenue > max.revenue ? stat : max, paymentModeStats[0]
-                  );
-                  const avgTransactionValue = totalRevenue / totalTransactions;
-                  const leastUsed = paymentModeStats.reduce((min, stat) =>
-                  stat.count < min.count ? stat : min, paymentModeStats[0]
-                  );
-                  const revenueShare = paymentModeStats.map((stat) => ({
-                    method: stat._id,
-                    share: (stat.revenue / totalRevenue * 100).toFixed(1)
-                  }));
+                    const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
+                    const totalTransactions = paymentModeStats.reduce((sum, s) => sum + s.count, 0);
+                    const mostPopularByCount = paymentModeStats.reduce((max, stat) =>
+                      stat.count > max.count ? stat : max, paymentModeStats[0]
+                    );
+                    const mostRevenue = paymentModeStats.reduce((max, stat) =>
+                      stat.revenue > max.revenue ? stat : max, paymentModeStats[0]
+                    );
+                    const avgTransactionValue = totalTransactions > 0 ? totalRevenue / totalTransactions : 0;
+                    const leastUsed = paymentModeStats.reduce((min, stat) =>
+                      stat.count < min.count ? stat : min, paymentModeStats[0]
+                    );
+                    const revenueShare = paymentModeStats.map((stat) => ({
+                      method: stat._id,
+                      share: totalRevenue > 0 ? (stat.revenue / totalRevenue * 100).toFixed(1) : '0.0'
+                    }));
 
-                  return (
-                    <div className="pt-3 border-t border-white/10 space-y-3">
+                    return (
+                      <div className="pt-3 border-t border-white/10 space-y-3">
                         <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-[#3b82f6]/10 rounded-lg p-2.5 border border-[#3b82f6]/20">
+                          <div className="bg-[#3b82f6]/10 rounded-xl p-2.5 border border-[#3b82f6]/20 shadow-sm">
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Most Popular")}</p>
                             <p className="text-xs font-bold text-white">{mostPopularByCount._id}</p>
-                            <p className="text-[10px] text-gray-500 mt-0.5">{mostPopularByCount.count} {t("txns")}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{mostPopularByCount.count} {t("txns")}</p>
                           </div>
-                          <div className="bg-[#22c55e]/10 rounded-lg p-2.5 border border-[#22c55e]/20">
+                          <div className="bg-[#22c55e]/10 rounded-xl p-2.5 border border-[#22c55e]/20 shadow-sm">
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Top Revenue")}</p>
                             <p className="text-xs font-bold text-white">{mostRevenue._id}</p>
-                            <p className="text-[10px] text-gray-500 mt-0.5">{formatCurrency(mostRevenue.revenue)}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{formatCurrency(mostRevenue.revenue)}</p>
                           </div>
-                          <div className="bg-[#f97316]/10 rounded-lg p-2.5 border border-[#f97316]/20">
+                          <div className="bg-[#f97316]/10 rounded-xl p-2.5 border border-[#f97316]/20 shadow-sm">
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Avg Transaction")}</p>
                             <p className="text-xs font-bold text-white">{formatCurrency(avgTransactionValue)}</p>
                           </div>
-                          <div className="bg-[#8b5cf6]/10 rounded-lg p-2.5 border border-[#8b5cf6]/20">
+                          <div className="bg-[#8b5cf6]/10 rounded-xl p-2.5 border border-[#8b5cf6]/20 shadow-sm">
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Total Transactions")}</p>
                             <p className="text-xs font-bold text-white">{totalTransactions}</p>
                           </div>
                         </div>
-                        <div className="bg-white/5 rounded-lg p-2.5 border border-white/5">
+                        <div className="bg-white/5 rounded-xl p-2.5 border border-white/5">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{t("Revenue Share")}</p>
                           <div className="space-y-1.5">
-                            {revenueShare.map((item, idx) =>
-                          <div key={idx} className="flex items-center justify-between">
+                            {revenueShare.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between">
                                 <span className="text-xs text-gray-400">{item.method}</span>
                                 <span className="text-xs font-bold text-white">{item.share}%</span>
                               </div>
-                          )}
+                            ))}
                           </div>
                         </div>
-                        <div className="bg-yellow-500/10 rounded-lg p-2.5 border border-yellow-500/20">
+                        <div className="bg-yellow-500/10 rounded-xl p-2.5 border border-yellow-500/20 shadow-sm">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Least Used")}</p>
                           <p className="text-xs font-bold text-white">{leastUsed._id}</p>
                           <p className="text-[10px] text-gray-500 mt-0.5">{t("Consider promoting this method")}</p>
                         </div>
-                      </div>);
-
-                })()}
+                      </div>
+                    );
+                  })()}
                 </div>
-              </div> :
-
-            <div className="flex items-center justify-center h-64 text-text-muted">
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-64 text-gray-400">
                 <p>{t("No payment data for the selected period")}</p>
               </div>
-            }
+            )}
           </div>
         </div>
 
-        {/* Additional Stats */}
+        {/* Additional Stats with Staggered Entrance */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '400ms' }}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-                <Calendar className="text-blue-500" size={20} />
+              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
+                <Calendar size={20} />
               </div>
               <h3 className="font-bold text-white text-sm">{t("Period Summary")}</h3>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
-                <span className="font-bold text-white text-base">{summary.period.bills}</span>
+                <span className="font-bold text-white text-base">
+                  <AnimatedNumber value={summary.period.bills} />
+                </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
-                <span className="font-bold text-white text-base">{summary.period.orders}</span>
+                <span className="font-bold text-white text-base">
+                  <AnimatedNumber value={summary.period.orders} />
+                </span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
                 <span className="font-bold text-white text-base">
-                  {formatCurrency(summary.period.averageBill)}
+                  <AnimatedNumber value={summary.period.averageBill} isCurrency={true} />
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '450ms' }}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-[#22c55e]/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="text-[#22c55e]" size={20} />
+              <div className="w-10 h-10 bg-[#22c55e]/10 rounded-xl flex items-center justify-center text-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.15)]">
+                <TrendingUp size={20} />
               </div>
               <h3 className="font-bold text-white text-sm">{t("Discounts & Tax")}</h3>
             </div>
@@ -808,44 +953,48 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Discount")}</span>
                 <span className="font-bold text-white text-base">
-                  {formatCurrency(summary.period.discount)}
+                  <AnimatedNumber value={summary.period.discount} isCurrency={true} />
                 </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Tax")}</span>
                 <span className="font-bold text-white text-base">
-                  {formatCurrency(summary.period.tax)}
+                  <AnimatedNumber value={summary.period.tax} isCurrency={true} />
                 </span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Net Revenue")}</span>
                 <span className="font-bold text-[#22c55e] text-base">
-                  {formatCurrency(summary.period.revenue)}
+                  <AnimatedNumber value={summary.period.revenue} isCurrency={true} />
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="glass-card p-5 hover:border-white/20 transition-all duration-200">
+          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '500ms' }}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-[#f97316]/10 rounded-lg flex items-center justify-center">
-                <Receipt className="text-[#f97316]" size={20} />
+              <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)]">
+                <Receipt size={20} />
               </div>
               <h3 className="font-bold text-white text-sm">{t("Today's Performance")}</h3>
             </div>
             <div className="space-y-3">
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
-                <span className="font-bold text-white text-base">{summary.today.bills}</span>
+                <span className="font-bold text-white text-base">
+                  <AnimatedNumber value={summary.today.bills} />
+                </span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-white/10">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
-                <span className="font-bold text-white text-base">{summary.today.orders}</span>
+                <span className="font-bold text-white text-base">
+                  <AnimatedNumber value={summary.today.orders} />
+                </span>
               </div>
               <div className="flex justify-between items-center py-2">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
                 <span className="font-bold text-white text-base">
-                  {formatCurrency(summary.today.averageBill)}
+                  <AnimatedNumber value={summary.today.averageBill} isCurrency={true} />
                 </span>
               </div>
             </div>

@@ -166,54 +166,61 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   const currentDeviceName = statusData?.deviceName || `MS Billings POS (${currentPlatformName})`;
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-white/15 rounded-3xl p-6 w-full max-w-lg shadow-2xl text-white animate-in zoom-in-95 duration-150 relative overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overscroll-contain">
+      <div className="bg-slate-900 border border-white/15 rounded-2xl sm:rounded-3xl p-4 sm:p-6 w-full max-w-lg shadow-2xl text-white animate-in zoom-in-95 duration-150 relative overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] my-auto">
         {/* Decorative glow */}
-        <div className="absolute top-0 right-0 w-60 h-60 bg-[#25D366]/15 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute top-0 right-0 w-48 sm:w-60 h-48 sm:h-60 bg-[#25D366]/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-36 sm:w-48 h-36 sm:h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4 relative z-10 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shadow-[0_0_15px_rgba(37,211,102,0.3)]">
-              <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+        <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10 mb-3 sm:mb-4 relative z-10 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shadow-[0_0_15px_rgba(37,211,102,0.3)] shrink-0">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6 fill-current" viewBox="0 0 24 24">
                 <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
               </svg>
             </div>
-            <div>
-              <h2 className="text-lg font-black text-white tracking-tight">{t("WhatsApp Automated Bot")}</h2>
-              <p className="text-xs text-gray-400">{t("Direct background e-Bills & DayBook reports")}</p>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">{t("WhatsApp Automated Bot")}</h2>
+              <p className="text-[11px] sm:text-xs text-gray-400 truncate">{t("Direct background e-Bills & DayBook reports")}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer">
-            <X size={20} />
+          <button 
+            onClick={onClose} 
+            className="p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors cursor-pointer shrink-0 ml-2"
+            aria-label="Close modal">
+            <X size={18} className="sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Action Feedback Banner */}
         {actionMessage && (
-          <div className={`p-3 rounded-2xl text-xs font-semibold flex items-center gap-2.5 mb-3 shrink-0 ${
+          <div className={`p-2.5 sm:p-3 rounded-xl sm:rounded-2xl text-xs font-semibold flex items-start sm:items-center gap-2 mb-3 shrink-0 ${
             actionMessage.type === 'success' 
               ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' 
               : actionMessage.type === 'error' 
               ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' 
               : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
           }`}>
-            {actionMessage.type === 'success' ? <CheckCircle2 size={16} className="shrink-0 text-emerald-400" /> : <AlertCircle size={16} className="shrink-0" />}
-            <span className="leading-tight">{actionMessage.text}</span>
+            {actionMessage.type === 'success' ? (
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-400 mt-0.5 sm:mt-0" />
+            ) : (
+              <AlertCircle size={16} className="shrink-0 mt-0.5 sm:mt-0" />
+            )}
+            <span className="leading-tight break-words min-w-0 flex-1">{actionMessage.text}</span>
           </div>
         )}
 
         {/* Main Content Area */}
-        <div className="overflow-y-auto pr-1 space-y-4 relative z-10 custom-scrollbar">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 sm:pr-1 space-y-3 sm:space-y-4 relative z-10 custom-scrollbar overscroll-contain pb-1">
           {isConnected ? (
-            <div className="bg-slate-800/90 rounded-2xl p-5 border border-emerald-500/30 space-y-4 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 text-emerald-400 font-bold text-sm">
-                  <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
+            <div className="bg-slate-800/90 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-emerald-500/30 space-y-3 sm:space-y-4 shadow-lg">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
+                  <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-500 animate-ping"></div>
                   <span>{t("Connected & Automated")}</span>
                 </div>
-                <span className="text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full border border-emerald-500/30">
+                <span className="text-[11px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border border-emerald-500/30">
                   +{statusData.connectedNumber || '9701800140'}
                 </span>
               </div>
@@ -221,25 +228,25 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
               {/* Linked Device Status Card */}
               <div className="pt-2 border-t border-white/10 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                  <span className="text-[10px] sm:text-xs font-bold text-gray-300 uppercase tracking-wider">
                     {t("Linked Device")}
                   </span>
-                  <span className="text-[11px] font-semibold text-emerald-400">
+                  <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-400">
                     ● {t("Active Gateway")}
                   </span>
                 </div>
 
-                <div className="bg-slate-900/80 border border-white/10 rounded-xl p-3.5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                      <Laptop size={18} />
+                <div className="bg-slate-900/80 border border-white/10 rounded-xl p-2.5 sm:p-3.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                      <Laptop size={16} className="sm:w-[18px] sm:h-[18px]" />
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-white">{currentDeviceName}</h4>
-                      <p className="text-[11px] text-gray-400">{t("Platform")}: {currentPlatformName} Gateway • {t("Live")}</p>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">{currentDeviceName}</h4>
+                      <p className="text-[10px] sm:text-[11px] text-gray-400 truncate">{t("Platform")}: {currentPlatformName} Gateway • {t("Live")}</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                  <span className="text-[9px] sm:text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-md shrink-0">
                     {t("Active")}
                   </span>
                 </div>
@@ -247,10 +254,10 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
               {/* Test Message Dispatch */}
               <div className="pt-2 border-t border-white/10 space-y-2">
-                <label className="text-xs font-semibold text-gray-300">{t("Send Test WhatsApp Message:")}</label>
+                <label className="text-[11px] sm:text-xs font-semibold text-gray-300 block">{t("Send Test WhatsApp Message:")}</label>
                 <div className="flex gap-2">
-                  <div className="flex items-center bg-slate-900 border border-white/10 rounded-xl px-3 py-2 flex-1">
-                    <span className="text-xs font-bold text-gray-400 mr-2">+91</span>
+                  <div className="flex items-center bg-slate-900 border border-white/10 rounded-xl px-2.5 sm:px-3 py-2 flex-1 min-w-0">
+                    <span className="text-xs font-bold text-gray-400 mr-1.5 sm:mr-2 shrink-0">+91</span>
                     <input
                       type="tel"
                       maxLength={10}
@@ -260,15 +267,15 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                         if (val.length === 12 && val.startsWith('91')) val = val.slice(2);
                         setTestPhone(val);
                       }}
-                      placeholder="10-digit mobile number"
-                      className="bg-transparent text-white font-mono font-bold text-xs focus:outline-none w-full"
+                      placeholder={t("10-digit mobile number")}
+                      className="bg-transparent text-white font-mono font-bold text-xs focus:outline-none w-full min-w-0"
                     />
                   </div>
                   <button
                     onClick={handleSendTest}
                     disabled={sendingTest}
-                    className="px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer">
-                    <Send size={14} className={sendingTest ? 'animate-spin' : ''} />
+                    className="px-3 sm:px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap">
+                    <Send size={13} className={sendingTest ? 'animate-spin' : ''} />
                     <span>{sendingTest ? t("Sending...") : t("Test Send")}</span>
                   </button>
                 </div>
@@ -278,38 +285,38 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                 <button
                   onClick={handleLogout}
                   disabled={loggingOut}
-                  className="px-3.5 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl border border-rose-500/30 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95">
+                  className="w-full sm:w-auto justify-center px-3.5 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl border border-rose-500/30 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95">
                   {loggingOut ? <RefreshCw size={14} className="animate-spin" /> : <LogOut size={14} />}
                   <span>{loggingOut ? t("Disconnecting...") : t("Disconnect / Re-link")}</span>
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Tabs for connection method */}
-              <div className="grid grid-cols-2 gap-2 bg-slate-800/80 p-1.5 rounded-2xl border border-white/10">
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2 bg-slate-800/80 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10">
                 <button
                   type="button"
                   onClick={() => { setConnectTab('qr'); setActionMessage(null); }}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl font-bold text-xs transition-all cursor-pointer ${
                     connectTab === 'qr'
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}>
-                  <QrCode size={16} />
-                  <span>{t("Method 1: Scan QR")}</span>
+                  <QrCode size={15} className="shrink-0 sm:w-4 sm:h-4" />
+                  <span className="truncate">{t("Method 1: Scan QR")}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setConnectTab('pairing'); setActionMessage(null); }}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer relative ${
+                  className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-3 rounded-lg sm:rounded-xl font-bold text-xs transition-all cursor-pointer relative ${
                     connectTab === 'pairing'
                       ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}>
-                  <Phone size={16} />
-                  <span>{t("Method 2: Phone Code")}</span>
-                  <span className="absolute -top-1.5 -right-1 bg-amber-500 text-[9px] font-black text-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter shadow-sm animate-pulse">
+                  <Phone size={15} className="shrink-0 sm:w-4 sm:h-4" />
+                  <span className="truncate">{t("Method 2: Phone Code")}</span>
+                  <span className="absolute -top-1 -right-0.5 sm:-top-1.5 sm:-right-1 bg-amber-500 text-[8px] sm:text-[9px] font-black text-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter shadow-sm animate-pulse">
                     {t("Easy")}
                   </span>
                 </button>
@@ -317,16 +324,16 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
               {/* Method 1: QR Code Tab */}
               {connectTab === 'qr' && (
-                <div className="bg-slate-800/80 rounded-2xl p-5 border border-white/10 space-y-4 text-center">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-amber-400 font-bold text-xs">
-                      <Smartphone size={15} />
-                      <span>{t("Scan with WhatsApp Camera")}</span>
+                <div className="bg-slate-800/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-white/10 space-y-3 sm:space-y-4 text-center">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 text-amber-400 font-bold text-xs">
+                      <Smartphone size={15} className="shrink-0" />
+                      <span className="text-left">{t("Scan with WhatsApp Camera")}</span>
                     </div>
                     <button
                       onClick={handleRefreshQR}
                       disabled={refreshingQR}
-                      className="px-2.5 py-1 bg-white/10 hover:bg-white/15 active:scale-95 text-gray-300 hover:text-white rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50">
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/15 active:scale-95 text-gray-300 hover:text-white rounded-lg text-[10px] sm:text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0">
                       <RefreshCw size={12} className={refreshingQR ? 'animate-spin text-emerald-400' : ''} />
                       <span>{refreshingQR ? t("Refreshing...") : t("Refresh QR")}</span>
                     </button>
@@ -334,27 +341,27 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
                   {statusData.qr ? (
                     <div className="flex flex-col items-center justify-center">
-                      <div className="bg-white p-3.5 rounded-2xl inline-block shadow-2xl border-4 border-white">
+                      <div className="bg-white p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl inline-block shadow-2xl border-2 sm:border-4 border-white max-w-[190px] sm:max-w-[220px]">
                         <img 
                           src={statusData.qr} 
                           alt="WhatsApp Pairing QR" 
-                          className="w-52 h-52 object-contain block" 
+                          className="w-40 h-40 sm:w-52 sm:h-52 object-contain block mx-auto" 
                         />
                       </div>
-                      <p className="text-[11px] text-emerald-400 font-medium mt-2 flex items-center gap-1">
+                      <p className="text-[11px] text-emerald-400 font-medium mt-2 flex items-center justify-center gap-1">
                         <Sparkles size={12} />
                         <span>{t("Live QR Code (Auto-refreshes every 30s)")}</span>
                       </p>
                     </div>
                   ) : (
-                    <div className="p-8 space-y-2">
-                      <RefreshCw size={26} className="animate-spin text-emerald-400 mx-auto" />
+                    <div className="py-6 sm:py-8 space-y-2">
+                      <RefreshCw size={24} className="animate-spin text-emerald-400 mx-auto" />
                       <p className="text-xs text-gray-300 font-bold">{t("Generating fresh pairing QR code...")}</p>
                     </div>
                   )}
 
                   {/* Step by step guide */}
-                  <div className="text-xs text-left bg-slate-900/90 p-3.5 rounded-xl border border-white/10 space-y-1.5 font-medium">
+                  <div className="text-[11px] sm:text-xs text-left bg-slate-900/90 p-3 sm:p-3.5 rounded-xl border border-white/10 space-y-1 sm:space-y-1.5 font-medium">
                     <p className="text-amber-300 font-bold text-[11px] flex items-center gap-1.5 mb-1">
                       <Info size={13} className="shrink-0" />
                       <span>{t("Crucial: Do NOT scan with Google Lens or standard phone camera!")}</span>
@@ -368,21 +375,21 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
               {/* Method 2: Phone Pairing Code Tab (100% Reliable without Camera) */}
               {connectTab === 'pairing' && (
-                <div className="bg-slate-800/80 rounded-2xl p-5 border border-emerald-500/30 space-y-4">
+                <div className="bg-slate-800/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-5 border border-emerald-500/30 space-y-3 sm:space-y-4">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
-                    <ShieldCheck size={16} />
+                    <ShieldCheck size={16} className="shrink-0" />
                     <span>{t("Link via 8-Digit Pairing Code (No Camera Needed)")}</span>
                   </div>
 
-                  <p className="text-xs text-gray-300 leading-relaxed">
+                  <p className="text-[11px] sm:text-xs text-gray-300 leading-relaxed">
                     {t("Enter your WhatsApp phone number below to generate a secure 8-character pairing code. This works 100% reliably without camera glare or scan issues!")}
                   </p>
 
                   {/* Phone input & generate button */}
                   <form onSubmit={handleRequestPairingCode} className="space-y-3">
-                    <div className="flex gap-2">
-                      <div className="flex items-center bg-slate-900 border border-white/15 rounded-xl px-3 py-2.5 flex-1 focus-within:border-[#25D366] transition-colors">
-                        <span className="text-xs font-black text-gray-400 mr-2">+91</span>
+                    <div className="flex gap-1.5 sm:gap-2">
+                      <div className="flex items-center bg-slate-900 border border-white/15 rounded-xl px-2.5 sm:px-3 py-2 sm:py-2.5 flex-1 min-w-0 focus-within:border-[#25D366] transition-colors">
+                        <span className="text-xs font-black text-gray-400 mr-1.5 sm:mr-2 shrink-0">+91</span>
                         <input
                           type="tel"
                           maxLength={10}
@@ -393,13 +400,13 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                             setPairPhone(val);
                           }}
                           placeholder={t("10-digit mobile number")}
-                          className="bg-transparent text-white font-mono font-bold text-sm focus:outline-none w-full placeholder:text-gray-600"
+                          className="bg-transparent text-white font-mono font-bold text-xs sm:text-sm focus:outline-none w-full placeholder:text-gray-600 min-w-0"
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={loadingPairing}
-                        className="px-4 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer">
+                        className="px-3 sm:px-4 py-2 sm:py-2.5 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap">
                         {loadingPairing ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
                         <span>{loadingPairing ? t("Generating...") : t("Get Code")}</span>
                       </button>
@@ -408,44 +415,44 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
                   {/* Pairing Code Display */}
                   {pairingCode && (
-                    <div className="bg-slate-900/95 border-2 border-[#25D366]/50 rounded-2xl p-4 text-center space-y-3 shadow-xl animate-in zoom-in-95">
-                      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block">
+                    <div className="bg-slate-900/95 border-2 border-[#25D366]/50 rounded-xl sm:rounded-2xl p-3 sm:p-4 text-center space-y-2 sm:space-y-3 shadow-xl animate-in zoom-in-95">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-widest block">
                         {t("Your 8-Digit Pairing Code:")}
                       </span>
-                      <div className="flex items-center justify-center gap-3">
-                        <div className="text-2xl sm:text-3xl font-black font-mono tracking-widest text-[#25D366] bg-black/40 px-4 py-2 rounded-xl border border-emerald-500/30 select-all">
+                      <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+                        <div className="text-xl sm:text-2xl md:text-3xl font-black font-mono tracking-wider sm:tracking-widest text-[#25D366] bg-black/40 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-emerald-500/30 select-all break-all">
                           {pairingCode}
                         </div>
                         <button
                           type="button"
                           onClick={handleCopyCode}
-                          className="p-2.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all cursor-pointer"
+                          className="p-2 sm:p-2.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-xl text-white transition-all cursor-pointer shrink-0"
                           title="Copy Code">
                           {copiedCode ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} />}
                         </button>
                       </div>
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-[10px] sm:text-[11px] text-gray-400">
                         {copiedCode ? <span className="text-emerald-400 font-bold">{t("Copied to clipboard! ✓")}</span> : t("Code expires in 60 seconds")}
                       </p>
                     </div>
                   )}
 
                   {/* 3 Step Instructions for Phone Code */}
-                  <div className="text-xs text-left bg-slate-900/90 p-3.5 rounded-xl border border-white/10 space-y-2 font-medium">
-                    <p className="text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+                  <div className="text-[11px] sm:text-xs text-left bg-slate-900/90 p-3 sm:p-3.5 rounded-xl border border-white/10 space-y-1.5 sm:space-y-2 font-medium">
+                    <p className="text-emerald-400 font-bold text-[10px] sm:text-[11px] uppercase tracking-wider">
                       {t("How to enter code on WhatsApp:")}
                     </p>
-                    <p className="text-gray-300">
+                    <p className="text-gray-300 leading-relaxed">
                       1. {t("Open WhatsApp on your phone ➔ Settings / 3 dots (⋮) ➔ Linked Devices ➔ Link a Device")}
                     </p>
-                    <p className="text-gray-300">
+                    <p className="text-gray-300 leading-relaxed">
                       2. {t("Tap ")}
                       <span className="text-amber-300 font-bold underline">
                         "{t("Link with phone number instead")}"
                       </span>
                       {t(" at the bottom of your phone screen")}
                     </p>
-                    <p className="text-gray-300">
+                    <p className="text-gray-300 leading-relaxed">
                       3. {t("Type the 8-digit code")} (<span className="font-mono text-emerald-400 font-bold">{pairingCode || 'XXXX-XXXX'}</span>). {t("It connects instantly!")}
                     </p>
                   </div>

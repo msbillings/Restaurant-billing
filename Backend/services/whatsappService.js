@@ -13,7 +13,46 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const AUTH_DIR = path.join(__dirname, '..', 'auth_info_baileys');
+
+function getAuthDir() {
+  if (process.env.APP_USER_DATA_PATH) {
+    const dir = path.join(process.env.APP_USER_DATA_PATH, 'auth_info_baileys');
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    } catch (e) {
+      console.warn('[WhatsApp Service] Failed to create dir in APP_USER_DATA_PATH, using fallback:', e);
+    }
+  }
+
+  if (process.env.VERCEL || process.env.VERCEL_ENV) {
+    const dir = path.join(os.tmpdir(), 'auth_info_baileys');
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    } catch (e) {}
+  }
+
+  // Development / Standard directory
+  const localDir = path.join(__dirname, '..', 'auth_info_baileys');
+  try {
+    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
+    // Verify write permissions
+    const testFile = path.join(localDir, '.write_test');
+    fs.writeFileSync(testFile, '1');
+    fs.unlinkSync(testFile);
+    return localDir;
+  } catch (e) {
+    // If packaged in read-only path (e.g. Program Files), fallback to OS temp or home directory
+    const fallbackDir = path.join(os.tmpdir(), 'msbilling_baileys_auth');
+    try {
+      if (!fs.existsSync(fallbackDir)) fs.mkdirSync(fallbackDir, { recursive: true });
+      return fallbackDir;
+    } catch (err) {
+      return localDir;
+    }
+  }
+}
 
 class WhatsAppService {
   constructor() {
@@ -23,6 +62,7 @@ class WhatsAppService {
     this.connectedNumber = null;
     this.connectionListeners = new Set();
     this.isInitializing = false;
+    this.authDir = getAuthDir();
   }
 
   getPlatformInfo() {
@@ -59,11 +99,12 @@ class WhatsAppService {
     this.isInitializing = true;
 
     try {
-      if (!fs.existsSync(AUTH_DIR)) {
-        fs.mkdirSync(AUTH_DIR, { recursive: true });
+      this.authDir = getAuthDir();
+      if (!fs.existsSync(this.authDir)) {
+        fs.mkdirSync(this.authDir, { recursive: true });
       }
 
-      const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
       let version;
       try {
         const vInfo = await fetchLatestBaileysVersion();
@@ -154,11 +195,12 @@ class WhatsAppService {
 
   clearAuth() {
     try {
-      if (fs.existsSync(AUTH_DIR)) {
-        const files = fs.readdirSync(AUTH_DIR);
+      const targetDir = this.authDir || getAuthDir();
+      if (fs.existsSync(targetDir)) {
+        const files = fs.readdirSync(targetDir);
         for (const file of files) {
           try {
-            fs.unlinkSync(path.join(AUTH_DIR, file));
+            fs.unlinkSync(path.join(targetDir, file));
           } catch (e) {}
         }
       }
@@ -226,10 +268,18 @@ class WhatsAppService {
       throw new Error('WhatsApp is already connected. Please disconnect first to link another device.');
     }
 
-    if (!this.sock) {
+    if (!this.sock || typeof this.sock.requestPairingCode !== 'function') {
       this.isInitializing = false;
       await this.init();
-      await new Promise(r => setTimeout(r, 1000));
+      let waited = 0;
+      while ((!this.sock || typeof this.sock.requestPairingCode !== 'function') && waited < 4000) {
+        await new Promise(r => setTimeout(r, 400));
+        waited += 400;
+      }
+    }
+
+    if (!this.sock || typeof this.sock.requestPairingCode !== 'function') {
+      throw new Error('WhatsApp service is initializing. Please wait 3 seconds and try again.');
     }
 
     try {
@@ -241,10 +291,17 @@ class WhatsAppService {
       this.clearAuth();
       this.isInitializing = false;
       await this.init();
-      await new Promise(r => setTimeout(r, 1500));
-      const code = await this.sock.requestPairingCode(cleanPhone);
-      const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
-      return { success: true, pairingCode: formattedCode, rawCode: code };
+      let waited = 0;
+      while ((!this.sock || typeof this.sock.requestPairingCode !== 'function') && waited < 4000) {
+        await new Promise(r => setTimeout(r, 400));
+        waited += 400;
+      }
+      if (this.sock && typeof this.sock.requestPairingCode === 'function') {
+        const code = await this.sock.requestPairingCode(cleanPhone);
+        const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+        return { success: true, pairingCode: formattedCode, rawCode: code };
+      }
+      throw new Error(err?.message || 'Failed to generate pairing code. Please refresh QR or try again.');
     }
   }
 

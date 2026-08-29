@@ -60,19 +60,19 @@ export const getApiUrl = () => {
     }
 
     // 3. If a local server IP is stored (for LAN / APK on Wi-Fi)
-    // IMPORTANT: Skip the stored LAN IP when running on localhost — the stored IP
-    // is only for Android/APK clients connecting over Wi-Fi to a remote server.
-    // If we're on localhost, the backend is on the same machine, so use localhost directly.
     const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
-    if (storedIp && storedIp.trim() && host !== 'localhost' && host !== '127.0.0.1') {
-        const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
-        if (cleanIp.includes(':')) {
-            return cleanApiUrl(`http://${cleanIp}`);
+    if (storedIp && storedIp.trim()) {
+        // Native mobile apps (APK / IPA) or remote LAN devices connect to the stored server IP
+        if (isCapacitorApp() || (host !== 'localhost' && host !== '127.0.0.1')) {
+            const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+            if (cleanIp.includes(':')) {
+                return cleanApiUrl(`http://${cleanIp}`);
+            }
+            return cleanApiUrl(`http://${cleanIp}:5002`);
         }
-        return cleanApiUrl(`http://${cleanIp}:5002`);
     }
 
-    // 4. Capacitor APK without a stored IP — use cloud production URL
+    // 4. Capacitor APK/IPA without a stored IP — fallback to cloud production URL
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
