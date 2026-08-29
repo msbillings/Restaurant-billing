@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { sendWhatsAppBill } from '../api/whatsapp';
 import html2canvas from 'html2canvas';
-import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
+import api from '../api/axios';
+
+const Invoice = ({ bill, onClose, onSave }) => {
   const { t } = useLanguage();
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
   const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
@@ -176,36 +179,72 @@ import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
     // never visually appears even though the state is already set to true.
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-    // Capture receipt image at scale:1 (faster) — still crisp enough for WhatsApp.
+    // Capture receipt image with crisp resolution & pure white background (no shadows or grey vignette)
     let imageBase64 = null;
     try {
-      const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
+      const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
       if (receiptElement) {
         const canvas = await html2canvas(receiptElement, {
-          scale: 1,
+          scale: 2,
           useCORS: true,
           logging: false,
           backgroundColor: '#ffffff',
-          imageTimeout: 3000
+          imageTimeout: 4000,
+          onclone: (clonedDoc) => {
+            const el = clonedDoc.querySelector('.receipt-print');
+            if (el) {
+              el.style.boxShadow = 'none';
+              el.style.filter = 'none';
+              el.style.backdropFilter = 'none';
+              el.style.margin = '0 auto';
+              el.style.backgroundColor = '#ffffff';
+              el.style.border = 'none';
+              el.style.borderRadius = '0px';
+            }
+          }
         });
-        imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+
+        // Ensure canvas draws over a solid, pure #ffffff white canvas with no shadow blending
+        const whiteCanvas = document.createElement('canvas');
+        whiteCanvas.width = canvas.width;
+        whiteCanvas.height = canvas.height;
+        const ctx = whiteCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
+        ctx.drawImage(canvas, 0, 0);
+
+        imageBase64 = whiteCanvas.toDataURL('image/jpeg', 0.95);
       }
     } catch (captureErr) {
       console.warn('Could not generate receipt image, falling back to text-only:', captureErr);
     }
 
     try {
-      const res = await sendWhatsAppBill(cleanPhone, msg, imageBase64, null, `Bill_${bill?.billNumber || 'Receipt'}.jpg`);
+      const res = await Promise.race([
+        sendWhatsAppBill(cleanPhone, msg, imageBase64, null, `Bill_${bill?.billNumber || 'Receipt'}.jpg`),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(t("Image upload timed out, falling back to text"))), 8000))
+      ]);
       if (res && res.success) {
-        setToast({ message: `${t("e-Bill image sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+        setToast({ message: `${t("e-Bill sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setShowWhatsAppModal(false);
         setSendingAutomated(false);
         return;
       }
     } catch (err) {
       console.error('WhatsApp background send error:', err);
-      const errorMsg = err.response?.data?.error || err.message || t('Failed to send WhatsApp e-Bill');
-      setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
+      // If media send failed, try sending formatted text bill directly
+      try {
+        const textRes = await sendWhatsAppBill(cleanPhone, msg);
+        if (textRes && textRes.success) {
+          setToast({ message: `${t("e-Bill text sent successfully to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+          setShowWhatsAppModal(false);
+          setSendingAutomated(false);
+          return;
+        }
+      } catch (fallbackErr) {
+        const errorMsg = fallbackErr.response?.data?.error || fallbackErr.message || t('Failed to send WhatsApp e-Bill');
+        setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
+      }
     } finally {
       setSendingAutomated(false);
     }
@@ -314,24 +353,29 @@ import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
         </button>
       </div>
 
-      {/* WhatsApp Quick Modal */}
-      {showWhatsAppModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[1100] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/20 rounded-2xl p-5 w-full max-w-md shadow-2xl text-white animate-in zoom-in-95 duration-150">
+      {/* WhatsApp Quick Modal rendered via Portal */}
+      {showWhatsAppModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/20 rounded-3xl p-6 w-full max-w-md shadow-2xl text-white animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] overflow-hidden relative">
+            {/* Ambient background glow */}
+            <div className="absolute top-0 right-0 w-40 h-40 bg-[#25D366]/15 rounded-full blur-2xl pointer-events-none"></div>
+
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
-              <div className="flex items-center gap-2 text-[#25D366] font-bold text-base">
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-                </svg>
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4 shrink-0 relative z-10">
+              <div className="flex items-center gap-2.5 text-[#25D366] font-bold text-base">
+                <div className="w-8 h-8 rounded-xl bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-center text-[#25D366]">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                  </svg>
+                </div>
                 <span>{t("Send WhatsApp e-Bill")}</span>
               </div>
-              <button onClick={() => setShowWhatsAppModal(false)} className="text-gray-400 hover:text-white p-1 cursor-pointer">
+              <button onClick={() => setShowWhatsAppModal(false)} className="text-gray-400 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-3 mb-5">
+            <div className="space-y-3.5 mb-4 overflow-y-auto pr-1 flex-1 relative z-10">
 
               {/* Customer Name Row */}
               <div>
@@ -455,7 +499,7 @@ import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
               })()}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 pt-2 border-t border-white/10 shrink-0 relative z-10">
               <button
                 type="button"
                 onClick={() => setShowWhatsAppModal(false)}
@@ -475,12 +519,13 @@ import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Inline Customer Details Mini-Modal (opened from WhatsApp modal) */}
-      {showCustomerEditModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1200] flex items-center justify-center p-4">
+      {/* Inline Customer Details Mini-Modal rendered via Portal */}
+      {showCustomerEditModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-orange-500/30 rounded-2xl p-5 w-full max-w-sm shadow-2xl text-white animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
               <div className="flex items-center gap-2">
@@ -560,7 +605,8 @@ import api from '../api/axios';const Invoice = ({ bill, onClose, onSave }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Receipt Preview */}

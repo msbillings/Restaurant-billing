@@ -1,12 +1,14 @@
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  Browsers
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +23,35 @@ class WhatsAppService {
     this.connectedNumber = null;
     this.connectionListeners = new Set();
     this.isInitializing = false;
+  }
+
+  getPlatformInfo() {
+    const plt = os.platform();
+    if (plt === 'win32') {
+      return {
+        browserConfig: Browsers.windows('MS Billings POS'),
+        platformName: 'Windows',
+        deviceName: 'MS Billings POS (Windows)'
+      };
+    } else if (plt === 'darwin') {
+      return {
+        browserConfig: Browsers.macOS('MS Billings POS'),
+        platformName: 'Mac OS',
+        deviceName: 'MS Billings POS (Mac OS)'
+      };
+    } else if (plt === 'android') {
+      return {
+        browserConfig: ['Android', 'MS Billings POS', '14.0'],
+        platformName: 'Android',
+        deviceName: 'MS Billings POS (Android APK)'
+      };
+    } else {
+      return {
+        browserConfig: Browsers.ubuntu('MS Billings POS'),
+        platformName: 'Linux / Ubuntu',
+        deviceName: 'MS Billings POS (Linux)'
+      };
+    }
   }
 
   async init() {
@@ -41,13 +72,18 @@ class WhatsAppService {
         version = [2, 3000, 1015901307];
       }
 
+      const platformInfo = this.getPlatformInfo();
+
       this.sock = makeWASocket({
         version,
         logger: pino({ level: 'silent' }),
         printQRInTerminal: false,
         auth: state,
-        browser: ['MS Billings POS', 'Chrome', '1.0.0'],
-        syncFullHistory: false
+        browser: platformInfo.browserConfig,
+        syncFullHistory: false,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 30000
       });
 
       this.sock.ev.on('creds.update', saveCreds);
@@ -57,7 +93,14 @@ class WhatsAppService {
 
         if (qr) {
           try {
-            this.qrDataUrl = await QRCode.toDataURL(qr);
+            this.qrDataUrl = await QRCode.toDataURL(qr, {
+              margin: 2,
+              scale: 8,
+              color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+              }
+            });
             this.status = 'SCAN_QR';
             this.notifyListeners();
           } catch (qrErr) {
@@ -112,7 +155,12 @@ class WhatsAppService {
   clearAuth() {
     try {
       if (fs.existsSync(AUTH_DIR)) {
-        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        const files = fs.readdirSync(AUTH_DIR);
+        for (const file of files) {
+          try {
+            fs.unlinkSync(path.join(AUTH_DIR, file));
+          } catch (e) {}
+        }
       }
     } catch (e) {
       console.error('[WhatsApp Service] Clear auth error:', e);
@@ -136,21 +184,88 @@ class WhatsAppService {
     return { success: true, message: 'Logged out successfully' };
   }
 
+  async refreshQR() {
+    try {
+      if (this.status === 'CONNECTED') {
+        return { success: true, message: 'Already connected', status: this.getStatus() };
+      }
+      this.clearAuth();
+      if (this.sock) {
+        try {
+          this.sock.end(undefined);
+        } catch (e) {}
+        this.sock = null;
+      }
+      this.qrDataUrl = null;
+      this.status = 'DISCONNECTED';
+      this.isInitializing = false;
+      await this.init();
+      let count = 0;
+      while (count < 20 && !this.qrDataUrl && this.status !== 'CONNECTED') {
+        await new Promise(r => setTimeout(r, 200));
+        count++;
+      }
+      return { success: true, status: this.getStatus() };
+    } catch (err) {
+      console.error('[WhatsApp Service] Refresh QR error:', err);
+      throw err;
+    }
+  }
+
+  async requestPairingCode(rawPhone) {
+    let cleanPhone = (rawPhone || '').replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      throw new Error('Invalid destination phone number. Please enter a valid 10-digit mobile number.');
+    }
+
+    if (this.status === 'CONNECTED') {
+      throw new Error('WhatsApp is already connected. Please disconnect first to link another device.');
+    }
+
+    if (!this.sock) {
+      this.isInitializing = false;
+      await this.init();
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
+    try {
+      const code = await this.sock.requestPairingCode(cleanPhone);
+      const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+      return { success: true, pairingCode: formattedCode, rawCode: code };
+    } catch (err) {
+      console.error('[WhatsApp Service] Pairing code error:', err);
+      this.clearAuth();
+      this.isInitializing = false;
+      await this.init();
+      await new Promise(r => setTimeout(r, 1500));
+      const code = await this.sock.requestPairingCode(cleanPhone);
+      const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+      return { success: true, pairingCode: formattedCode, rawCode: code };
+    }
+  }
+
   getStatus() {
     const rawJid = this.sock?.user?.id || '';
     const phone = this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0];
     const isConnected = this.status === 'CONNECTED' || Boolean(this.sock?.user);
+    const { platformName, deviceName } = this.getPlatformInfo();
 
     return {
       status: isConnected ? 'CONNECTED' : this.status,
       connectedNumber: phone || null,
       userName: this.sock?.user?.name || 'MS Billings User',
+      platform: platformName,
+      deviceName: deviceName,
       linkedAt: this.linkedAt || (isConnected ? new Date().toISOString() : null),
       linkedDevices: isConnected ? [
         {
           id: 'dev_1',
-          name: 'Google Chrome (MS Billings POS)',
-          platform: 'Windows / Web Gateway',
+          name: deviceName,
+          platform: `${platformName} Gateway`,
           status: 'Active',
           lastActive: 'Just now',
           phoneNumber: phone ? `+${phone}` : ''
@@ -248,6 +363,7 @@ class WhatsAppService {
         const buffer = Buffer.from(cleanBase64, 'base64');
         return await this.sock.sendMessage(jid, {
           image: buffer,
+          mimetype: 'image/jpeg',
           caption: caption || '🧾 *Your Digital e-Bill Receipt*'
         });
       } else if (pdfBase64 || documentBase64) {
@@ -268,16 +384,21 @@ class WhatsAppService {
     try {
       return await sendAction();
     } catch (sendErr) {
-      if (sendErr?.message?.includes('Connection Closed') || sendErr?.message?.includes('closed') || sendErr?.message?.includes('output')) {
-        console.warn('[WhatsApp Service] Connection dropped during media send. Re-initializing & retrying once...');
-        this.isInitializing = false;
-        await this.init();
-        await new Promise(r => setTimeout(r, 2000));
-        if (this.sock) {
-          return await sendAction();
+      console.warn('[WhatsApp Service] Media upload failed, falling back to instant formatted text:', sendErr?.message);
+      try {
+        return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
+      } catch (fallbackErr) {
+        if (fallbackErr?.message?.includes('Connection Closed') || fallbackErr?.message?.includes('closed') || fallbackErr?.message?.includes('output')) {
+          console.warn('[WhatsApp Service] Connection dropped during fallback. Re-initializing & retrying once...');
+          this.isInitializing = false;
+          await this.init();
+          await new Promise(r => setTimeout(r, 2000));
+          if (this.sock) {
+            return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
+          }
         }
+        throw fallbackErr;
       }
-      throw sendErr;
     }
   }
 }

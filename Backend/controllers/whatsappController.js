@@ -61,3 +61,28 @@ export const sendBill = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const requestPairingCode = async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+    const result = await whatsappService.requestPairingCode(phone);
+    res.json(result);
+  } catch (error) {
+    console.error('Error generating WhatsApp pairing code:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const refreshQR = async (req, res) => {
+  try {
+    const result = await whatsappService.refreshQR();
+    res.json(result);
+  } catch (error) {
+    console.error('Error refreshing WhatsApp QR:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+

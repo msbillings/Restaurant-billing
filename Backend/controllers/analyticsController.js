@@ -348,20 +348,35 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Monthly Report');
 
-    // Add title
+    // Row 1: Title
     worksheet.mergeCells('A1:L1');
-    worksheet.getCell('A1').value = `Restaurant Billing Report - ${periodName}`;
-    worksheet.getCell('A1').font = { size: 16, bold: true };
-    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    const titleRow = worksheet.getRow(1);
+    titleRow.height = 36;
+    const titleCell = titleRow.getCell(1);
+    titleCell.value = `Restaurant Billing Report - ${periodName}`;
+    titleCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FF1E293B' } };
+    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    // Add headers
-    worksheet.getRow(3).values = ['Date', 'Time', 'Bill ID', 'Bill Type', 'Table/Order', 'Item Count', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment Mode', 'Platform'];
-    worksheet.getRow(3).font = { bold: true };
-    worksheet.getRow(3).eachCell(cell => {
+    // Row 2: Spacer
+    worksheet.getRow(2).height = 10;
+
+    // Row 3: Headers
+    const headerRow = worksheet.getRow(3);
+    headerRow.height = 28;
+    headerRow.values = ['Date', 'Time', 'Bill ID', 'Bill Type', 'Table / Order', 'Item Count', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment Mode', 'Platform'];
+    headerRow.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E293B' } };
+    headerRow.eachCell(cell => {
       cell.fill = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FFE6E6FA' }
+        fgColor: { argb: 'FFE2E8F0' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
       };
     });
 
@@ -372,9 +387,10 @@ export const downloadMonthlyReportExcel = async (req, res) => {
       Cash: 0
     };
 
-    // Add data
+    // Add data rows
     bills.forEach((bill, index) => {
       const row = worksheet.getRow(index + 4);
+      row.height = 22;
       
       // Determine platform for delivery orders
       let platform = '';
@@ -393,7 +409,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
       row.values = [
         new Date(bill.createdAt).toLocaleDateString('en-IN'),
         new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        bill.billNumber || '', // Use billNumber instead of _id
+        bill.billNumber || '',
         bill.billType || 'Dine-In',
         bill.tableNo || '',
         itemCount,
@@ -404,24 +420,36 @@ export const downloadMonthlyReportExcel = async (req, res) => {
         bill.paymentMode || '',
         platform
       ];
+
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { 
+          vertical: 'middle', 
+          horizontal: colNumber <= 6 || colNumber >= 11 ? 'center' : 'right' 
+        };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFF1F5F9' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFF1F5F9' } },
+          right: { style: 'thin', color: { argb: 'FFF1F5F9' } }
+        };
+      });
     });
 
-    // Auto-fit columns
-    worksheet.columns.forEach((column, index) => {
-      if (index === 2) { // Bill ID
-        column.width = 20;
-      } else if (index === 3) { // Bill Type
-        column.width = 12;
-      } else if (index === 4) { // Table/Order
-        column.width = 15;
-      } else if (index === 5) { // Item Count
-        column.width = 12;
-      } else if (index >= 6 && index <= 9) { // Financial columns
-        column.width = 14;
-      } else {
-        column.width = 15;
-      }
-    });
+    // Configure generous column widths for perfect mobile & desktop view
+    worksheet.columns = [
+      { key: 'date', width: 14 },
+      { key: 'time', width: 12 },
+      { key: 'billId', width: 18 },
+      { key: 'billType', width: 14 },
+      { key: 'table', width: 18 },
+      { key: 'itemCount', width: 12 },
+      { key: 'subtotal', width: 15 },
+      { key: 'discount', width: 14 },
+      { key: 'tax', width: 14 },
+      { key: 'total', width: 16 },
+      { key: 'paymentMode', width: 16 },
+      { key: 'platform', width: 16 }
+    ];
 
     // Format financial columns as currency
     const financialColumns = [6, 7, 8, 9]; // Subtotal, Discount, Tax, Total
@@ -435,6 +463,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     // Add summary at the bottom
     const totalRow = bills.length + 4;
     const summaryRow = worksheet.getRow(totalRow);
+    summaryRow.height = 26;
     summaryRow.values = [
       'TOTAL',
       '',
@@ -449,7 +478,11 @@ export const downloadMonthlyReportExcel = async (req, res) => {
       '',
       ''
     ];
-    summaryRow.font = { bold: true };
+    summaryRow.font = { name: 'Calibri', size: 11, bold: true };
+    summaryRow.eachCell(cell => {
+      cell.alignment = { vertical: 'middle' };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCBD5E1' } };
+    });
     financialColumns.forEach(colIndex => {
       const cell = worksheet.getCell(totalRow, colIndex + 1);
       cell.numFmt = '#,##0.00';
@@ -457,6 +490,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
 
     // Add payment method totals
     const cardRow = worksheet.getRow(totalRow + 1);
+    cardRow.height = 22;
     cardRow.values = [
       'CARD TOTAL',
       '',
@@ -475,6 +509,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     worksheet.getCell(totalRow + 1, 10).numFmt = '#,##0.00';
 
     const upiRow = worksheet.getRow(totalRow + 2);
+    upiRow.height = 22;
     upiRow.values = [
       'UPI TOTAL',
       '',
@@ -493,6 +528,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     worksheet.getCell(totalRow + 2, 10).numFmt = '#,##0.00';
 
     const cashRow = worksheet.getRow(totalRow + 3);
+    cashRow.height = 22;
     cashRow.values = [
       'CASH TOTAL',
       '',

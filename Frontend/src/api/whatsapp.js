@@ -19,3 +19,14 @@ export const sendWhatsAppBill = async (phone, billText, imageBase64 = null, pdfB
   const response = await api.post('/whatsapp/send-bill', { phone, billText, imageBase64, pdfBase64, fileName, documentBase64, mimetype });
   return response.data;
 };
+
+export const requestWhatsAppPairingCode = async (phone) => {
+  const response = await api.post('/whatsapp/pairing-code', { phone });
+  return response.data;
+};
+
+export const refreshWhatsAppQR = async () => {
+  const response = await api.post('/whatsapp/refresh');
+  return response.data;
+};
+
