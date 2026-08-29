@@ -3,6 +3,8 @@ import { getDayBook, downloadDayBookExcel } from '../api/analytics';
 import { Calendar, Download, TrendingUp, TrendingDown, RefreshCw, CreditCard, Wallet, Smartphone, Banknote, Loader2 } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
+import { sendWhatsAppMessage, sendWhatsAppBill } from '../api/whatsapp';
+import api from '../api/axios';
 
 const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -42,6 +44,105 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       setToast({ message: 'Failed to download Excel report', type: 'error' });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async (customPhone = null) => {
+    try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      const restName = (s.restaurantName || 'MS Billings Restaurant').trim();
+      const rawPhone = customPhone || s.whatsappNumber || s.phone || '';
+
+      let cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+      if (cleanPhone.length === 10) {
+        cleanPhone = '91' + cleanPhone; // Default country code for 10-digit Indian numbers
+      }
+
+      if (!cleanPhone || cleanPhone.length < 10) {
+        setToast({ message: t("Please enter a valid WhatsApp number in POS Settings"), type: 'warning' });
+        return;
+      }
+
+      let formattedDate = date;
+      try {
+        const [y, m, d] = date.split('-');
+        if (y && m && d) formattedDate = `${d}/${m}/${y}`;
+      } catch (e) {}
+
+      const totalSales = Number(data.summary.totalSales || 0).toLocaleString('en-IN');
+      const salesCount = data.summary.salesCount || 0;
+      const totalExpenses = Number(data.summary.totalExpenses || 0).toLocaleString('en-IN');
+      const expensesCount = data.summary.expensesCount || 0;
+      const netCashFlow = Number((data.summary.totalSales || 0) - (data.summary.totalExpenses || 0)).toLocaleString('en-IN');
+
+      const cashIn = Number(data.cashFlow.cashIn || 0).toLocaleString('en-IN');
+      const onlineIn = Number(data.cashFlow.onlineIn || 0).toLocaleString('en-IN');
+      const cashOut = Number(data.cashFlow.cashOut || 0).toLocaleString('en-IN');
+      const onlineOut = Number(data.cashFlow.onlineOut || 0).toLocaleString('en-IN');
+
+      let onlineBreakdownText = '';
+      if (data.cashFlow.onlineInBreakdown && data.cashFlow.onlineInBreakdown.length > 0) {
+        onlineBreakdownText = data.cashFlow.onlineInBreakdown
+          .map(b => `  • ${b.app}: ₹${Number(b.amount || 0).toLocaleString('en-IN')}`)
+          .join('\n');
+      }
+
+      const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+      const msg = `📊 *DAILY SALES REPORT* 📊\n` +
+        `🏨 *${restName.toUpperCase()}* (${formattedDate})\n` +
+        READ_MORE + `\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *SALES SUMMARY*\n` +
+        `• *Total Sales:* ₹${totalSales} (${salesCount} Bills)\n` +
+        `• *Total Expenses:* ₹${totalExpenses} (${expensesCount} Expenses)\n` +
+        `• *Net Cash Flow:* ₹${netCashFlow}\n\n` +
+        `📥 *PAYMENT IN*\n` +
+        `• *Cash In:* ₹${cashIn}\n` +
+        `• *Online In:* ₹${onlineIn}\n` +
+        (onlineBreakdownText ? `${onlineBreakdownText}\n` : '') +
+        `\n📤 *PAYMENT OUT*\n` +
+        `• *Cash Out:* ₹${cashOut}\n` +
+        `• *Online Out:* ₹${onlineOut}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `_Generated automatically via MS Billings POS_`;
+
+      // Try fetching Excel report as base64 document attachment
+      let excelBase64 = null;
+      try {
+        const url = `/analytics/daybook/export?date=${date}&restaurantName=${encodeURIComponent(restName)}`;
+        const response = await api.get(url, { responseType: 'arraybuffer' });
+        const bytes = new Uint8Array(response.data);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        excelBase64 = window.btoa(binary);
+      } catch (excelErr) {
+        console.warn('Could not generate Excel attachment for WhatsApp, sending text only:', excelErr);
+      }
+
+      try {
+        let res;
+        if (excelBase64) {
+          res = await sendWhatsAppBill(cleanPhone, msg, null, null, `DayBook-${date}.xlsx`, excelBase64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        } else {
+          res = await sendWhatsAppMessage(cleanPhone, msg);
+        }
+
+        if (res && res.success) {
+          setToast({ message: `${t("Daily sales report sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+          return;
+        }
+      } catch (botErr) {
+        console.error('WhatsApp bot background send error:', botErr);
+        const errorMsg = botErr.response?.data?.error || botErr.message || t('Failed to send WhatsApp report');
+        setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
+      }
+    } catch (err) {
+      console.error('Error sharing report to WhatsApp:', err);
+      setToast({ message: t("Failed to generate WhatsApp report"), type: 'error' });
     }
   };
 
@@ -99,6 +200,15 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => handleShareWhatsApp()}
+              title={t("Share Daily Report on WhatsApp")}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#25D366] hover:text-[#4ade80] rounded-xl border border-[#25D366]/40 transition-all shadow-[0_0_15px_rgba(37,211,102,0.15)] font-bold text-xs sm:text-sm cursor-pointer active:scale-95">
+              <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+              </svg>
+              <span>{t("WhatsApp")}</span>
+            </button>
             <button
               onClick={fetchDayBookData}
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-[#1e1e24] hover:bg-white/10 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs sm:text-sm cursor-pointer">

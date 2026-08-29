@@ -100,7 +100,7 @@ export const generateESCPOSTestReceipt = (config) => {
 /**
  * Generate a formatted KOT ESC/POS Buffer for thermal printers
  */
-export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) => {
+export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig, queueNumber) => {
   const is58mm = printerConfig.paperWidth === '58mm';
   const lineDivider = is58mm
     ? '--------------------------------'
@@ -113,16 +113,24 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) =
   content += CMD.TEXT_LARGE + CMD.BOLD_ON + 'KITCHEN ORDER (KOT)' + CMD.LINE_FEED;
   content += CMD.TEXT_DOUBLE_HEIGHT + `KOT NO: ${kotNumber}` + CMD.LINE_FEED;
   if (kotNumber && !kotNumber.toUpperCase().includes('UPDATE')) {
-    const queueNo = kotNumber.replace(/[^0-9]/g, '') || '1';
+    const queueNo = queueNumber || bill.tokenNo || bill.queueNumber || '1';
     content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `QUEUE NO: #${queueNo}` + CMD.LINE_FEED;
   }
   content += CMD.TEXT_NORMAL + CMD.BOLD_OFF;
   content += lineDivider + CMD.LINE_FEED;
   
   content += CMD.ALIGN_LEFT;
-  content += CMD.BOLD_ON + `TABLE: ${bill.tableNo || 'Takeaway / Delivery'}` + CMD.BOLD_OFF + CMD.LINE_FEED;
-  if (bill.orderType) content += `Order Type: ${bill.orderType}` + CMD.LINE_FEED;
-  content += `Time: ${new Date().toLocaleTimeString()}` + CMD.LINE_FEED;
+  const bType = bill.billType || bill.orderType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+  if (bType === 'Delivery') {
+    const partner = (bill.orderSource || '').trim() || 'DIRECT';
+    content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `DELIVERY: ${partner.toUpperCase()}` + CMD.LINE_FEED;
+    content += CMD.BOLD_ON + `Order #${bill.tableNo || 'DEL'}` + CMD.BOLD_OFF + CMD.LINE_FEED;
+  } else if (bType === 'Takeaway') {
+    content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `TAKEAWAY ${bill.tableNo ? `(${bill.tableNo})` : ''}` + CMD.LINE_FEED;
+  } else {
+    content += CMD.BOLD_ON + `TABLE: ${bill.tableNo || 'Dine In'}` + CMD.BOLD_OFF + CMD.LINE_FEED;
+  }
+  content += `Time: ${new Date(bill?.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}` + CMD.LINE_FEED;
   content += lineDivider + CMD.LINE_FEED;
 
   // Header for items
@@ -159,7 +167,7 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig) =
 /**
  * Routes and sends KOT items to active thermal network printers concurrently
  */
-export const printKOTToPrinters = async (req, bill, kotNumber, kotItems) => {
+export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNumber) => {
   try {
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const Menu = getTenantModel(req, 'Menu', MenuDefault);
@@ -227,7 +235,7 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems) => {
       }
 
       const itemsToPrint = targetItems.length > 0 ? targetItems : kotItems;
-      const buffer = generateKOTESCPOSBuffer(bill, itemsToPrint, kotNumber, printer);
+      const buffer = generateKOTESCPOSBuffer(bill, itemsToPrint, kotNumber, printer, queueNumber);
 
       console.log(`[PrinterService] Streaming KOT #${kotNumber} to '${printer.name}' (${printer.ipAddress}:${printer.port || 9100})`);
 

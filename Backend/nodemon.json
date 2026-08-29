@@ -1,0 +1,15 @@
+{
+  "watch": ["server.js", "controllers", "routes", "services", "middleware", "utils", "models", "config"],
+  "ext": "js,mjs,cjs",
+  "ignore": [
+    "auth_info_baileys/**",
+    "auth_info_baileys",
+    "node_modules/**",
+    "tests/**",
+    "*.log",
+    "temp/**",
+    "uploads/**",
+    "client-config.json"
+  ],
+  "delay": "1000"
+}

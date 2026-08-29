@@ -18,8 +18,9 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
   const quickAmounts = currencySymbol === '$' ? [10, 50, 100] : [500, 1000, 2000];
 
   const balance = amountPaid - total;
-  const mixedTotal = splitPayments.cash + splitPayments.upi + splitPayments.card;
-  const isMixedValid = mixedTotal === total;
+  const mixedTotal = (splitPayments.cash || 0) + (splitPayments.upi || 0) + (splitPayments.card || 0);
+  const isMixedValid = Math.abs(mixedTotal - total) < 0.01;
+  const remainingMixed = Number((total - mixedTotal).toFixed(2));
 
   const getIcon = (m) => {
     switch (m) {
@@ -82,11 +83,14 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">{currencySymbol}</span>
                   <input
-                  type="number"
-                  className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 text-xl font-black text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-                  value={amountPaid === 0 ? '' : amountPaid}
-                  onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
-                  autoFocus />
+                    type="number"
+                    min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 text-xl font-black text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                    value={amountPaid === 0 ? '' : amountPaid}
+                    onChange={(e) => setAmountPaid(Math.max(0, parseFloat(e.target.value) || 0))}
+                    autoFocus />
                 
                 </div>
 
@@ -172,38 +176,122 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
           }
 
           {mode === 'Mixed' &&
-          <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className={`p-4 rounded-xl border flex flex-col gap-2.5 shadow-xs transition-all ${
+                isMixedValid
+                  ? 'bg-success/5 border-success/30'
+                  : remainingMixed > 0
+                  ? 'bg-amber-500/10 border-amber-500/30'
+                  : 'bg-danger/10 border-danger/30'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-sm text-text-main">{t("Total Allocated")}</span>
+                  <span className={`text-xl font-black ${isMixedValid ? 'text-success' : remainingMixed > 0 ? 'text-amber-600' : 'text-danger'}`}>
+                    {currencySymbol}{mixedTotal.toFixed(2)} / {currencySymbol}{total.toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center pt-2.5 border-t border-border/60">
+                  <span className="font-semibold text-xs sm:text-sm text-text-muted">
+                    {isMixedValid 
+                      ? t("Remaining Amount") 
+                      : remainingMixed > 0 
+                      ? t("Remaining Amount to Pay") 
+                      : t("Excess Amount Allocated")}
+                  </span>
+                  <span className={`font-black text-base sm:text-lg ${isMixedValid ? 'text-success' : remainingMixed > 0 ? 'text-amber-600' : 'text-danger'}`}>
+                    {isMixedValid ? (
+                      <span className="inline-flex items-center gap-1">
+                        {currencySymbol}0.00 <span className="text-[11px] bg-success/15 text-success px-2 py-0.5 rounded-full font-bold">✓ {t("Complete")}</span>
+                      </span>
+                    ) : (
+                      `${remainingMixed > 0 ? '' : '+'}${currencySymbol}${Math.abs(remainingMixed).toFixed(2)}`
+                    )}
+                  </span>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-3">
                 <label className="text-sm font-medium text-text-muted">{t("Enter Split Amounts")}</label>
                 
                 <div className="grid gap-3">
                   {['cash', 'upi', 'card'].map((method) =>
-                <div key={method} className="flex items-center gap-3">
+                    <div key={method} className="flex items-center gap-3">
                       <div className="w-20 uppercase font-bold text-sm text-text-main flex items-center gap-2">
                         {method === 'cash' ? <Banknote size={16} /> : method === 'upi' ? <Wallet size={16} /> : <CreditCard size={16} />}
                         {method}
                       </div>
-                      <div className="relative">
+                      <div className="relative flex-1">
                         <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted font-bold text-lg">{currencySymbol}</span>
                         <input
-                      type="number"
-                      className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 font-bold text-text-main focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                      value={splitPayments[method] === 0 ? '' : splitPayments[method]}
-                      onChange={(e) => setSplitPayments({ ...splitPayments, [method]: parseFloat(e.target.value) || 0 })}
-                      placeholder={`${method.charAt(0).toUpperCase() + method.slice(1)} Amount`} />
-                    
+                          type="number"
+                          min="0"
+                          onWheel={(e) => e.target.blur()}
+                          onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                          className="w-full bg-background border border-border rounded-xl py-3 pl-10 pr-4 font-bold text-text-main focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                          value={splitPayments[method] === 0 ? '' : splitPayments[method]}
+                          onChange={(e) => setSplitPayments({ ...splitPayments, [method]: Math.max(0, parseFloat(e.target.value) || 0) })}
+                          placeholder={`${method.charAt(0).toUpperCase() + method.slice(1)} Amount`} />
                       </div>
                     </div>
-                )}
+                  )}
                 </div>
               </div>
-              
-              <div className={`p-4 rounded-xl border ${isMixedValid ? 'bg-success/5 border-success/20' : 'bg-danger/5 border-danger/20'} flex justify-between items-center`}>
-                <span className="font-bold text-sm text-text-main">{t("Total Allocated")}</span>
-                <span className={`text-xl font-black ${isMixedValid ? 'text-success' : 'text-danger'}`}>
-                  {currencySymbol}{mixedTotal.toFixed(2)} / {currencySymbol}{total.toFixed(2)}
-                </span>
-              </div>
+
+              {/* Dynamic QR Code specifically for Entered UPI Split Amount */}
+              {splitPayments.upi > 0 && enableQrPayment && (
+                <div className="bg-background p-4 rounded-2xl border border-primary/20 flex flex-col items-center justify-center text-center shadow-inner relative overflow-hidden animate-in fade-in duration-200">
+                  <div className="bg-primary/10 py-1 px-3 rounded-full text-[11px] font-bold text-primary tracking-wide uppercase mb-2">
+                    {t("Scan & Pay UPI Portion")} ({currencySymbol}{Number(splitPayments.upi).toFixed(2)})
+                  </div>
+                  
+                  <div className="bg-white p-2.5 rounded-2xl shadow-md border border-border/40 my-1 flex flex-col items-center">
+                    <QRCodeSVG
+                      value={(() => {
+                        let pa = 'maheshsiva864@oksbi';
+                        let pn = 'MS Billings';
+                        try {
+                          const s = JSON.parse(localStorage.getItem('restaurantSettings'));
+                          if (s?.upiId && s.upiId !== 'msbillings@upi') pa = s.upiId.trim();
+                          if (s?.restaurantName) pn = s.restaurantName.trim();
+                        } catch (e) {}
+                        const am = Number(splitPayments.upi || 0).toFixed(2);
+                        const noteText = billNumber ? `Bill #${billNumber} - Rs ${am}` : tableNo ? `Table ${tableNo} - Rs ${am}` : `Payment Rs ${am}`;
+                        const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
+                        const tr = `PAY${Date.now()}`;
+                        return `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+                      })()}
+                      size={135}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+                  
+                  <div className="text-xs text-text-muted mt-2">
+                    {t("Mobile will only show entered amount:")} <strong className="text-primary font-black text-sm">{currencySymbol}{Number(splitPayments.upi).toFixed(2)}</strong>
+                  </div>
+
+                  {/* App recorder for UPI split */}
+                  <div className="w-full mt-3 pt-2 border-t border-border/50">
+                    <label className="text-[10px] font-semibold text-text-muted mb-1.5 block uppercase tracking-wider text-left">{t("Record UPI App Used")}</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {['PhonePe', 'GPay', 'Paytm', 'Amazon Pay', 'BharatPe', 'Other'].map((app) =>
+                        <button
+                          type="button"
+                          key={app}
+                          className={`py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                            upiApp === app
+                              ? 'bg-primary/10 border-primary text-primary shadow-xs'
+                              : 'bg-surface border-border text-text-muted hover:bg-surface-hover hover:text-text-main'
+                          }`}
+                          onClick={() => setUpiApp(app)}>
+                          {app}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           }
         </div>

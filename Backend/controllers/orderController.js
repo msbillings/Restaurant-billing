@@ -17,6 +17,15 @@ import { syncOrderKotsWithItems } from './kotController.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
 
+const toValidObjectId = (val) => {
+  if (!val) return undefined;
+  const s = String(val).trim();
+  if (mongoose.Types.ObjectId.isValid(s) && s.length === 24 && /^[0-9a-fA-F]{24}$/.test(s)) {
+    return s;
+  }
+  return undefined;
+};
+
 export const getActiveOrder = asyncHandler(async (req, res, next) => {
   const Bill = getTenantModel(req, 'Bill', BillDefault);
   const { tableNo } = req.params;
@@ -146,8 +155,9 @@ export const saveOrder = async (req, res) => {
         const isCancelled = item.isCancelled || false;
         const cancelledQty = item.cancelledQuantity || 0;
         const activeQty = isCancelled ? 0 : Math.max(0, Number(item.quantity || 0) - cancelledQty);
+        const validId = toValidObjectId(item._id);
         return {
-          _id: item._id,
+          ...(validId && { _id: validId }),
           name: item.name,
           price: Number(item.price || 0),
           quantity: Number(item.quantity || 0),
@@ -227,8 +237,10 @@ export const saveOrder = async (req, res) => {
             ? newItem.specialNote
             : (existingItem.specialNote || '');
 
+          const validResolvedId = toValidObjectId(existingItem._id) || toValidObjectId(newItem._id);
+
           return { 
-            _id: existingItem._id || newItem._id,
+            ...(validResolvedId && { _id: validResolvedId }),
             ...newItem, 
             printedQuantity: existingItem.printedQuantity !== undefined ? existingItem.printedQuantity : newItem.printedQuantity,
             specialNote: resolvedNote,
@@ -350,6 +362,20 @@ export const saveOrder = async (req, res) => {
       order.discountType = dType;
       order.discountValue = dValue;
       order.discount = calculatedDiscount;
+
+      try {
+        const activeBills = await Bill.find({
+          status: { $in: ['Open', 'Billed'] }
+        })
+        .select('_id tableNo createdAt')
+        .sort({ createdAt: 1 })
+        .lean();
+
+        const activeIdx = activeBills.findIndex(b => b._id.toString() === order._id.toString() || b.tableNo === order.tableNo);
+        const qNo = activeIdx !== -1 ? (activeIdx + 1) : (activeBills.length || 1);
+        order.queueNumber = qNo;
+        order.tokenNo = qNo;
+      } catch (e) {}
       
       // Update delivery fields if delivery order
       if (billType === 'Delivery') {
@@ -443,6 +469,19 @@ export const saveOrder = async (req, res) => {
       const calculatedTax = (taxableAmount * tRate) / 100;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax);
 
+      // Calculate current active KDS queue position for the new bill
+      let nextQueueNo = 1;
+      try {
+        const activeBills = await Bill.find({
+          status: { $in: ['Open', 'Billed'] }
+        })
+        .select('_id tableNo createdAt')
+        .sort({ createdAt: 1 })
+        .lean();
+
+        nextQueueNo = activeBills.length + 1;
+      } catch (e) {}
+
       const orderData = {
         tableNo,
         items: sanitizedItems,
@@ -456,7 +495,9 @@ export const saveOrder = async (req, res) => {
         customerPhone,
         kitchenNotes,
         discountType: dType,
-        discountValue: dValue
+        discountValue: dValue,
+        queueNumber: nextQueueNo,
+        tokenNo: nextQueueNo
       };
 
       // Add delivery fields only if delivery order
@@ -628,7 +669,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -678,8 +719,13 @@ export const settleBill = async (req, res) => {
     // Set status to 'Paid' - this makes it appear in billing history
     order.status = 'Paid';
     order.paymentMode = paymentMode;
-    if (paymentMode === 'UPI' && upiApp) {
+    if (upiApp) {
       order.upiApp = upiApp;
+    }
+
+    if (amountPaid !== undefined) {
+      order.amountPaid = Number(amountPaid) || 0;
+      order.changeAmount = changeAmount !== undefined ? Number(changeAmount) || 0 : Math.max(0, (Number(amountPaid) || 0) - (order.total || 0));
     }
 
     if (paymentMode === 'Mixed' && splitPayments) {
@@ -720,7 +766,11 @@ export const settleBill = async (req, res) => {
         if (freshOrder) {
           freshOrder.status = 'Paid';
           freshOrder.paymentMode = paymentMode;
-          if (paymentMode === 'UPI' && upiApp) freshOrder.upiApp = upiApp;
+          if (upiApp) freshOrder.upiApp = upiApp;
+          if (amountPaid !== undefined) {
+            freshOrder.amountPaid = Number(amountPaid) || 0;
+            freshOrder.changeAmount = changeAmount !== undefined ? Number(changeAmount) || 0 : Math.max(0, (Number(amountPaid) || 0) - (freshOrder.total || 0));
+          }
           if (paymentMode === 'Mixed' && splitPayments) {
             freshOrder.splitPayments = {
               cash: Number(splitPayments.cash) || 0,
@@ -813,7 +863,7 @@ export const getOpenOrders = async (req, res) => {
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
     })
-    .select('tableNo items total subtotal tax status billNumber billType orderSource createdAt')
+    .select('tableNo items total subtotal tax status billNumber billType orderSource queueNumber tokenNo createdAt')
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();

@@ -117,6 +117,9 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
               kotNumber: data.kot.kotNumber,
               tableNo: data.tableNo || data.kot.tableNo,
               billType: data.billType || data.kot.billType || 'Dine-In',
+              orderSource: data.kot?.orderSource || data.orderSource,
+              queueNumber: data.kot?.queueNumber || data.kot?.tokenNo || data.queueNumber || data.tokenNo,
+              tokenNo: data.kot?.tokenNo || data.kot?.queueNumber || data.tokenNo || data.queueNumber,
               billId: data.orderId || data.kot.orderId,
               createdAt: data.kot.createdAt || new Date().toISOString(),
               items: (data.kot.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))

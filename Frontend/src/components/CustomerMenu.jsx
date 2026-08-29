@@ -3310,13 +3310,24 @@ const CustomerMenu = () => {
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 bg-slate-50 border rounded-xl p-1">
-                      <button onClick={() => updateQuantity(index, -1)} className="w-8 h-8 flex items-center justify-center text-slate-600 hover:bg-white rounded-lg shadow-sm">
-                        <Minus size={16} />
+                    <div className="flex items-center gap-1 bg-slate-50 border rounded-xl p-1">
+                      <button type="button" onClick={() => updateQuantity(index, -1)} className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-white rounded-lg shadow-xs">
+                        <Minus size={14} />
                       </button>
-                      <span className="font-black w-4 text-center">{item.quantity}</span>
-                      <button onClick={() => updateQuantity(index, 1)} className="w-8 h-8 flex items-center justify-center text-slate-600 hover:bg-white rounded-lg shadow-sm">
-                        <Plus size={16} />
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 0) {
+                            updateQuantity(index, val - item.quantity);
+                          }
+                        }}
+                        className="w-8 h-7 bg-white text-center font-black text-xs text-slate-900 border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-orange-500 p-0"
+                      />
+                      <button type="button" onClick={() => updateQuantity(index, 1)} className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-white rounded-lg shadow-xs">
+                        <Plus size={14} />
                       </button>
                     </div>
                   </div>

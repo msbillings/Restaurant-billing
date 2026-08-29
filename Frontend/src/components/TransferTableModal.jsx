@@ -1,18 +1,19 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState } from 'react';
-import { X, ArrowRightLeft } from 'lucide-react';
+import { X, ArrowRightLeft, Loader2 } from 'lucide-react';
 
-const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersList = [], onClose, onTransfer }) => {
+const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersList = [], onClose, onTransfer, isLoading = false }) => {
   const { t } = useLanguage();
 
   const activeOrders = openOrdersList.filter(o => o.status === 'Open' || o.status === 'Billed');
   const activeTableNumbers = activeOrders.map(o => o.tableNo);
 
   const [newTable, setNewTable] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!newTable || !currentTable || newTable === currentTable) return;
+    if (!newTable || !currentTable || newTable === currentTable || isTransferring || isLoading) return;
 
     // Find the orderId for the current table
     let orderId = currentOrderId;
@@ -22,9 +23,16 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
     }
 
     if (orderId) {
-      onTransfer(newTable, orderId, currentTable);
+      setIsTransferring(true);
+      try {
+        await onTransfer(newTable, orderId, currentTable);
+      } finally {
+        setIsTransferring(false);
+      }
     }
   };
+
+  const loadingState = isTransferring || isLoading;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
@@ -35,7 +43,8 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-black/5 rounded-full transition-colors text-text-muted hover:text-text-main">
+            disabled={loadingState}
+            className="p-2 hover:bg-black/5 rounded-full transition-colors text-text-muted hover:text-text-main disabled:opacity-50">
             <X size={20} />
           </button>
         </div>
@@ -56,8 +65,9 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
             <label className="text-sm font-semibold text-text-main">{t("Transfer To Table")}</label>
             <select
               value={newTable}
+              disabled={loadingState}
               onChange={(e) => setNewTable(e.target.value)}
-              className="bg-background border border-border rounded-xl px-4 py-3 font-bold text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+              className="bg-background border border-border rounded-xl px-4 py-3 font-bold text-text-main focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all disabled:opacity-60"
               required>
               <option value="" disabled>{t("Select New Table")}</option>
               {floors.map((floor) => {
@@ -111,9 +121,23 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
 
           <button
             type="submit"
-            disabled={!newTable || !currentTable || newTable === currentTable}
-            className="w-full bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2">
-            <ArrowRightLeft size={18} />{t("Transfer Order")}
+            disabled={loadingState || !newTable || !currentTable || newTable === currentTable}
+            className={`w-full font-bold py-3 px-4 rounded-xl shadow-lg transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2 ${
+              loadingState
+                ? 'bg-primary/80 text-white cursor-wait opacity-90'
+                : 'bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-primary/20 cursor-pointer'
+            }`}>
+            {loadingState ? (
+              <>
+                <Loader2 size={18} className="animate-spin text-white" />
+                <span>{t("Transferring...")}</span>
+              </>
+            ) : (
+              <>
+                <ArrowRightLeft size={18} />
+                <span>{t("Transfer Order")}</span>
+              </>
+            )}
           </button>
         </form>
       </div>

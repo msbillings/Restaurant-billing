@@ -234,6 +234,24 @@ export const generateKOT = async (req, res) => {
 
     const itemsToSave = kotItems.filter(k => !k.isNoteUpdateOnly);
 
+    // Calculate active queue number for this bill (order of active open/billed tables by creation time)
+    let queueNumber = 1;
+    try {
+      const activeOpenBills = await Bill.find({
+        status: { $in: ['Open', 'Billed'] }
+      })
+      .select('_id tableNo createdAt')
+      .sort({ createdAt: 1 })
+      .lean();
+
+      const activeIdx = activeOpenBills.findIndex(b => b._id.toString() === bill._id.toString());
+      if (activeIdx !== -1) {
+        queueNumber = activeIdx + 1;
+      }
+    } catch (e) {
+      console.warn('Error calculating queueNumber:', e.message);
+    }
+
     if (itemsToSave.length > 0) {
       // Generate KOT number (e.g., "KOT-1" relative to this bill)
       const kotNumber = `KOT-${(bill.kots ? bill.kots.length : 0) + 1}`;
@@ -252,6 +270,9 @@ export const generateKOT = async (req, res) => {
         createdAt: savedKOT.createdAt,
         tableNo: bill.tableNo,
         billType: bill.billType,
+        orderSource: bill.orderSource,
+        queueNumber: queueNumber,
+        tokenNo: queueNumber,
         orderId: bill._id
       };
     }
@@ -335,7 +356,7 @@ export const generateKOT = async (req, res) => {
       emitNotification(req, notifTitle, dynamicMessage, isUpdate ? 'warning' : 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
 
       // Trigger physical network thermal printing to configured IP printers
-      printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems).catch(err => {
+      printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems, queueNumber).catch(err => {
         console.error('[KOT Print Error]:', err.message);
       });
     } else if (hadQuantityReductions || noteUpdatedItems.length > 0) {
@@ -351,7 +372,7 @@ export const generateKOT = async (req, res) => {
       if (kotItems.length > 0) {
         // There were note updates to print, but no new KOT saved to DB
         const dummyKotNumber = `KOT UPDATE`;
-        printKOTToPrinters(req, bill, dummyKotNumber, kotItems).catch(err => {
+        printKOTToPrinters(req, bill, dummyKotNumber, kotItems, queueNumber).catch(err => {
           console.error('[KOT Print Error]:', err.message);
         });
       }
@@ -366,6 +387,9 @@ export const generateKOT = async (req, res) => {
         createdAt: new Date(),
         tableNo: bill.tableNo,
         billType: bill.billType,
+        orderSource: bill.orderSource,
+        queueNumber: queueNumber,
+        tokenNo: queueNumber,
         orderId: bill._id
       };
     }
@@ -374,7 +398,7 @@ export const generateKOT = async (req, res) => {
 
     res.status(200).json({
       message: kotPayload ? 'KOT generated successfully' : 'KOT updated successfully',
-      kot: responseKotPayload || { items: bill.items, tableNo: bill.tableNo, orderId: bill._id },
+      kot: responseKotPayload || { items: bill.items, tableNo: bill.tableNo, billType: bill.billType, orderSource: bill.orderSource, queueNumber: queueNumber, tokenNo: queueNumber, orderId: bill._id },
       bill: bill
     });
   } catch (error) {
@@ -434,10 +458,28 @@ export const getTodayKOTs = async (req, res) => {
         { updatedAt: { $gte: queryStart, $lte: queryEnd } }
       ]
     })
-    .select('tableNo billType kots status items createdAt updatedAt')
+    .select('tableNo billType orderSource queueNumber tokenNo kots status items createdAt updatedAt')
     .sort({ updatedAt: -1, createdAt: -1 })
     .limit(500)
     .lean();
+
+    // Build active KDS queue number map for all open/billed orders currently in system
+    const activeOpenBills = (bills || [])
+      .filter(b => b.status === 'Open' || b.status === 'Billed')
+      .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+    const activeQueueMap = {};
+    activeOpenBills.forEach((b, idx) => {
+      activeQueueMap[b._id.toString()] = idx + 1;
+      if (b.tableNo) activeQueueMap[b.tableNo] = idx + 1;
+    });
+
+    // Build fallback creation sequence map for completed/paid historical bills
+    const sortedBillsAsc = [...(bills || [])].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+    const billQueueMap = {};
+    sortedBillsAsc.forEach((b, idx) => {
+      billQueueMap[b._id.toString()] = idx + 1;
+    });
 
     // Flatten KOTs into a single array, validating date match for each KOT
     let allKOTs = [];
@@ -504,6 +546,11 @@ export const getTodayKOTs = async (req, res) => {
             .filter(item => !item.isNoteUpdateOnly && (item.quantity > 0 || item.isCancelled));
 
 
+          const qNo = activeQueueMap[bill._id.toString()] || activeQueueMap[bill.tableNo] || billQueueMap[bill._id.toString()] || bill.queueNumber || bill.tokenNo || 1;
+          if (bill._id && (!bill.queueNumber || !bill.tokenNo)) {
+            Bill.updateOne({ _id: bill._id }, { $set: { queueNumber: qNo, tokenNo: qNo } }).catch(() => {});
+          }
+
           allKOTs.push({
             ...kot,
             _id: kot._id || `${bill._id}_${kot.kotNumber}`,
@@ -512,6 +559,9 @@ export const getTodayKOTs = async (req, res) => {
             billId: bill._id,
             tableNo: bill.tableNo,
             billType: bill.billType,
+            orderSource: bill.orderSource,
+            queueNumber: qNo,
+            tokenNo: qNo,
             billStatus: bill.status,
             createdAt: kot.createdAt || bill.createdAt || bill.updatedAt
           });
@@ -663,11 +713,14 @@ export const getActiveKOTs = async (req, res) => {
           item.isCancelled
         ));
         if (hasActiveKitchenItems) {
+          const qNo = order.queueNumber || order.tokenNo || 1;
           allKots.push({
             orderId: order._id,
             tableNo: order.tableNo,
             billType: order.billType,
             orderSource: order.orderSource,
+            queueNumber: qNo,
+            tokenNo: qNo,
             kotId: kot._id,
             kotNumber: kot.kotNumber,
             items: processedItems,

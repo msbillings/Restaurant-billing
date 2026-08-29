@@ -3,6 +3,8 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import { getAnalytics, downloadDailyReportCSV, downloadMonthlyReportExcel } from '../api/analytics';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import api from '../api/axios';
+import { sendWhatsAppBill, sendWhatsAppMessage, getWhatsAppStatus } from '../api/whatsapp';
 import {
   TrendingUp,
   Receipt,
@@ -22,7 +24,8 @@ import {
   UserX,
   X,
   DownloadCloud,
-  ChevronDown } from
+  ChevronDown,
+  Loader2 } from
 'lucide-react';
 import Toast from './Toast';
 
@@ -39,6 +42,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [fraudData, setFraudData] = useState(null);
   const [fraudLoading, setFraudLoading] = useState(false);
   const [fraudDays, setFraudDays] = useState(30);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
   useEffect(() => {
     fetchAnalytics();
@@ -143,6 +147,111 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     } catch (error) {
       console.error('Error downloading report:', error);
       setToast({ message: 'Failed to download report', type: 'error' });
+    }
+  };
+
+  const handleShareWhatsAppReport = async () => {
+    setSendingWhatsApp(true);
+    setToast({ message: t("Fetching WhatsApp connection..."), type: 'info' });
+
+    try {
+      // Auto-fetch the scanned/connected owner WhatsApp number
+      const statusRes = await getWhatsAppStatus();
+      if (!statusRes || statusRes.status !== 'CONNECTED' || !statusRes.connectedNumber) {
+        setToast({ message: t("WhatsApp is not connected. Please scan the QR code in WhatsApp settings first."), type: 'error' });
+        setSendingWhatsApp(false);
+        return;
+      }
+
+      let cleanPhone = String(statusRes.connectedNumber).replace(/[^0-9]/g, '');
+      // connectedNumber from WhatsApp is typically in format 919701800140 (country code + number)
+      // Ensure it has country code
+      if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+      setToast({ message: t("Generating & sending WhatsApp analytics report..."), type: 'info' });
+
+      const restSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      const restName = restSettings.restaurantName || 'MS BILLINGS RESTAURANT';
+
+      let periodLabel = '';
+      if (viewMode === 'month') {
+        periodLabel = getMonthName(selectedMonth) + ' ' + selectedYear;
+      } else if (viewMode === 'day') {
+        periodLabel = selectedDate;
+      } else {
+        periodLabel = `Last ${days || 7} Days`;
+      }
+
+      const totalRevenue = Number(analytics?.summary?.totalRevenue || 0).toLocaleString('en-IN');
+      const totalBills = Number(analytics?.summary?.totalBills || 0).toLocaleString('en-IN');
+      const totalOrders = Number(analytics?.summary?.totalOrders || 0).toLocaleString('en-IN');
+
+      let paymentBreakdownText = '';
+      if (analytics?.paymentModeStats && analytics.paymentModeStats.length > 0) {
+        paymentBreakdownText = analytics.paymentModeStats
+          .map(p => `• *${p._id}:* ₹${Number(p.revenue || 0).toLocaleString('en-IN')} (${p.count} txns)`)
+          .join('\n');
+      }
+
+      const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+      const caption = `📊 *ANALYTICS SALES REPORT* 📊\n` +
+        `🏨 *${restName.toUpperCase()}* (${periodLabel})\n` +
+        READ_MORE + `\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *SALES SUMMARY*\n` +
+        `• *Total Revenue:* ₹${totalRevenue}\n` +
+        `• *Total Bills:* ${totalBills}\n` +
+        `• *Total Orders:* ${totalOrders}\n\n` +
+        (paymentBreakdownText ? `💳 *PAYMENT BREAKDOWN*\n${paymentBreakdownText}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `_Generated automatically via MS Billings POS_`;
+
+      let excelBase64 = null;
+      const fileName = `Analytics-Report-${viewMode === 'month' ? `${selectedMonth}-${selectedYear}` : viewMode === 'day' ? selectedDate : `${days}days`}.xlsx`;
+
+      try {
+        let endpoint = `/analytics/download/monthly/excel?`;
+        if (viewMode === 'month') {
+          endpoint += `month=${selectedMonth}&year=${selectedYear}`;
+        } else {
+          endpoint += `month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`;
+        }
+        const response = await api.get(endpoint, { responseType: 'arraybuffer' });
+        const bytes = new Uint8Array(response.data);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        excelBase64 = window.btoa(binary);
+      } catch (excelErr) {
+        console.warn('Could not generate Excel attachment, sending text only:', excelErr);
+      }
+
+      let res;
+      if (excelBase64) {
+        res = await sendWhatsAppBill(
+          cleanPhone,
+          caption,
+          null,
+          null,
+          fileName,
+          excelBase64,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+      } else {
+        res = await sendWhatsAppMessage(cleanPhone, caption);
+      }
+
+      if (res && res.success) {
+        setToast({ message: `${t("Analytics report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+      }
+    } catch (err) {
+      console.error('WhatsApp analytics report error:', err);
+      const errorMsg = err.response?.data?.error || err.message || t('Failed to send WhatsApp report');
+      setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
+    } finally {
+      setSendingWhatsApp(false);
     }
   };
 
@@ -272,23 +381,38 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               )}
             </div>
             
-            {/* Action Buttons: 3 equal-width columns on mobile, auto on tablet/desktop */}
-            <div className="grid grid-cols-3 gap-1.5 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto shrink-0">
+            {/* Action Buttons: 4 equal-width columns on mobile, auto on tablet/desktop */}
+            <div className="grid grid-cols-4 gap-1.5 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto shrink-0">
               <button
                 onClick={handleDownloadReport}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] rounded-xl transition-all text-white shadow-sm font-bold text-xs">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer"
+                title={t("Download Excel Report")}>
                 <FileSpreadsheet size={14} />
                 <span>{t("Report")}</span>
               </button>
               <button
+                onClick={() => handleShareWhatsAppReport()}
+                disabled={sendingWhatsApp}
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer disabled:opacity-60"
+                title={t("Send Analytics Report on WhatsApp")}>
+                {sendingWhatsApp ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                  </svg>
+                )}
+                <span>{t("WhatsApp")}</span>
+              </button>
+              <button
                 onClick={fetchAnalytics}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs cursor-pointer">
                 <RefreshCw size={14} />
                 <span>{t("Refresh")}</span>
               </button>
               <button
                 onClick={() => fetchFraudAnalysis()}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs">
+                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs cursor-pointer">
                 <ShieldAlert size={14} />
                 <span>{t("Auditor")}</span>
               </button>
@@ -738,7 +862,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       }
 
       {/* Fraud Analysis Modal */}
-      {showFraudModal &&
+      {showFraudModal && (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#141418] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-white/10 flex justify-between items-center bg-red-500/10">
@@ -768,17 +892,17 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             </div>
             
             <div className="p-6 overflow-y-auto flex-1">
-              {fraudLoading ?
-            <div className="flex flex-col items-center justify-center py-20">
+              {fraudLoading ? (
+                <div className="flex flex-col items-center justify-center py-20">
                   <div className="relative">
                     <ShieldAlert className="w-16 h-16 text-red-500 animate-pulse" />
                     <RefreshCw className="w-6 h-6 text-red-500 animate-spin absolute -bottom-2 -right-2 bg-[#141418] rounded-full" />
                   </div>
                   <p className="mt-6 text-white font-bold text-lg">{t("Scanning Database...")}</p>
                   <p className="text-gray-400 mt-2 text-sm">{t("Looking for cancelled bills, unusual discounts, and staff patterns.")}</p>
-                </div> :
-            fraudData ?
-            <div className="space-y-6">
+                </div>
+              ) : fraudData ? (
+                <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
                       <p className="text-gray-400 text-sm uppercase font-bold mb-1">{t("Bills Analyzed")}</p>
@@ -789,28 +913,26 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                       <p className="text-3xl font-black text-red-500">{fraudData.alerts?.length || 0}</p>
                     </div>
                   </div>
-
-                  {fraudData.alerts?.length > 0 ?
-              <div className="space-y-3">
+                  {fraudData.alerts?.length > 0 ? (
+                    <div className="space-y-3">
                       <h3 className="font-bold text-white text-lg mb-4 border-b border-white/10 pb-2">{t("Detailed Alerts")}</h3>
-                      {fraudData.alerts.map((alert, i) =>
-                <div key={i} className={`p-4 rounded-xl border flex gap-4 ${
-                alert.severity === 'Critical' ? 'bg-red-500/10 border-red-500/30' :
-                alert.severity === 'High' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10'}`
-                }>
+                      {fraudData.alerts.map((alert, i) => (
+                        <div key={i} className={`p-4 rounded-xl border flex gap-4 ${
+                          alert.severity === 'Critical' ? 'bg-red-500/10 border-red-500/30' :
+                          alert.severity === 'High' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10'}`}>
                           <div className={`mt-1 ${
-                  alert.severity === 'Critical' ? 'text-red-500' :
-                  alert.severity === 'High' ? 'text-orange-500' : 'text-gray-400'}`
-                  }>
+                            alert.severity === 'Critical' ? 'text-red-500' :
+                            alert.severity === 'High' ? 'text-orange-500' : 'text-gray-400'}`}>
                             {alert.type === 'Staff Anomaly' ? <UserX size={24} /> : <AlertTriangle size={24} />}
                           </div>
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <h4 className="font-bold text-white">{alert.type}</h4>
                               <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
-                      alert.severity === 'Critical' ? 'bg-red-500 text-white' :
-                      alert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-600 text-white'}`
-                      }>{alert.severity}</span>
+                                alert.severity === 'Critical' ? 'bg-red-500 text-white' :
+                                alert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-600 text-white'}`}>
+                                {alert.severity}
+                              </span>
                             </div>
                             <p className="text-gray-400 text-sm">{alert.details}</p>
                             <div className="mt-2 flex gap-4 text-xs font-mono text-gray-500">
@@ -820,25 +942,28 @@ const Analytics = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                             </div>
                           </div>
                         </div>
-                )}
-                    </div> :
-
-              <div className="py-16 text-center">
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-16 text-center">
                       <div className="w-16 h-16 bg-green-500/10 text-[#22c55e] rounded-full flex items-center justify-center mx-auto mb-4">
                         <ShieldAlert size={32} />
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2">{t("No Anomalies Found")}</h3>
                       <p className="text-gray-400">{t("Your billing activity looks completely normal for the past 30 days.")}</p>
                     </div>
-              }
-                </div> :
-            null}
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-      }
-    </div>);
+      )}
 
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
+  );
 };
 
 export default Analytics;

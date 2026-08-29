@@ -2,6 +2,18 @@ import CustomerSchema from '../models/Customer.js';
 import BillDefault from '../models/Bill.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 
+export const searchCustomers = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) return res.json([]);
+    const Customer = getTenantModel(req, 'Customer', CustomerSchema);
+    const customers = await Customer.find({ phone: new RegExp(`^${q}`, 'i') }).select('phone name lastOrderType').limit(10).lean();
+    res.json(customers);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getCustomerInfo = async (req, res) => {
   try {
     const { phone } = req.params;

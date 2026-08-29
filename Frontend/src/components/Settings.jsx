@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
+import WhatsAppConnectModal from './WhatsAppConnectModal';
 
 const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -22,6 +23,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     restaurantType: '',
     address: '',
     phone: '',
+    whatsappNumber: '',
     email: '',
     gstin: '',
     fssai: '',
@@ -54,6 +56,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [toast, setToast] = useState(null);
   const [systemPrinters, setSystemPrinters] = useState([]);
   const [showOwnerPin, setShowOwnerPin] = useState(false);
+  const [showWhatsAppConnectModal, setShowWhatsAppConnectModal] = useState(false);
 
   useEffect(() => {
     // 1. Load settings from localStorage first for instant display
@@ -469,20 +472,35 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-text-main flex items-center gap-2">
                   <Phone size={14} />{t("Phone Number")}
-
-                  </label>
+                </label>
                 <input
-                    type="tel"
-                    value={settings.phone}
-                    onChange={(e) => handleInputChange('phone', e.target.value)}
-                    onKeyPress={(e) => {
-                      if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
-                        e.preventDefault();
-                      }
-                    }}
-                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter phone number")} />
+                  type="tel"
+                  value={settings.phone}
+                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  onKeyPress={(e) => {
+                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter phone number")} />
+              </div>
 
-                  
+              {/* WhatsApp Report Number */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                  <Phone size={14} className="text-emerald-600" />{t("WhatsApp Report Number (Optional)")}
+                </label>
+                <input
+                  type="tel"
+                  value={settings.whatsappNumber || ''}
+                  onChange={(e) => handleInputChange('whatsappNumber', e.target.value)}
+                  onKeyPress={(e) => {
+                    if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'Enter'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
+                  placeholder={t("e.g. 9876543210 (Defaults to Phone Number)")} />
               </div>
 
               {/* Email */}
@@ -520,187 +538,205 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   
               </div>
 
-              {/* FSSAI */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />{t("FSSAI Number")}
-
-                  </label>
-                <input
-                    type="text"
-                    value={settings.fssai || ''}
-                    onChange={(e) => handleInputChange('fssai', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter FSSAI License Number")} />
-
-                  
-              </div>
-
-              {/* Individual Tax Configuration */}
-              <div className="space-y-3 p-4 bg-background rounded-xl border border-border">
-                <h3 className="text-sm font-bold text-text-main flex items-center gap-2">
-                  <FileText size={14} className="text-primary" />{t("Individual Tax Options (CGST, SGST, GST)")}
-
-                  </h3>
-                <p className="text-xs text-text-muted">{t("Toggle ON/OFF each tax option and set its default percentage rate.")}</p>
-
-                {/* CGST Option */}
-                <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-3">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={settings.enableCgst !== false}
-                          onChange={(e) => handleInputChange('enableCgst', e.target.checked)} />
-                        
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                    <span className="text-sm font-semibold text-text-main">{t("Enable CGST")}</span>
-                  </div>
-                  {settings.enableCgst !== false &&
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={settings.cgstRate !== undefined ? settings.cgstRate : 2.5}
-                        onChange={(e) => handleInputChange('cgstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
-                      
-                      <span className="text-xs font-bold text-text-muted">%</span>
-                    </div>
-                    }
-                </div>
-
-                {/* SGST Option */}
-                <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-3">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={settings.enableSgst !== false}
-                          onChange={(e) => handleInputChange('enableSgst', e.target.checked)} />
-                        
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                    <span className="text-sm font-semibold text-text-main">{t("Enable SGST")}</span>
-                  </div>
-                  {settings.enableSgst !== false &&
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={settings.sgstRate !== undefined ? settings.sgstRate : 2.5}
-                        onChange={(e) => handleInputChange('sgstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
-                      
-                      <span className="text-xs font-bold text-text-muted">%</span>
-                    </div>
-                    }
-                </div>
-
-                {/* GST / IGST Option */}
-                <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-3">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={settings.enableGst === true}
-                          onChange={(e) => handleInputChange('enableGst', e.target.checked)} />
-                        
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                    <span className="text-sm font-semibold text-text-main">{t("Enable GST (or IGST)")}</span>
-                  </div>
-                  {settings.enableGst === true &&
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={settings.gstRate !== undefined ? settings.gstRate : 5}
-                        onChange={(e) => handleInputChange('gstRate', parseFloat(e.target.value) || 0)}
-                        className="w-20 px-2 py-1 border border-border rounded-lg text-sm font-mono text-center bg-surface" />
-                      
-                      <span className="text-xs font-bold text-text-muted">%</span>
-                    </div>
-                    }
-                </div>
-              </div>
-
-              {/* UPI ID */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />{t("UPI Payment VPA / ID")}
-
-                  </label>
-                <input
-                    type="text"
-                    value={settings.upiId || ''}
-                    onChange={(e) => handleInputChange('upiId', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono" placeholder={t("e.g. restaurant@upi or 9876543210@ybl")} />
-
-                  
-              </div>
-
-              {/* Dynamic QR Payment Toggle */}
-              <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-border">
-                <div className="space-y-0.5">
+              {/* Left Column Settings (FSSAI, UPI, WhatsApp, Footer) */}
+              {/* Left Column Settings */}
+              <div className="flex flex-col gap-6">
+                {/* FSSAI */}
+                <div className="space-y-2">
                   <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    <FileText size={14} className="text-primary" />{t("Dynamic QR Code Payment")}
-
-                    </label>
-                  <p className="text-xs text-text-muted">{t("Show dynamic scan-to-pay UPI QR code on checkout screen & printed bills")}</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                    <FileText size={14} />{t("FSSAI Number")}
+                  </label>
                   <input
+                      type="text"
+                      value={settings.fssai || ''}
+                      onChange={(e) => handleInputChange('fssai', e.target.value)}
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter FSSAI License Number")} />
+                </div>
+
+                {/* UPI ID */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    <FileText size={14} />{t("UPI Payment VPA / ID")}
+                  </label>
+                  <input
+                      type="text"
+                      value={settings.upiId || ''}
+                      onChange={(e) => handleInputChange('upiId', e.target.value)}
+                      className="w-full px-4 py-3 border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-blue-50 text-blue-900 font-mono" placeholder={t("e.g. restaurant@upi")} />
+                </div>
+
+                {/* WhatsApp Automated Bot Configuration */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-3 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/20">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-6 h-6 rounded-full bg-[#25D366] text-white flex items-center justify-center shrink-0 mt-0.5">
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                      </svg>
+                    </div>
+                    
+                    <div className="flex flex-col gap-1 w-full sm:w-[130px]">
+                      <label className="text-[13px] font-bold text-text-main leading-snug">
+                        {t("WhatsApp Automated Gateway (Scan QR)")}
+                      </label>
+                      <p className="text-[11px] text-text-muted leading-tight pr-1">
+                        {t("Link your WhatsApp to send automatic e-bills & DayBook reports in background")}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowWhatsAppConnectModal(true)}
+                    className="w-full sm:w-auto px-4 py-3 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shrink-0">
+                    <RefreshCw size={14} />
+                    <span>{t("Scan QR / Link Bot")}</span>
+                  </button>
+                </div>
+
+                {/* Footer Message */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    <FileText size={14} />{t("Footer Message")}
+                  </label>
+                  <input
+                      type="text"
+                      value={settings.footerMessage}
+                      onChange={(e) => handleInputChange('footerMessage', e.target.value)}
+                      className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter footer message for receipts")} />
+                </div>
+              </div>
+
+              {/* Right Column Settings */}
+              <div className="flex flex-col gap-6">
+                {/* Individual Tax Configuration */}
+                <div className="space-y-3 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                  <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2">
+                    <FileText size={14} className="text-orange-600" />{t("Individual Tax Options (CGST, SGST, GST)")}
+                  </h3>
+                  <p className="text-xs text-orange-700/70">{t("Toggle ON/OFF each tax option and set its default percentage rate.")}</p>
+
+                  {/* CGST Option */}
+                  <div className="flex items-center justify-between pt-2 border-t border-orange-200/50">
+                    <div className="flex items-center gap-3">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={settings.enableCgst !== false}
+                            onChange={(e) => handleInputChange('enableCgst', e.target.checked)} />
+                          
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                      <span className="text-sm font-semibold text-text-main">{t("Enable CGST")}</span>
+                    </div>
+                    {settings.enableCgst !== false &&
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.cgstRate !== undefined ? settings.cgstRate : 2.5}
+                          onChange={(e) => handleInputChange('cgstRate', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 border border-orange-200 rounded-lg text-sm font-mono text-center bg-white" />
+                        <span className="text-xs font-bold text-text-muted">%</span>
+                      </div>
+                      }
+                  </div>
+
+                  {/* SGST Option */}
+                  <div className="flex items-center justify-between pt-2 border-t border-orange-200/50">
+                    <div className="flex items-center gap-3">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={settings.enableSgst !== false}
+                            onChange={(e) => handleInputChange('enableSgst', e.target.checked)} />
+                          
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                      <span className="text-sm font-semibold text-text-main">{t("Enable SGST")}</span>
+                    </div>
+                    {settings.enableSgst !== false &&
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.sgstRate !== undefined ? settings.sgstRate : 2.5}
+                          onChange={(e) => handleInputChange('sgstRate', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 border border-orange-200 rounded-lg text-sm font-mono text-center bg-white" />
+                        <span className="text-xs font-bold text-text-muted">%</span>
+                      </div>
+                      }
+                  </div>
+
+                  {/* GST / IGST Option */}
+                  <div className="flex items-center justify-between pt-2 border-t border-orange-200/50">
+                    <div className="flex items-center gap-3">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={settings.enableGst === true}
+                            onChange={(e) => handleInputChange('enableGst', e.target.checked)} />
+                          
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                      </label>
+                      <span className="text-sm font-semibold text-text-main">{t("Enable GST (or IGST)")}</span>
+                    </div>
+                    {settings.enableGst === true &&
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={settings.gstRate !== undefined ? settings.gstRate : 5}
+                          onChange={(e) => handleInputChange('gstRate', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 border border-orange-200 rounded-lg text-sm font-mono text-center bg-white" />
+                        <span className="text-xs font-bold text-text-muted">%</span>
+                      </div>
+                      }
+                  </div>
+                </div>
+
+                {/* Dynamic QR Payment Toggle */}
+                <div className="flex items-center justify-between p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                  <div className="space-y-0.5">
+                    <label className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                      <FileText size={14} className="text-orange-600" />{t("Dynamic QR Code Payment")}
+                    </label>
+                    <p className="text-xs text-orange-700/70">{t("Show dynamic scan-to-pay UPI QR code on checkout screen & printed bills")}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
                       type="checkbox"
                       className="sr-only peer"
                       checked={settings.enableQrPayment !== false}
                       onChange={(e) => handleInputChange('enableQrPayment', e.target.checked)} />
-                    
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                </label>
-              </div>
-
-
-              {/* Owner Security PIN */}
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <Lock size={14} />{t("Owner Security PIN (Reports Lock)")}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showOwnerPin ? "text" : "password"}
-                    value={settings.ownerPin || ''}
-                    onChange={(e) => handleInputChange('ownerPin', e.target.value)}
-                    maxLength={10}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main font-mono tracking-widest font-bold pr-12"
-                    placeholder={t("•••••• (Leave blank to keep)")}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowOwnerPin(!showOwnerPin)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showOwnerPin ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Footer Message */}
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <FileText size={14} />{t("Footer Message")}
-
+                    <div className="w-11 h-6 bg-orange-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-orange-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
                   </label>
-                <input
-                    type="text"
-                    value={settings.footerMessage}
-                    onChange={(e) => handleInputChange('footerMessage', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter footer message for receipts")} />
+                </div>
 
-                  
+                {/* Owner Security PIN */}
+                <div className="space-y-2 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+                  <label className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                    <Lock size={14} className="text-orange-600" />{t("Owner Security PIN (Reports Lock)")}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showOwnerPin ? "text" : "password"}
+                      value={settings.ownerPin || ''}
+                      onChange={(e) => handleInputChange('ownerPin', e.target.value)}
+                      maxLength={10}
+                      className="w-full px-4 py-3 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 font-mono tracking-widest font-bold pr-12 placeholder:text-orange-900/40"
+                      placeholder={t("•••••• (Leave blank to keep)")}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOwnerPin(!showOwnerPin)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors"
+                    >
+                      {showOwnerPin ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Geo-Fencing Security */}
@@ -1021,8 +1057,12 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         message={toast.message}
         type={toast.type}
         onClose={() => setToast(null)} />
-
       }
+
+      <WhatsAppConnectModal
+        isOpen={showWhatsAppConnectModal}
+        onClose={() => setShowWhatsAppConnectModal(false)}
+      />
     </div>);
 
 };

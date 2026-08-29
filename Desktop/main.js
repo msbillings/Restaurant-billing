@@ -289,7 +289,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
   console.log('[Print] silent-print received, silent:', silent, 'printer:', printerName || '(default)');
   
   let printWindow = new BrowserWindow({ 
-    show: !silent, // Must be visible for OS print dialog to work correctly on Windows
+    show: false, // Always keep print worker window hidden so extra preview window never pops up over main app
     width: 400,
     height: 800
   });

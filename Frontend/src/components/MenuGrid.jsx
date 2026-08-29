@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search, ChevronLeft, ChevronRight, Star, X, ChevronDown, Image as ImageIcon,
   Pizza, Sandwich, UtensilsCrossed, Flame, Gift, Menu as MenuIcon, Utensils,
@@ -78,14 +79,32 @@ const formatImageUrl = (url) => {
   return trimmed;
 };
 
-// Lazy Menu Image Component with skeleton shimmer loader and smooth fade-in
+// In-memory set of already loaded/cached image URLs to render instantly with 0ms delay
+const loadedImageCache = new Set();
+
+// Instant & Lazy Menu Image Component with zero-delay cached display & complete check
 const LazyMenuImage = ({ src, alt, className }) => {
-  const [loaded, setLoaded] = useState(false);
+  const isCached = Boolean(src && loadedImageCache.has(src));
+  const [loaded, setLoaded] = useState(isCached);
   const [error, setError] = useState(false);
+  const imgRef = useRef(null);
 
   useEffect(() => {
-    setLoaded(false);
-    setError(false);
+    if (!src) return;
+    if (loadedImageCache.has(src)) {
+      setLoaded(true);
+      setError(false);
+      return;
+    }
+    // Check if the DOM image is already complete in browser cache
+    if (imgRef.current && imgRef.current.complete) {
+      if (imgRef.current.naturalWidth > 0) {
+        setLoaded(true);
+        loadedImageCache.add(src);
+      } else {
+        setError(true);
+      }
+    }
   }, [src]);
 
   if (!src || error) {
@@ -99,19 +118,27 @@ const LazyMenuImage = ({ src, alt, className }) => {
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-gray-100">
-      {/* Animated shimmer skeleton while loading */}
+      {/* Animated shimmer skeleton only while initial loading */}
       {!loaded && (
         <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse flex items-center justify-center">
           <UtensilsCrossed size={16} className="text-gray-300 animate-spin" />
         </div>
       )}
       <img
+        ref={imgRef}
         src={src}
         alt={alt}
-        onLoad={() => setLoaded(true)}
+        loading="eager"
+        decoding="async"
+        fetchPriority="high"
+        onLoad={() => {
+          setLoaded(true);
+          loadedImageCache.add(src);
+        }}
         onError={() => setError(true)}
-        className={`w-full h-full object-cover transition-all duration-200 ease-out ${loaded ? 'opacity-100 scale-100 filter-none' : 'opacity-0 scale-95 blur-xs'
-          } ${className || ''}`}
+        className={`w-full h-full object-cover transition-opacity duration-150 ease-out ${
+          loaded ? 'opacity-100 scale-100 filter-none' : 'opacity-0 scale-95 blur-xs'
+        } ${className || ''}`}
       />
     </div>
   );
@@ -322,6 +349,39 @@ const MenuGrid = ({
       unsubMenu();
     };
   }, []);
+
+  // Proactively preload images across all pages for instant 0ms rendering
+  useEffect(() => {
+    if (items && items.length > 0 && showImages) {
+      const urls = items
+        .map((i) => formatImageUrl(i.image))
+        .filter((url) => url && !loadedImageCache.has(url));
+
+      // Batch 1: first 60 items (Pages 1 & 2) immediately with async decoding
+      const priorityBatch = urls.slice(0, 60);
+      const remainingBatch = urls.slice(60);
+
+      priorityBatch.forEach((url) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.src = url;
+        img.onload = () => loadedImageCache.add(url);
+      });
+
+      // Batch 2: remaining items smoothly in background
+      if (remainingBatch.length > 0) {
+        const timer = setTimeout(() => {
+          remainingBatch.forEach((url) => {
+            const img = new Image();
+            img.decoding = 'async';
+            img.src = url;
+            img.onload = () => loadedImageCache.add(url);
+          });
+        }, 1000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [items, showImages]);
 
   const validCategories = categories.filter((cat) => {
     if (items.length === 0) return true;
@@ -645,6 +705,7 @@ const MenuGrid = ({
                     className={`menu-card-item bg-white transition-all border flex flex-col justify-between overflow-hidden relative rounded-2xl ${isAvailable ? 'cursor-pointer hover:shadow-lg hover:border-red-300 hover:-translate-y-1 border-gray-200 shadow-sm' : 'cursor-not-allowed opacity-50 bg-gray-100 border-gray-300'} ${showImages ? 'min-h-42.5' : 'h-30 p-3'}`}
                     onClick={(e) => {
                       if (!isAvailable) return;
+                      if (typeof document !== 'undefined' && document.querySelector('.modal-portal-overlay')) return;
                       
                       const isDineInWithoutTable = (billType === 'Dine-In' || !billType) && !activeTable;
 
@@ -865,17 +926,27 @@ const MenuGrid = ({
       </div>
 
       {/* Variant Selection Modal */}
-      {selectedItemVariants && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-surface w-full max-w-sm rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden">
+      {selectedItemVariants && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedItemVariants(null);
+          }}
+        >
+          <div 
+            className="bg-surface w-full max-w-sm rounded-2xl shadow-2xl border border-border flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center p-5 border-b border-border bg-linear-to-r from-primary/5 to-transparent">
               <h2 className="text-xl font-bold text-text-main pr-4 leading-tight">{t("Select Size")}<br /><span className="text-sm font-normal text-text-muted">{selectedItemVariants.name}</span></h2>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedItemVariants(null);
                 }}
-                className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors"
+                className="text-text-muted hover:text-text-main hover:bg-surface-hover rounded-full p-2 transition-colors cursor-pointer"
               >
                 <X size={24} />
               </button>
@@ -884,6 +955,7 @@ const MenuGrid = ({
               {selectedItemVariants.variants.map((variant, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     const isDineInWithoutTable = (billType === 'Dine-In' || !billType) && !activeTable;
@@ -907,7 +979,7 @@ const MenuGrid = ({
                     }
                     setSelectedItemVariants(null);
                   }}
-                  className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md"
+                  className="flex items-center justify-between p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group shadow-sm hover:shadow-md cursor-pointer"
                 >
                   <span className="font-bold text-lg text-text-main group-hover:text-primary transition-colors">{variant.name}</span>
                   <span className="font-black text-xl text-text-main bg-background px-3 py-1 rounded-lg border border-border group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-colors">₹{variant.price}</span>
@@ -915,7 +987,8 @@ const MenuGrid = ({
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

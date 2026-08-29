@@ -384,8 +384,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     </td>
                     <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
                       <div className="flex flex-col text-xs">
-                        <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()}</span>
-                        <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+                        <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
                       </div>
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">

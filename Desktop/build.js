@@ -40,15 +40,19 @@ execSync(`${npmCmd} run build`, {
   env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' }
 });
 
+// Copy Backend (Ignore node_modules, session data, uploads, reports, logs)
+console.log('Copying Backend...');
+copySync(backendSrc, desktopBackend, ['node_modules', '.git', 'auth_info_baileys', 'reports', 'uploads', 'dist', 'logs']);
+
 // Copy Frontend
 console.log('Copying Frontend...');
 copySync(frontendDist, desktopFrontend);
 // Also copy to backend so the Express server can serve it to mobile phones without asar restrictions
-copySync(frontendDist, path.join(desktopBackend, 'frontend'));
+const desktopBackendFrontend = path.join(desktopBackend, 'frontend');
+copySync(frontendDist, desktopBackendFrontend);
 
 // Convert all root absolute paths to relative paths in index.html for Electron file:// protocol
 console.log('Patching HTML asset paths for Electron file:// protocol...');
-const desktopBackendFrontend = path.join(desktopBackend, 'frontend');
 [desktopFrontend, desktopBackendFrontend].forEach(dir => {
   const indexHtml = path.join(dir, 'index.html');
   if (fs.existsSync(indexHtml)) {
@@ -84,25 +88,26 @@ if('serviceWorker' in navigator) {
 
 // Fix for Desktop app: Ensure it connects to localhost instead of the hardcoded IP from Vite build
 console.log('Patching API URLs for Desktop (localhost)...');
-const assetsDir = path.join(desktopFrontend, 'assets');
-if (fs.existsSync(assetsDir)) {
-  const files = fs.readdirSync(assetsDir);
-  files.forEach(file => {
-    if (file.endsWith('.js')) {
-      const filePath = path.join(assetsDir, file);
-      let content = fs.readFileSync(filePath, 'utf8');
-      // Replace Vercel API URL with 127.0.0.1 for Desktop to avoid IPv6 issues
-      content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://127.0.0.1:5002/api');
-      content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
-      content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
-      fs.writeFileSync(filePath, content);
-    }
-  });
-}
-
-// Copy Backend (Ignore node_modules)
-console.log('Copying Backend...');
-copySync(backendSrc, desktopBackend, ['node_modules', '.git']);
+[desktopFrontend, desktopBackendFrontend].forEach(targetDir => {
+  const assetsDir = path.join(targetDir, 'assets');
+  if (fs.existsSync(assetsDir)) {
+    const files = fs.readdirSync(assetsDir);
+    files.forEach(file => {
+      if (file.endsWith('.js')) {
+        const filePath = path.join(assetsDir, file);
+        try {
+          let content = fs.readFileSync(filePath, 'utf8');
+          content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://127.0.0.1:5002/api');
+          content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
+          content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
+          fs.writeFileSync(filePath, content);
+        } catch (err) {
+          console.warn(`[Build] Warning patching ${file}:`, err.message);
+        }
+      }
+    });
+  }
+});
 
 // Copy AI Face Detection Models to Backend public folder for local server serving
 console.log('Copying AI models to Backend...');

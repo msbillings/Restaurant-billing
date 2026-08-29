@@ -6,6 +6,12 @@ const billSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  queueNumber: {
+    type: Number
+  },
+  tokenNo: {
+    type: Number
+  },
   tableNo: {
     type: String,
     required: true
@@ -78,6 +84,16 @@ const billSchema = new mongoose.Schema({
     cash: { type: Number, default: 0, min: [0, 'Cash cannot be negative'] },
     upi: { type: Number, default: 0, min: [0, 'UPI cannot be negative'] },
     card: { type: Number, default: 0, min: [0, 'Card cannot be negative'] }
+  },
+  amountPaid: {
+    type: Number,
+    default: 0,
+    min: [0, 'Amount paid cannot be negative']
+  },
+  changeAmount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Change amount cannot be negative']
   },
   upiApp: {
     type: String,

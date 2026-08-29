@@ -285,12 +285,19 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [containerCharge, setContainerCharge] = useState('0');
 
   const [showPayment, setShowPayment] = useState(false);
-  const [showInvoice, setShowInvoice] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(() => {
+    try { return sessionStorage.getItem('ms_invoice_open') === 'true'; } catch { return false; }
+  });
   const [showKOT, setShowKOT] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [activeKOTData, setActiveKOTData] = useState(null);
-  const [completedBill, setCompletedBill] = useState(null);
+  const [completedBill, setCompletedBill] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('ms_completed_bill');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [tempCustomerPhone, setTempCustomerPhone] = useState('');
   const [tempCustomerName, setTempCustomerName] = useState('');
@@ -1596,6 +1603,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const settledOrder = await settleBill(currentId, {
         paymentMode: paymentData.mode,
         splitPayments: paymentData.splitPayments,
+        amountPaid: paymentData.amountPaid,
         upiApp: paymentData.upiApp,
         orderSource: billType === 'Delivery' ? orderSource : undefined
       });
@@ -1612,12 +1620,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         items: (cart && cart.length > 0) ? cart : (settledOrder?.items || billDetails?.items || []),
         status: 'Paid',
         paymentMode: paymentData.mode,
+        splitPayments: paymentData.splitPayments || settledOrder?.splitPayments,
+        amountPaid: paymentData.amountPaid || settledOrder?.amountPaid,
+        upiApp: paymentData.upiApp || settledOrder?.upiApp,
+        paymentMethod: paymentData.upiApp || settledOrder?.upiApp,
         billNumber: currentBillNum || settledOrder?.billNumber,
         tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable,
         subtotal: subtotal || settledOrder?.subtotal,
         tax: taxVal || settledOrder?.tax,
         discount: discountAmount || settledOrder?.discount,
         discountType: discount.type || settledOrder?.discountType,
+        discountValue: discount.value || settledOrder?.discountValue,
         total: total || settledOrder?.total,
         billType: billType || settledOrder?.billType,
         orderSource: orderSource || settledOrder?.orderSource,
@@ -1631,6 +1644,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       isViewingInvoiceRef.current = true;
       setCompletedBill(finalBill);
       setShowInvoice(true);
+      // Persist invoice state so page refresh restores this view
+      try {
+        sessionStorage.setItem('ms_invoice_open', 'true');
+        sessionStorage.setItem('ms_completed_bill', JSON.stringify(finalBill));
+      } catch (e) {}
       showToast(t('billSettled'), 'success');
       hasPendingLocalChanges.current = false;
       fetchDailyStats();
@@ -1727,10 +1745,25 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         };
       }
 
+      // Calculate current active queue position of this order
+      const activeOrdersSorted = (openOrdersList || [])
+        .filter(o => o.status === 'Open' || o.status === 'Billed')
+        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+      const orderIndex = activeOrdersSorted.findIndex(o => 
+        (o._id && currentId && o._id === currentId) || 
+        isTableMatching(o.tableNo, tableNo)
+      );
+
+      const queueNo = orderIndex !== -1 ? (orderIndex + 1) : (activeOrdersSorted.length || 1);
+
       setActiveKOTData({
         ...kotData,
         tableNo: tableNo,
         billType: billType,
+        orderSource: kotData?.orderSource || orderSource || response?.bill?.orderSource,
+        tokenNo: kotData?.tokenNo || kotData?.queueNumber || queueNo,
+        queueNumber: kotData?.tokenNo || kotData?.queueNumber || queueNo,
         waiterName: userRole
       });
       setShowKOT(true);
@@ -1754,7 +1787,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     if (completedBill && completedBill.status === 'Paid') {
       showToast(`${t('billSaved')} ${completedBill.billNumber || ''}`, 'success');
     }
-
+    // Clear persisted invoice state
+    try {
+      sessionStorage.removeItem('ms_invoice_open');
+      sessionStorage.removeItem('ms_completed_bill');
+    } catch (e) {}
     setShowInvoice(false);
     setCart([]);
     setOrderId(null);
@@ -2329,6 +2366,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         currentTable={activeTable}
         currentOrderId={orderId}
         openOrdersList={openOrdersList}
+        isLoading={loading}
         onClose={() => setShowTransfer(false)}
         onTransfer={handleTransferTable} />
       }

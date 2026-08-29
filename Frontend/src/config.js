@@ -60,8 +60,11 @@ export const getApiUrl = () => {
     }
 
     // 3. If a local server IP is stored (for LAN / APK on Wi-Fi)
+    // IMPORTANT: Skip the stored LAN IP when running on localhost — the stored IP
+    // is only for Android/APK clients connecting over Wi-Fi to a remote server.
+    // If we're on localhost, the backend is on the same machine, so use localhost directly.
     const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
-    if (storedIp && storedIp.trim()) {
+    if (storedIp && storedIp.trim() && host !== 'localhost' && host !== '127.0.0.1') {
         const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
         if (cleanIp.includes(':')) {
             return cleanApiUrl(`http://${cleanIp}`);

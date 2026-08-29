@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2 } from 'lucide-react';
 
@@ -62,14 +63,16 @@ const BillSummary = ({
   const [isPaid, setIsPaid] = useState(false);
   const [useLoyalty, setUseLoyalty] = useState(true);
   const [sendSms, setSendSms] = useState(true);
-  const [pax, setPax] = useState(4);
+  const [pax, setPax] = useState(1);
+  const [isSplitActive, setIsSplitActive] = useState(false);
   const [showCharges, setShowCharges] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [settlementAmount, setSettlementAmount] = useState('');
 
   const [showPaxModal, setShowPaxModal] = useState(false);
-  const [paxInput, setPaxInput] = useState('');
+  const [paxInput, setPaxInput] = useState('1');
 
+  const [waiter, setWaiter] = useState('');
   const [showWaiterModal, setShowWaiterModal] = useState(false);
   const [waiterInput, setWaiterInput] = useState('');
 
@@ -78,7 +81,7 @@ const BillSummary = ({
   const [selectedCartItemForNote, setSelectedCartItemForNote] = useState(null);
 
   const [showSplitCalcModal, setShowSplitCalcModal] = useState(false);
-  const [splitWays, setSplitWays] = useState(pax > 1 ? pax : 2);
+  const [splitWays, setSplitWays] = useState(2);
 
   // Custom Delivery Platforms State (Full CRUD per shop)
   const [customPlatforms, setCustomPlatforms] = useState(() => {
@@ -155,18 +158,54 @@ const BillSummary = ({
     setShowPaxModal(true);
   };
 
-  const submitPax = () => {
+  const submitPax = (applySplit = false) => {
     if (paxInput && !isNaN(paxInput) && Number(paxInput) > 0) {
-      setPax(Number(paxInput));
+      const val = Number(paxInput);
+      setPax(val);
+      setSplitWays(val);
+      if (val > 1) {
+        setIsSplitActive(true);
+        if (total > 0) {
+          setSettlementAmount((total / val).toFixed(2));
+        }
+      } else {
+        setIsSplitActive(false);
+        if (total > 0) {
+          setSettlementAmount(total.toFixed(2));
+        }
+      }
     }
-    setShowPaxModal(false);
+    setTimeout(() => setShowPaxModal(false), 50);
+  };
+
+  const handleCancelSplit = () => {
+    setPax(1);
+    setPaxInput('1');
+    setSplitWays(1);
+    setIsSplitActive(false);
+    if (total > 0) {
+      setSettlementAmount(total.toFixed(2));
+    }
+    setTimeout(() => {
+      setShowSplitCalcModal(false);
+      setShowPaxModal(false);
+    }, 50);
   };
 
   const handleWaiterClick = () => {
+    setWaiterInput(waiter || '');
     setShowWaiterModal(true);
   };
 
   const submitWaiter = () => {
+    const trimmed = (waiterInput || '').trim();
+    setWaiter(trimmed);
+    setShowWaiterModal(false);
+  };
+
+  const handleClearWaiter = () => {
+    setWaiter('');
+    setWaiterInput('');
     setShowWaiterModal(false);
   };
 
@@ -341,37 +380,142 @@ const BillSummary = ({
               </div>
             );
           })()}
-          <div onClick={handlePaxClick} className="flex flex-col items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
-            <Users size={10} className="mb-0.5 opacity-80" />
-            <span className="text-[7.5px] font-bold leading-none">{pax}</span>
+          {/* PAX Badge */}
+          <div 
+            onClick={handlePaxClick} 
+            title={`${t("Number of Persons (PAX)")}: ${pax}`}
+            className={`flex items-center justify-center gap-1 min-w-[30px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all shrink-0 ${
+              pax > 1 
+                ? 'bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 font-black' 
+                : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-bold'
+            }`}
+          >
+            <Users size={11} className="opacity-80 shrink-0" />
+            <span className="text-[9px] leading-none">{pax}</span>
           </div>
-          <div onClick={handleWaiterClick} className="flex items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
-            <UserCheck size={11} className="opacity-80" />
-          </div>
-          <div onClick={handleNoteClick} className="flex items-center justify-center w-7 h-7 bg-gray-50 border border-gray-100 rounded-lg text-gray-500 cursor-pointer hover:bg-gray-100 shadow-sm transition-colors shrink-0">
-            <Clipboard size={11} className="opacity-80" />
-          </div>
-        </div>
 
-        <div className="flex-1 flex justify-end min-w-0">
-          {activeTable && (
-            <div className="flex flex-col items-end">
-              <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">
-                {billType === 'Delivery' || activeTable.startsWith('DEL-')
-                  ? t("Delivery No.")
-                  : billType === 'Takeaway' || activeTable.startsWith('TAK-')
-                  ? t("Pick Up No.")
-                  : t("Current Table")}
-              </span>
-              <span className="text-[10px] font-black text-gray-700 truncate max-w-[85px] sm:max-w-[100px]" title={activeTable}>{activeTable}</span>
+          {/* Waiter / Captain Badge */}
+          <div 
+            onClick={handleWaiterClick} 
+            title={waiter ? `${t("Waiter")}: ${waiter} (${t("Click to change")})` : t("Assign Waiter / Captain")}
+            className={`flex items-center justify-center gap-1 min-w-[30px] max-w-[85px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all shrink-0 ${
+              waiter 
+                ? 'bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-bold' 
+                : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-500'
+            }`}
+          >
+            <UserCheck size={11} className="opacity-80 shrink-0" />
+            <span className="text-[9px] font-bold truncate">{waiter || t("Waiter")}</span>
+          </div>
+
+          {/* Special Note Badge */}
+          {(() => {
+            const hasAnyNote = (cart || []).some(item => !!item.specialNote) || (selectedCartItemForNote && selectedCartItemForNote.specialNote);
+            return (
+              <div 
+                onClick={handleNoteClick} 
+                title={hasAnyNote ? t("Special Notes Active (Click to edit)") : t("Add Special Note")}
+                className={`flex items-center justify-center gap-1 min-w-[30px] max-w-[75px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all shrink-0 ${
+                  hasAnyNote 
+                    ? 'bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 font-bold' 
+                    : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-500'
+                }`}
+              >
+                <Clipboard size={11} className="opacity-80 shrink-0" />
+                <span className="text-[9px] font-bold truncate">{hasAnyNote ? `📝 ${t("Note")}` : t("Note")}</span>
+              </div>
+            );
+          })()}
+
+          {/* Instant Stat Badge */}
+          {cart.length > 0 && (
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-orange-50 border border-orange-200 rounded-md text-orange-700 text-[9px] font-bold shadow-2xs ml-0.5 shrink-0 animate-in fade-in duration-150">
+              <span>{cart.length} {cart.length === 1 ? t("Item") : t("Items")}</span>
+              <span className="text-orange-300 font-normal">|</span>
+              <span>{cart.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0)} {t("Qty")}</span>
             </div>
           )}
         </div>
       </div>
 
+      {/* Dynamic Active Split Strip */}
+      {isSplitActive && pax > 1 && total > 0 && (
+        <div className="flex items-center justify-between px-2.5 py-1.5 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50/50 border-b border-orange-200 text-orange-900 shadow-2xs shrink-0 animate-in slide-in-from-top-1 duration-150">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="flex h-2 w-2 relative shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+            </span>
+            <span className="text-[11px] font-extrabold text-orange-900 truncate">
+              {t("Split Bill")}: <span className="text-orange-600 font-black text-xs">{currencySymbol}{(total / pax).toFixed(2)}</span> <span className="font-normal text-[10px] text-orange-700">/ {t("person")}</span>
+            </span>
+            <span className="text-[9px] font-bold text-orange-600 bg-orange-100 px-1 py-0.2 rounded shrink-0">({pax} PAX)</span>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const perPerson = (total / pax).toFixed(2);
+                setSettlementAmount(perPerson);
+              }}
+              className="px-2 py-0.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white rounded text-[10px] font-bold shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+              title={t("Set Settlement Amount to this split share")}
+            >
+              <span>{t("Apply to Settle")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSplitWays(pax);
+                setShowSplitCalcModal(true);
+              }}
+              className="p-1 bg-white hover:bg-orange-100 border border-orange-200 text-orange-700 rounded text-[10px] font-bold transition-all cursor-pointer"
+              title={t("Open Split Calculator")}
+            >
+              <PieChart size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelSplit}
+              className="p-1 bg-white hover:bg-red-50 border border-red-200 text-red-500 hover:text-red-700 rounded text-[10px] font-bold transition-all cursor-pointer"
+              title={t("Cancel Split (Reset to Full Bill)")}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic Assigned Waiter Strip */}
+      {waiter && (
+        <div className="flex items-center justify-between px-2.5 py-1 bg-blue-50 border-b border-blue-100 text-[10px] font-bold text-blue-800 shrink-0">
+          <div className="flex items-center gap-1.5 truncate">
+            <UserCheck size={12} className="text-blue-600 shrink-0" />
+            <span className="text-gray-500 font-semibold">{t("Assigned Waiter")}:</span>
+            <span className="text-blue-700 font-extrabold truncate">{waiter}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleClearWaiter}
+            className="text-blue-400 hover:text-red-500 transition-colors p-0.5 rounded cursor-pointer"
+            title={t("Clear Waiter")}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Table Headers */}
-      <div className="flex items-center px-2 py-0.5 bg-gray-100 border-b border-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wider shrink-0">
-        <div className="w-[44%]">{t("Items")}</div>
+      <div className="flex items-center px-2 py-1 bg-gray-100 border-b border-gray-200 text-gray-500 text-[8px] font-bold uppercase tracking-wider shrink-0">
+        <div className="w-[44%] flex items-center gap-1.5 min-w-0">
+          <span className="shrink-0">{t("Items")}</span>
+          {cart.length > 0 && (
+            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[8px] font-black bg-orange-100 text-orange-700 border border-orange-200 shadow-2xs truncate">
+              {cart.length} ({cart.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0)} {t("Qty")})
+            </span>
+          )}
+        </div>
         <div className="w-[14%] text-center hidden xl:block">{t("Check")}</div>
         <div className="w-[26%] text-center">{t("Qty.")}</div>
         <div className="w-[16%] text-right pr-1">{t("Price")}</div>
@@ -569,18 +713,42 @@ const BillSummary = ({
               </div>
 
               {/* Quantity Controls */}
-              <div className="flex items-center gap-0 w-[72px] shrink-0 bg-gray-100 rounded-md overflow-hidden border border-gray-200">
+              <div className="flex items-center gap-0 w-[78px] shrink-0 bg-gray-100 rounded-md overflow-hidden border border-gray-200">
                 <button
+                  type="button"
                   onClick={() => updateQuantity(item._id || item.name, -1)}
                   disabled={isLocked || item.isCancelled}
-                  className="flex-1 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors">
+                  className="w-5 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-red-500 disabled:opacity-50 transition-colors shrink-0">
                   <Minus size={11} />
                 </button>
-                <span className={`font-bold text-[11px] text-gray-800 shrink-0 w-5 text-center ${item.isCancelled ? 'line-through' : ''}`}>{item.quantity - (item.cancelledQuantity || 0)}</span>
+                <input
+                  type="number"
+                  min="1"
+                  disabled={isLocked || item.isCancelled}
+                  value={item.quantity - (item.cancelledQuantity || 0)}
+                  onWheel={(e) => e.target.blur()}
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === '+' || e.key === '.') e.preventDefault();
+                  }}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') return;
+                    const parsed = parseInt(raw, 10);
+                    if (!isNaN(parsed) && parsed >= 0) {
+                      const currentActive = item.quantity - (item.cancelledQuantity || 0);
+                      const delta = parsed - currentActive;
+                      if (delta !== 0) {
+                        updateQuantity(item._id || item.name, delta);
+                      }
+                    }
+                  }}
+                  className={`w-7 h-6 bg-white text-center font-bold text-[11px] text-gray-800 focus:outline-none focus:ring-1 focus:ring-primary border-x border-gray-200 p-0 ${item.isCancelled ? 'line-through text-gray-400' : ''}`}
+                />
                 <button
+                  type="button"
                   onClick={() => updateQuantity(item._id || item.name, 1)}
                   disabled={isLocked || item.isCancelled}
-                  className="flex-1 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors">
+                  className="w-5 h-6 flex items-center justify-center text-gray-600 hover:bg-white hover:text-green-600 disabled:opacity-50 transition-colors shrink-0">
                   <Plus size={11} />
                 </button>
               </div>
@@ -615,10 +783,15 @@ const BillSummary = ({
                 <span className="w-1/3 text-center">{cart.reduce((acc, item) => acc + item.quantity, 0)}</span>
                 <span className="w-1/3 text-right">{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex items-center justify-between font-bold">
-                <span className="w-1/3 flex items-center gap-1">{t("Discount")}<button className="text-primary underline text-[11px] ml-1 hover:text-red-700" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button></span>
-                <span className="w-1/3 text-center"></span>
-                <span className="w-1/3 text-right text-green-600">({discountAmount.toFixed(2)})</span>
+              <div className={`flex items-center justify-between ${discountAmount > 0 ? 'font-black text-emerald-700 bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200/60' : 'font-bold'}`}>
+                <span className="w-1/2 flex items-center gap-1">
+                  {t("Discount")}
+                  {discount?.type === 'percentage' && discount?.value ? ` (${discount.value}%)` : (discount?.type === 'complimentary' ? ' (100%)' : '')}
+                  <button className="text-primary underline text-[11px] ml-1 hover:text-red-700 font-bold" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button>
+                </span>
+                <span className={`w-1/2 text-right ${discountAmount > 0 ? 'text-emerald-700 font-black text-sm' : 'text-green-600'}`}>
+                  {discountAmount > 0 ? `-${currencySymbol}${discountAmount.toFixed(2)}` : `(${discountAmount.toFixed(2)})`}
+                </span>
               </div>
               {showDiscountInput &&
                 <div className="flex items-center justify-between bg-gray-200/50 p-2 rounded-lg gap-2 border border-gray-200">
@@ -634,10 +807,13 @@ const BillSummary = ({
                   {discount?.type !== 'complimentary' && (
                     <input
                       type="number"
+                      min="0"
+                      onWheel={(e) => e.target.blur()}
+                      onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                       className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold"
                       placeholder={t('Value')}
                       value={discount?.value || ''}
-                      onChange={(e) => setDiscount({ ...(discount || {}), value: e.target.value })} />
+                      onChange={(e) => setDiscount({ ...(discount || {}), value: Math.max(0, parseFloat(e.target.value) || 0) })} />
                   )}
                 </div>
               }
@@ -649,13 +825,27 @@ const BillSummary = ({
               <div className="flex items-center justify-between font-bold">
                 <span className="w-2/3">{t("Delivery Charge")}</span>
                 <span className="w-1/3 text-right">
-                  <input type="number" value={deliveryCharge} onChange={(e) => setDeliveryCharge(e.target.value)} className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
+                  <input
+                    type="number"
+                    min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    value={deliveryCharge}
+                    onChange={(e) => setDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
                 </span>
               </div>
               <div className="flex items-center justify-between font-bold">
                 <span className="w-2/3 flex items-center gap-1"><span className="w-3 h-3 border border-gray-400 bg-gray-100 rounded-full inline-block"></span>{t("Container Charge")}</span>
                 <span className="w-1/3 text-right">
-                  <input type="number" value={containerCharge} onChange={(e) => setContainerCharge(e.target.value)} className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
+                  <input
+                    type="number"
+                    min="0"
+                    onWheel={(e) => e.target.blur()}
+                    onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
+                    value={containerCharge}
+                    onChange={(e) => setContainerCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-[80px] bg-white border border-gray-300 text-gray-800 text-right px-1 rounded h-7 outline-none focus:border-primary" />
                 </span>
               </div>
             </div>
@@ -700,12 +890,27 @@ const BillSummary = ({
 
         {/* Row 3: Settlement */}
         <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 overflow-x-auto no-scrollbar w-full gap-1">
-          <span className="text-gray-600 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-gray-600 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider shrink-0">{t("Settlement Amount")}</span>
+            {total > 0 && pax > 1 && (
+              <button
+                type="button"
+                onClick={() => setSettlementAmount((total / pax).toFixed(2))}
+                className="text-[9px] text-orange-600 hover:text-orange-700 font-bold text-left hover:underline cursor-pointer flex items-center gap-0.5"
+                title={t("Click to set split amount for this person")}
+              >
+                <span>👥 {currencySymbol}{(total / pax).toFixed(2)}/person ({pax} PAX)</span>
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 ml-1 shrink-0">
             <input
               type="number"
+              min="0"
+              onWheel={(e) => e.target.blur()}
+              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
               value={settlementAmount}
-              onChange={(e) => setSettlementAmount(e.target.value)}
+              onChange={(e) => setSettlementAmount(Math.max(0, parseFloat(e.target.value) || 0))}
               disabled={isLocked || cart.length === 0}
               className="w-[75px] sm:w-[85px] h-7 bg-white border border-gray-200 text-gray-800 text-right px-1.5 rounded-lg outline-none focus:border-primary font-bold text-xs sm:text-sm disabled:opacity-50" />
             <button
@@ -715,7 +920,7 @@ const BillSummary = ({
                 if (onSettleBill) onSettleBill();
               }}
               disabled={cart.length === 0 || orderStatus === 'Paid' || loading}
-              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1">
+              className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer">
               {actionLoading === 'settle' ? (
                 <>
                   <Loader2 size={11} className="animate-spin" />
@@ -737,6 +942,16 @@ const BillSummary = ({
             <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />{t("It's Paid")}
           </label>
         </div>
+
+        {/* User-friendly Unsaved Items & Navigation Reminder */}
+        {cart.length > 0 && !isLocked && (
+          <div className="mx-2 my-1 px-2 py-1.5 bg-gradient-to-r from-amber-50/90 via-orange-50/70 to-amber-50/90 border border-amber-200/90 rounded-lg flex items-start gap-1.5 text-[9.5px] sm:text-[10px] text-amber-900 shadow-2xs animate-in fade-in duration-200">
+            <span className="text-amber-600 font-bold shrink-0 text-[11px] leading-tight">⚠️</span>
+            <span className="leading-tight font-medium">
+              {t("Please stay on this page & Save or Fire KOT before navigating away, or unsaved items will be cleared.")}
+            </span>
+          </div>
+        )}
       </div>
       {/* END: Bottom action area + unified scrollable area */}
       </div>
@@ -834,48 +1049,129 @@ const BillSummary = ({
       </div>
 
 
-      {showPaxModal &&
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      {showPaxModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="modal-portal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPaxModal(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <Users size={18} className="text-primary" />{t("Number of Persons (PAX)")}
-
               </h3>
-              <button onClick={() => setShowPaxModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPaxModal(false);
+                }} 
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
                 <X size={20} />
               </button>
             </div>
             <div className="p-6">
               <input
                 type="number"
+                min="1"
+                onWheel={(e) => e.target.blur()}
                 value={paxInput}
-                onChange={(e) => setPaxInput(e.target.value)}
+                onChange={(e) => setPaxInput(e.target.value.replace(/[^0-9]/g, ''))}
                 placeholder={t('Enter PAX')}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all text-center text-2xl font-black text-gray-800"
                 autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && submitPax()} />
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === '-' || e.key === 'e' || e.key === '+' || e.key === '.') e.preventDefault();
+                  if (e.key === 'Enter') submitPax(Number(paxInput) > 1);
+                }} 
+              />
 
-              <button
-                onClick={submitPax}
-                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
+              {total > 0 && Number(paxInput) > 1 && (
+                <div className="mt-4 p-3 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl text-center shadow-2xs animate-in fade-in duration-150">
+                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wider block mb-0.5">{t("Split Amount Per Person")}</span>
+                  <span className="text-2xl font-black text-orange-600">
+                    {currencySymbol}{(total / Number(paxInput)).toFixed(2)}
+                  </span>
+                  <span className="text-[10px] text-gray-500 block mt-0.5">({currencySymbol}{total.toFixed(2)} ÷ {paxInput} {t("PAX")})</span>
+                </div>
+              )}
 
+              <div className="flex flex-col gap-2 mt-6">
+                {Number(paxInput) > 1 ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      submitPax(true);
+                    }}
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold py-3.5 rounded-xl hover:shadow-lg active:scale-[0.98] transition-all shadow-md text-sm cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>👥 {t("Apply Split to Settlement")} ({currencySymbol}{(total / Number(paxInput)).toFixed(2)})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      submitPax(false);
+                    }}
+                    className="w-full bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20 cursor-pointer text-sm"
+                  >
+                    {t("Confirm PAX")}
+                  </button>
+                )}
 
-              </button>
+                {(isSplitActive || pax > 1) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCancelSplit();
+                    }}
+                    className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold py-2.5 rounded-xl active:scale-[0.98] transition-all cursor-pointer text-xs"
+                  >
+                    {t("Cancel Split (Reset to 1 PAX)")}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      }
+        </div>,
+        document.body
+      )}
 
-      {showWaiterModal &&
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      {showWaiterModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="modal-portal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowWaiterModal(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <UserCheck size={18} className="text-primary" />{t("Assign Waiter / Captain")}
-
               </h3>
-              <button onClick={() => setShowWaiterModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowWaiterModal(false);
+                }} 
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -884,23 +1180,74 @@ const BillSummary = ({
                 type="text"
                 value={waiterInput}
                 onChange={(e) => setWaiterInput(e.target.value)}
-                placeholder={t('Enter Name')}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-bold text-gray-800"
+                placeholder={t('Enter Waiter / Captain Name')}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-bold text-gray-800 text-center text-lg"
                 autoFocus
-                onKeyDown={(e) => e.key === 'Enter' && submitWaiter()} />
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') submitWaiter();
+                }} 
+              />
 
-              <button
-                onClick={submitWaiter}
-                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Confirm")}
-              </button>
+              {waiter && (
+                <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-xl text-center flex items-center justify-between px-3">
+                  <span className="text-[11px] font-bold text-blue-700">{t("Currently Assigned")}: <span className="font-black">{waiter}</span></span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClearWaiter();
+                    }}
+                    className="text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                  >
+                    {t("Remove")}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-6">
+                {waiter && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClearWaiter();
+                    }}
+                    className="flex-1 bg-gray-100 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all cursor-pointer text-xs"
+                  >
+                    {t("Clear")}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    submitWaiter();
+                  }}
+                  className="flex-1 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20 cursor-pointer text-xs sm:text-sm"
+                >
+                  {t("Confirm Waiter")}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      }
+        </div>,
+        document.body
+      )}
 
-      {showNoteModal &&
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      {showNoteModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="modal-portal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowNoteModal(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <Clipboard size={18} className="text-primary" />
@@ -908,7 +1255,14 @@ const BillSummary = ({
                   ? `${t("Note for")} ${selectedCartItemForNote.name}`
                   : t("Special Note for Kitchen")}
               </h3>
-              <button onClick={() => setShowNoteModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowNoteModal(false);
+                }} 
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -918,30 +1272,50 @@ const BillSummary = ({
                 onChange={(e) => setNoteInput(e.target.value)}
                 placeholder={t('Special requests, allergies...')}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all font-medium text-gray-800 min-h-[120px] resize-none"
-                autoFocus />
+                autoFocus
+                onClick={(e) => e.stopPropagation()}
+              />
 
               <button
-                onClick={submitNote}
-                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Save Note")}
-
-
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  submitNote();
+                }}
+                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20 cursor-pointer"
+              >
+                {t("Save Note")}
               </button>
             </div>
           </div>
-        </div>
-      }
+        </div>,
+        document.body
+      )}
 
-
-
-      {showSplitCalcModal &&
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      {showSplitCalcModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="modal-portal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowSplitCalcModal(false);
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-red-50 to-orange-50">
               <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
                 <PieChart size={18} className="text-primary" />{t("Split Bill Calculator")}
-
               </h3>
-              <button onClick={() => setShowSplitCalcModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-white">
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSplitCalcModal(false);
+                }} 
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-white cursor-pointer"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -956,16 +1330,22 @@ const BillSummary = ({
                 <label className="block text-gray-500 font-semibold mb-3 text-center">{t("Split equally by how many people?")}</label>
                 <div className="flex items-center justify-center gap-4">
                   <button
-                    onClick={() => setSplitWays(Math.max(1, splitWays - 1))}
-                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
-
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSplitWays(Math.max(1, splitWays - 1));
+                    }}
+                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95 cursor-pointer">
                     <Minus size={20} />
                   </button>
                   <span className="text-3xl font-black w-16 text-center text-primary">{splitWays}</span>
                   <button
-                    onClick={() => setSplitWays(splitWays + 1)}
-                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95">
-
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSplitWays(splitWays + 1);
+                    }}
+                    className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors active:scale-95 cursor-pointer">
                     <Plus size={20} />
                   </button>
                 </div>
@@ -978,20 +1358,60 @@ const BillSummary = ({
                 </span>
               </div>
 
-              <button
-                onClick={() => setShowSplitCalcModal(false)}
-                className="w-full mt-6 bg-primary text-white font-bold py-3.5 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20">{t("Done")}
-
-              </button>
+              <div className="grid grid-cols-3 gap-2 mt-6">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (total > 0 && splitWays > 0) {
+                      setSettlementAmount((total / splitWays).toFixed(2));
+                      setIsSplitActive(splitWays > 1);
+                      setPax(splitWays);
+                    }
+                    setShowSplitCalcModal(false);
+                  }}
+                  className="col-span-1 bg-primary text-white font-bold py-3 rounded-xl hover:bg-primary-hover active:scale-[0.98] transition-all shadow-md shadow-primary/20 cursor-pointer text-xs flex items-center justify-center text-center">
+                  {t("Apply")}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCancelSplit();
+                  }}
+                  className="col-span-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-bold py-3 rounded-xl active:scale-[0.98] transition-all cursor-pointer text-xs flex items-center justify-center text-center">
+                  {t("Cancel Split")}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowSplitCalcModal(false);
+                  }}
+                  className="col-span-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 active:scale-[0.98] transition-all cursor-pointer text-xs flex items-center justify-center text-center">
+                  {t("Close")}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      }
+        </div>,
+        document.body
+      )}
 
       {/* Delivery Platforms Manager Modal (Full CRUD) */}
-      {showPlatformModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+      {showPlatformModal && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="modal-portal-overlay fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPlatformModal(false);
+            setNewPlatformName('');
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-orange-500/10 to-amber-500/10">
               <div>
                 <h3 className="font-black text-sm text-gray-900 dark:text-white flex items-center gap-2">
@@ -1001,7 +1421,8 @@ const BillSummary = ({
               </div>
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowPlatformModal(false);
                   setNewPlatformName('');
                 }}
@@ -1050,7 +1471,8 @@ const BillSummary = ({
                     return (
                       <div
                         key={name}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setOrderSource(rawVal);
                           setShowPlatformModal(false);
                         }}
@@ -1083,7 +1505,8 @@ const BillSummary = ({
                         }`}
                       >
                         <div
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setOrderSource(p);
                             setShowPlatformModal(false);
                           }}
@@ -1113,7 +1536,8 @@ const BillSummary = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

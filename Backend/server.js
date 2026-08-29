@@ -377,6 +377,8 @@ import cameraRoutes from './routes/cameraRoutes.js';
 import loyaltyRoutes from './routes/loyaltyRoutes.js';
 import broadcastRoutes from './routes/broadcastRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
+import whatsappRoutes from './routes/whatsappRoutes.js';
+import whatsappService from './services/whatsappService.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -412,6 +414,10 @@ app.use('/api/cameras', cameraRoutes);
 app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
+
+// Initialize WhatsApp background service
+whatsappService.init().catch((err) => console.error('[WhatsApp Service] Auto-init failed:', err));
 
 // --- GLOBAL ERROR HANDLER ---
 // Must be placed after all API route definitions

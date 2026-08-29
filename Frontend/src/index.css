@@ -80,6 +80,17 @@
     -webkit-user-select: auto;
     user-select: auto;
   }
+
+  /* Disable spinner arrows and accidental increments globally on all number inputs */
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+  }
+  input[type=number] {
+    -moz-appearance: textfield !important;
+    appearance: textfield !important;
+  }
 }
 
 /* Global Dynamic Viewport Unit Overrides for 100% responsive layout across all phone screens */

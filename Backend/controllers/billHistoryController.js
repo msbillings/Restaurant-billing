@@ -89,7 +89,7 @@ export const getBills = async (req, res) => {
     // Run query and count concurrently in parallel for 2x faster execution
     const [bills, total] = await Promise.all([
       Bill.find(query)
-        .select('billNumber tableNo billType paymentMode total orderSource items status customerName customerPhone createdAt updatedAt')
+        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax discount discountType discountValue deliveryCharge containerCharge total orderSource items status customerName customerPhone createdAt updatedAt')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
