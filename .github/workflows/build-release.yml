@@ -64,6 +64,7 @@ jobs:
       - name: 🔑 Generate Release Keystore
         working-directory: ./Frontend/android
         run: |
+          if (Test-Path "keystore.jks") { Remove-Item -Force "keystore.jks" }
           keytool -genkeypair -v -keystore keystore.jks -alias msbilling -keyalg RSA -keysize 2048 -validity 10000 -storepass "MsBilling@2026#Secure!" -keypass "MsBilling@2026#Secure!" -dname "CN=MS Billing, OU=Restaurant, O=MS Billings, L=City, ST=State, C=IN"
 
       - name: 🔨 Build Android APK (.apk)
