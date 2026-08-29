@@ -96,59 +96,69 @@ export const getNotificationSocket = () => {
 
 // ── 2.5 CAPACITOR ANDROID NOTIFICATION CHANNEL & PERMISSION AUTO-INIT ────────
 let isChannelInitialized = false;
-export const initCapacitorNotifications = async () => {
-  if (typeof window === 'undefined' || !Capacitor.isNativePlatform() || isChannelInitialized) return;
+export const initCapacitorNotifications = async (requestPermissionNow = false) => {
+  if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return;
   try {
-    // 1. Runtime permission request (Mandatory for Android 13+ / API 33+)
-    const permStatus = await LocalNotifications.checkPermissions();
-    if (permStatus.display !== 'granted') {
-      await LocalNotifications.requestPermissions();
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('user');
+
+    // 1. Runtime permission request (Mandatory for Android 13+ / API 33+) - ONLY when logged in and requested!
+    if (token && requestPermissionNow) {
+      const permStatus = await LocalNotifications.checkPermissions();
+      if (permStatus.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
     }
 
-    // 2. High-Priority Notification Channel (Mandatory for Android 8.0+)
-    await LocalNotifications.createChannel({
-      id: 'restaurant_alerts_v1',
-      name: 'Restaurant Alerts',
-      description: 'High-priority real-time alerts for orders and KOTs',
-      importance: 5, // High / Max (Popup + Sound + Heads Up)
-      visibility: 1, // Public
-      vibration: true,
-      lights: true,
-      lightColor: '#EA580C'
-    });
-
-    // 3. Initialize Firebase Push Notifications
-    let pushPermStatus = await PushNotifications.checkPermissions();
-    if (pushPermStatus.receive !== 'granted') {
-      pushPermStatus = await PushNotifications.requestPermissions();
+    if (!isChannelInitialized) {
+      // 2. High-Priority Notification Channel (Mandatory for Android 8.0+)
+      await LocalNotifications.createChannel({
+        id: 'restaurant_alerts_v1',
+        name: 'Restaurant Alerts',
+        description: 'High-priority real-time alerts for orders and KOTs',
+        importance: 5, // High / Max (Popup + Sound + Heads Up)
+        visibility: 1, // Public
+        vibration: true,
+        lights: true,
+        lightColor: '#EA580C'
+      });
+      isChannelInitialized = true;
     }
-    
-    if (pushPermStatus.receive === 'granted') {
-      PushNotifications.register();
+
+    // 3. Initialize Firebase Push Notifications ONLY when logged in and requested!
+    if (token && requestPermissionNow) {
+      let pushPermStatus = await PushNotifications.checkPermissions();
+      if (pushPermStatus.receive !== 'granted') {
+        pushPermStatus = await PushNotifications.requestPermissions();
+      }
+      
+      if (pushPermStatus.receive === 'granted') {
+        PushNotifications.register();
+      }
     }
 
     // Add listeners once
-    PushNotifications.addListener('registration', (token) => {
-      console.log('[useNotifications] Push registration success, token:', token.value);
-      // Send token to backend
-      api.post('/auth/fcm-token', { token: token.value })
-        .catch(err => console.error('[useNotifications] Failed to register FCM token with backend', err));
-    });
+    try {
+      PushNotifications.addListener('registration', (token) => {
+        console.log('[useNotifications] Push registration success, token:', token.value);
+        // Send token to backend
+        api.post('/auth/fcm-token', { token: token.value })
+          .catch(err => console.error('[useNotifications] Failed to register FCM token with backend', err));
+      });
 
-    PushNotifications.addListener('registrationError', (error) => {
-      console.error('[useNotifications] Error on FCM registration:', error);
-    });
+      PushNotifications.addListener('registrationError', (error) => {
+        console.error('[useNotifications] Error on FCM registration:', error);
+      });
 
-    PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      console.log('[useNotifications] Push received:', notification);
-      playNotificationSound(); // Local chime fallback if app is open
-    });
+      PushNotifications.addListener('pushNotificationReceived', (notification) => {
+        console.log('[useNotifications] Push received:', notification);
+        playNotificationSound(); // Local chime fallback if app is open
+      });
 
-    PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-      console.log('[useNotifications] Push action performed:', notification);
-    });
+      PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
+        console.log('[useNotifications] Push action performed:', notification);
+      });
+    } catch (e) {}
 
-    isChannelInitialized = true;
     console.log('[useNotifications] Native High-Priority Notification Channel & FCM initialized');
   } catch (err) {
     console.warn('[useNotifications] Capacitor notification init:', err);
@@ -538,24 +548,36 @@ const useNotifications = (userRole = 'Admin') => {
 
   // ── 5. LIFECYCLE & UNIVERSAL REAL-TIME SYNC ENGINE ─────────────────────────
   useEffect(() => {
-    // 1. Initialize Capacitor Android Notification Channel & Permissions
-    initCapacitorNotifications();
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('user');
 
-    // 2. Request Web Notification permissions for browser users
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
+    // 1. Initialize Capacitor Android Notification Channel (permissions requested ONLY if user is already logged in)
+    if (token) {
+      initCapacitorNotifications(false);
+      // Request Web Notification permissions for browser users ONLY after login
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+      // Initial fetch
+      fetchActiveNotifications(false);
     }
 
-    // 3. Initial fetch
-    fetchActiveNotifications(false);
-    const handleLogin = () => fetchActiveNotifications(false);
+    const handleLogin = () => {
+      initCapacitorNotifications(true);
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+      fetchActiveNotifications(false);
+    };
     window.addEventListener('loginSuccess', handleLogin);
 
     // 4. Universal Real-Time Polling Engine (Every 4 seconds)
     // Ensures digital menu cloud orders immediately trigger chimes, table refreshes,
     // and Windows OS toasts on .exe, .apk, and Web without relying solely on local sockets.
     const pollInterval = setInterval(() => {
-      fetchActiveNotifications(true);
+      const currentToken = localStorage.getItem('accessToken') || localStorage.getItem('user');
+      if (currentToken) {
+        fetchActiveNotifications(true);
+      }
     }, 4000);
 
     // 5. Visibility / Window Focus listener

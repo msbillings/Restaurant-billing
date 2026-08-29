@@ -69,25 +69,25 @@ class WhatsAppService {
     const plt = os.platform();
     if (plt === 'win32') {
       return {
-        browserConfig: Browsers.windows('MS Billings POS'),
+        browserConfig: Browsers.windows('Chrome'),
         platformName: 'Windows',
         deviceName: 'MS Billings POS (Windows)'
       };
     } else if (plt === 'darwin') {
       return {
-        browserConfig: Browsers.macOS('MS Billings POS'),
+        browserConfig: Browsers.macOS('Chrome'),
         platformName: 'Mac OS',
         deviceName: 'MS Billings POS (Mac OS)'
       };
     } else if (plt === 'android') {
       return {
-        browserConfig: ['Android', 'MS Billings POS', '14.0'],
+        browserConfig: ['Chrome', 'Android', '120.0.0'],
         platformName: 'Android',
         deviceName: 'MS Billings POS (Android APK)'
       };
     } else {
       return {
-        browserConfig: Browsers.ubuntu('MS Billings POS'),
+        browserConfig: Browsers.ubuntu('Chrome'),
         platformName: 'Linux / Ubuntu',
         deviceName: 'MS Billings POS (Linux)'
       };
@@ -268,7 +268,7 @@ class WhatsAppService {
       throw new Error('WhatsApp is already connected. Please disconnect first to link another device.');
     }
 
-    if (!this.sock || typeof this.sock.requestPairingCode !== 'function') {
+    if (!this.sock || typeof this.sock.requestPairingCode !== 'function' || !this.sock.ws?.isOpen) {
       this.isInitializing = false;
       await this.init();
       let waited = 0;
@@ -276,6 +276,12 @@ class WhatsAppService {
         await new Promise(r => setTimeout(r, 400));
         waited += 400;
       }
+    }
+
+    if (this.sock?.waitForSocketOpen) {
+      try {
+        await this.sock.waitForSocketOpen();
+      } catch (e) {}
     }
 
     if (!this.sock || typeof this.sock.requestPairingCode !== 'function') {
@@ -295,6 +301,9 @@ class WhatsAppService {
       while ((!this.sock || typeof this.sock.requestPairingCode !== 'function') && waited < 4000) {
         await new Promise(r => setTimeout(r, 400));
         waited += 400;
+      }
+      if (this.sock?.waitForSocketOpen) {
+        try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       if (this.sock && typeof this.sock.requestPairingCode === 'function') {
         const code = await this.sock.requestPairingCode(cleanPhone);

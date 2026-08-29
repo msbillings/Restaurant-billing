@@ -1,5 +1,5 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import api from '../api/axios.js';
 import { Capacitor } from '@capacitor/core';
@@ -69,9 +69,11 @@ const triggerNativeBroadcastNotification = async (b) => {
 const useBroadcasts = (userRole) => {
   const [broadcasts, setBroadcasts] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const isInitialLoadDoneRef = useRef(false);
 
-  const fetchBroadcasts = async () => {
+  const fetchBroadcasts = async (isBackgroundSync = false) => {
     try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
 
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
@@ -105,20 +107,43 @@ const useBroadcasts = (userRole) => {
       const visibleBroadcasts = fetchedBroadcasts.filter(b => !clearedIds.includes(b._id));
       setBroadcasts(visibleBroadcasts);
 
-      // Check for any new un-notified broadcasts and schedule a native notification
-      visibleBroadcasts.forEach(b => {
-        const bId = String(b._id || b.id || '');
-        if (!bId) return;
-        const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
-        const legacyNotifiedKey = `notified_native_broadcast_${bId}`;
-        const hasBeenNotified = localStorage.getItem(notifiedKey) || localStorage.getItem(legacyNotifiedKey);
+      const now = Date.now();
+      const freshWindow = 2 * 60 * 60 * 1000; // 2 hours window for fresh announcements
 
-        if (!hasBeenNotified) {
+      // If this is the initial load (or user is not yet logged in), mark all existing historical broadcasts as seen WITHOUT firing push notifications
+      if (!isInitialLoadDoneRef.current || !token) {
+        visibleBroadcasts.forEach(b => {
+          const bId = String(b._id || b.id || '');
+          if (!bId) return;
+          const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
+          const legacyNotifiedKey = `notified_native_broadcast_${bId}`;
           localStorage.setItem(notifiedKey, 'true');
           localStorage.setItem(legacyNotifiedKey, 'true');
-          triggerNativeBroadcastNotification(b);
+        });
+        if (token) {
+          isInitialLoadDoneRef.current = true;
         }
-      });
+      } else if (isBackgroundSync) {
+        // On background sync when user is actively logged in, notify ONLY genuinely new incoming broadcasts
+        visibleBroadcasts.forEach(b => {
+          const bId = String(b._id || b.id || '');
+          if (!bId) return;
+          const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
+          const legacyNotifiedKey = `notified_native_broadcast_${bId}`;
+          const hasBeenNotified = localStorage.getItem(notifiedKey) || localStorage.getItem(legacyNotifiedKey);
+
+          if (!hasBeenNotified) {
+            localStorage.setItem(notifiedKey, 'true');
+            localStorage.setItem(legacyNotifiedKey, 'true');
+
+            // Only trigger push notification if broadcast is recently created
+            const createdAtTime = new Date(b.createdAt || b.date || b.timestamp || now).getTime();
+            if (now - createdAtTime <= freshWindow) {
+              triggerNativeBroadcastNotification(b);
+            }
+          }
+        });
+      }
 
       // Calculate unread count using localStorage to track read IDs
       let readBroadcasts = [];
@@ -176,27 +201,27 @@ const useBroadcasts = (userRole) => {
   };
 
   useEffect(() => {
-    // 1. Initial immediate fetch
-    fetchBroadcasts();
+    // 1. Initial immediate fetch (do not fire push notifications for old historical broadcasts)
+    fetchBroadcasts(false);
 
     // 2. High-speed 10-second background sync for near-instant broadcast delivery
     const interval = setInterval(() => {
-      fetchBroadcasts();
+      fetchBroadcasts(true);
     }, 10000);
 
     // 3. Instant refresh on tab visibility / window focus
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchBroadcasts();
+        fetchBroadcasts(true);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', fetchBroadcasts);
+    window.addEventListener('focus', () => fetchBroadcasts(true));
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', fetchBroadcasts);
+      window.removeEventListener('focus', () => fetchBroadcasts(true));
     };
   }, [userRole]);
 

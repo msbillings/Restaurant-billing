@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, HelpCircle, ExternalLink } from 'lucide-react';
+import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, HelpCircle, ExternalLink, ArrowRight, Sparkles } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { 
   requestCameraPermissions, 
@@ -14,9 +14,9 @@ import {
 const isNative = Capacitor.isNativePlatform();
 
 const StatusIcon = ({ status }) => {
-  if (status === 'granted') return <CheckCircle2 className="text-success" size={22} />;
-  if (status === 'denied') return <XCircle className="text-danger" size={22} />;
-  return <HelpCircle className="text-text-muted" size={22} />;
+  if (status === 'granted') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20"><CheckCircle2 size={14} /> Granted</span>;
+  if (status === 'denied') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20"><XCircle size={14} /> Denied</span>;
+  return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">Ready</span>;
 };
 
 const SystemPermissionsModal = ({ onComplete }) => {
@@ -46,18 +46,16 @@ const SystemPermissionsModal = ({ onComplete }) => {
       try {
         const statuses = await checkAllPermissions();
         setPermStatus(statuses);
-        // If any are denied on a native platform, show the Open Settings hint
         if (isNative) {
           const anyDenied = Object.values(statuses).some(s => s === 'denied');
           setHasDenied(anyDenied);
         }
-        // Auto-deselect already granted ones (no need to re-request)
-        setSelected(prev => ({
+        setSelected({
           camera: statuses.camera !== 'granted',
           location: statuses.location !== 'granted',
           mic: statuses.mic !== 'granted',
           notifications: statuses.notifications !== 'granted',
-        }));
+        });
       } catch (err) {
         console.warn('Could not check permissions:', err);
       } finally {
@@ -86,18 +84,18 @@ const SystemPermissionsModal = ({ onComplete }) => {
     if (permStatus[key] === 'granted') return;
     setLoading(true);
     try {
-      if (key === 'camera') {
-        setStatusMsg('Requesting Camera...');
+      if (key === 'notifications') {
+        setStatusMsg(t('Requesting Notifications...'));
+        await requestNotificationPermissions();
+      } else if (key === 'camera') {
+        setStatusMsg(t('Requesting Camera...'));
         await requestCameraPermissions();
       } else if (key === 'location') {
-        setStatusMsg('Requesting Location...');
+        setStatusMsg(t('Requesting Location...'));
         await requestLocationPermissions();
       } else if (key === 'mic') {
-        setStatusMsg('Requesting Microphone...');
+        setStatusMsg(t('Requesting Microphone...'));
         await requestMicPermissions();
-      } else if (key === 'notifications') {
-        setStatusMsg('Requesting Notifications...');
-        await requestNotificationPermissions();
       }
       await refreshStatuses();
     } catch (err) {
@@ -112,28 +110,33 @@ const SystemPermissionsModal = ({ onComplete }) => {
     requestSinglePermission(key);
   };
 
-  const requestPermissions = async () => {
+  const requestAllPermissions = async () => {
     setLoading(true);
     try {
-      if (selected.camera && permStatus.camera !== 'granted') {
-        setStatusMsg('Requesting Camera...');
-        await requestCameraPermissions();
+      // 1. Notifications first
+      if (permStatus.notifications !== 'granted') {
+        setStatusMsg(t('Requesting Notifications...'));
+        await requestNotificationPermissions();
       }
       
-      if (selected.mic && permStatus.mic !== 'granted') {
-        setStatusMsg('Requesting Microphone...');
+      // 2. Camera for AI face attendance / QR
+      if (permStatus.camera !== 'granted') {
+        setStatusMsg(t('Requesting Camera...'));
+        await requestCameraPermissions();
+      }
+
+      // 3. Location for delivery
+      if (permStatus.location !== 'granted') {
+        setStatusMsg(t('Requesting Location...'));
+        await requestLocationPermissions();
+      }
+
+      // 4. Mic for voice
+      if (permStatus.mic !== 'granted') {
+        setStatusMsg(t('Requesting Microphone...'));
         await requestMicPermissions();
       }
 
-      if (selected.notifications && permStatus.notifications !== 'granted') {
-        setStatusMsg('Requesting Notifications...');
-        await requestNotificationPermissions();
-      }
-
-      if (selected.location && permStatus.location !== 'granted') {
-        setStatusMsg('Requesting Location...');
-        await requestLocationPermissions();
-      }
       await refreshStatuses();
     } catch (err) {
       console.warn("Some permissions were denied or failed", err);
@@ -143,131 +146,156 @@ const SystemPermissionsModal = ({ onComplete }) => {
     }
   };
 
+  const allGranted = Object.values(permStatus).every(s => s === 'granted');
+
   const permItems = [
+    {
+      key: 'notifications',
+      icon: Bell,
+      iconColor: 'text-amber-500',
+      iconBg: 'bg-amber-500/15',
+      label: t("Push & Local Notifications"),
+      desc: t("Instant popups & sounds for digital orders & KOTs.")
+    },
     {
       key: 'camera',
       icon: Camera,
       iconColor: 'text-blue-500',
-      iconBg: 'bg-blue-500/20',
-      label: t("Camera"),
-      desc: t("Required for AI Face Attendance.")
+      iconBg: 'bg-blue-500/15',
+      label: t("Camera Access"),
+      desc: t("Required for AI Face Attendance & QR Scanning.")
     },
     {
       key: 'location',
       icon: MapPin,
-      iconColor: 'text-green-500',
-      iconBg: 'bg-green-500/20',
-      label: t("Location"),
-      desc: t("Required for delivery tracking.")
+      iconColor: 'text-emerald-500',
+      iconBg: 'bg-emerald-500/15',
+      label: t("Location Services"),
+      desc: t("Required for delivery & store geo-verification.")
     },
     {
       key: 'mic',
       icon: Mic,
-      iconColor: 'text-amber-500',
-      iconBg: 'bg-amber-500/20',
-      label: t("Microphone"),
-      desc: t("Required for voice commands.")
-    },
-    {
-      key: 'notifications',
-      icon: Bell,
       iconColor: 'text-purple-500',
-      iconBg: 'bg-purple-500/20',
-      label: t("Notifications"),
-      desc: t("Instant alerts for KOTs.")
+      iconBg: 'bg-purple-500/15',
+      label: t("Microphone"),
+      desc: t("Required for AI voice command billing.")
     }
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[9999] animate-in fade-in duration-300">
-      <div className="bg-surface rounded-3xl border border-border shadow-2xl max-w-lg w-full mx-4 overflow-hidden relative">
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[9999] p-2.5 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200">
+      <div className="bg-slate-900 text-white rounded-2xl sm:rounded-3xl border border-white/15 shadow-2xl max-w-md w-full my-auto overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
         
-        <div className="px-8 py-6 bg-linear-to-r from-primary/20 to-primary/5 flex flex-col items-center border-b border-border text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary/20 text-primary flex items-center justify-center shadow-inner mb-4">
-            <ShieldCheck size={36} />
+        {/* Header */}
+        <div className="p-4 sm:p-6 pb-3 sm:pb-4 bg-linear-to-b from-primary/20 via-primary/5 to-transparent flex flex-col items-center border-b border-white/10 text-center shrink-0">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/25 text-primary border border-primary/30 flex items-center justify-center shadow-lg shadow-primary/20 mb-2 sm:mb-3">
+            <ShieldCheck size={28} className="sm:w-8 sm:h-8" />
           </div>
-          <h2 className="text-2xl font-black text-text-main tracking-tight">
-            {t("System Permissions")}
+          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+            {t("App Permissions Setup")}
           </h2>
-          <p className="text-sm text-text-muted font-medium mt-2">
+          <p className="text-[12px] sm:text-xs text-gray-300 font-medium mt-1 max-w-xs">
             {checkingStatus
-              ? t("Checking current permission status...")
-              : t("Select the permissions you want to grant for this application.")}
+              ? t("Checking system permission status...")
+              : t("Allow the required permissions below for smooth billing, instant order alerts, and AI features.")}
           </p>
         </div>
 
-        <div className="p-8 space-y-4">
-
+        {/* Scrollable Permissions List */}
+        <div className="p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 overflow-y-auto flex-1 overscroll-contain">
           {checkingStatus ? (
-            <div className="flex items-center justify-center py-6">
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
               <Loader2 size={32} className="animate-spin text-primary" />
+              <p className="text-xs text-gray-400 font-medium">{t("Scanning hardware permissions...")}</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {permItems.map(({ key, icon: Icon, iconColor, iconBg, label, desc }) => {
-                const status = permStatus[key];
-                const isDenied = status === 'denied';
-                const isGranted = status === 'granted';
-                const isSelected = selected[key];
+            permItems.map(({ key, icon: Icon, iconColor, iconBg, label, desc }) => {
+              const status = permStatus[key];
+              const isDenied = status === 'denied';
+              const isGranted = status === 'granted';
 
-                return (
-                  <div
-                    key={key}
-                    onClick={() => toggle(key)}
-                    className={`flex items-center justify-between p-4 rounded-2xl border transition-colors
-                      ${isGranted ? 'bg-success/10 border-success/30 cursor-default' :
-                        isDenied ? 'bg-danger/10 border-danger/30 cursor-default' :
-                        isSelected ? 'bg-primary/10 border-primary/30 cursor-pointer' :
-                        'bg-background border-border hover:bg-surface-hover cursor-pointer'}`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full ${iconBg} ${iconColor} flex items-center justify-center`}>
-                        <Icon size={20} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-text-main">{label}</p>
-                        <p className={`text-xs ${isDenied ? 'text-danger font-semibold' : 'text-text-muted'}`}>
-                          {isDenied && isNative ? t("Denied — open Settings to enable") : desc}
-                        </p>
-                      </div>
+              return (
+                <div
+                  key={key}
+                  onClick={() => toggle(key)}
+                  className={`flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
+                    isGranted 
+                      ? 'bg-emerald-500/10 border-emerald-500/30 cursor-default' 
+                      : isDenied 
+                      ? 'bg-red-500/10 border-red-500/30 cursor-pointer' 
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/40 cursor-pointer active:scale-[0.99]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0 border border-white/10`}>
+                      <Icon size={18} className="sm:w-5 sm:h-5" />
                     </div>
-                    <StatusIcon status={isGranted ? 'granted' : isDenied ? 'denied' : isSelected ? 'prompt' : 'none'} />
+                    <div className="min-w-0">
+                      <p className="font-bold text-white text-xs sm:text-sm truncate">{label}</p>
+                      <p className={`text-[11px] sm:text-xs truncate ${isDenied ? 'text-red-400 font-semibold' : 'text-gray-400'}`}>
+                        {isDenied && isNative ? t("Denied — tap to grant or fix in Settings") : desc}
+                      </p>
+                    </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="shrink-0">
+                    <StatusIcon status={status} />
+                  </div>
+                </div>
+              );
+            })
           )}
 
-          {/* Open Settings hint for native when some are denied */}
+          {/* Open Settings hint for native if any are denied */}
           {isNative && hasDenied && !checkingStatus && (
             <button
               onClick={openAppSettings}
-              className="w-full py-3 border border-border text-text-muted rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-surface-hover transition-colors"
+              className="w-full py-2.5 px-3 border border-white/15 bg-white/5 text-amber-300 rounded-xl font-semibold text-[11px] sm:text-xs flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
             >
-              <ExternalLink size={16} />
-              {t("Open Device Settings to fix denied permissions")}
+              <ExternalLink size={14} />
+              {t("Open Device Settings to unlock denied permissions")}
             </button>
           )}
+        </div>
 
-          <div className="pt-2">
+        {/* Footer Actions */}
+        <div className="p-3.5 sm:p-5 pt-2 sm:pt-3 border-t border-white/10 bg-slate-900/90 shrink-0 space-y-2">
+          <button
+            onClick={allGranted ? onComplete : requestAllPermissions}
+            disabled={loading || checkingStatus}
+            className={`w-full py-3 sm:py-3.5 font-black text-sm sm:text-base rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-[0.98] ${
+              allGranted
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40'
+                : 'bg-primary hover:bg-primary-hover text-white shadow-primary/30'
+            }`}
+          >
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span className="truncate">{statusMsg || t("Granting permissions...")}</span>
+              </>
+            ) : allGranted ? (
+              <>
+                <CheckCircle2 size={18} />
+                <span>{t("All Permissions Granted — Continue")}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={18} />
+                <span>{t("Allow All Permissions")}</span>
+                <ArrowRight size={16} />
+              </>
+            )}
+          </button>
+
+          {!allGranted && !loading && (
             <button
-              onClick={requestPermissions}
-              disabled={loading || checkingStatus}
-              className="w-full py-4 bg-primary text-primary-foreground font-black text-lg rounded-xl shadow-lg shadow-primary/30 hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              onClick={onComplete}
+              className="w-full py-1.5 text-center text-xs text-gray-400 hover:text-gray-200 transition-colors cursor-pointer"
             >
-              {loading ? (
-                <>
-                  <Loader2 size={24} className="animate-spin" />
-                  {statusMsg}
-                </>
-              ) : (
-                t("Proceed & Grant")
-              )}
+              {t("Skip for now (some features may be restricted)")}
             </button>
-            <p className="text-center text-xs text-text-muted mt-4">
-              {t("You only need to do this once.")}
-            </p>
-          </div>
+          )}
         </div>
       </div>
     </div>
