@@ -18,9 +18,9 @@ android {
     }
     signingConfigs {
         release {
-            def ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: "msbilling2026"
-            def kAlias = System.getenv("KEY_ALIAS") ?: "msbilling"
-            def kPassword = System.getenv("KEY_PASSWORD") ?: "msbilling2026"
+            def ksPassword = "msbilling2026"
+            def kAlias = "msbilling"
+            def kPassword = "msbilling2026"
 
             def keystorePropertiesFile = rootProject.file("keystore.properties")
             if (keystorePropertiesFile.exists()) {
@@ -30,6 +30,11 @@ android {
                 kAlias = keystoreProperties['keyAlias'] ?: kAlias
                 kPassword = keystoreProperties['keyPassword'] ?: kPassword
             }
+
+            // Environment variables take highest priority (e.g., in CI/CD)
+            ksPassword = System.getenv("KEYSTORE_PASSWORD") ?: ksPassword
+            kAlias = System.getenv("KEY_ALIAS") ?: kAlias
+            kPassword = System.getenv("KEY_PASSWORD") ?: kPassword
 
             storeFile file("../keystore.jks")
             storePassword ksPassword
