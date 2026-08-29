@@ -201,7 +201,7 @@ class WhatsAppService {
 
     await this.ensureConnection();
 
-    if (!this.sock) {
+    if (!this.sock || !this.sock.user || !this.sock.user.id) {
       throw new Error('WhatsApp service is not connected. Please scan the QR code in POS Settings.');
     }
 
@@ -236,7 +236,7 @@ class WhatsAppService {
 
     await this.ensureConnection();
 
-    if (!this.sock) {
+    if (!this.sock || !this.sock.user || !this.sock.user.id) {
       throw new Error('WhatsApp service is not connected. Please scan the QR code in POS Settings.');
     }
 
