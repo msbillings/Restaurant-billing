@@ -66,32 +66,11 @@ class WhatsAppService {
   }
 
   getPlatformInfo() {
-    const plt = os.platform();
-    if (plt === 'win32') {
-      return {
-        browserConfig: Browsers.windows('Chrome'),
-        platformName: 'Windows',
-        deviceName: 'MS Billings POS (Windows)'
-      };
-    } else if (plt === 'darwin') {
-      return {
-        browserConfig: Browsers.macOS('Chrome'),
-        platformName: 'Mac OS',
-        deviceName: 'MS Billings POS (Mac OS)'
-      };
-    } else if (plt === 'android') {
-      return {
-        browserConfig: ['Chrome', 'Android', '120.0.0'],
-        platformName: 'Android',
-        deviceName: 'MS Billings POS (Android APK)'
-      };
-    } else {
-      return {
-        browserConfig: Browsers.ubuntu('Chrome'),
-        platformName: 'Linux / Ubuntu',
-        deviceName: 'MS Billings POS (Linux)'
-      };
-    }
+    return {
+      browserConfig: Browsers.macOS('Chrome'),
+      platformName: 'MS Billings POS',
+      deviceName: 'MS Billings Gateway'
+    };
   }
 
   async init() {
@@ -99,6 +78,14 @@ class WhatsAppService {
     this.isInitializing = true;
 
     try {
+      if (this.sock) {
+        try {
+          this.sock.ev.removeAllListeners();
+          this.sock.end(undefined);
+        } catch (e) {}
+        this.sock = null;
+      }
+
       this.authDir = getAuthDir();
       if (!fs.existsSync(this.authDir)) {
         fs.mkdirSync(this.authDir, { recursive: true });
@@ -110,7 +97,7 @@ class WhatsAppService {
         const vInfo = await fetchLatestBaileysVersion();
         version = vInfo.version;
       } catch (e) {
-        version = [2, 3000, 1015901307];
+        version = [2, 3000, 1017531287];
       }
 
       const platformInfo = this.getPlatformInfo();
@@ -164,31 +151,37 @@ class WhatsAppService {
 
         if (connection === 'close') {
           const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
+          const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
           
-          this.status = 'DISCONNECTED';
-          this.connectedNumber = null;
-          this.notifyListeners();
-
-          if (shouldReconnect) {
-            console.log('[WhatsApp Service] Reconnecting...');
-            setTimeout(() => {
-              this.isInitializing = false;
-              this.init();
-            }, 3000);
-          } else {
+          if (isLoggedOut) {
             console.log('[WhatsApp Service] Logged out. Clearing credentials...');
+            this.status = 'DISCONNECTED';
+            this.connectedNumber = null;
+            this.qrDataUrl = null;
             this.clearAuth();
+            this.notifyListeners();
+
             setTimeout(() => {
               this.isInitializing = false;
               this.init();
             }, 2000);
+          } else {
+            console.log(`[WhatsApp Service] Reconnecting (status: ${statusCode}, restartRequired: ${isRestartRequired})...`);
+            this.status = isRestartRequired ? 'CONNECTING' : 'DISCONNECTED';
+            this.notifyListeners();
+
+            const delay = isRestartRequired ? 600 : 2500;
+            setTimeout(() => {
+              this.isInitializing = false;
+              this.init();
+            }, delay);
           }
         } else if (connection === 'open') {
           this.status = 'CONNECTED';
           this.qrDataUrl = null;
           this.linkedAt = this.linkedAt || new Date().toISOString();
-          const rawJid = this.sock.user?.id || '';
+          const rawJid = this.sock?.user?.id || state?.creds?.me?.id || '';
           this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0];
           console.log(`[WhatsApp Service] Connected successfully as +${this.connectedNumber}`);
           this.notifyListeners();
@@ -332,6 +325,10 @@ class WhatsAppService {
     const phone = this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0];
     const isConnected = this.status === 'CONNECTED' || Boolean(this.sock?.user) || Boolean(this.connectedNumber);
     const { platformName, deviceName } = this.getPlatformInfo();
+
+    if (!isConnected && !this.sock && !this.isInitializing) {
+      this.init().catch(() => {});
+    }
 
     return {
       status: isConnected ? 'CONNECTED' : this.status,

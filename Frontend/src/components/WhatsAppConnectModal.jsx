@@ -79,6 +79,9 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
       App.addListener('appStateChange', ({ isActive }) => {
         if (isActive) {
           fetchStatus();
+          setTimeout(fetchStatus, 800);
+          setTimeout(fetchStatus, 1800);
+          setTimeout(fetchStatus, 3200);
         }
       }).then(l => { appListener = l; }).catch(() => {});
     }
@@ -191,10 +194,14 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const isConnected = statusData.status === 'CONNECTED';
-  const isMac = statusData?.platform 
+  const isCapacitor = Capacitor.isNativePlatform();
+  const isAndroid = isCapacitor && /android/i.test(navigator.userAgent || '');
+  const isIOS = isCapacitor && /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const isMac = !isCapacitor && (statusData?.platform 
     ? statusData.platform.toLowerCase().includes('mac') 
-    : (typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent));
-  const currentPlatformName = statusData?.platform || (isMac ? 'Mac OS' : 'Windows');
+    : (typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)));
+  
+  const currentPlatformName = statusData?.platform || (isAndroid ? 'Android APK' : isIOS ? 'iOS App' : isMac ? 'Mac OS' : 'Windows');
   const currentDeviceName = statusData?.deviceName || `MS Billings POS (${currentPlatformName})`;
 
   const modalContent = (
@@ -411,7 +418,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                         <img 
                           src={statusData.qr} 
                           alt="WhatsApp Pairing QR" 
-                          className="w-40 h-40 sm:w-52 sm:h-52 object-contain block mx-auto" 
+                          className="w-40 h-40 sm:w-52 sm:h-52 object-contain block mx-auto [image-rendering:pixelated]" 
                         />
                       </div>
                       <p className="text-[11px] text-emerald-400 font-medium mt-2 flex items-center justify-center gap-1">

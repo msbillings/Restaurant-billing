@@ -47,11 +47,21 @@ export const getApiUrl = () => {
         return 'http://127.0.0.1:5002/api';
     }
 
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    // 2. If a local server IP is stored (for Android APK / iOS IPA / LAN devices on Wi-Fi)
+    const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
+    if (storedIp && storedIp.trim()) {
+        const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+        if (cleanIp.includes(':')) {
+            return cleanApiUrl(`http://${cleanIp}`);
+        }
+        return cleanApiUrl(`http://${cleanIp}:5002`);
+    }
 
-    // 2. If running on Vercel or any HTTPS cloud deployment, ALWAYS use HTTPS API (prevent Mixed Content blocks)
-    if (host && (host.includes('vercel.app') || isHttps)) {
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isVercelHost = typeof window !== 'undefined' && host && host.includes('vercel.app');
+
+    // 3. If running directly on Vercel cloud domain
+    if (isVercelHost) {
         let envUrl = import.meta.env.VITE_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanApiUrl(envUrl);
@@ -59,20 +69,7 @@ export const getApiUrl = () => {
         return 'https://restaurant-billing-apk.vercel.app/api';
     }
 
-    // 3. If a local server IP is stored (for LAN / APK on Wi-Fi)
-    const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
-    if (storedIp && storedIp.trim()) {
-        // Native mobile apps (APK / IPA) or remote LAN devices connect to the stored server IP
-        if (isCapacitorApp() || (host !== 'localhost' && host !== '127.0.0.1')) {
-            const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
-            if (cleanIp.includes(':')) {
-                return cleanApiUrl(`http://${cleanIp}`);
-            }
-            return cleanApiUrl(`http://${cleanIp}:5002`);
-        }
-    }
-
-    // 4. Capacitor APK/IPA without a stored IP — fallback to cloud production URL
+    // 4. Capacitor APK/IPA native mobile app without a stored IP — fallback to cloud URL
     if (isCapacitorApp()) {
         let envUrl = import.meta.env.VITE_API_URL;
         if (envUrl && envUrl.startsWith('https://')) {
@@ -105,35 +102,7 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
-    // 1. If running in Electron Desktop App (.exe) -> SuperAdmin is the live cloud server
-    if (isElectronApp()) {
-        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
-        if (envUrl && envUrl.startsWith('https://')) {
-            return cleanSuperadminUrl(envUrl);
-        }
-        return 'https://restaurant-billing-apk.vercel.app';
-    }
-
-    // 2. Android APK (Capacitor Native) -> ALWAYS route to live cloud API
-    if (isCapacitorApp()) {
-        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
-        if (envUrl && envUrl.startsWith('https://')) {
-            return cleanSuperadminUrl(envUrl);
-        }
-        return 'https://restaurant-billing-apk.vercel.app';
-    }
-
-    const host = typeof window !== 'undefined' ? window.location.hostname : '';
-    // 3. If running on Vercel or any cloud HTTPS deployment
-    if (host && (host.includes('vercel.app') || (typeof window !== 'undefined' && window.location.protocol === 'https:'))) {
-        let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
-        if (envUrl && envUrl.startsWith('https://')) {
-            return cleanSuperadminUrl(envUrl);
-        }
-        return 'https://restaurant-billing-apk.vercel.app';
-    }
-
-    // 4. Default: Live production cloud SuperAdmin server
+    // Default: Live production cloud SuperAdmin server
     let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
     if (envUrl && envUrl.startsWith('https://')) {
         return cleanSuperadminUrl(envUrl);

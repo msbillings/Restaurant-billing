@@ -202,8 +202,9 @@ api.interceptors.response.use(
     // 1. SMART CLOUD FALLBACK: If local IP is unreachable (e.g. phone switched from Wi-Fi to 5G cellular)
     const currentBase = originalRequest?.baseURL || '';
     const isLocalNetworkIp = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|localhost|127\.0\.0\.1)/i.test(currentBase);
+    const isWhatsAppEndpoint = originalRequest?.url?.includes('/whatsapp/');
     
-    if (isNetworkOrTimeout && isLocalNetworkIp && !originalRequest._fallbackToCloud) {
+    if (isNetworkOrTimeout && isLocalNetworkIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
       console.warn('[axios] Local server unreachable, automatically falling back to live Cloud API:', originalRequest.url);
       originalRequest._fallbackToCloud = true;
       originalRequest.baseURL = 'https://restaurant-billing-apk.vercel.app/api';
