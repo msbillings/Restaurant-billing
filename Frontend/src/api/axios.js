@@ -207,7 +207,7 @@ api.interceptors.response.use(
     if (isNetworkOrTimeout && isLocalNetworkIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
       console.warn('[axios] Local server unreachable, automatically falling back to live Cloud API:', originalRequest.url);
       originalRequest._fallbackToCloud = true;
-      originalRequest.baseURL = 'https://restaurant-billing-apk.vercel.app/api';
+      originalRequest.baseURL = 'https://msbillings-backend.onrender.com/api';
       return api(originalRequest);
     }
 

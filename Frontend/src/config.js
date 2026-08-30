@@ -66,7 +66,7 @@ export const getApiUrl = () => {
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanApiUrl(envUrl);
         }
-        return 'https://restaurant-billing-apk.vercel.app/api';
+        return 'https://msbillings-backend.onrender.com/api';
     }
 
     // 4. Capacitor APK/IPA native mobile app without a stored IP — fallback to cloud URL
@@ -75,7 +75,7 @@ export const getApiUrl = () => {
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanApiUrl(envUrl);
         }
-        return 'https://restaurant-billing-apk.vercel.app/api';
+        return 'https://msbillings-backend.onrender.com/api';
     }
 
     // 5. Local development or local LAN Wi-Fi IP
@@ -108,7 +108,7 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(envUrl);
     }
 
-    return 'https://restaurant-billing-apk.vercel.app';
+    return 'https://msbillings-backend.onrender.com';
 };
 
 export const getSocketUrl = () => {

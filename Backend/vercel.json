@@ -21,7 +21,7 @@
     "ADMIN_MAX_CONCURRENT_LOGINS": "99999",
     "CUSTOMER_MAX_CONCURRENT_LOGINS": "99999",
     "CAPTAIN_MAX_CONCURRENT_LOGINS": "99999",
-    "FRONTEND_URL": "https://restaurant-billing-frontend-main.vercel.app",
-    "CORS_ORIGIN": "https://restaurant-billing-frontend-main.vercel.app"
+    "FRONTEND_URL": "https://restaurant-billing-seven.vercel.app",
+    "CORS_ORIGIN": "https://restaurant-billing-seven.vercel.app"
   }
 }

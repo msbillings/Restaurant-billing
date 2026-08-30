@@ -97,7 +97,7 @@ console.log('Patching API URLs for Desktop (localhost)...');
         const filePath = path.join(assetsDir, file);
         try {
           let content = fs.readFileSync(filePath, 'utf8');
-          content = content.replace(/https:\/\/restaurant-billing-apk\.vercel\.app\/api/g, 'http://127.0.0.1:5002/api');
+          content = content.replace(/https:\/\/msbillings-backend\.onrender\.com\/api/g, 'http://127.0.0.1:5002/api');
           content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
           content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
           fs.writeFileSync(filePath, content);
