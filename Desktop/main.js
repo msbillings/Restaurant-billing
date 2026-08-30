@@ -47,23 +47,23 @@ function createMenu() {
         { role: 'paste' },
         ...(isMac
           ? [
-              { role: 'pasteAndMatchStyle' },
-              { role: 'delete' },
-              { role: 'selectAll' },
-              { type: 'separator' },
-              {
-                label: 'Speech',
-                submenu: [
-                  { role: 'startSpeaking' },
-                  { role: 'stopSpeaking' }
-                ]
-              }
-            ]
+            { role: 'pasteAndMatchStyle' },
+            { role: 'delete' },
+            { role: 'selectAll' },
+            { type: 'separator' },
+            {
+              label: 'Speech',
+              submenu: [
+                { role: 'startSpeaking' },
+                { role: 'stopSpeaking' }
+              ]
+            }
+          ]
           : [
-              { role: 'delete' },
-              { type: 'separator' },
-              { role: 'selectAll' }
-            ])
+            { role: 'delete' },
+            { type: 'separator' },
+            { role: 'selectAll' }
+          ])
       ]
     },
     // { role: 'viewMenu' }
@@ -83,7 +83,7 @@ function createMenu() {
         { role: 'zoomIn' },
         { role: 'zoomOut' },
         { type: 'separator' },
-        { 
+        {
           role: 'togglefullscreen',
           accelerator: 'F11'
         }
@@ -97,14 +97,14 @@ function createMenu() {
         { role: 'zoom' },
         ...(isMac
           ? [
-              { type: 'separator' },
-              { role: 'front' },
-              { type: 'separator' },
-              { role: 'window' }
-            ]
+            { type: 'separator' },
+            { role: 'front' },
+            { type: 'separator' },
+            { role: 'window' }
+          ]
           : [
-              { role: 'close' }
-            ])
+            { role: 'close' }
+          ])
       ]
     },
     {
@@ -169,8 +169,8 @@ function createWindow() {
 
   // Clear cache on launch to prevent stale asset hash imports
   const { session } = require('electron');
-  session.defaultSession.clearCache().catch(() => {});
-  session.defaultSession.clearCodeCaches({}).catch(() => {});
+  session.defaultSession.clearCache().catch(() => { });
+  session.defaultSession.clearCodeCaches({}).catch(() => { });
 
   // Load the built static files
   mainWindow.loadFile(path.join(__dirname, 'frontend/index.html'));
@@ -187,7 +187,7 @@ function createWindow() {
 
 function startBackend() {
   const { fork } = require('child_process');
-  
+
   // Check if app is packaged
   const isPackaged = app.isPackaged;
 
@@ -195,17 +195,17 @@ function startBackend() {
   // In development, it's ./backend
   // In production, it's extracted to process.resourcesPath/backend because we use extraResources
   const backendPath = isPackaged
-      ? path.join(process.resourcesPath, 'backend')
-      : path.join(__dirname, 'backend');
+    ? path.join(process.resourcesPath, 'backend')
+    : path.join(__dirname, 'backend');
 
   let serverPath = path.join(backendPath, 'server.js');
-  
+
   // When packaged by electron-builder, files unpacked from ASAR are stored in app.asar.unpacked
   if (serverPath.includes('app.asar')) {
     serverPath = serverPath.replace('app.asar', 'app.asar.unpacked');
     backendPath = backendPath.replace('app.asar', 'app.asar.unpacked');
   }
-  
+
   const fs = require('fs');
   const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
   let logStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
@@ -285,13 +285,13 @@ ipcMain.handle('get-printers', async () => {
 
 ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) => {
   console.log('[Print] silent-print received, silent:', silent, 'printer:', printerName || '(default)');
-  
-  let printWindow = new BrowserWindow({ 
+
+  let printWindow = new BrowserWindow({
     show: false, // Always keep print worker window hidden so extra preview window never pops up over main app
     width: 400,
     height: 800
   });
-  
+
   if (!silent) {
     printWindow.setMenuBarVisibility(false);
   }
@@ -366,7 +366,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
     console.error('[Print] Failed to write temp file, falling back to data URL:', err);
     printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`);
   }
-  
+
   printWindow.webContents.once('did-finish-load', () => {
     console.log('[Print] Print window loaded, sending to printer...');
     // Slight delay to ensure CSS is fully painted before sending to printer spooler
@@ -390,7 +390,7 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
         }
         if (!printWindow.isDestroyed()) printWindow.close();
         // Clean up temp file
-        try { fs.unlinkSync(tempPath); } catch (e) {}
+        try { fs.unlinkSync(tempPath); } catch (e) { }
       });
     }, 500);
   });
@@ -529,7 +529,7 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
   try {
     autoUpdater.logger = console;
-  } catch (e) {}
+  } catch (e) { }
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for updates...');
@@ -537,16 +537,22 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdater] Update available:', info ? info.version : 'new version');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-available', info);
+    }
   });
 
   autoUpdater.on('update-not-available', () => {
     console.log('[AutoUpdater] Application is up to date.');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-not-available');
+    }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info ? info.version : 'ready');
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-ready');
+      mainWindow.webContents.send('update-ready', info);
     } else {
       dialog.showMessageBox({
         type: 'info',
@@ -607,7 +613,7 @@ app.on('ready', async () => {
     createMenu();
     createWindow();
     setupAutoUpdater();
-    
+
     // Initial check for updates
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.error('[AutoUpdater] Initial check error:', err);

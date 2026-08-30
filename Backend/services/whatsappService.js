@@ -117,13 +117,6 @@ class WhatsAppService {
       this.sock.ev.on('creds.update', async () => {
         try {
           await saveCreds();
-          const meId = state?.creds?.me?.id || this.sock?.user?.id;
-          if (meId) {
-            this.connectedNumber = meId.split(':')[0] || meId.split('@')[0];
-            this.status = 'CONNECTED';
-            this.qrDataUrl = null;
-            this.notifyListeners();
-          }
         } catch (e) {
           console.warn('[WhatsApp Service] creds.update error:', e);
         }
@@ -182,7 +175,7 @@ class WhatsAppService {
           this.qrDataUrl = null;
           this.linkedAt = this.linkedAt || new Date().toISOString();
           const rawJid = this.sock?.user?.id || state?.creds?.me?.id || '';
-          this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0];
+          this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0] || null;
           console.log(`[WhatsApp Service] Connected successfully as +${this.connectedNumber}`);
           this.notifyListeners();
         } else if (connection === 'connecting') {
@@ -321,35 +314,35 @@ class WhatsAppService {
   }
 
   getStatus() {
-    const rawJid = this.sock?.user?.id || '';
-    const phone = this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0];
-    const isConnected = this.status === 'CONNECTED' || Boolean(this.sock?.user) || Boolean(this.connectedNumber);
+    const isActuallyConnected = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user);
+    const rawJid = isActuallyConnected ? (this.sock?.user?.id || '') : '';
+    const phone = isActuallyConnected ? (this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0] || null) : null;
     const { platformName, deviceName } = this.getPlatformInfo();
 
-    if (!isConnected && !this.sock && !this.isInitializing) {
+    if (!isActuallyConnected && !this.sock && !this.isInitializing) {
       this.init().catch(() => {});
     }
 
     return {
-      status: isConnected ? 'CONNECTED' : this.status,
-      connectedNumber: phone || null,
-      userName: this.sock?.user?.name || 'MS Billings User',
+      status: isActuallyConnected ? 'CONNECTED' : (this.qrDataUrl ? 'SCAN_QR' : this.status),
+      connectedNumber: phone,
+      userName: isActuallyConnected ? (this.sock?.user?.name || 'MS Billings User') : null,
       platform: platformName,
       deviceName: deviceName,
-      linkedAt: this.linkedAt || (isConnected ? new Date().toISOString() : null),
-      linkedDevices: isConnected ? [
+      linkedAt: isActuallyConnected ? (this.linkedAt || new Date().toISOString()) : null,
+      linkedDevices: isActuallyConnected && phone ? [
         {
           id: 'dev_1',
           name: deviceName,
           platform: `${platformName} Gateway`,
           status: 'Active',
           lastActive: 'Just now',
-          phoneNumber: phone ? `+${phone}` : ''
+          phoneNumber: `+${phone}`
         }
       ] : [],
-      totalLinkedDevices: isConnected ? 1 : 0,
-      hasQr: Boolean(this.qrDataUrl),
-      qr: isConnected ? null : this.qrDataUrl
+      totalLinkedDevices: isActuallyConnected && phone ? 1 : 0,
+      hasQr: Boolean(this.qrDataUrl && !isActuallyConnected),
+      qr: isActuallyConnected ? null : this.qrDataUrl
     };
   }
 
@@ -368,8 +361,9 @@ class WhatsAppService {
   }
 
   async ensureConnection() {
-    if (!this.sock || this.status !== 'CONNECTED' || !this.sock.ws?.isOpen) {
-      console.log('[WhatsApp Service] Ensuring socket connection is open...');
+    const isReady = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user) && this.sock?.ws?.isOpen;
+    if (!isReady) {
+      console.log('[WhatsApp Service] Ensuring socket connection is open and user is verified...');
       if (!this.sock || this.status === 'DISCONNECTED') {
         this.isInitializing = false;
         await this.init();
@@ -380,7 +374,7 @@ class WhatsAppService {
         } catch (e) {}
       }
       let count = 0;
-      while (count < 25 && this.status !== 'CONNECTED' && !this.sock?.ws?.isOpen) {
+      while (count < 30 && (this.status !== 'CONNECTED' || !this.sock?.user?.id)) {
         await new Promise(r => setTimeout(r, 200));
         count++;
       }
@@ -399,7 +393,7 @@ class WhatsAppService {
 
     await this.ensureConnection();
 
-    if (!this.sock || this.status === 'DISCONNECTED') {
+    if (!this.sock || this.status !== 'CONNECTED' || !this.sock?.user?.id) {
       throw new Error('WhatsApp service is not connected. Please scan the QR code or link via phone code.');
     }
 
@@ -418,7 +412,7 @@ class WhatsAppService {
       if (this.sock?.waitForSocketOpen) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
-      if (this.sock) {
+      if (this.sock && this.sock.user?.id) {
         return await this.sock.sendMessage(jid, { text: String(text) });
       }
       throw sendErr;

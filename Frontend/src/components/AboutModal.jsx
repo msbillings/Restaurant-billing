@@ -1,20 +1,21 @@
-import { useLanguage } from "../context/LanguageContext";import React from 'react';
+import { useLanguage } from "../context/LanguageContext"; import React from 'react';
 import { X, Info, ShieldCheck, Heart, Sparkles, Code2, Server } from 'lucide-react';
 
-const AboutModal = ({ isOpen, onClose, version }) => {const { t } = useLanguage();
+const AboutModal = ({ isOpen, onClose, version }) => {
+  const { t } = useLanguage();
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div
         className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-slide-up relative">
-        
+
         {/* Banner */}
         <div className="bg-gradient-to-r from-orange-500 to-rose-500 h-32 relative overflow-hidden flex items-center justify-center">
           <div className="absolute inset-0 bg-black/10"></div>
           <Sparkles className="absolute top-4 right-4 text-white/50" size={24} />
           <Code2 className="absolute bottom-4 left-4 text-white/50" size={32} />
-          
+
           <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-md shadow-lg border border-white/30 transform translate-y-6">
             <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">{t("msbillings")}</h1>
           </div>
@@ -60,7 +61,7 @@ const AboutModal = ({ isOpen, onClose, version }) => {const { t } = useLanguage(
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/40 text-white rounded-full transition-colors z-10">
-          
+
           <X size={20} />
         </button>
       </div>

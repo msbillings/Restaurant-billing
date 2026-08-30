@@ -193,7 +193,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const isConnected = statusData.status === 'CONNECTED';
+  const isConnected = statusData.status === 'CONNECTED' && Boolean(statusData.connectedNumber);
   const isCapacitor = Capacitor.isNativePlatform();
   const isAndroid = isCapacitor && /android/i.test(navigator.userAgent || '');
   const isIOS = isCapacitor && /iphone|ipad|ipod/i.test(navigator.userAgent || '');
@@ -289,7 +289,8 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                 </div>
                 {(() => {
                   const rawNum = String(statusData.connectedNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                  const displayNum = rawNum.length === 12 && rawNum.startsWith('91') ? rawNum.slice(2) : (rawNum || '9701800140');
+                  const displayNum = rawNum.length === 12 && rawNum.startsWith('91') ? rawNum.slice(2) : rawNum;
+                  if (!displayNum) return null;
                   return (
                     <span className="text-[11px] sm:text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border border-emerald-500/30">
                       +91 {displayNum}
@@ -421,10 +422,6 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                           className="w-40 h-40 sm:w-52 sm:h-52 object-contain block mx-auto [image-rendering:pixelated]" 
                         />
                       </div>
-                      <p className="text-[11px] text-emerald-400 font-medium mt-2 flex items-center justify-center gap-1">
-                        <Sparkles size={12} />
-                        <span>{t("Live QR Code (Auto-refreshes every 30s)")}</span>
-                      </p>
                     </div>
                   ) : (
                     <div className="py-6 sm:py-8 space-y-2">

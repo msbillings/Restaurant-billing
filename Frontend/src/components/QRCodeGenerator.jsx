@@ -473,8 +473,24 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     if (isCapacitor || (typeof window !== 'undefined' && window.innerWidth < 768)) {
       setIsExportModalOpen(true);
     } else {
-      window.print();
+      handleSystemPrint();
     }
+  };
+
+  const handleSystemPrint = () => {
+    setIsExportModalOpen(false);
+    setTimeout(() => {
+      if (window.electronAPI) {
+        const area = document.getElementById('qr-cards-container');
+        if (area) {
+          window.electronAPI.silentPrint(area.outerHTML, '', false);
+        }
+      } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+        window.AndroidPrint.print();
+      } else {
+        window.print();
+      }
+    }, 300);
   };
 
   const downloadSingleQRCard = async (tableIdentifier, cardElementId) => {
@@ -483,29 +499,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       const element = document.getElementById(cardElementId);
       if (!element) return;
       const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
-      link.href = imgData;
-      link.click();
-      setExportSuccessToast(t("QR Image downloaded successfully!"));
-      setTimeout(() => setExportSuccessToast(null), 2500);
-    } catch (err) {
-      console.error('Download QR failed:', err);
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const shareSingleQRCard = async (tableIdentifier, cardElementId) => {
-    try {
-      setIsExporting(true);
-      const element = document.getElementById(cardElementId);
-      if (!element) return;
-      const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
-
+      const canvas = await html2canvas(element, { scale: 3, useCORS: true, allowTaint: true, scrollY: 0, scrollX: 0, backgroundColor: '#ffffff' });
+      
       canvas.toBlob(async (blob) => {
         if (!blob) return;
         const file = new File([blob], `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`, { type: 'image/png' });
@@ -519,34 +514,65 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             });
             return;
           } catch (shareErr) {
-            if (shareErr.name !== 'AbortError') console.warn('Share error:', shareErr);
+            if (shareErr.name === 'AbortError') return;
           }
         }
 
-        if (navigator.share) {
-          const qrUrl = getQRUrl(tableIdentifier);
-          try {
-            await navigator.share({
-              title: `${restaurantName} - ${tableIdentifier}`,
-              text: `Order Menu link for ${tableIdentifier}: ${qrUrl}`,
-              url: qrUrl
-            });
-            return;
-          } catch (shareErr) {
-            if (shareErr.name !== 'AbortError') console.warn('Share error:', shareErr);
-          }
-        }
-
-        // Fallback: download the image
         const link = document.createElement('a');
         link.download = `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
-        setExportSuccessToast(t("QR Image saved to downloads!"));
+        setExportSuccessToast(t("QR Image saved!"));
+        setTimeout(() => setExportSuccessToast(null), 2500);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Download QR failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const shareSingleQRCard = async (tableIdentifier, cardElementId) => {
+    try {
+      setIsExporting(true);
+      const element = document.getElementById(cardElementId) || document.getElementById('qr-cards-container');
+      if (!element) return;
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(element, { scale: 2.5, useCORS: true, allowTaint: true, scrollY: 0, scrollX: 0, backgroundColor: '#ffffff' });
+
+      canvas.toBlob(async (blob) => {
+        const qrUrl = getQRUrl(tableIdentifier || selectedTable !== 'ALL' ? selectedTable : '');
+        if (blob && navigator.canShare && navigator.canShare({ files: [new File([blob], 'QR.png', { type: 'image/png' })] })) {
+          const file = new File([blob], `${restaurantName}_QR_${(tableIdentifier || 'Menu').replace(/[^a-zA-Z0-9_-]/g, '_')}.png`, { type: 'image/png' });
+          try {
+            await navigator.share({
+              title: `${restaurantName} - ${tableIdentifier || 'Table'} Menu QR`,
+              text: `Scan or click to order from ${restaurantName}: ${qrUrl}`,
+              files: [file]
+            });
+            setIsExportModalOpen(false);
+            return;
+          } catch (shareErr) {
+            if (shareErr.name === 'AbortError') {
+              setIsExportModalOpen(false);
+              return;
+            }
+          }
+        }
+
+        // Direct WhatsApp / Web share link fallback
+        const shareText = encodeURIComponent(`*${restaurantName} QR Menu Order*\nTable: ${tableIdentifier || 'All Tables'}\n\n👉 Click to view menu & place order:\n${qrUrl}`);
+        window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+        setIsExportModalOpen(false);
+        setExportSuccessToast(t("Shared via WhatsApp!"));
         setTimeout(() => setExportSuccessToast(null), 2500);
       }, 'image/png');
     } catch (err) {
       console.error('Share QR failed:', err);
+      const qrUrl = getQRUrl(tableIdentifier || '');
+      const shareText = encodeURIComponent(`*${restaurantName} QR Menu Order*\n\n👉 Click to view menu & place order:\n${qrUrl}`);
+      window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+      setIsExportModalOpen(false);
     } finally {
       setIsExporting(false);
     }
@@ -558,15 +584,36 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
       const container = document.getElementById('qr-cards-container');
       if (!container) return;
       const html2canvas = (await import('html2canvas')).default;
-      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-      const imgData = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `${restaurantName}_All_Table_QRs.png`;
-      link.href = imgData;
-      link.click();
-      setIsExportModalOpen(false);
-      setExportSuccessToast(t("All QR Codes downloaded as image!"));
-      setTimeout(() => setExportSuccessToast(null), 2500);
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true, allowTaint: true, scrollY: 0, scrollX: 0, backgroundColor: '#ffffff' });
+      
+      canvas.toBlob(async (blob) => {
+        if (blob && navigator.canShare && navigator.canShare({ files: [new File([blob], 'QRCodes.png', { type: 'image/png' })] })) {
+          const file = new File([blob], `${restaurantName}_All_Table_QRs.png`, { type: 'image/png' });
+          try {
+            await navigator.share({
+              title: `${restaurantName} All QR Codes`,
+              text: `QR Menu Cards for ${restaurantName}`,
+              files: [file]
+            });
+            setIsExportModalOpen(false);
+            return;
+          } catch (e) {
+            if (e.name === 'AbortError') {
+              setIsExportModalOpen(false);
+              return;
+            }
+          }
+        }
+
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${restaurantName}_All_Table_QRs.png`;
+        link.href = imgData;
+        link.click();
+        setIsExportModalOpen(false);
+        setExportSuccessToast(t("All QR Codes exported successfully!"));
+        setTimeout(() => setExportSuccessToast(null), 2500);
+      }, 'image/png');
     } catch (err) {
       console.error('Download all QRs failed:', err);
     } finally {
@@ -1009,17 +1056,9 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => downloadSingleQRCard(fullTableIdentifier, cardElementId)}
-                                  className="text-text-muted hover:text-primary p-1 rounded transition-colors"
-                                  title={t("Download QR Image")}
-                                >
-                                  <Download size={13} />
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => shareSingleQRCard(fullTableIdentifier, cardElementId)}
                                   className="text-text-muted hover:text-primary p-1 rounded transition-colors"
-                                  title={t("Share QR")}
+                                  title={t("Share QR via WhatsApp / Apps")}
                                 >
                                   <Share2 size={13} />
                                 </button>
@@ -1212,35 +1251,18 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             </div>
 
             <p className="text-xs text-text-muted">
-              {t("Choose how you would like to print, download, or share the table QR codes on your device:")}
+              {t("Choose how you would like to print or share the table QR codes on your device:")}
             </p>
 
             <div className="space-y-2 pt-1">
-              {/* Option 1: Download Image */}
-              <button
-                type="button"
-                onClick={downloadAllQRsContainer}
-                disabled={isExporting}
-                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer disabled:opacity-50"
-              >
-                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
-                  <Download size={18} />
-                </div>
-                <div>
-                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Download QR Image (PNG)")}</div>
-                  <div className="text-[10px] text-text-muted">{t("Save high-resolution QR cards image to gallery")}</div>
-                </div>
-              </button>
-
-              {/* Option 2: Share Sheet */}
+              {/* Option 1: Share Sheet */}
               <button
                 type="button"
                 onClick={() => {
-                  const firstTable = selectedTable !== 'ALL' ? selectedTable : (floors[0]?.tables[0] || 'Table 1');
+                  const firstTable = selectedTable !== 'ALL' ? selectedTable : (floors[0]?.tables[0] || 'All Tables');
                   const firstFloor = floors[0]?.floorName || '';
-                  const cardId = `qr-card-${firstFloor.replace(/[^a-zA-Z0-9_-]/g, '_')}-${firstTable.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                  const cardId = selectedTable !== 'ALL' && firstFloor ? `qr-card-${firstFloor.replace(/[^a-zA-Z0-9_-]/g, '_')}-${firstTable.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
                   shareSingleQRCard(firstTable, cardId);
-                  setIsExportModalOpen(false);
                 }}
                 disabled={isExporting}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer disabled:opacity-50"
@@ -1254,13 +1276,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                 </div>
               </button>
 
-              {/* Option 3: Browser Print Dialog */}
+              {/* Option 2: System Print Dialog */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsExportModalOpen(false);
-                  setTimeout(() => window.print(), 200);
-                }}
+                onClick={handleSystemPrint}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer"
               >
                 <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
