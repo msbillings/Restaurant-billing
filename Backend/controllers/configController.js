@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import ClientDefault from '../models/Client.js';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import FloorDefault from '../models/Floor.js';
@@ -15,7 +16,7 @@ export const setupDatabase = async (req, res) => {
   try {
     isSettingUpDB = true;
     const { databaseName, username, password, staffAccounts } = req.body;
-    
+
     // We only strictly need databaseName now, but we check if either username/password OR staffAccounts is provided
     if (!databaseName || (!username && !staffAccounts)) {
       return res.status(400).json({ message: 'Missing required configuration fields.' });
@@ -25,7 +26,7 @@ export const setupDatabase = async (req, res) => {
     // Instead, initialize tenant pool for this database. (Desktop app provides APP_USER_DATA_PATH, so it is never cloud)
     const isDesktop = !!process.env.APP_USER_DATA_PATH;
     const isCloud = !isDesktop && (process.env.VERCEL || process.env.VERCEL_ENV || process.env.RENDER || process.env.NODE_ENV === 'production' || process.env.MONGO_URI?.includes('mongodb+srv'));
-    
+
     let User = UserDefault;
     if (isCloud) {
       console.log(`[Cloud Mode] Initializing tenant connection for: ${databaseName}`);
@@ -48,11 +49,11 @@ export const setupDatabase = async (req, res) => {
       const parts = baseUri.split('?');
       const connectionPart = parts[0];
       const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
-      
+
       const lastSlashIndex = connectionPart.lastIndexOf('/');
       const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + databaseName;
       const newUri = newConnectionPart + queryPart;
-      
+
       // 4. Reconnect
       await mongoose.connect(newUri, {
         serverSelectionTimeoutMS: 30000,
@@ -83,16 +84,16 @@ export const setupDatabase = async (req, res) => {
         for (const staff of staffAccounts) {
           // Skip if staff username is same as admin username to avoid Duplicate Key error
           if (staff.username === username) continue;
-          
+
           const staffPassword = staff.plainTextPassword || staff.password || password || '123456';
-          
+
           const newUser = new User({
             username: staff.username || 'staff',
             password: staffPassword,
             role: staff.role || 'Cashier',
             activeSessions: []
           });
-          
+
           try {
             await newUser.save();
           } catch (err) {
@@ -130,25 +131,92 @@ export const getRestaurantInfo = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const Floor = getTenantModel(req, 'Floor', FloorDefault);
-    const expiryDoc = await Setting.findOne({ key: 'licenseExpiry' });
-    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' });
+    const expiryDoc = await Setting.findOne({ key: 'licenseExpiry' }).lean();
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
     const spacesDoc = await Floor.find().sort({ createdAt: 1 }).lean();
-    
+
     // Default to July 12, 2026 (Demo Expiry) if not set in DB
     const licenseExpiry = expiryDoc?.value || '2026-07-12T23:59:59.000Z';
-    
-    const restaurantSettings = settingsDoc?.value || {
-      restaurantName: '',
-      restaurantType: '',
-      address: '',
-      phone: '',
-      email: '',
-      gstin: ''
+
+    let restaurantSettings = settingsDoc?.value;
+    if (typeof restaurantSettings === 'string') {
+      try {
+        restaurantSettings = JSON.parse(restaurantSettings);
+      } catch (e) { }
+    }
+    if (!restaurantSettings || typeof restaurantSettings !== 'object') {
+      restaurantSettings = {};
+    }
+
+    // Intelligent fallback to SuperAdmin Client registration if restaurantName is not set yet in tenant DB
+    const tenantDbName = req.tenantDb || req.headers?.['x-tenant-db'] || '';
+    if (!restaurantSettings.restaurantName && tenantDbName) {
+      try {
+        const clientDoc = await ClientDefault.findOne({
+          $or: [
+            { databaseName: tenantDbName },
+            { licenseKey: req.headers?.['x-license-key'] || '' }
+          ]
+        }).lean();
+
+        if (clientDoc) {
+          if (!restaurantSettings.restaurantName && clientDoc.restaurantName) {
+            restaurantSettings.restaurantName = clientDoc.restaurantName;
+          }
+          if (!restaurantSettings.email && clientDoc.email) {
+            restaurantSettings.email = clientDoc.email;
+          }
+          if (!restaurantSettings.phone && clientDoc.phone) {
+            restaurantSettings.phone = clientDoc.phone;
+          }
+        }
+      } catch (clientErr) {
+        console.warn('Notice: could not lookup client doc fallback:', clientErr.message);
+      }
+    }
+
+    // Default structure for complete form hydration
+    restaurantSettings = {
+      restaurantName: restaurantSettings.restaurantName || '',
+      restaurantType: restaurantSettings.restaurantType || '',
+      address: restaurantSettings.address || '',
+      phone: restaurantSettings.phone || '',
+      email: restaurantSettings.email || '',
+      gstin: restaurantSettings.gstin || '',
+      fssai: restaurantSettings.fssai || '',
+      upiId: restaurantSettings.upiId || '',
+      ownerPin: restaurantSettings.ownerPin || '',
+      footerMessage: restaurantSettings.footerMessage || '*** THANK YOU! VISIT AGAIN ***',
+      kotPrinter: restaurantSettings.kotPrinter || '',
+      billingPrinter: restaurantSettings.billingPrinter || '',
+      silentPrinting: restaurantSettings.silentPrinting !== undefined ? restaurantSettings.silentPrinting : true,
+      enableQrPayment: restaurantSettings.enableQrPayment !== undefined ? restaurantSettings.enableQrPayment : true,
+      enableCgst: restaurantSettings.enableCgst !== undefined ? restaurantSettings.enableCgst : true,
+      cgstRate: restaurantSettings.cgstRate !== undefined ? restaurantSettings.cgstRate : 2.5,
+      enableSgst: restaurantSettings.enableSgst !== undefined ? restaurantSettings.enableSgst : true,
+      sgstRate: restaurantSettings.sgstRate !== undefined ? restaurantSettings.sgstRate : 2.5,
+      enableGst: restaurantSettings.enableGst !== undefined ? restaurantSettings.enableGst : false,
+      gstRate: restaurantSettings.gstRate !== undefined ? restaurantSettings.gstRate : 5,
+      logo: restaurantSettings.logo || '',
+      printFormat: restaurantSettings.printFormat || '80mm',
+      enableGeoFencing: restaurantSettings.enableGeoFencing !== undefined ? restaurantSettings.enableGeoFencing : false,
+      geoFencingRadius: restaurantSettings.geoFencingRadius || 50,
+      latitude: restaurantSettings.latitude || '',
+      longitude: restaurantSettings.longitude || '',
+      qrMenuMode: restaurantSettings.qrMenuMode || 'cloud',
+      vercelUrl: restaurantSettings.vercelUrl || 'https://restaurant-billing-seven.vercel.app',
+      serverIp: restaurantSettings.serverIp || '',
+      ...restaurantSettings
     };
 
     const spaces = spacesDoc && spacesDoc.length > 0 ? spacesDoc : null;
 
-    res.status(200).json({ licenseExpiry, restaurantSettings, spaces });
+    res.status(200).json({
+      licenseExpiry,
+      restaurantSettings,
+      spaces,
+      ...restaurantSettings
+    });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching config', error: error.message });
   }
@@ -158,13 +226,14 @@ export const updateRestaurantInfo = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const { licenseExpiry, restaurantSettings, spaces } = req.body;
+    const settingsToSave = restaurantSettings || (req.body.restaurantName ? req.body : null);
     const updatePromises = [];
 
     if (licenseExpiry) {
       updatePromises.push(Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true }).maxTimeMS(4000));
     }
-    if (restaurantSettings) {
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: restaurantSettings }, { upsert: true }).maxTimeMS(4000));
+    if (settingsToSave) {
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: settingsToSave }, { upsert: true }).maxTimeMS(4000));
     }
     if (spaces) {
       updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(4000));
@@ -172,11 +241,11 @@ export const updateRestaurantInfo = async (req, res) => {
 
     await Promise.all(updatePromises);
 
-    if (restaurantSettings) {
-      emitSocketEvent(req, 'settingsUpdated', restaurantSettings);
+    if (settingsToSave) {
+      emitSocketEvent(req, 'settingsUpdated', settingsToSave);
       try {
         clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     res.status(200).json({ message: 'Updated successfully' });
@@ -236,17 +305,17 @@ export const getSecuritySettings = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const securityDoc = await Setting.findOne({ key: 'securitySettings' });
-    
-    let config = { 
-      requireMasterPin: true, 
+
+    let config = {
+      requireMasterPin: true,
       ownerPin: '1234',
-      customLocks: {} 
+      customLocks: {}
     };
 
     if (securityDoc && securityDoc.value) {
       config.requireMasterPin = securityDoc.value.requireMasterPin !== false;
       config.ownerPin = securityDoc.value.masterPin || securityDoc.value.ownerPin || '1234';
-      
+
       if (securityDoc.value.customLocks) {
         Object.entries(securityDoc.value.customLocks).forEach(([key, lock]) => {
           config.customLocks[key] = {
@@ -257,7 +326,7 @@ export const getSecuritySettings = async (req, res) => {
         });
       }
     }
-    
+
     res.status(200).json(config);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching security settings', error: error.message });
@@ -268,11 +337,11 @@ export const updateSecuritySettings = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const { requireMasterPin, ownerPin, customLocks } = req.body;
-    
+
     // Fetch existing so we don't overwrite if not provided
     const existingDoc = await Setting.findOne({ key: 'securitySettings' });
     const existingValue = existingDoc ? existingDoc.value : {};
-    
+
     const finalMasterPin = (ownerPin !== undefined && ownerPin !== '') ? String(ownerPin) : (existingValue.masterPin || existingValue.ownerPin || '1234');
     const masterPinHash = await bcrypt.hash(finalMasterPin, 10);
 
@@ -295,9 +364,9 @@ export const updateSecuritySettings = async (req, res) => {
         };
       }
     }
-    
+
     await Setting.findOneAndUpdate({ key: 'securitySettings' }, { value: updatedValue }, { upsert: true });
-    
+
     // Notify connected clients that settings changed (structure only)
     emitSocketEvent(req, 'securitySettingsUpdated', {
       requireMasterPin: updatedValue.requireMasterPin,
@@ -305,8 +374,8 @@ export const updateSecuritySettings = async (req, res) => {
         Object.entries(updatedValue.customLocks).map(([k, v]) => [k, { enabled: v.enabled }])
       )
     });
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       message: 'Security settings saved successfully',
       ownerPin: finalMasterPin,
       customLocks: Object.fromEntries(
@@ -322,14 +391,14 @@ export const verifyPin = async (req, res) => {
   try {
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const { featureId, pin } = req.body;
-    
+
     if (!pin) {
       return res.status(400).json({ success: false, message: 'PIN is required' });
     }
-    
+
     const securityDoc = await Setting.findOne({ key: 'securitySettings' });
     const config = securityDoc ? securityDoc.value : {};
-    
+
     const inputPin = String(pin).trim();
     let isMatch = false;
 
@@ -357,7 +426,7 @@ export const verifyPin = async (req, res) => {
         isMatch = true;
       }
     }
-    
+
     res.status(200).json({ success: isMatch });
   } catch (error) {
     console.error('Error verifying PIN:', error);

@@ -242,6 +242,30 @@ export const prependCachedBillHistory = async (bill) => {
   }
 };
 
+// ==================== DELIVERY BILLS CACHE ====================
+
+export const cacheDeliveryBills = async (bills) => {
+  try {
+    if (bills && Array.isArray(bills)) {
+      await setMeta('cached_delivery_bills', bills);
+      await setMeta('lastDeliverySync', Date.now());
+    }
+  } catch (err) {
+    console.error('[OfflineDB] Failed to cache delivery bills:', err);
+  }
+};
+
+export const getCachedDeliveryBills = async () => {
+  try {
+    const cached = await getMeta('cached_delivery_bills');
+    return Array.isArray(cached) ? cached : null;
+  } catch (err) {
+    console.error('[OfflineDB] Failed to read cached delivery bills:', err);
+    return null;
+  }
+};
+
+
 // ==================== SYNC QUEUE ====================
 
 /**

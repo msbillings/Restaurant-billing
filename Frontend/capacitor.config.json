@@ -8,5 +8,14 @@
   },
   "android": {
     "allowMixedContent": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_launcher",
+      "iconColor": "#EA580C"
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
   }
 }

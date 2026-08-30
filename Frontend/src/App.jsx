@@ -211,7 +211,7 @@ function App() {
 
   const { broadcasts, unreadCount, markAsRead, markAllAsRead, clearAllBroadcasts } = useBroadcasts(userRole);
   const { notifications: realTimeNotifs, unreadCount: rtUnreadCount, markAllAsRead: rtMarkAllAsRead, clearNotification: rtClearNotification } = useNotifications(userRole);
-  
+
   // Calculate role-accurate unread count based on current shop and role
   const totalUnreadCount = React.useMemo(() => {
     try {
@@ -219,7 +219,7 @@ function App() {
       const roleKeyLC = (userRole || 'Admin').toLowerCase();
       const readRtIds = new Set(JSON.parse(localStorage.getItem(`realtime_read_ids_${tenantKey}_${roleKeyLC}`) || '[]'));
       const readBcIds = new Set(JSON.parse(localStorage.getItem('read_broadcasts') || '[]'));
-      
+
       const unreadRt = realTimeNotifs.filter(n => !readRtIds.has(String(n.id))).length;
       const unreadBc = broadcasts.filter(b => !readBcIds.has(String(b._id))).length;
       return unreadRt + unreadBc;
@@ -242,13 +242,13 @@ function App() {
         orderId: n.data?.orderId,
         itemId: n.data?.itemId,
         action
-      }, { 
-        headers: { 
+      }, {
+        headers: {
           Authorization: `Bearer ${token}`,
           'X-Tenant-DB': tenantDb
-        } 
+        }
       });
-      
+
       setResolvingCancelIds(prev => ({ ...prev, [n.id]: `${action}_done` }));
       window.dispatchEvent(new CustomEvent('cancellationResolved', { detail: { orderId: n.data?.orderId, itemId: n.data?.itemId, action } }));
       setTimeout(() => {
@@ -700,12 +700,15 @@ function App() {
 
     const fetchLatestSettings = async () => {
       try {
-        const res = await api.get('/config');
-        if (res.data) {
-          localStorage.setItem('restaurantSettings', JSON.stringify(res.data));
-          setRestaurantName(res.data.restaurantName || 'msbillings');
-          document.title = `${res.data.restaurantName || 'msbillings'} - Restaurant Management`;
-          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: res.data }));
+        const res = await api.get('/config/info');
+        const settingsData = res.data?.restaurantSettings || res.data;
+        if (settingsData && (settingsData.restaurantName || typeof settingsData === 'object')) {
+          localStorage.setItem('restaurantSettings', JSON.stringify(settingsData));
+          if (settingsData.restaurantName) {
+            setRestaurantName(settingsData.restaurantName);
+            document.title = `${settingsData.restaurantName} - Restaurant Management`;
+          }
+          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settingsData }));
         }
       } catch (e) {
         console.warn('Could not fetch latest settings from backend, using cached:', e);
@@ -775,7 +778,7 @@ function App() {
     // Step 1: Clear ALL old restaurant-specific cached data FIRST (Memory, Storage, IndexedDB)
     clearMenuCache();
     clearCategoryCache();
-    clearAllOfflineData().catch(() => {});
+    clearAllOfflineData().catch(() => { });
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
     localStorage.removeItem('resto_license_expiry');
@@ -868,7 +871,7 @@ function App() {
     // Clear ALL caches and state immediately across memory, localStorage, and IndexedDB
     clearMenuCache();
     clearCategoryCache();
-    clearAllOfflineData().catch(() => {});
+    clearAllOfflineData().catch(() => { });
 
     setUser(null);
     localStorage.removeItem('accessToken');
@@ -943,9 +946,9 @@ function App() {
 
   // BYPASS LICENSE/AUTH FOR DIGITAL MENU — must be BEFORE any loading/auth guard!
   const currentSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-  const isCustomerOrderRoute = window.location.pathname === '/order' || 
-                               window.location.pathname.startsWith('/order/') || 
-                               (currentSearchParams.has('table') && currentSearchParams.has('tenant'));
+  const isCustomerOrderRoute = window.location.pathname === '/order' ||
+    window.location.pathname.startsWith('/order/') ||
+    (currentSearchParams.has('table') && currentSearchParams.has('tenant'));
 
   if (isCustomerOrderRoute) {
     return (
@@ -1174,16 +1177,14 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className={`min-h-[56px] sm:min-h-[58px] lg:min-h-[62px] xl:min-h-[66px] py-1 sm:py-1.5 flex items-center justify-between px-2 sm:px-3 lg:px-4 border-b shadow-xs shrink-0 gap-1 sm:gap-2 lg:gap-3 w-full z-40 relative overflow-visible ${
-        view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
-      }`}>
+      <header className={`min-h-[56px] sm:min-h-[58px] lg:min-h-[62px] xl:min-h-[66px] py-1 sm:py-1.5 flex items-center justify-between px-2 sm:px-3 lg:px-4 border-b shadow-xs shrink-0 gap-1 sm:gap-2 lg:gap-3 w-full z-40 relative overflow-visible ${view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
+        }`}>
         {/* Left: Hamburger & Logo */}
         <div className="flex items-center min-w-0 shrink-0 gap-1">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className={`p-1 rounded-lg transition-colors shrink-0 flex items-center justify-center ${
-              view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-text-main hover:bg-surface-hover'
-            }`}>
+            className={`p-1 rounded-lg transition-colors shrink-0 flex items-center justify-center ${view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-text-main hover:bg-surface-hover'
+              }`}>
             <Menu size={20} className="sm:w-5 sm:h-5" />
           </button>
           <button
@@ -1229,8 +1230,8 @@ function App() {
             <button
               onClick={() => setShowExpiryPopup(true)}
               className={`hidden lg:flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-xs cursor-pointer whitespace-nowrap shrink-0 ${daysRemaining <= 0 ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse' :
-                  daysRemaining <= 15 ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                    'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                daysRemaining <= 15 ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                  'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
               <CalendarClock size={12} />
               <span>
                 {daysRemaining <= 0 ? t('Expired!') : daysRemaining > 365 ? t('Lifetime') : `${daysRemaining}${t('d left')}`}
@@ -1275,9 +1276,8 @@ function App() {
                 // without the user having actually read them.
                 // Unread count is reset only via explicit mark-as-read in NotificationCenter.
               }}
-              className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${
-                view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
-              }`}>
+              className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
+                }`}>
               <Bell size={18} />
               {totalUnreadCount > 0 && (
                 <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[9px] rounded-full h-3.5 min-w-[14px] px-1 flex items-center justify-center font-bold">
@@ -1334,9 +1334,8 @@ function App() {
                               markAsRead(n.id);
                             }
                           }}
-                          className={`px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start ${
-                            n.isBroadcast ? 'bg-purple-50/30 hover:bg-purple-50/60' : ''
-                          }`}
+                          className={`px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start ${n.isBroadcast ? 'bg-purple-50/30 hover:bg-purple-50/60' : ''
+                            }`}
                         >
                           {/* Colour dot or Broadcast icon */}
                           {n.isBroadcast ? (
@@ -1345,11 +1344,10 @@ function App() {
                             </div>
                           ) : (
                             <div
-                              className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
-                                n.type === 'warning' ? 'bg-amber-500' :
-                                n.type === 'success' ? 'bg-green-500' :
-                                n.type === 'error'   ? 'bg-red-500'   : 'bg-blue-500'
-                              }`}
+                              className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' :
+                                  n.type === 'success' ? 'bg-green-500' :
+                                    n.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                                }`}
                             />
                           )}
 
@@ -1383,8 +1381,8 @@ function App() {
                               const rawId = n.broadcastId || n.data?.broadcastId || n.id || '';
                               const bId = String(rawId).replace(/^broadcast_/, '');
                               const tenantDb = localStorage.getItem('resto_db_name') || 'default';
-                              const savedReply = n.myReply || sentReplies[bId] || 
-                                                 (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
+                              const savedReply = n.myReply || sentReplies[bId] ||
+                                (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
                               const isEditing = Boolean(editingReplyId[bId]);
                               const currentText = broadcastReplies[bId] !== undefined ? broadcastReplies[bId] : (savedReply || '');
 
@@ -1440,11 +1438,10 @@ function App() {
                                         type="button"
                                         onClick={(e) => handleSendBroadcastReply(e, n)}
                                         disabled={submittingBroadcastReply[bId] || !(currentText.trim())}
-                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${
-                                          submittingBroadcastReply[bId] || !(currentText.trim())
+                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${submittingBroadcastReply[bId] || !(currentText.trim())
                                             ? 'bg-purple-200 text-purple-400 cursor-not-allowed'
                                             : 'bg-purple-600 hover:bg-purple-700 active:scale-95 text-white cursor-pointer shadow-xs'
-                                        }`}
+                                          }`}
                                       >
                                         {submittingBroadcastReply[bId] ? (
                                           <Loader2 size={11} className="animate-spin" />
@@ -1539,11 +1536,10 @@ function App() {
           {isChef && (
             <button
               onClick={() => handleViewChange('kothistory')}
-              className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer ${
-                view === 'kothistory'
+              className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer ${view === 'kothistory'
                   ? 'bg-amber-500 text-white shadow-md'
                   : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30'
-              }`}
+                }`}
               title={t("KOT Page / History")}
             >
               <Printer size={18} />
@@ -1567,9 +1563,8 @@ function App() {
           {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}
           <button
             onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
-            className={`sm:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border shrink-0 ${
-              view === 'kds' ? 'text-slate-300 border-slate-800 hover:bg-slate-800' : 'text-gray-700 hover:bg-surface-hover border-border/60'
-            }`}
+            className={`sm:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border shrink-0 ${view === 'kds' ? 'text-slate-300 border-slate-800 hover:bg-slate-800' : 'text-gray-700 hover:bg-surface-hover border-border/60'
+              }`}
             title="More Actions">
             <MoreVertical size={18} />
           </button>
@@ -2088,7 +2083,7 @@ function App() {
                 let isProtected = false;
                 if (view === 'security') isProtected = s.requireMasterPin !== false;
                 else if (s.customLocks && s.customLocks[view]) isProtected = s.customLocks[view].enabled;
-                
+
                 return isProtected && !unlockedFeatures[view];
               })() ?
                 <div className="h-full flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200">
@@ -2112,7 +2107,7 @@ function App() {
                         const API_BASE_URL = getApiUrl();
                         const token = localStorage.getItem('accessToken');
                         const dbName = localStorage.getItem('resto_db_name');
-                        
+
                         const res = await fetch(`${API_BASE_URL}/config/verify-pin`, {
                           method: 'POST',
                           headers: {
@@ -2122,7 +2117,7 @@ function App() {
                           },
                           body: JSON.stringify({ featureId: view, pin: pinInput })
                         });
-                        
+
                         const data = await res.json();
                         if (data.success) {
                           setUnlockedFeatures(prev => {
@@ -2256,17 +2251,17 @@ function App() {
           <div className="bg-surface rounded-3xl border border-border shadow-2xl max-w-md w-full mx-4 overflow-hidden">
             {/* Header */}
             <div className={`px-6 py-5 flex items-center justify-between ${daysRemaining <= 0 ?
-                'bg-linear-to-r from-red-500/20 to-red-400/10' :
-                daysRemaining > 365 ?
-                  'bg-linear-to-r from-emerald-500/20 to-emerald-400/10' :
-                  'bg-linear-to-r from-amber-500/20 to-amber-400/10'}`
+              'bg-linear-to-r from-red-500/20 to-red-400/10' :
+              daysRemaining > 365 ?
+                'bg-linear-to-r from-emerald-500/20 to-emerald-400/10' :
+                'bg-linear-to-r from-amber-500/20 to-amber-400/10'}`
             }>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${daysRemaining <= 0 ?
-                    'bg-red-500/20 text-red-500' :
-                    daysRemaining > 365 ?
-                      'bg-emerald-500/20 text-emerald-500' :
-                      'bg-amber-500/20 text-amber-500'}`
+                  'bg-red-500/20 text-red-500' :
+                  daysRemaining > 365 ?
+                    'bg-emerald-500/20 text-emerald-500' :
+                    'bg-amber-500/20 text-amber-500'}`
                 }>
                   {daysRemaining > 365 ? <CalendarClock size={28} /> : <ShieldAlert size={28} />}
                 </div>
@@ -2311,12 +2306,12 @@ function App() {
                 <div className="flex justify-between items-center">
                   <span className="text-[1.05rem] text-text-muted font-medium">{t("Days Remaining")}</span>
                   <span className={`text-[1.05rem] font-bold ${daysRemaining <= 0 ?
-                      'text-red-500' :
-                      daysRemaining > 365 ?
-                        'text-emerald-500' :
-                        daysRemaining <= 7 ?
-                          'text-red-500' :
-                          'text-amber-500'}`
+                    'text-red-500' :
+                    daysRemaining > 365 ?
+                      'text-emerald-500' :
+                      daysRemaining <= 7 ?
+                        'text-red-500' :
+                        'text-amber-500'}`
                   }>
                     {daysRemaining <= 0 ?
                       'EXPIRED' :

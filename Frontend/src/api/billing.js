@@ -127,13 +127,17 @@ export const getOpenOrders = async () => {
 
 export const getBills = async (pageOrOptions = 1, limit = 50, search = '', billType = '', excludeBillType = '', orderSource = '') => {
   const params = new URLSearchParams();
+  let requestedBillType = '';
   
   if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
     const opts = pageOrOptions;
     if (opts.page) params.append('page', opts.page);
     if (opts.limit) params.append('limit', opts.limit);
     if (opts.search) params.append('search', opts.search);
-    if (opts.billType) params.append('billType', opts.billType);
+    if (opts.billType) {
+      params.append('billType', opts.billType);
+      requestedBillType = opts.billType;
+    }
     if (opts.excludeBillType) params.append('excludeBillType', opts.excludeBillType);
     if (opts.orderSource) params.append('orderSource', opts.orderSource);
     if (opts.paymentMode) params.append('paymentMode', opts.paymentMode);
@@ -143,13 +147,46 @@ export const getBills = async (pageOrOptions = 1, limit = 50, search = '', billT
     params.append('page', pageOrOptions);
     params.append('limit', limit);
     if (search) params.append('search', search);
-    if (billType) params.append('billType', billType);
+    if (billType) {
+      params.append('billType', billType);
+      requestedBillType = billType;
+    }
     if (excludeBillType) params.append('excludeBillType', excludeBillType);
     if (orderSource) params.append('orderSource', orderSource);
   }
 
-  const response = await api.get(`/bills?${params.toString()}`);
-  return response.data;
+  try {
+    const response = await api.get(`/bills?${params.toString()}`);
+    if (response.data && Array.isArray(response.data.bills)) {
+      if (requestedBillType === 'Delivery') {
+        const { cacheDeliveryBills } = await import('../db/offlineDb');
+        cacheDeliveryBills(response.data.bills).catch(() => {});
+      }
+    }
+    return response.data;
+  } catch (err) {
+    if (requestedBillType === 'Delivery') {
+      try {
+        const { getCachedDeliveryBills } = await import('../db/offlineDb');
+        const cached = await getCachedDeliveryBills();
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          console.warn('[Billing API] Using cached delivery orders fallback.');
+          return {
+            bills: cached,
+            pagination: {
+              totalBills: cached.length,
+              totalPages: 1,
+              currentPage: 1
+            },
+            _fromCache: true
+          };
+        }
+      } catch (cacheErr) {
+        console.warn('Error reading cached delivery bills:', cacheErr);
+      }
+    }
+    throw err;
+  }
 };
 
 

@@ -24,6 +24,7 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const [platformFilter, setPlatformFilter] = useState('all'); // all, Swiggy, Zomato, Direct, Other
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -39,6 +40,7 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
 
   const fetchDeliveryOrders = async () => {
     setLoading(true);
+    setHasError(false);
     try {
       const data = await getBills({
         page: currentPage,
@@ -59,7 +61,10 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
       });
     } catch (error) {
       console.error('Error fetching delivery orders:', error);
-      setToast({ message: 'Failed to load delivery orders', type: 'error' });
+      setHasError(true);
+      if (orders.length === 0) {
+        setToast({ message: 'Unable to load delivery orders from server. Tap retry to reconnect.', type: 'error' });
+      }
     } finally {
       setLoading(false);
     }
@@ -208,6 +213,7 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
           {/* Platform Filter Dropdown */}
           <div className="relative shrink-0">
             <button
+              type="button"
               onClick={() => setShowPlatformFilter(!showPlatformFilter)}
               className="flex items-center gap-2 pl-3 pr-7 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm font-bold text-text-main cursor-pointer hover:bg-surface-hover transition-colors">
               <Filter size={15} className="text-primary" />
@@ -216,29 +222,38 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
             </button>
             
             {showPlatformFilter && (
-              <div className="absolute top-full right-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-20 min-w-[130px]">
-                {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) => (
-                  <button
-                    key={platform}
-                    onClick={() => {
-                      setPlatformFilter(platform);
-                      setCurrentPage(1);
-                      setShowPlatformFilter(false);
-                    }}
-                    className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      platformFilter === platform
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-text-main hover:bg-surface-hover'
-                    }`}>
-                    {t(platform === 'all' ? 'All' : platform)}
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* Backdrop to dismiss dropdown when tapping outside on mobile/desktop */}
+                <div
+                  className="fixed inset-0 z-20 bg-transparent"
+                  onClick={() => setShowPlatformFilter(false)}
+                />
+                <div className="absolute top-full left-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-30 min-w-[140px] max-w-[calc(100vw-32px)]">
+                  {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) => (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => {
+                        setPlatformFilter(platform);
+                        setCurrentPage(1);
+                        setShowPlatformFilter(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        platformFilter === platform
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'text-text-main hover:bg-surface-hover'
+                      }`}>
+                      {t(platform === 'all' ? 'All' : platform)}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 
           {/* Refresh Button */}
           <button
+            type="button"
             onClick={fetchDeliveryOrders}
             className="p-2 bg-background border border-border rounded-xl hover:bg-surface-hover transition-all text-text-main shrink-0 cursor-pointer"
             title={t("Refresh")}>
@@ -290,8 +305,21 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
                     <div className="flex flex-col items-center gap-3">
                       <Truck size={44} className="text-text-muted/40" />
                       <div>
-                        <h3 className="text-base font-bold text-text-main mb-1">{t("No Delivery Orders")}</h3>
-                        <p className="text-xs text-text-muted">{t("No orders match your current filters")}</p>
+                        <h3 className="text-base font-bold text-text-main mb-1">
+                          {hasError ? t("Connection issue loading orders") : t("No Delivery Orders")}
+                        </h3>
+                        <p className="text-xs text-text-muted mb-3">
+                          {hasError ? t("Could not sync latest delivery orders with server.") : t("No orders match your current filters")}
+                        </p>
+                        {hasError && (
+                          <button
+                            type="button"
+                            onClick={fetchDeliveryOrders}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-90 transition-opacity cursor-pointer">
+                            <RefreshCw size={13} />
+                            <span>{t("Retry Connection")}</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -374,8 +402,21 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
           ) : filteredOrders.length === 0 ? (
             <div className="text-center py-12 p-4">
               <Truck size={40} className="mx-auto text-text-muted/40 mb-2" />
-              <h3 className="text-base font-bold text-text-main mb-1">{t("No Delivery Orders")}</h3>
-              <p className="text-xs text-text-muted">{t("No orders match your current filters")}</p>
+              <h3 className="text-base font-bold text-text-main mb-1">
+                {hasError ? t("Connection issue loading orders") : t("No Delivery Orders")}
+              </h3>
+              <p className="text-xs text-text-muted mb-3">
+                {hasError ? t("Could not sync latest delivery orders with server.") : t("No orders match your current filters")}
+              </p>
+              {hasError && (
+                <button
+                  type="button"
+                  onClick={fetchDeliveryOrders}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold shadow-xs hover:opacity-90 transition-opacity cursor-pointer">
+                  <RefreshCw size={13} />
+                  <span>{t("Retry Connection")}</span>
+                </button>
+              )}
             </div>
           ) : (
             filteredOrders.map((order) => (

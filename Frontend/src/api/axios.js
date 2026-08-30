@@ -195,9 +195,33 @@ api.interceptors.response.use(
       }
     }
 
-    // If not a 401/403 or refresh failed, reject the error
+    // If not a 401/403 or refresh failed, check if we can fallback from local IP to Cloud API or retry
+    const isGetRequest = (originalRequest?.method || 'get').toLowerCase() === 'get';
+    const isNetworkOrTimeout = !error.response || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || error.message?.includes('Network Error');
+
+    // 1. SMART CLOUD FALLBACK: If local IP is unreachable (e.g. phone switched from Wi-Fi to 5G cellular)
+    const currentBase = originalRequest?.baseURL || '';
+    const isLocalNetworkIp = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|localhost|127\.0\.0\.1)/i.test(currentBase);
+    
+    if (isNetworkOrTimeout && isLocalNetworkIp && !originalRequest._fallbackToCloud) {
+      console.warn('[axios] Local server unreachable, automatically falling back to live Cloud API:', originalRequest.url);
+      originalRequest._fallbackToCloud = true;
+      originalRequest.baseURL = 'https://restaurant-billing-apk.vercel.app/api';
+      return api(originalRequest);
+    }
+
+    // 2. TRANSIENT NETWORK ERROR RETRY for GET requests (cold start / temporary latency spike)
+    if (isNetworkOrTimeout && isGetRequest && (!originalRequest._retryCount || originalRequest._retryCount < 2)) {
+      originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
+      const delay = originalRequest._retryCount * 600;
+      console.warn(`[axios] Transient network error on GET ${originalRequest.url}. Retrying attempt ${originalRequest._retryCount} in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return api(originalRequest);
+    }
+
     return Promise.reject(error);
   }
 );
 
 export default api;
+

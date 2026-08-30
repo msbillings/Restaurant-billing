@@ -12,6 +12,8 @@ router.post('/reset', resetLicense);
 import { authenticateToken } from '../middleware/auth.js';
 
 // Sync license expiry and restaurant settings across all devices
+router.get('/', authenticateToken, getRestaurantInfo);
+router.post('/', authenticateToken, updateRestaurantInfo);
 router.get('/info', authenticateToken, getRestaurantInfo);
 router.post('/info', authenticateToken, updateRestaurantInfo);
 // Security Settings & PINs

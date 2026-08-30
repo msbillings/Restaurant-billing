@@ -42,6 +42,9 @@ const triggerNativeBroadcastNotification = async (b) => {
             title,
             body,
             id: Math.floor(Math.random() * 1000000),
+            smallIcon: 'ic_launcher',
+            largeIcon: 'ic_launcher',
+            iconColor: '#EA580C',
             channelId: 'superadmin_broadcast_channel',
             actionTypeId: '',
             extra: { broadcastId: b._id, type: 'broadcast' }

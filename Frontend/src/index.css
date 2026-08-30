@@ -242,27 +242,37 @@ input[type="week"]::-webkit-calendar-picker-indicator {
   background-repeat: no-repeat;
 }
 
-/* Print Styles for Dynamic Printers */
+/* Print Styles for Dynamic Printers and QR Menu Codes */
 @media print {
   @page {
     size: portrait;
-    margin: 0 !important;
+    margin: 8mm 6mm !important;
   }
 
-  html, body {
+  /* When printing standard invoices/receipts */
+  body:has(.invoice-container) {
     margin: 0 !important;
     padding: 0 !important;
     background: white;
-    visibility: hidden; /* Hide everything by default */
+    visibility: hidden;
   }
 
-  .invoice-container {
-    visibility: visible; /* Show only the invoice */
+  body:has(.invoice-container) .invoice-container {
+    visibility: visible;
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: auto;
+    background: white !important;
+  }
+
+  /* When printing QR Code Sheets: Allow multi-page natural flow */
+  body:has(.qr-print-container) {
+    visibility: visible !important;
+    height: auto !important;
+    overflow: visible !important;
+    position: static !important;
     background: white !important;
   }
 
@@ -284,4 +294,4 @@ input[type="week"]::-webkit-calendar-picker-indicator {
     display: none !important;
     visibility: hidden !important;
   }
-}
+}

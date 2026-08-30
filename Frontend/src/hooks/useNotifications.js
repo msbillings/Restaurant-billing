@@ -410,6 +410,9 @@ const useNotifications = (userRole = 'Admin') => {
               title,
               body,
               id: Math.floor(Math.random() * 1000000),
+              smallIcon: 'ic_launcher',
+              largeIcon: 'ic_launcher',
+              iconColor: '#EA580C',
               channelId: 'restaurant_alerts_v1', // High priority channel for Android
               actionTypeId: '',
               extra: notification.data || null

@@ -1,7 +1,28 @@
 import { getApiUrl, isCapacitorApp } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { QrCode, Printer, Wifi, Save, RefreshCw, AlertTriangle, Layers, Globe, Copy, Check, Info, Server, ShieldCheck } from 'lucide-react';
+import {
+  QrCode,
+  Printer,
+  Wifi,
+  Save,
+  RefreshCw,
+  AlertTriangle,
+  Layers,
+  Globe,
+  Copy,
+  Check,
+  Info,
+  Server,
+  ShieldCheck,
+  ChevronDown,
+  Download,
+  Share2,
+  X,
+  Search,
+  Filter,
+  CheckCircle2
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../api/axios';
 import { getOpenOrders } from '../api/billing';
@@ -91,23 +112,32 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   const [selectedTable, setSelectedTable] = useState('ALL');
   const [restaurantName, setRestaurantName] = useState('MSBillings');
 
+  // Custom Table Filter Modal state
+  const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
+
+  // Mobile Print & Share Export Modal state
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccessToast, setExportSuccessToast] = useState(null);
+
   // Detect Capacitor native mobile app (.apk / .ipa)
   const isCapacitor = typeof window !== 'undefined' && Boolean(
-    window.Capacitor?.isNativePlatform?.() || 
+    window.Capacitor?.isNativePlatform?.() ||
     window.location.href.includes('capacitor://') ||
     (window.location.hostname === 'localhost' && !window.location.port)
   );
 
   // Detect Electron (file: protocol or electron userAgent)
   const isElectron = typeof window !== 'undefined' && (
-    window.location.protocol === 'file:' || 
-    (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')) || 
+    window.location.protocol === 'file:' ||
+    (typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().includes('electron')) ||
     Boolean(window.electronAPI)
   );
 
   // Detect active Vite dev server (npm run dev on local port 5173/3000)
   const isDevPort = typeof window !== 'undefined' && ['5173', '5174', '5175', '3000'].includes(window.location.port);
-  
+
   // Show Dev Mode switcher ONLY in active browser localhost development (npm run dev)
   const isDevMode = Boolean(import.meta.env.DEV && isDevPort && !isCapacitor && !isElectron);
 
@@ -120,7 +150,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   });
 
   // Vercel / Cloud URL Configuration
-  const initialVercelUrl = localStorage.getItem('resto_vercel_url') || 
+  const initialVercelUrl = localStorage.getItem('resto_vercel_url') ||
     (typeof window !== 'undefined' && window.location.hostname?.includes('vercel.app') ? window.location.origin : DEFAULT_VERCEL_URL);
   const [vercelUrl, setVercelUrl] = useState(initialVercelUrl);
   const [customVercelInput, setCustomVercelInput] = useState(initialVercelUrl);
@@ -439,8 +469,109 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     return `http://${host}${portPart}/order?tenant=${dbName}&table=${encodeURIComponent(table)}`;
   };
 
-  const printQRCodes = () => {
-    window.print();
+  const handlePrintClick = () => {
+    if (isCapacitor || (typeof window !== 'undefined' && window.innerWidth < 768)) {
+      setIsExportModalOpen(true);
+    } else {
+      window.print();
+    }
+  };
+
+  const downloadSingleQRCard = async (tableIdentifier, cardElementId) => {
+    try {
+      setIsExporting(true);
+      const element = document.getElementById(cardElementId);
+      if (!element) return;
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
+      link.href = imgData;
+      link.click();
+      setExportSuccessToast(t("QR Image downloaded successfully!"));
+      setTimeout(() => setExportSuccessToast(null), 2500);
+    } catch (err) {
+      console.error('Download QR failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const shareSingleQRCard = async (tableIdentifier, cardElementId) => {
+    try {
+      setIsExporting(true);
+      const element = document.getElementById(cardElementId);
+      if (!element) return;
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `${restaurantName} - ${tableIdentifier} Menu QR`,
+              text: `Scan to order from ${restaurantName} (${tableIdentifier})`,
+              files: [file]
+            });
+            return;
+          } catch (shareErr) {
+            if (shareErr.name !== 'AbortError') console.warn('Share error:', shareErr);
+          }
+        }
+
+        if (navigator.share) {
+          const qrUrl = getQRUrl(tableIdentifier);
+          try {
+            await navigator.share({
+              title: `${restaurantName} - ${tableIdentifier}`,
+              text: `Order Menu link for ${tableIdentifier}: ${qrUrl}`,
+              url: qrUrl
+            });
+            return;
+          } catch (shareErr) {
+            if (shareErr.name !== 'AbortError') console.warn('Share error:', shareErr);
+          }
+        }
+
+        // Fallback: download the image
+        const link = document.createElement('a');
+        link.download = `${restaurantName}_QR_${tableIdentifier.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        setExportSuccessToast(t("QR Image saved to downloads!"));
+        setTimeout(() => setExportSuccessToast(null), 2500);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Share QR failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const downloadAllQRsContainer = async () => {
+    try {
+      setIsExporting(true);
+      const container = document.getElementById('qr-cards-container');
+      if (!container) return;
+      const html2canvas = (await import('html2canvas')).default;
+      const canvas = await html2canvas(container, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${restaurantName}_All_Table_QRs.png`;
+      link.href = imgData;
+      link.click();
+      setIsExportModalOpen(false);
+      setExportSuccessToast(t("All QR Codes downloaded as image!"));
+      setTimeout(() => setExportSuccessToast(null), 2500);
+    } catch (err) {
+      console.error('Download all QRs failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const isLoopback = localIP === '127.0.0.1' || localIP === 'localhost';
@@ -491,35 +622,29 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-          {/* Table filter selector */}
-          <select
-            value={selectedTable}
-            onChange={(e) => setSelectedTable(e.target.value)}
+          {/* Custom Table Filter Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setIsTableModalOpen(true)}
             disabled={isLoading}
-            className="flex-1 sm:w-64 min-w-0 bg-surface border border-border rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium shadow-xs disabled:opacity-60 truncate">
-            {isLoading ? (
-              <option value="ALL">{t("Fetching tables & statuses...")}</option>
-            ) : (
-              <>
-                <option value="ALL">{t("All Tables")} ({totalTablesCount})</option>
-                {floors.map((floor, fi) => (
-                  <optgroup key={`floor-group-${fi}`} label={`📍 ${floor.floorName}`}>
-                    {floor.tables.map((tbl, ti) => {
-                      const statusInfo = getTableStatusInfo(floor.floorName, tbl);
-                      return (
-                        <option key={`${tbl}-${fi}-${ti}`} value={tbl}>
-                          {tbl} ({statusInfo.isBusy ? `🔴 ${t("Busy")}${statusInfo.total ? ` · ₹${statusInfo.total}` : ''}` : `🟢 ${t("Empty")}`})
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                ))}
-              </>
-            )}
-          </select>
+            className="flex-1 sm:w-64 min-w-0 bg-surface border border-border hover:border-primary/50 rounded-xl px-3 py-2 text-xs sm:text-sm text-text-main font-medium shadow-xs disabled:opacity-60 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+          >
+            <div className="flex items-center gap-1.5 truncate">
+              <Layers size={14} className="text-primary shrink-0" />
+              <span className="truncate">
+                {isLoading
+                  ? t("Fetching tables...")
+                  : selectedTable === 'ALL'
+                    ? `${t("All Tables")} (${totalTablesCount})`
+                    : selectedTable}
+              </span>
+            </div>
+            <ChevronDown size={14} className="text-text-muted shrink-0" />
+          </button>
 
           {/* Refresh live statuses button */}
           <button
+            type="button"
             onClick={handleManualRefresh}
             disabled={isLoading || isRefreshing}
             className="p-2 sm:px-3 sm:py-2 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-bold transition-all text-xs sm:text-sm shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
@@ -529,15 +654,16 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             <span className="hidden md:inline">{t("Sync Status")}</span>
           </button>
 
-          {/* Print button (icon only on mobile, with label on desktop) */}
+          {/* Print / Export Button (works seamlessly on APK mobile and desktop) */}
           <button
-            onClick={printQRCodes}
-            disabled={isLoading}
+            type="button"
+            onClick={handlePrintClick}
+            disabled={isLoading || isExporting}
             className="p-2 sm:px-4 sm:py-2 bg-primary text-white rounded-xl font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-opacity text-xs sm:text-sm disabled:opacity-60 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
-            title={t("Print QRs")}
+            title={isCapacitor ? t("Print / Save QRs") : t("Print QRs")}
           >
-            <Printer size={16} />
-            <span className="hidden sm:inline">{t("Print QRs")}</span>
+            {isExporting ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} />}
+            <span className="hidden sm:inline">{isCapacitor ? t("Print / Save") : t("Print QRs")}</span>
           </button>
         </div>
       </div>
@@ -551,11 +677,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
               {/* Cloud / Vercel Menu Button */}
               <button
                 onClick={() => handleSelectQrMode('cloud')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  qrMode === 'cloud'
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${qrMode === 'cloud'
                     ? 'bg-primary text-white shadow-xs'
                     : 'text-text-muted hover:text-text-main hover:bg-surface'
-                }`}
+                  }`}
               >
                 <Globe size={14} /> {t("Cloud / Vercel Menu")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">4G/5G/Online</span>
               </button>
@@ -563,11 +688,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
               {/* Local Wi-Fi IP Button */}
               <button
                 onClick={() => handleSelectQrMode('wifi')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  qrMode === 'wifi'
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${qrMode === 'wifi'
                     ? 'bg-primary text-white shadow-xs'
                     : 'text-text-muted hover:text-text-main hover:bg-surface'
-                }`}
+                  }`}
               >
                 <Wifi size={14} /> {t("Local Wi-Fi IP")} <span className="text-[9px] bg-white/20 px-1.5 py-0.2 rounded-full uppercase font-mono">LAN Mode</span>
               </button>
@@ -772,7 +896,14 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
         </div>
       ) : (
         /* LOADED STATE: Render QR Codes Grid grouped by Floor */
-        <div className="flex-1 overflow-y-auto print:overflow-visible">
+        <div id="qr-cards-container" className="flex-1 overflow-y-auto qr-print-container">
+          {exportSuccessToast && (
+            <div className="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl mb-3 text-center animate-fade-in shadow-md shrink-0 flex items-center justify-center gap-2 print:hidden">
+              <CheckCircle2 size={16} />
+              <span>{exportSuccessToast}</span>
+            </div>
+          )}
+
           {floorsToRender.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center p-6 bg-surface rounded-2xl border border-border">
               <QrCode size={48} className="text-text-muted mb-3 opacity-40" />
@@ -783,7 +914,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             floorsToRender.map((floor, floorIdx) => {
               const color = floorColors[floorIdx % floorColors.length];
               return (
-                <div key={`floor-section-${floorIdx}`} className="mb-8 print:mb-6">
+                <div key={`floor-section-${floorIdx}`} className="mb-8 qr-floor-block">
                   {/* Floor Section Header */}
                   <div className={`flex items-center gap-2.5 mb-3 pb-2 border-b border-border print:hidden`}>
                     <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${color.bg} ${color.border}`}>
@@ -799,20 +930,22 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                   </div>
 
                   {/* Floor header for print */}
-                  <div className="hidden print:block text-center font-black text-base uppercase tracking-widest mb-2 border-b border-black pb-1">
+                  <div className="hidden print:block qr-floor-header">
                     {floor.floorName}
                   </div>
 
                   {/* Cards Grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 print:grid-cols-3 print:gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 qr-print-grid">
                     {floor.tables.map((table, tableIdx) => {
                       const fullTableIdentifier = floor.floorName ? `${floor.floorName} - ${table}` : table;
+                      const cardElementId = `qr-card-${floor.floorName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${table.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
                       const currentQrUrl = getQRUrl(fullTableIdentifier);
                       const isCopied = copiedTable === table;
                       return (
                         <div
+                          id={cardElementId}
                           key={`${floor.floorName}-${table}-${tableIdx}`}
-                          className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 break-inside-avoid print:border-black print:bg-white print:shadow-none shadow-sm hover:shadow-md hover:border-primary/40 transition-all relative group"
+                          className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 qr-print-card shadow-sm hover:shadow-md transition-all relative group"
                         >
                           <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
 
@@ -821,9 +954,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                             <div className={`text-[8px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${color.bg} ${color.text} ${color.border}`}>
                               {floor.floorName}
                             </div>
-                            <div className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
-                              (isProduction || qrMode === 'cloud') ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                            }`}>
+                            <div className={`text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider border ${(isProduction || qrMode === 'cloud') ? 'bg-blue-500/10 text-blue-600 border-blue-500/30' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              }`}>
                               {(isProduction || qrMode === 'cloud') ? 'Cloud' : 'Wi-Fi'}
                             </div>
                             {(() => {
@@ -865,14 +997,33 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                             <p className="text-[9px] sm:text-xs text-text-muted font-bold tracking-widest uppercase mb-0.5">{t("Scan to Order")}</p>
                             <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
                             <div className="mt-1.5 flex items-center justify-between gap-1 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg border border-border/50 max-w-full print:hidden">
-                              <span className="truncate">{currentQrUrl}</span>
-                              <button
-                                onClick={() => handleCopyMenuLink(currentQrUrl, table)}
-                                className="text-text-muted hover:text-primary shrink-0 p-0.5"
-                                title="Copy QR Order Link"
-                              >
-                                {isCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
-                              </button>
+                              <span className="truncate flex-1 text-left">{currentQrUrl}</span>
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyMenuLink(currentQrUrl, table)}
+                                  className="text-text-muted hover:text-primary p-1 rounded transition-colors"
+                                  title={t("Copy Link")}
+                                >
+                                  {isCopied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => downloadSingleQRCard(fullTableIdentifier, cardElementId)}
+                                  className="text-text-muted hover:text-primary p-1 rounded transition-colors"
+                                  title={t("Download QR Image")}
+                                >
+                                  <Download size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => shareSingleQRCard(fullTableIdentifier, cardElementId)}
+                                  className="text-text-muted hover:text-primary p-1 rounded transition-colors"
+                                  title={t("Share QR")}
+                                >
+                                  <Share2 size={13} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -883,6 +1034,255 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
               );
             })
           )}
+        </div>
+      )}
+
+      {/* CUSTOM TABLE FILTER MODAL WITH EXPLICIT CANCEL BUTTON */}
+      {isTableModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          {/* Backdrop dismiss */}
+          <div className="fixed inset-0" onClick={() => setIsTableModalOpen(false)} />
+
+          <div className="relative bg-surface border border-border rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[85vh] z-10">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border flex items-center justify-between bg-surface shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                  <QrCode size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text-main">{t("Select Table Filter")}</h3>
+                  <p className="text-[11px] text-text-muted">{t("Filter QR codes by table or floor")}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTableModalOpen(false)}
+                className="p-2 rounded-xl hover:bg-surface-hover text-text-muted hover:text-text-main transition-colors cursor-pointer"
+                title={t("Close")}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-3 border-b border-border/60 bg-background/50 shrink-0">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  value={tableSearchTerm}
+                  onChange={(e) => setTableSearchTerm(e.target.value)}
+                  placeholder={t("Search tables or floors...")}
+                  className="w-full pl-8 pr-3 py-1.5 bg-surface border border-border rounded-xl text-xs font-medium text-text-main focus:outline-none focus:border-primary placeholder:text-text-muted"
+                />
+              </div>
+            </div>
+
+            {/* Table Options List */}
+            <div className="overflow-y-auto flex-1 p-3 space-y-3 custom-scrollbar">
+              {/* All Tables Option */}
+              {(!tableSearchTerm || 'all tables'.includes(tableSearchTerm.toLowerCase())) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTable('ALL');
+                    setIsTableModalOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer ${selectedTable === 'ALL'
+                      ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                      : 'bg-surface border-border hover:bg-surface-hover text-text-main font-medium'
+                    }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base">🏢</span>
+                    <span className="text-xs sm:text-sm">{t("All Tables")}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-hover text-text-muted font-bold border border-border">
+                      {totalTablesCount}
+                    </span>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedTable === 'ALL' ? 'border-primary bg-primary text-white' : 'border-text-muted/40'
+                    }`}>
+                    {selectedTable === 'ALL' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
+              )}
+
+              {/* Floor Groups and Tables */}
+              {floors.map((floor, fi) => {
+                const matchingTables = floor.tables.filter((tbl) =>
+                  !tableSearchTerm ||
+                  tbl.toLowerCase().includes(tableSearchTerm.toLowerCase()) ||
+                  floor.floorName.toLowerCase().includes(tableSearchTerm.toLowerCase())
+                );
+
+                if (matchingTables.length === 0) return null;
+
+                return (
+                  <div key={`modal-floor-${fi}`} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 px-1 pt-1 text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                      <span>📍</span>
+                      <span>{floor.floorName}</span>
+                      <span className="text-[10px] opacity-70">({matchingTables.length})</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {matchingTables.map((tbl, ti) => {
+                        const statusInfo = getTableStatusInfo(floor.floorName, tbl);
+                        const isSelected = selectedTable === tbl;
+
+                        return (
+                          <button
+                            key={`modal-tbl-${tbl}-${fi}-${ti}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedTable(tbl);
+                              setIsTableModalOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${isSelected
+                                ? 'bg-primary/10 border-primary text-primary font-bold shadow-xs'
+                                : 'bg-surface border-border hover:bg-surface-hover text-text-main font-medium'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm">{tbl}</span>
+                              {statusInfo.isBusy ? (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 font-bold border border-rose-500/30 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                  {t("Busy")} {statusInfo.total ? `· ₹${statusInfo.total}` : ''}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-500/30 flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  {t("Empty")}
+                                </span>
+                              )}
+                            </div>
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${isSelected ? 'border-primary bg-primary text-white' : 'border-text-muted/40'
+                              }`}>
+                              {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer with Explicit CANCEL and Apply Buttons */}
+            <div className="p-3 border-t border-border flex items-center justify-between gap-2 bg-surface shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsTableModalOpen(false)}
+                className="flex-1 py-2 px-4 rounded-xl border border-border text-text-main hover:bg-surface-hover font-bold text-xs sm:text-sm transition-colors cursor-pointer text-center"
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTableModalOpen(false)}
+                className="flex-1 py-2 px-4 rounded-xl bg-primary text-white font-bold text-xs sm:text-sm shadow-xs hover:opacity-90 transition-opacity cursor-pointer text-center"
+              >
+                {t("Done")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRINT & EXPORT SHEET MODAL FOR MOBILE / APK */}
+      {isExportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="fixed inset-0" onClick={() => setIsExportModalOpen(false)} />
+          <div className="relative bg-surface border border-border rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden flex flex-col p-4 space-y-3 z-10">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Printer className="text-primary" size={20} />
+                <h3 className="text-base font-bold text-text-main">{t("Print & Share QR Codes")}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="p-1 text-text-muted hover:text-text-main rounded-lg cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-text-muted">
+              {t("Choose how you would like to print, download, or share the table QR codes on your device:")}
+            </p>
+
+            <div className="space-y-2 pt-1">
+              {/* Option 1: Download Image */}
+              <button
+                type="button"
+                onClick={downloadAllQRsContainer}
+                disabled={isExporting}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer disabled:opacity-50"
+              >
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+                  <Download size={18} />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Download QR Image (PNG)")}</div>
+                  <div className="text-[10px] text-text-muted">{t("Save high-resolution QR cards image to gallery")}</div>
+                </div>
+              </button>
+
+              {/* Option 2: Share Sheet */}
+              <button
+                type="button"
+                onClick={() => {
+                  const firstTable = selectedTable !== 'ALL' ? selectedTable : (floors[0]?.tables[0] || 'Table 1');
+                  const firstFloor = floors[0]?.floorName || '';
+                  const cardId = `qr-card-${firstFloor.replace(/[^a-zA-Z0-9_-]/g, '_')}-${firstTable.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                  shareSingleQRCard(firstTable, cardId);
+                  setIsExportModalOpen(false);
+                }}
+                disabled={isExporting}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer disabled:opacity-50"
+              >
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 shrink-0">
+                  <Share2 size={18} />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Share via WhatsApp / Apps")}</div>
+                  <div className="text-[10px] text-text-muted">{t("Send QR cards directly to printer app or WhatsApp")}</div>
+                </div>
+              </button>
+
+              {/* Option 3: Browser Print Dialog */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExportModalOpen(false);
+                  setTimeout(() => window.print(), 200);
+                }}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                  <Printer size={18} />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Print via System Dialog")}</div>
+                  <div className="text-[10px] text-text-muted">{t("Open standard print / PDF preview")}</div>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                className="w-full py-2 bg-surface hover:bg-surface-hover border border-border rounded-xl text-xs font-bold text-text-main transition-colors cursor-pointer"
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -897,18 +1297,126 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           position: absolute;
           animation: scanLaser 2s infinite ease-in-out;
         }
+
         @media print {
-          body * {
-            visibility: hidden;
+          @page {
+            size: A4 portrait;
+            margin: 8mm 6mm !important;
           }
-          .print\\:overflow-visible, .print\\:overflow-visible * {
-            visibility: visible;
+
+          html, body {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: static !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            visibility: visible !important;
           }
-          .print\\:overflow-visible {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+
+          #root, main, .h-full, .overflow-hidden, .overflow-y-auto {
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          /* Hide application UI elements */
+          header, nav, aside, footer, .print\\:hidden, [role="dialog"], button, input, select {
+            display: none !important;
+            visibility: hidden !important;
+          }
+
+          /* Multi-page QR Print Flow Container */
+          .qr-print-container {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .qr-print-container * {
+            visibility: visible !important;
+          }
+
+          .qr-floor-block {
+            display: block !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            margin-bottom: 16px !important;
+          }
+
+          .qr-floor-header {
+            display: block !important;
+            text-align: center !important;
+            font-size: 13pt !important;
+            font-weight: 900 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 2px !important;
+            padding: 4px 0 !important;
+            margin-bottom: 12px !important;
+            border-bottom: 2px solid #000000 !important;
+            color: #000000 !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
+
+          .qr-print-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 12px !important;
+            width: 100% !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+          }
+
+          .qr-print-card {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            border: 1.5px dashed #000000 !important;
+            border-radius: 12px !important;
+            padding: 10px 8px !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-bottom: 6px !important;
+          }
+
+          .qr-print-card h2 {
+            font-size: 10.5pt !important;
+            font-weight: 900 !important;
+            color: #000000 !important;
+            margin-bottom: 4px !important;
+            text-transform: uppercase !important;
+          }
+
+          .qr-print-card h3 {
+            font-size: 14pt !important;
+            font-weight: 900 !important;
+            color: #000000 !important;
+            margin: 2px 0 !important;
+          }
+
+          .qr-print-card svg {
+            display: block !important;
+            margin: 0 auto !important;
+            width: 110px !important;
+            height: 110px !important;
           }
         }
       `}</style>

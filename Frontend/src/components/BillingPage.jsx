@@ -123,7 +123,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       if (cached && Array.isArray(cached) && cached.length > 0) {
         setOpenOrdersList(cached);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     fetchOpenOrdersList();
 
@@ -203,7 +203,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }
           setFloors(parsed);
           return;
-        } catch (error) {console.error('Error loading spaces:', error);}
+        } catch (error) { console.error('Error loading spaces:', error); }
       }
       setFloors([{
         id: 'f-1',
@@ -231,7 +231,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             setFloors(data.spaces);
           }
         }
-      } catch (error) {console.error('Error syncing spaces:', error);}
+      } catch (error) { console.error('Error syncing spaces:', error); }
     };
     syncSpacesFromBackend();
 
@@ -412,9 +412,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         const diffHours = (Date.now() - new Date(o.createdAt).getTime()) / (1000 * 60 * 60);
         return diffHours < 24;
       };
-      const existingOrder = openOrdersList.find((o) => 
-        o.tableNo?.startsWith(prefix) && 
-        (o.status === 'Open' || o.status === 'Billed') && 
+      const existingOrder = openOrdersList.find((o) =>
+        o.tableNo?.startsWith(prefix) &&
+        (o.status === 'Open' || o.status === 'Billed') &&
         isRecentOrder(o)
       );
       if (existingOrder && !initialTable) {
@@ -474,7 +474,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const handleRemoteOrderUpdate = (e) => {
       // Pause updates if the user is currently viewing the invoice or payment modal
       if (showInvoice || showPayment || isViewingInvoiceRef.current) return;
-      
+
       const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
       if (hasLocalCart) {
         // Active cart has local unsaved items — protect it from being clobbered by remote socket events
@@ -535,8 +535,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 (data.itemId && i._id?.toString() === data.itemId?.toString()) ||
                 (data.itemName && i.name === data.itemName)
               ) {
-                return { 
-                  ...i, 
+                return {
+                  ...i,
                   status: data.status || i.status,
                   unitStatuses: data.unitStatuses || i.unitStatuses,
                   preparedQuantity: data.preparedQuantity !== undefined ? data.preparedQuantity : i.preparedQuantity,
@@ -585,7 +585,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               setCustomerInfo(null);
             }
           }
-        } catch (error) {console.error('Error fetching customer:', error);}
+        } catch (error) { console.error('Error fetching customer:', error); }
       };
       fetchCustomer();
     } else {
@@ -623,7 +623,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           if (orderData.customerPhone) setCustomerPhone(orderData.customerPhone);
           if (orderData.customerName) setCustomerName(orderData.customerName);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     setTempCustomerPhone(phoneToUse);
@@ -725,7 +725,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           tableNo: activeTable,
           customerPhone: cleanPhone,
           customerName: cleanName || 'Guest'
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       showToast(t('Customer details linked to order'), 'success');
@@ -890,7 +890,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       try {
         const idbOrders = await getCachedOpenOrders();
         hasInstantCache = checkAndApplyCache(idbOrders);
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (hasInstantCache) {
@@ -1135,9 +1135,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       // Instantly remove from IndexedDB and local state
       if (currentOrderId) {
-        removeCachedOpenOrder(currentOrderId).catch(() => {});
+        removeCachedOpenOrder(currentOrderId).catch(() => { });
       }
-      removeCachedOpenOrder(targetTable).catch(() => {});
+      removeCachedOpenOrder(targetTable).catch(() => { });
       setOpenOrdersList(prev => prev.filter(o => o.tableNo !== targetTable && o._id !== currentOrderId));
       setOrderId(null);
       setOrderStatus('Open');
@@ -1273,15 +1273,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
     const cleanId = String(identifier || '').trim().toLowerCase();
     const cleanNote = (specialNote || '').trim();
-    
+
     lastLocalEditTime.current = Date.now();
     hasPendingLocalChanges.current = true;
     setCart((prev) => {
       return prev.map((i) => {
         const iIdStr = String(i._id || '').trim().toLowerCase();
         const iNameStr = String(i.name || '').trim().toLowerCase();
-        const match = (iIdStr && cleanId === iIdStr) || 
-                      (iNameStr && cleanId === iNameStr);
+        const match = (iIdStr && cleanId === iIdStr) ||
+          (iNameStr && cleanId === iNameStr);
         if (match) return { ...i, specialNote: cleanNote };
         return i;
       });
@@ -1455,7 +1455,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         try {
           const resp = await api.get(`/bills/${orderId}`);
           if (resp.data) setCompletedBill(resp.data);
-        } catch (e) {}
+        } catch (e) { }
       }
       isViewingInvoiceRef.current = true;
       setShowInvoice(true);
@@ -1484,7 +1484,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const activeId = savedOrder?._id || orderId;
       if (savedOrder?._id) {
         setOrderId(savedOrder._id);
-        upsertCachedOpenOrder(savedOrder).catch(() => {});
+        upsertCachedOpenOrder(savedOrder).catch(() => { });
       }
       await generateBillAfterSave(activeId);
     } catch (error) {
@@ -1504,7 +1504,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
       const totRate = cRate + sRate + gRate;
 
-      let cAmt = 0,sAmt = 0,gAmt = 0;
+      let cAmt = 0, sAmt = 0, gAmt = 0;
       if (totRate > 0) {
         cAmt = taxVal * (cRate / totRate) || 0;
         sAmt = taxVal * (sRate / totRate) || 0;
@@ -1695,8 +1695,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setShowPayment(false);
 
       // Remove from offline cache so table is immediately released
-      removeCachedOpenOrder(currentId).catch(() => {});
-      if (activeTable) removeCachedOpenOrder(activeTable).catch(() => {});
+      removeCachedOpenOrder(currentId).catch(() => { });
+      if (activeTable) removeCachedOpenOrder(activeTable).catch(() => { });
 
       const finalBill = {
         ...(billDetails || settledOrder),
@@ -1732,7 +1732,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       try {
         sessionStorage.setItem('ms_invoice_open', 'true');
         sessionStorage.setItem('ms_completed_bill', JSON.stringify(finalBill));
-      } catch (e) {}
+      } catch (e) { }
       showToast(t('billSettled'), 'success');
       hasPendingLocalChanges.current = false;
       fetchDailyStats();
@@ -1834,8 +1834,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         .filter(o => o.status === 'Open' || o.status === 'Billed')
         .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
-      const orderIndex = activeOrdersSorted.findIndex(o => 
-        (o._id && currentId && o._id === currentId) || 
+      const orderIndex = activeOrdersSorted.findIndex(o =>
+        (o._id && currentId && o._id === currentId) ||
         isTableMatching(o.tableNo, tableNo)
       );
 
@@ -1875,14 +1875,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       sessionStorage.removeItem('ms_invoice_open');
       sessionStorage.removeItem('ms_completed_bill');
-    } catch (e) {}
+    } catch (e) { }
     setShowInvoice(false);
     setCart([]);
     setOrderId(null);
     setOrderStatus('Open');
     setBillNumber(null);
     setCompletedBill(null);
-    
+
     // Reset order-specific states to prevent carry-over to next order
     setDiscount({ type: 'percentage', value: '' });
     setCustomerPhone('');
@@ -1891,7 +1891,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     setDeliveryCharge('0');
     setContainerCharge('0');
     setOrderSource('Direct');
-    
+
     if (billType === 'Dine-In') {
       setActiveTable('');
       fetchActiveOrder('');
@@ -1990,8 +1990,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <div className="flex items-center pointer-events-none min-w-0">
               <span className="font-bold text-text-main text-xs sm:text-sm truncate">
                 {activeTable ?
-                activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable :
-                t('selectTable', { defaultValue: 'Select Table' })}
+                  activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable :
+                  t('selectTable', { defaultValue: 'Select Table' })}
               </span>
               <ChevronDown size={13} className="text-text-muted ml-0.5 shrink-0" />
             </div>
@@ -2094,22 +2094,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setFoodTypeFilter('all')}
-              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
-                foodTypeFilter === 'all'
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${foodTypeFilter === 'all'
                   ? 'bg-gray-900 text-white shadow-xs'
                   : 'text-text-muted hover:text-text-main'
-              }`}
+                }`}
             >
               {t("All")}
             </button>
             <button
               type="button"
               onClick={() => setFoodTypeFilter('veg')}
-              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                foodTypeFilter === 'veg'
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'veg'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-emerald-600 hover:bg-emerald-50/50'
-              }`}
+                }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
               <span>{t("Veg")}</span>
@@ -2117,11 +2115,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setFoodTypeFilter('non-veg')}
-              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                foodTypeFilter === 'non-veg'
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'non-veg'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-rose-600 hover:bg-rose-50/50'
-              }`}
+                }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
               <span>{t("Non-Veg")}</span>
@@ -2191,18 +2188,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 <p className="text-xs font-bold text-text-main font-mono leading-tight">₹{dailyStats.sales.toLocaleString()}</p>
               </div>
             </div>
-            
+
             <button
               onClick={() => setIsLayoutLocked(!isLayoutLocked)}
               className={`p-1.5 rounded-lg transition-all shrink-0 ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
               title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}>
-              
+
               {isLayoutLocked ? <Lock size={16} /> : <Unlock size={16} />}
             </button>
             <button
               onClick={toggleFullScreen}
               className="p-1.5 text-text-muted hover:text-primary hover:bg-primary/5 rounded-lg transition-all shrink-0">
-              
+
               {isFullScreen ? <Minimize size={16} /> : <Maximize size={16} />}
             </button>
           </div>
@@ -2213,27 +2210,25 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         <div className="flex gap-2">
           <button
             onClick={() => setMobileTab('menu')}
-            className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 ${
-            mobileTab === 'menu' ?
-            'bg-primary text-white shadow-md' :
-            'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
+            className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 ${mobileTab === 'menu' ?
+                'bg-primary text-white shadow-md' :
+                'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
-            
+
             <span>🍽️ {t('menuItems')}</span>
           </button>
           <button
             id="mobile-cart-tab"
             data-mobile-cart-tab="true"
             onClick={() => setMobileTab('cart')}
-            className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 relative ${
-            mobileTab === 'cart' ?
-            'bg-primary text-white shadow-md' :
-            'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
+            className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 relative ${mobileTab === 'cart' ?
+                'bg-primary text-white shadow-md' :
+                'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
-            
+
             <span>🛒 {t('currentOrder')}</span>
             {cart.length > 0 &&
-            <span data-mobile-cart-badge="true" className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+              <span data-mobile-cart-badge="true" className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
                 {cart.length}
               </span>
             }
@@ -2241,65 +2236,68 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         </div>
 
         {mobileTab === 'menu' &&
-        <div className="relative group w-full mt-0.5">
+          <div className="relative group w-full mt-0.5">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={16} />
             <input
-            type="text"
-            placeholder={t('searchDishes')}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner" />
-          
+              type="text"
+              placeholder={t('searchDishes')}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner" />
+
           </div>
         }
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-          <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${
-          mobileTab === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 transition-all duration-300`
+          <div className={`flex flex-col overflow-hidden bg-surface border-r border-border/50 ${mobileTab === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 transition-all duration-300`
           }>
-            <MenuGrid 
-              onSelectItem={addToCart} 
+            <MenuGrid
+              onSelectItem={addToCart}
               activeTable={activeTable}
               billType={billType}
-              searchTerm={searchTerm} 
-              onSearchChange={setSearchTerm} 
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
               foodTypeFilter={foodTypeFilter}
               onFoodTypeFilterChange={setFoodTypeFilter}
-              isLayoutLocked={isLayoutLocked} 
-              onNavigate={onNavigate} 
-              userRole={userRole} 
+              isLayoutLocked={isLayoutLocked}
+              onNavigate={onNavigate}
+              userRole={userRole}
               isLocked={orderStatus === 'Paid' || orderStatus === 'Cancelled' || (orderStatus === 'Billed' && !hasPendingLocalChanges.current)}
               orderStatus={orderStatus}
             />
           </div>
 
           <div
-            style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { 
+            style={typeof window !== 'undefined' && window.innerWidth >= 768 ? {
               width: isCartCollapsed ? 0 : (window.innerWidth < 1024 ? Math.min(rightPanelWidth, 360) : rightPanelWidth),
               maxWidth: '45vw',
               minWidth: isCartCollapsed ? 0 : (window.innerWidth < 1024 ? '300px' : '360px')
             } : { width: '100%', maxWidth: '100vw' }}
-            className={`flex flex-col bg-surface h-full ${
-            mobileTab === 'menu' ? 'hidden md:flex' : 'flex'} ${
-            isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-visible' : 'border-l border-border/50 overflow-visible'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
-            
-            
+            className={`flex flex-col bg-surface h-full ${mobileTab === 'menu' ? 'hidden md:flex' : 'flex'} ${isCartCollapsed ? 'md:w-0 lg:w-0 border-none opacity-0 md:opacity-100 overflow-visible' : 'border-l border-border/50 overflow-visible'} shrink-0 md:shrink-0 w-full md:w-auto transition-none relative`}>
+
+
             {/* Drag Handle */}
             {!isCartCollapsed && !isLayoutLocked &&
-            <div
-              onMouseDown={startResizing}
-              className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent z-40 transition-colors" />
+              <div
+                onMouseDown={startResizing}
+                className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/50 bg-transparent z-40 transition-colors" />
 
             }
-            
+
             <button
+              type="button"
               onClick={() => setIsCartCollapsed(!isCartCollapsed)}
-              className="hidden md:flex absolute top-1/2 -translate-y-1/2 -left-3.5 z-30 bg-primary text-white shadow-md rounded-full p-1.5 hover:opacity-90 transition-all"
+              className={`hidden md:flex absolute top-1/2 -translate-y-1/2 z-30 bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xl rounded-l-2xl py-3.5 px-2 hover:opacity-95 transition-all items-center gap-1 border-y border-l border-white/25 cursor-pointer group ${
+                isCartCollapsed ? 'right-0' : 'left-0 -translate-x-full'
+              }`}
               title={isCartCollapsed ? t('expandCart') : t('collapseCart')}>
-              
-              {isCartCollapsed ? <ChevronLeft size={14} className="ml-0.5" /> : <ChevronRight size={14} className="mr-0.5" />}
+              {isCartCollapsed ? (
+                <ChevronLeft size={18} className="transition-transform group-hover:-translate-x-0.5" />
+              ) : (
+                <ChevronRight size={18} className="transition-transform group-hover:translate-x-0.5" />
+              )}
             </button>
             <div className={`bill-summary-container w-full h-full flex flex-col overflow-hidden ${isCartCollapsed ? 'hidden' : 'flex'}`}>
               <BillSummary
@@ -2356,20 +2354,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 reservations={reservations}
                 onOpenCustomerModal={handleOpenCustomerModal} />
             </div>
-            
+
           </div>
         </div>
 
         {cart.length > 0 && mobileTab === 'menu' &&
-        <div className="md:hidden p-3 bg-surface border border-border rounded-2xl shadow-xl flex items-center justify-between shrink-0 animate-bounce-short">
+          <div className="md:hidden p-3 bg-surface border border-border rounded-2xl shadow-xl flex items-center justify-between shrink-0 animate-bounce-short">
             <div className="flex flex-col">
               <span className="text-[10px] text-text-muted font-bold uppercase">{t('total')} ({cart.reduce((sum, item) => item.isCancelled ? sum : sum + item.quantity - (item.cancelledQuantity || 0), 0)} {t('items')})</span>
               <span className="text-base font-black text-primary">₹{total.toFixed(2)}</span>
             </div>
             <button
-            onClick={() => setMobileTab('cart')}
-            className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary-hover flex items-center gap-2">
-            
+              onClick={() => setMobileTab('cart')}
+              className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary-hover flex items-center gap-2">
+
               <span>{t('viewOrder')}</span>
               <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]">➔</span>
             </button>
@@ -2378,13 +2376,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       </div>
 
       {showPayment &&
-      <PaymentModal
-        total={total}
-        billNumber={billNumber}
-        tableNo={activeTable}
-        isLoading={loading}
-        onClose={() => setShowPayment(false)}
-        onComplete={handleSettleBill} />
+        <PaymentModal
+          total={total}
+          billNumber={billNumber}
+          tableNo={activeTable}
+          isLoading={loading}
+          onClose={() => setShowPayment(false)}
+          onComplete={handleSettleBill} />
 
       }
 
@@ -2416,31 +2414,31 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       })()}
 
       {showKOT && activeKOTData &&
-      <KOT
-        order={activeKOTData}
-        onClose={() => {
-          setShowKOT(false);
-          setActiveKOTData(null);
-        }} />
+        <KOT
+          order={activeKOTData}
+          onClose={() => {
+            setShowKOT(false);
+            setActiveKOTData(null);
+          }} />
 
       }
 
       {showTransfer && billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-') &&
-      <TransferTableModal
-        floors={floors}
-        currentTable={activeTable}
-        currentOrderId={orderId}
-        openOrdersList={openOrdersList}
-        isLoading={loading}
-        onClose={() => setShowTransfer(false)}
-        onTransfer={handleTransferTable} />
+        <TransferTableModal
+          floors={floors}
+          currentTable={activeTable}
+          currentOrderId={orderId}
+          openOrdersList={openOrdersList}
+          isLoading={loading}
+          onClose={() => setShowTransfer(false)}
+          onTransfer={handleTransferTable} />
       }
 
       {toast &&
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        onClose={() => setToast(null)} />
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)} />
 
       }
 
@@ -2553,7 +2551,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           </div>
         </div>
       )}
-      
+
     </div>);
 
 };
