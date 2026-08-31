@@ -206,6 +206,8 @@ export const getRestaurantInfo = async (req, res) => {
       qrMenuMode: restaurantSettings.qrMenuMode || 'cloud',
       vercelUrl: restaurantSettings.vercelUrl || 'https://restaurant-billing-seven.vercel.app',
       serverIp: restaurantSettings.serverIp || '',
+      autoSendDaybook: restaurantSettings.autoSendDaybook !== undefined ? restaurantSettings.autoSendDaybook : false,
+      autoSendTime: restaurantSettings.autoSendTime || '22:00',
       ...restaurantSettings
     };
 

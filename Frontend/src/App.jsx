@@ -1104,7 +1104,7 @@ function App() {
               initial={{ opacity: 0, y: -50, scale: 0.95 }}
               animate={{ opacity: 1, y: 20, scale: 1 }}
               exit={{ opacity: 0, y: -50, scale: 0.95 }}
-              className={`fixed top-0 right-4 sm:right-6 z-9999 bg-white border border-gray-200 border-l-4 ${style.border} px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer min-w-[300px] max-w-md`}
+              className={`fixed z-[99999] top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md sm:top-6 sm:left-auto sm:-translate-x-0 sm:right-6 sm:w-auto sm:min-w-[350px] bg-white border border-gray-200 border-l-4 ${style.border} px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer`}
               onClick={() => {
                 setToastNotifInfo(null);
                 handleViewChange('notification');
@@ -1198,6 +1198,9 @@ function App() {
               style={{ objectFit: 'contain' }}
             />
           </button>
+          <span className={`relative z-[99] ml-1 sm:ml-2 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-sm border whitespace-nowrap ${onlineStatus?.isOnline ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
+            {onlineStatus?.isOnline ? '● Online' : '● Offline'}
+          </span>
         </div>
 
         {/* Desktop / Tablet Search & Actions */}
@@ -1554,10 +1557,6 @@ function App() {
 
           <button onClick={() => setProfileOpen(!profileOpen)} className="p-1 sm:p-1.5 hover:text-text-main hover:bg-surface-hover rounded-lg transition-colors hidden sm:flex items-center justify-center text-gray-600 shrink-0" title={t("User Profile")}>
             <User size={18} />
-          </button>
-
-          <button onClick={() => setShowLogoutConfirm(true)} className="p-1 sm:p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-red-500 hidden sm:flex items-center justify-center shrink-0" title={t("Logout")}>
-            <Power size={18} />
           </button>
 
           {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}

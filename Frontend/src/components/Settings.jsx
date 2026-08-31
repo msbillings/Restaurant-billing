@@ -8,6 +8,7 @@ import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
+import CustomTimePicker from './common/CustomTimePicker';
 
 const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -49,7 +50,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     longitude: '',
     qrMenuMode: 'cloud',
     vercelUrl: 'https://restaurant-billing-seven.vercel.app',
-    serverIp: ''
+    serverIp: '',
+    autoSendDaybook: false,
+    autoSendTime: '22:00'
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -568,6 +571,35 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         <RefreshCw size={14} />
                         <span>{t("Scan QR / Link Bot")}</span>
                       </button>
+                    </div>
+                    
+                    <div className="pt-3 mt-3 border-t border-emerald-500/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold text-text-main">
+                          {t("Auto-Send DayBook Report")}
+                        </label>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={settings.autoSendDaybook || false}
+                            onChange={(e) => handleInputChange('autoSendDaybook', e.target.checked)}
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div>
+                        </label>
+                      </div>
+
+                      {settings.autoSendDaybook && (
+                        <div className="flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                          <label className="text-xs text-text-muted">
+                            {t("Report Time")}
+                          </label>
+                          <CustomTimePicker 
+                            value={settings.autoSendTime || '22:00'}
+                            onChange={(val) => handleInputChange('autoSendTime', val)}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 

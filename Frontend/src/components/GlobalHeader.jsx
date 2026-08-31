@@ -2,6 +2,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import { Menu, Search, Calculator, Bell, User, Power, Phone } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
+import useOnlineStatus from '../hooks/useOnlineStatus';
 import logoImg from '../assets/images/logo.png';
 
 const GlobalHeader = ({
@@ -18,6 +19,7 @@ const GlobalHeader = ({
   const { unreadCount: broadcastUnread } = useBroadcasts(userRole);
   const { unreadCount: notifUnread } = useNotifications(userRole);
   const unreadCount = (broadcastUnread || 0) + (notifUnread || 0);
+  const { isOnline } = useOnlineStatus();
 
   const handleSearchKeyPress = (e) => {
     if (e.key === 'Enter' && searchBillNo.trim()) {
@@ -31,7 +33,7 @@ const GlobalHeader = ({
   return (
     <div className="min-h-[60px] h-16 sm:h-20 flex items-center justify-between px-2 sm:px-6 bg-white border-b border-border shrink-0 z-20 shadow-xs w-full">
       {/* Left section: Hamburger & Logo */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1 shrink-0 relative">
         {onToggleMenu && (
           <button
             onClick={onToggleMenu}
@@ -50,6 +52,9 @@ const GlobalHeader = ({
             style={{ objectFit: 'contain' }}
           />
         </button>
+        <span className={`relative z-[999] ml-[100px] sm:ml-[120px] md:ml-[140px] px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md border whitespace-nowrap ${isOnline ? 'bg-green-100 text-green-700 border-green-300' : 'bg-orange-100 text-orange-700 border-orange-300'}`}>
+          {isOnline ? '● Online' : '● Offline'}
+        </span>
       </div>
 
       {/* Middle section: New Order & Search (Hidden for Chef) */}
@@ -108,9 +113,6 @@ const GlobalHeader = ({
               <User size={18} />
             </button>
           )}
-          <button onClick={onLogout} className="text-danger hover:text-red-700 transition-colors p-1.5 rounded-lg touch-target flex items-center justify-center">
-            <Power size={18} />
-          </button>
         </div>
       </div>
     </div>);

@@ -1,7 +1,13 @@
-import whatsappService from '../services/whatsappService.js';
+import whatsappManager from '../services/whatsappService.js';
+
+const getWhatsAppService = (req) => {
+  const tenantId = req.user?.db || 'default';
+  return whatsappManager.getInstance(tenantId);
+};
 
 export const getStatus = async (req, res) => {
   try {
+    const whatsappService = getWhatsAppService(req);
     const status = whatsappService.getStatus();
     res.json(status);
   } catch (error) {
@@ -12,6 +18,7 @@ export const getStatus = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
+    const whatsappService = getWhatsAppService(req);
     const result = await whatsappService.logout();
     res.json(result);
   } catch (error) {
@@ -27,6 +34,7 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ error: 'Phone number and message are required.' });
     }
 
+    const whatsappService = getWhatsAppService(req);
     await whatsappService.sendMessage(phone, message);
     res.json({ success: true, message: 'WhatsApp message sent successfully!' });
   } catch (error) {
@@ -42,6 +50,7 @@ export const sendBill = async (req, res) => {
       return res.status(400).json({ error: 'Destination phone number is required.' });
     }
 
+    const whatsappService = getWhatsAppService(req);
     if (imageBase64 || pdfBase64 || documentBase64) {
       await whatsappService.sendBillMedia(phone, {
         imageBase64,
@@ -68,6 +77,7 @@ export const requestPairingCode = async (req, res) => {
     if (!phone) {
       return res.status(400).json({ error: 'Phone number is required.' });
     }
+    const whatsappService = getWhatsAppService(req);
     const result = await whatsappService.requestPairingCode(phone);
     res.json(result);
   } catch (error) {
@@ -78,6 +88,7 @@ export const requestPairingCode = async (req, res) => {
 
 export const refreshQR = async (req, res) => {
   try {
+    const whatsappService = getWhatsAppService(req);
     const result = await whatsappService.refreshQR();
     res.json(result);
   } catch (error) {

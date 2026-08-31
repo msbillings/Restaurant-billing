@@ -1,8 +1,10 @@
 import api from './axios';
 
-export const getAnalytics = async (month = null, year = null, days = null, date = null) => {
+export const getAnalytics = async (month = null, year = null, days = null, date = null, customStart = null, customEnd = null) => {
   let url = '/analytics?';
-  if (date) {
+  if (customStart && customEnd) {
+    url += `customStart=${customStart}&customEnd=${customEnd}`;
+  } else if (date) {
     url += `date=${date}`;
   } else if (month && year) {
     url += `month=${month}&year=${year}`;

@@ -74,6 +74,8 @@ const Analytics = ({ onNavigate, onGoBack }) => {
   const [days, setDays] = useState(null); // For 7 or 30 days view
   const [viewMode, setViewMode] = useState('month'); // 'month', 'days', or 'day'
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [toast, setToast] = useState(null);
   const [showFraudModal, setShowFraudModal] = useState(false);
   const [fraudData, setFraudData] = useState(null);
@@ -85,14 +87,16 @@ const Analytics = ({ onNavigate, onGoBack }) => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [selectedMonth, selectedYear, days, viewMode, selectedDate]);
+  }, [selectedMonth, selectedYear, days, viewMode, selectedDate, customStart, customEnd]);
 
   const fetchAnalytics = async () => {
     setLoading(true);
     setAnimateBars(false);
     try {
       let data;
-      if (viewMode === 'month') {
+      if (viewMode === 'custom' && customStart && customEnd) {
+        data = await getAnalytics(null, null, null, null, customStart, customEnd);
+      } else if (viewMode === 'month') {
         data = await getAnalytics(selectedMonth, selectedYear, null);
       } else if (viewMode === 'day') {
         data = await getAnalytics(null, null, null, selectedDate);
@@ -241,18 +245,21 @@ const Analytics = ({ onNavigate, onGoBack }) => {
       const restSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
       const restName = restSettings.restaurantName || 'MS BILLINGS RESTAURANT';
 
-      let periodLabel = '';
-      if (viewMode === 'month') {
-        periodLabel = getMonthName(selectedMonth) + ' ' + selectedYear;
-      } else if (viewMode === 'day') {
-        periodLabel = selectedDate;
-      } else {
-        periodLabel = `Last ${days || 7} Days`;
-      }
+      const getPeriodLabelText = () => {
+        if (viewMode === 'month') return `${getMonthName(selectedMonth)} ${selectedYear}`;
+        if (viewMode === 'day') return selectedDate;
+        if (viewMode === 'custom') {
+          if (customStart && customEnd) return `${formatDate(customStart)} to ${formatDate(customEnd)}`;
+          return 'Custom Period';
+        }
+        return `Last ${days} Days`;
+      };
+      
+      const periodLabel = getPeriodLabelText();
 
-      const totalRevenue = Number(analytics?.summary?.totalRevenue || 0).toLocaleString('en-IN');
-      const totalBills = Number(analytics?.summary?.totalBills || 0).toLocaleString('en-IN');
-      const totalOrders = Number(analytics?.summary?.totalOrders || 0).toLocaleString('en-IN');
+      const totalRevenue = Number(analytics?.summary?.period?.revenue || 0).toLocaleString('en-IN');
+      const totalBills = Number(analytics?.summary?.period?.bills || 0).toLocaleString('en-IN');
+      const totalOrders = Number(analytics?.summary?.period?.orders || 0).toLocaleString('en-IN');
 
       let paymentBreakdownText = '';
       if (analytics?.paymentModeStats && analytics.paymentModeStats.length > 0) {
@@ -323,7 +330,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  if (loading) {
+  if (loading && !analytics) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="flex flex-col items-center gap-4">
@@ -347,6 +354,18 @@ const Analytics = ({ onNavigate, onGoBack }) => {
 
   const { summary, dailyRevenue, paymentModeStats } = analytics;
   const maxRevenue = getMaxRevenue();
+
+  const getPeriodLabel = () => {
+    if (viewMode === 'month') return `${getMonthName(selectedMonth)} ${selectedYear}`;
+    if (viewMode === 'day') return selectedDate;
+    if (viewMode === 'custom') {
+      if (customStart && customEnd) {
+        return `${formatDate(customStart)} to ${formatDate(customEnd)}`;
+      }
+      return 'Custom Period';
+    }
+    return `Last ${days} Days`;
+  };
 
   return (
     <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto" key={`analytics-view-${animKey}`}>
@@ -429,6 +448,17 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
                     }>{t("Day")}
                   </button>
+                  <button
+                    onClick={() => {
+                      setViewMode('custom');
+                      setDays(null);
+                    }}
+                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
+                      viewMode === 'custom' ?
+                      'bg-[#f97316] text-white shadow-md font-bold' :
+                      'text-gray-400 hover:text-white hover:bg-white/5'}`
+                    }>{t("Custom")}
+                  </button>
                 </div>
               </div>
               
@@ -466,6 +496,29 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                       {d} {t("Days")}
                     </button>
                   ))}
+                </div>
+              ) : viewMode === 'custom' ? (
+                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
+                  <div className="flex items-center gap-2 w-full">
+                    <Calendar size={13} className="text-[#f97316]" />
+                    <input
+                      type="date"
+                      value={customStart}
+                      onChange={(e) => {
+                        setCustomStart(e.target.value);
+                        if (customEnd && e.target.value > customEnd) {
+                          setCustomEnd(e.target.value);
+                        }
+                      }}
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
+                    <span className="text-gray-400">to</span>
+                    <input
+                      type="date"
+                      value={customEnd}
+                      min={customStart}
+                      onChange={(e) => setCustomEnd(e.target.value)}
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
@@ -508,7 +561,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               <button
                 onClick={fetchAnalytics}
                 className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 active:scale-95 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs cursor-pointer">
-                <RefreshCw size={14} />
+                <RefreshCw size={14} className={loading ? 'animate-spin text-[#f97316]' : ''} />
                 <span>{t("Refresh")}</span>
               </button>
               <button
@@ -533,7 +586,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
               <p className="text-base sm:text-xl font-bold text-white leading-tight">
-                <AnimatedNumber value={summary.totalBills} />
+                <AnimatedNumber value={summary.period.bills} />
               </p>
             </div>
           </div>
@@ -548,25 +601,11 @@ const Analytics = ({ onNavigate, onGoBack }) => {
             <div className="space-y-0.5">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
               <p className="text-base sm:text-xl font-bold text-white leading-tight">
-                <AnimatedNumber value={summary.totalOrders} />
+                <AnimatedNumber value={summary.period.orders} />
               </p>
             </div>
           </div>
 
-          {/* Today's Revenue */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '150ms' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-[#22c55e]/10 flex items-center justify-center text-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.15)]">
-                <TrendingUp size={16} />
-              </div>
-            </div>
-            <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Today's Revenue")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">
-                <AnimatedNumber value={summary.today.revenue} isCurrency={true} />
-              </p>
-            </div>
-          </div>
 
           {/* Period Revenue */}
           <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '200ms' }}>
@@ -576,8 +615,8 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               </div>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate" title={viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ${t("Revenue")}` : `${days} Days ${t("Revenue")}`}>
-                {viewMode === 'month' ? `${getMonthName(selectedMonth)} ${selectedYear} ` : `${days} Days `}{t("Revenue")}
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate" title={`${getPeriodLabel()} ${t("Revenue")}`}>
+                {getPeriodLabel()} {t("Revenue")}
               </p>
               <p className="text-base sm:text-xl font-bold text-white leading-tight">
                 <AnimatedNumber value={summary.period.revenue} isCurrency={true} />
@@ -604,6 +643,26 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               </p>
             </div>
           </div>
+
+          {/* Pick Up Orders */}
+          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-2 md:col-span-1 animate-card-entry shadow-sm" style={{ animationDelay: '250ms' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5 sm:block">
+                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0 sm:mb-1.5 text-pink-500 shadow-[0_0_12px_rgba(236,72,153,0.15)]">
+                  <ShoppingBag size={16} />
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Pick Up Orders")}</p>
+                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">
+                    <AnimatedNumber value={summary.period.pickupOrders || 0} />
+                  </p>
+                </div>
+              </div>
+              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">
+                <AnimatedNumber value={summary.period.pickupOrders || 0} />
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Charts Section */}
@@ -618,9 +677,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                 <div>
                   <h2 className="text-lg font-bold text-white">{t("Daily Revenue & Orders")}</h2>
                   <p className="text-xs text-gray-400">
-                    {viewMode === 'month' ?
-                    `${getMonthName(selectedMonth)} ${selectedYear}` :
-                    `Last ${days} days`}
+                    {getPeriodLabel()}
                   </p>
                 </div>
               </div>
@@ -776,9 +833,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                 <div>
                   <h2 className="text-lg font-bold text-white">{t("Payment Methods")}</h2>
                   <p className="text-xs text-gray-400">
-                    {viewMode === 'month' ?
-                    `${getMonthName(selectedMonth)} ${selectedYear}` :
-                    `Last ${days} days`}
+                    {getPeriodLabel()}
                   </p>
                 </div>
               </div>

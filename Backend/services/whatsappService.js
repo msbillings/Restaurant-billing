@@ -14,9 +14,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getAuthDir() {
+function getAuthDir(tenantId = 'default') {
+  const dirName = `auth_info_baileys_${tenantId}`;
   if (process.env.APP_USER_DATA_PATH) {
-    const dir = path.join(process.env.APP_USER_DATA_PATH, 'auth_info_baileys');
+    const dir = path.join(process.env.APP_USER_DATA_PATH, dirName);
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       return dir;
@@ -26,7 +27,7 @@ function getAuthDir() {
   }
 
   if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    const dir = path.join(os.tmpdir(), 'auth_info_baileys');
+    const dir = path.join(os.tmpdir(), dirName);
     try {
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       return dir;
@@ -34,7 +35,7 @@ function getAuthDir() {
   }
 
   // Development / Standard directory
-  const localDir = path.join(__dirname, '..', 'auth_info_baileys');
+  const localDir = path.join(__dirname, '..', dirName);
   try {
     if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
     // Verify write permissions
@@ -44,7 +45,7 @@ function getAuthDir() {
     return localDir;
   } catch (e) {
     // If packaged in read-only path (e.g. Program Files), fallback to OS temp or home directory
-    const fallbackDir = path.join(os.tmpdir(), 'msbilling_baileys_auth');
+    const fallbackDir = path.join(os.tmpdir(), `msbilling_baileys_auth_${tenantId}`);
     try {
       if (!fs.existsSync(fallbackDir)) fs.mkdirSync(fallbackDir, { recursive: true });
       return fallbackDir;
@@ -55,14 +56,15 @@ function getAuthDir() {
 }
 
 class WhatsAppService {
-  constructor() {
+  constructor(tenantId = 'default') {
+    this.tenantId = tenantId;
     this.sock = null;
     this.qrDataUrl = null;
     this.status = 'DISCONNECTED'; // 'DISCONNECTED', 'SCAN_QR', 'CONNECTING', 'CONNECTED'
     this.connectedNumber = null;
     this.connectionListeners = new Set();
     this.isInitializing = false;
-    this.authDir = getAuthDir();
+    this.authDir = getAuthDir(this.tenantId);
   }
 
   getPlatformInfo() {
@@ -86,7 +88,7 @@ class WhatsAppService {
         this.sock = null;
       }
 
-      this.authDir = getAuthDir();
+      this.authDir = getAuthDir(this.tenantId);
       if (!fs.existsSync(this.authDir)) {
         fs.mkdirSync(this.authDir, { recursive: true });
       }
@@ -486,5 +488,18 @@ class WhatsAppService {
   }
 }
 
-const whatsappService = new WhatsAppService();
-export default whatsappService;
+class WhatsAppManager {
+  constructor() {
+    this.instances = new Map();
+  }
+
+  getInstance(tenantId = 'default') {
+    if (!this.instances.has(tenantId)) {
+      this.instances.set(tenantId, new WhatsAppService(tenantId));
+    }
+    return this.instances.get(tenantId);
+  }
+}
+
+const whatsappManager = new WhatsAppManager();
+export default whatsappManager;
