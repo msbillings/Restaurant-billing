@@ -14,7 +14,7 @@ const inView = (delay = 0, dir = 'up', duration = 0.9) => ({
     y: dir === 'up' ? 40 : dir === 'down' ? -40 : 0,
     x: dir === 'left' ? 40 : dir === 'right' ? -40 : 0,
   },
-  whileInView: { opacity: 1, y: 0 },
+  whileInView: { opacity: 1, y: 0, x: 0 },
   viewport: { once: false, margin: '-60px' },
   transition: { duration, ease: [0.16, 1, 0.3, 1], delay },
 });

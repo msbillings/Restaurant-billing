@@ -827,8 +827,8 @@ function App() {
     const handleForceLogout = () => {
       console.warn('[App] forceLogout event received — resetting user state');
       setUser(null);
-      setView('floor');
-      window.history.replaceState(null, '', '/login');
+      setView('landing');
+      window.history.replaceState(null, '', '/');
       // Re-check license status from localStorage in case license was cleared
       // (e.g. via "Reset License" button). If resto_license is gone, show LicenseScreen.
       const savedLicense = localStorage.getItem('resto_license');
@@ -968,7 +968,8 @@ function App() {
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
     sessionStorage.removeItem('unlockedFeatures');
-    window.history.replaceState(null, '', '/login');
+    setView('landing');
+    window.history.replaceState(null, '', '/');
   };
 
   const handleViewChange = (newView, tableSelection = null) => {

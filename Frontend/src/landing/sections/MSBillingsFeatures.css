@@ -47,8 +47,8 @@
     linear-gradient(rgba(184, 115, 51, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(184, 115, 51, 0.04) 1px, transparent 1px);
   background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
   -webkit-mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 80%);
 }
 
 /* ── Typography & Header ────────────────────────────────────────── */
@@ -69,6 +69,7 @@
   border: 1px solid rgba(184, 115, 51, 0.25);
   border-radius: 999px;
   background: rgba(255, 248, 235, 0.7);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   margin-bottom: 1.2rem;
   box-shadow: 0 4px 12px rgba(62, 47, 31, 0.05);
@@ -159,6 +160,7 @@
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.8) 0%, rgba(251, 248, 241, 0.5) 100%);
   border: 1px solid rgba(200, 150, 62, 0.15);
   border-radius: 32px;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   box-shadow: 
     0 10px 30px rgba(62, 47, 31, 0.04),
@@ -400,7 +402,7 @@
 }
 
 @media (max-width: 900px) {
-  .msbf-bento { grid-template-columns: 1fr; }
+  .msbf-bento { grid-template-columns: 1fr; margin-bottom: 3rem; }
   .msbf-card--large { grid-row: auto; }
   .msbf-card--wide { grid-column: span 1; }
   .msbf-card__content--split { flex-direction: column; }
@@ -408,6 +410,8 @@
   .msbf-card__visual--wide { margin: 0 2rem 2rem; height: 300px; }
   
   .msbf-alt-block { grid-template-columns: 1fr; gap: 4rem; }
+  .msbf-connector { margin-bottom: 4rem; }
+  .msbf-alt-section { gap: 4rem; }
   .msbf-alt-block--reverse .msbf-alt-block__visual,
   .msbf-alt-block--reverse .msbf-alt-block__content {
     order: unset;
@@ -432,4 +436,7 @@
   .msbf-alt-title { font-size: clamp(1.6rem, 7vw, 2rem); }
   .msbf-alt-desc { font-size: 0.9rem; }
   .msbf-alt-image-frame img { height: clamp(200px, 60vw, 280px); }
+  .msbf-bento { margin-bottom: 2rem; }
+  .msbf-connector { margin-bottom: 1rem; }
+  .msbf-alt-section { gap: 3rem; }
 }

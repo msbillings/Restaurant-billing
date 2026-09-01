@@ -370,10 +370,10 @@
 @media (max-width: 580px) {
   .t-section { padding: 3rem 0 3.5rem; }
   .t-header { margin-bottom: 2rem; padding: 0 1rem; }
-  .t-stats-header { padding: 0 1rem; }
-  .t-heading { font-size: clamp(1.6rem, 6vw, 2rem); margin-bottom: 0.5rem; word-break: break-word; }
-  .t-stats-heading { font-size: clamp(1.5rem, 5vw, 1.8rem); margin-bottom: 0.5rem; word-break: break-word; }
-  .t-stats-subheading { font-size: 0.95rem; margin-bottom: 1.5rem; }
+  .t-stats-header { padding: 0 1rem; text-align: center; }
+  .t-heading { font-size: clamp(1.6rem, 6vw, 2rem); margin-bottom: 0.5rem; word-break: break-word; text-align: center; }
+  .t-stats-heading { font-size: clamp(1.5rem, 5vw, 1.8rem); margin-bottom: 0.5rem; word-break: break-word; text-align: center; }
+  .t-stats-subheading { font-size: 0.95rem; margin-bottom: 1.5rem; text-align: center; }
   
   .t-stats-grid {
     grid-template-columns: 1fr;
