@@ -1,8 +1,9 @@
-import React, { memo, useEffect, useState } from 'react';
+import { getApiUrl } from '../../config.js';
+import React, { memo, useEffect, useState, useRef } from 'react';
 import { motion as Motion, useInView } from 'framer-motion';
 import { Star, Quote, TrendingUp, Store, CloudLightning, BadgeDollarSign } from 'lucide-react';
-import { useRef } from 'react';
-import { STATS, REVIEWS } from '../constants/landingData';
+import axios from 'axios';
+import { STATS as DEFAULT_STATS, REVIEWS } from '../constants/landingData';
 import './Testimonials.css';
 
 /* ─── Animation Helpers ──────────────────────────────────────────── */
@@ -13,44 +14,71 @@ const inView = (delay = 0, dir = 'up', duration = 0.9) => ({
     y: dir === 'up' ? 40 : dir === 'down' ? -40 : 0,
     x: dir === 'left' ? 40 : dir === 'right' ? -40 : 0,
   },
-  whileInView: { opacity: 1, y: 0, x: 0 },
+  whileInView: { opacity: 1, y: 0 },
   viewport: { once: false, margin: '-60px' },
   transition: { duration, ease: [0.16, 1, 0.3, 1], delay },
 });
 
+/* ─── Number Formatter ───────────────────────────────────────────── */
+
+const formatStat = (num, isCurrency = false) => {
+  const n = Number(num) || 0;
+  if (isCurrency) {
+    if (n >= 10000000) {
+      return { value: parseFloat((n / 10000000).toFixed(1)), prefix: '₹', suffix: 'Cr+' };
+    }
+    if (n >= 100000) {
+      return { value: parseFloat((n / 100000).toFixed(1)), prefix: '₹', suffix: 'L+' };
+    }
+    if (n >= 1000) {
+      return { value: parseFloat((n / 1000).toFixed(1)), prefix: '₹', suffix: 'k+' };
+    }
+    return { value: Math.round(n), prefix: '₹', suffix: '+' };
+  }
+
+  if (n >= 1000000) {
+    return { value: parseFloat((n / 1000000).toFixed(1)), prefix: '', suffix: 'M+' };
+  }
+  if (n >= 1000) {
+    return { value: parseFloat((n / 1000).toFixed(1)), prefix: '', suffix: 'k+' };
+  }
+  return { value: n, prefix: '', suffix: n > 0 ? '+' : '' };
+};
+
 /* ─── Animated Counter ───────────────────────────────────────────── */
 
 const AnimatedCounter = ({ value, suffix = '', prefix = '' }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
-  const [count, setCount] = useState(0);
+  const [displayValue, setDisplayValue] = useState(value);
+  const isDecimal = String(value).includes('.');
 
   useEffect(() => {
-    if (isInView) {
-      let start = 0;
-      const end = value;
-      const duration = 2000; // ms
-      const incrementTime = 20;
-      const step = end / (duration / incrementTime);
-      
-      const timer = setInterval(() => {
-        start += step;
-        if (start >= end) {
-          setCount(end);
-          clearInterval(timer);
-        } else {
-          setCount(Math.floor(start));
-        }
-      }, incrementTime);
-      return () => clearInterval(timer);
+    const target = Number(value) || 0;
+    if (target === 0) {
+      setDisplayValue(value);
+      return;
     }
-  }, [isInView, value]);
 
-  // For values like 99.9, handle differently (mocking simplified for integers here, hardcode the decimal if needed)
-  const displayValue = value === 99 ? '99.9' : count;
+    let current = 0;
+    const duration = 1200; // ms
+    const steps = 30;
+    const stepTime = duration / steps;
+    const increment = target / steps;
+
+    const timer = setInterval(() => {
+      current += increment;
+      if (current >= target) {
+        setDisplayValue(value);
+        clearInterval(timer);
+      } else {
+        setDisplayValue(isDecimal ? parseFloat(current.toFixed(1)) : Math.floor(current));
+      }
+    }, stepTime);
+
+    return () => clearInterval(timer);
+  }, [value, isDecimal]);
 
   return (
-    <span ref={ref} className="t-stat__number">
+    <span className="t-stat__number">
       {prefix}{displayValue}{suffix}
     </span>
   );
@@ -105,7 +133,72 @@ const ReviewCard = memo(({ review, delay }) => {
 
 /* ─── Main Section ───────────────────────────────────────────────── */
 
+const INITIAL_STATS = [
+  { id: 1, value: 7.8, prefix: '', suffix: 'k+', label: 'Orders Processed', icon: TrendingUp },
+  { id: 2, value: 9, prefix: '', suffix: '+', label: 'Partner Restaurants', icon: Store },
+  { id: 3, value: 64.8, prefix: '₹', suffix: 'L+', label: 'Revenue Managed', icon: BadgeDollarSign },
+  { id: 4, value: 99.9, prefix: '', suffix: '%', label: 'Cloud Uptime', icon: CloudLightning },
+];
+
 const Testimonials = () => {
+  const [statsData, setStatsData] = useState(INITIAL_STATS);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPlatformStats = async () => {
+      try {
+        const res = await axios.get(`${getApiUrl()}/public/platform-stats`, { timeout: 6000 });
+        if (res.data?.success && res.data?.stats && isMounted) {
+          const { ordersProcessed, partnerRestaurants, revenueManaged, uptimePercentage } = res.data.stats;
+          
+          const ordersFmt = formatStat(ordersProcessed);
+          const partnersFmt = formatStat(partnerRestaurants);
+          const revenueFmt = formatStat(revenueManaged, true);
+
+          setStatsData([
+            {
+              id: 1,
+              value: ordersFmt.value,
+              prefix: ordersFmt.prefix,
+              suffix: ordersFmt.suffix,
+              label: 'Orders Processed',
+              icon: TrendingUp
+            },
+            {
+              id: 2,
+              value: partnersFmt.value,
+              prefix: partnersFmt.prefix,
+              suffix: partnersFmt.suffix,
+              label: 'Partner Restaurants',
+              icon: Store
+            },
+            {
+              id: 3,
+              value: revenueFmt.value,
+              prefix: revenueFmt.prefix,
+              suffix: revenueFmt.suffix,
+              label: 'Revenue Managed',
+              icon: BadgeDollarSign
+            },
+            {
+              id: 4,
+              value: uptimePercentage || 99.9,
+              prefix: '',
+              suffix: '%',
+              label: 'Cloud Uptime',
+              icon: CloudLightning
+            }
+          ]);
+        }
+      } catch (err) {
+        console.warn('[Landing Stats] Using default statistics:', err.message);
+      }
+    };
+
+    fetchPlatformStats();
+    return () => { isMounted = false; };
+  }, []);
+
   return (
     <section id="reviews" className="t-section" aria-label="Statistics and Testimonials">
       
@@ -127,7 +220,7 @@ const Testimonials = () => {
           </Motion.div>
           
           <div className="t-stats-grid">
-            {STATS.map((stat, index) => (
+            {statsData.map((stat, index) => (
               <StatCard key={stat.id} stat={stat} index={index} />
             ))}
           </div>

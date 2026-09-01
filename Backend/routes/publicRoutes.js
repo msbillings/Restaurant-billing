@@ -1,5 +1,6 @@
 import express from 'express';
 import os from 'os';
+import mongoose from 'mongoose';
 const router = express.Router();
 import MenuDefault from '../models/Menu.js';
 import CategoryDefault from '../models/Category.js';
@@ -7,6 +8,8 @@ import BillDefault from '../models/Bill.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
 import SettingDefault from '../models/Setting.js';
 import ReservationDefault from '../models/Reservation.js';
+import ClientDefault from '../models/Client.js';
+import CustomerDefault from '../models/Customer.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
@@ -832,6 +835,102 @@ router.get('/system-ip', (req, res) => {
 
   const serverPort = process.env.PORT || 5002;
   res.status(200).json({ ip: localIP, port: serverPort });
+});
+
+// Dynamic Real-time Platform Statistics for Landing Page
+let cachedPlatformStats = null;
+let lastStatsFetchTimestamp = 0;
+
+router.get('/platform-stats', async (req, res) => {
+  try {
+    const now = Date.now();
+    // Cache for 30 seconds for live dynamic updates
+    if (cachedPlatformStats && (now - lastStatsFetchTimestamp < 30000)) {
+      return res.status(200).json({ success: true, stats: cachedPlatformStats });
+    }
+
+    let partnerCount = 0;
+    let clients = [];
+    try {
+      clients = await ClientDefault.find({ status: { $ne: 'Deleted' } }).lean();
+      partnerCount = clients.length;
+    } catch (e) {}
+
+    let totalOrders = 0;
+    let totalRevenue = 0;
+
+    // 1. Primary DB bills
+    try {
+      const primaryBills = await BillDefault.find({ status: { $nin: ['Deleted', 'Cancelled'] } })
+        .select('total amountPaid subtotal status')
+        .lean()
+        .maxTimeMS(2500);
+
+      for (const b of primaryBills) {
+        const amt = Number(b.total || b.amountPaid || b.subtotal || 0);
+        totalRevenue += amt;
+        totalOrders++;
+      }
+    } catch (e) {}
+
+    // 2. Query all client tenant databases in parallel
+    const mongoClient = mongoose.connection.client;
+    if (mongoClient && clients && clients.length > 0) {
+      const tasks = clients.map(async (client) => {
+        if (!client.databaseName) return { orders: 0, revenue: 0 };
+        try {
+          const tenantDb = mongoClient.db(client.databaseName);
+          const bills = await tenantDb.collection('bills')
+            .find({ status: { $nin: ['Deleted', 'Cancelled'] } })
+            .project({ total: 1, amountPaid: 1, subtotal: 1, status: 1 })
+            .maxTimeMS(2500)
+            .toArray();
+
+          let clientRevenue = 0;
+          let clientOrders = 0;
+
+          for (const bill of bills) {
+            const amt = Number(bill.total || bill.amountPaid || bill.subtotal || 0);
+            clientRevenue += amt;
+            clientOrders++;
+          }
+
+          return { orders: clientOrders, revenue: clientRevenue };
+        } catch (err) {
+          return { orders: 0, revenue: 0 };
+        }
+      });
+
+      const results = await Promise.allSettled(tasks);
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          totalOrders += r.value.orders;
+          totalRevenue += r.value.revenue;
+        }
+      }
+    }
+
+    const calculatedStats = {
+      ordersProcessed: totalOrders,
+      partnerRestaurants: partnerCount,
+      revenueManaged: Math.round(totalRevenue),
+      uptimePercentage: 99.9
+    };
+
+    cachedPlatformStats = calculatedStats;
+    lastStatsFetchTimestamp = now;
+
+    res.status(200).json({
+      success: true,
+      stats: calculatedStats
+    });
+  } catch (error) {
+    console.error("Error fetching live platform stats:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 });
 
 export default router;

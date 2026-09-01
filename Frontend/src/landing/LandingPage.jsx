@@ -16,14 +16,14 @@ const Testimonials = lazy(() => import('./sections/Testimonials'));
 const CallToAction = lazy(() => import('./sections/CallToAction'));
 const Footer = lazy(() => import('./sections/Footer'));
 
-const LandingPage = () => {
+const LandingPage = ({ onLaunchApp, isLoggedIn }) => {
   return (
     <MotionConfig reducedMotion="user">
       <div className="landing-layout">
         <a href="#main-content" className="skip-link">Skip to main content</a>
-        <Navbar />
+        <Navbar onLaunchApp={onLaunchApp} isLoggedIn={isLoggedIn} />
         <main id="main-content">
-          <Hero />
+          <Hero onLaunchApp={onLaunchApp} isLoggedIn={isLoggedIn} />
           <Experience />
           <About />
           <FoodShowcase />
@@ -33,7 +33,7 @@ const LandingPage = () => {
           <Suspense fallback={<div className="lazy-fallback"></div>}>
             <Gallery />
             <Testimonials />
-            <CallToAction />
+            <CallToAction onLaunchApp={onLaunchApp} />
           </Suspense>
         </main>
         

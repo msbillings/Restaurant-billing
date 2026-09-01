@@ -378,6 +378,7 @@ import loyaltyRoutes from './routes/loyaltyRoutes.js';
 import broadcastRoutes from './routes/broadcastRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -415,6 +416,7 @@ app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
+app.use('/api/contact', contactRoutes);
 
 // WhatsApp sessions are lazily initialized via WhatsAppManager in whatsappController.js
 

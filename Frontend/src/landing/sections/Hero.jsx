@@ -103,15 +103,50 @@ const AnimSub = memo(() => {
       initial="hidden"
       animate={controls}
     >
-      MS Billings is the all-in-one billing platform built for
-      <strong> fine dining, cloud kitchens, cafés, hotels</strong> and every
-      restaurant in between. One tap to bill. Zero friction. Pure growth.
+      The complete POS and billing platform built for
+      <strong> fine dining, cloud kitchens, and cafes</strong>. One tap to bill. Zero friction.
     </Motion.p>
   );
 });
 
+const AnimActions = memo(({ onLaunchApp }) => {
+  const { ref, controls, variants } = useScrollAnim(0.60, 22);
+
+  const handleLaunch = () => {
+    if (onLaunchApp) {
+      onLaunchApp('floor');
+    } else {
+      window.location.href = '/login';
+    }
+  };
+
+  const handleExplore = (e) => {
+    e.preventDefault();
+    const el = document.querySelector('#features') || document.querySelector('#ms-billings');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  return (
+    <Motion.div
+      ref={ref}
+      className="hero-actions"
+      variants={variants}
+      initial="hidden"
+      animate={controls}
+    >
+      <button className="hero-btn-primary" onClick={handleLaunch}>
+        <span>Launch Live POS</span>
+        <Zap size={16} />
+      </button>
+      <button className="hero-btn-secondary" onClick={handleExplore}>
+        <span>Explore Features</span>
+      </button>
+    </Motion.div>
+  );
+});
+
 const AnimBadges = memo(() => {
-  const { ref, controls, variants } = useScrollAnim(0.68, 20);
+  const { ref, controls, variants } = useScrollAnim(0.72, 20);
   return (
     <Motion.div
       ref={ref}
@@ -201,7 +236,7 @@ const ScrollIndicator = memo(() => {
 });
 
 // ─── Hero ────────────────────────────────────────────────────────────────────
-const Hero = () => {
+const Hero = ({ onLaunchApp }) => {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -244,6 +279,7 @@ const Hero = () => {
           <AnimEyebrow />
           <AnimHeadline />
           <AnimSub />
+          <AnimActions onLaunchApp={onLaunchApp} />
           <AnimBadges />
         </div>
       </div>

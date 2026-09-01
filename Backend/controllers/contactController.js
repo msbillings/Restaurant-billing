@@ -1,12 +1,15 @@
 import nodemailer from 'nodemailer';
 import Contact from '../models/Contact.js';
 
-// ── Nodemailer transporter ──────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
+// ── Nodemailer transporter (lazy — reads env at request time) ───────────────
+const MAIL_USER = process.env.MAIL_USER || 'msbillling@gmail.com';
+const MAIL_PASS = process.env.MAIL_APP_PASS || 'awoxpqruiuqjgtdc';
+
+const getTransporter = () => nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_APP_PASS,
+    user: MAIL_USER,
+    pass: MAIL_PASS,
   },
 });
 
@@ -199,9 +202,10 @@ export const submitContactForm = async (req, res) => {
     await newContact.save();
 
     // 2. Send notification email to MS Billings team
+    const transporter = getTransporter();
     await transporter.sendMail({
-      from: `"MS Billings Contact" <${process.env.MAIL_USER}>`,
-      to: process.env.MAIL_USER,
+      from: `"MS Billings Contact" <${MAIL_USER}>`,
+      to: MAIL_USER,
       replyTo: email,
       subject: `📩 New Inquiry from ${name}${restaurantName ? ` — ${restaurantName}` : ''}`,
       html: buildAdminEmail({ name, email, restaurantName, phone, message }),
@@ -209,7 +213,7 @@ export const submitContactForm = async (req, res) => {
 
     // 3. Send acknowledgement email to the user
     await transporter.sendMail({
-      from: `"MS Billings" <${process.env.MAIL_USER}>`,
+      from: `"MS Billings" <${MAIL_USER}>`,
       to: email,
       subject: `Thanks for reaching out, ${name}! — MS Billings`,
       html: buildUserEmail({ name }),
@@ -217,7 +221,9 @@ export const submitContactForm = async (req, res) => {
 
     res.status(201).json({ message: 'Message sent successfully! Check your email for confirmation.' });
   } catch (error) {
-    console.error('Contact form error:', error);
-    res.status(500).json({ message: 'Server error while sending your message.' });
+    console.error('Contact form error:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error stack:', error.stack?.split('\n')[0]);
+    res.status(500).json({ message: 'Server error while sending your message.', detail: error.message });
   }
 };

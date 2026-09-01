@@ -16,6 +16,7 @@
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(251, 248, 241, 0.8) 100%);
   border: 1px solid rgba(200, 150, 62, 0.25);
   border-radius: 40px;
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   box-shadow: 
     0 24px 64px rgba(62, 47, 31, 0.08),
@@ -187,6 +188,7 @@
   background: rgba(255, 255, 255, 0.6);
   color: var(--color-text-main);
   border: 1px solid rgba(200, 150, 62, 0.3);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   box-shadow: 0 8px 16px rgba(62, 47, 31, 0.05);
   transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
@@ -208,6 +210,7 @@
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 24px;
   padding: 2.5rem;
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   box-shadow: 0 16px 40px rgba(62, 47, 31, 0.05);
   text-align: left;
@@ -285,23 +288,41 @@
 }
 
 @media (max-width: 580px) {
-  .cta-section { padding: 2rem 1rem 5rem; }
-  .cta-panel { padding: clamp(3rem, 10vw, 4rem) clamp(1.2rem, 5vw, 1.5rem); border-radius: 24px; }
-  .cta-icon-wrap { width: 56px; height: 56px; margin-bottom: 1.5rem; }
-  .cta-heading { font-size: clamp(1.6rem, 6vw, 2rem); }
-  .cta-subheading { font-size: clamp(0.9rem, 4vw, 1.15rem); margin-bottom: 2.5rem; }
-  .cta-actions { flex-direction: column; width: 100%; gap: 1rem; }
+  .cta-section { padding: 2rem 0 3rem; }
+  .cta-panel { padding: 2rem 1rem; border-radius: 20px; }
+  .cta-icon-wrap { width: 48px; height: 48px; margin-bottom: 1rem; }
+  .cta-heading { font-size: clamp(1.6rem, 6vw, 1.8rem); margin-bottom: 0.75rem; }
+  .cta-subheading { font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.5; }
+  .cta-actions { flex-direction: column; width: 100%; gap: 0.75rem; }
   .cta-btn { 
     width: 100%; 
     justify-content: center; 
-    padding: clamp(0.9rem, 4vw, 1.1rem) clamp(1.5rem, 6vw, 2.5rem);
-    font-size: 0.95rem;
+    padding: 0.85rem 1.5rem;
+    font-size: 0.9rem;
   }
   .cta-form__group-row {
     flex-direction: column;
     gap: 0;
   }
   .cta-form {
-    padding: 1.5rem;
+    padding: 1.25rem 1rem;
+    border-radius: 16px;
+  }
+  .cta-form__title {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+  .cta-form__input {
+    padding: 0.85rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 10px;
+  }
+  .cta-form__group {
+    margin-bottom: 0.75rem;
+  }
+  .cta-btn--submit {
+    padding: 0.85rem;
+    font-size: 0.95rem;
+    border-radius: 10px;
   }
 }

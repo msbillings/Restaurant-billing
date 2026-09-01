@@ -1,4 +1,4 @@
-import { getApiUrl, getSuperadminApiUrl } from "./config.js";
+import { getApiUrl, getSuperadminApiUrl, isCapacitorApp, isElectronApp } from "./config.js";
 import React, { useState, useEffect, Suspense } from 'react';
 import axios from 'axios';
 import api from './api/axios';
@@ -83,15 +83,55 @@ function App() {
   const { t } = useLanguage();
   const onlineStatus = useOnlineStatus();
   const [view, setView] = useState(() => {
+    const isNative = isCapacitorApp() || isElectronApp();
     const path = window.location.pathname.replace(/^\/+/, '');
-    if (window.location.protocol === 'file:' || path.includes('.html')) {
+
+    // 1. Native mobile (APK/IPA) and Desktop (EXE/DMG/file:) go directly to POS app
+    if (isNative || window.location.protocol === 'file:' || path.includes('.html')) {
       return 'floor';
     }
-    if (path && !['login', 'app', 'dashboard', 'index.html', ''].includes(path)) {
+
+    // 2. Customer menu / QR order deep links or KDS
+    if (path === 'order' || path.startsWith('order/') || path === 'kds') {
       return path;
     }
-    return 'floor';
-  }); // Initialize from URL or default to floor view
+
+    // 3. Explicit routes requested by user
+    if (path === 'login' || path === 'app') {
+      return 'floor';
+    }
+
+    // 4. Web browser (Vercel / Localhost) always defaults to Landing Page!
+    return 'landing';
+  }); // Initialize from URL or default to landing on web / floor on native
+
+  // Keep URL clean as '/' when on the landing page in a web browser
+  useEffect(() => {
+    const isNative = isCapacitorApp() || isElectronApp();
+    if (!isNative && view === 'landing' && window.location.pathname !== '/' && window.location.pathname !== '') {
+      try {
+        window.history.replaceState(null, '', '/');
+      } catch (e) {}
+    }
+  }, [view]);
+
+  // Handle browser back / forward navigation between Landing Page and App on web
+  useEffect(() => {
+    const handlePopState = () => {
+      const isNative = isCapacitorApp() || isElectronApp();
+      const path = window.location.pathname.replace(/^\/+/, '');
+      if (isNative || window.location.protocol === 'file:') return;
+      if (!path || path === '' || path === 'landing' || path === 'home' || path === 'index.html') {
+        setView('landing');
+      } else if (path === 'login' || path === 'app' || path === 'floor') {
+        setView('floor');
+      } else {
+        setView(path);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
   const [user, setUser] = useState(null);
@@ -870,10 +910,10 @@ function App() {
   };
 
   useEffect(() => {
-    if (user && (window.location.pathname === '/login' || window.location.pathname === '/')) {
+    if (user && window.location.pathname === '/login' && view !== 'landing') {
       window.history.replaceState(null, '', '/floor');
     }
-  }, [user]);
+  }, [user, view]);
 
   useEffect(() => {
     if (user) {
@@ -930,31 +970,6 @@ function App() {
     sessionStorage.removeItem('unlockedFeatures');
     window.history.replaceState(null, '', '/login');
   };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname.replace(/^\/+/, '');
-      if (window.location.protocol === 'file:' || path.includes('.html')) {
-        setView('floor');
-        return;
-      }
-      if (path && !['login', 'app', 'index.html', ''].includes(path)) {
-        setView(path);
-        setViewHistory(prev => {
-          if (prev[prev.length - 1] === path) return prev;
-          return [...prev, path];
-        });
-      } else {
-        setView('floor');
-        setViewHistory(prev => {
-          if (prev[prev.length - 1] === 'floor') return prev;
-          return [...prev, 'floor'];
-        });
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   const handleViewChange = (newView, tableSelection = null) => {
     setSelectedTable(tableSelection);
@@ -1031,6 +1046,24 @@ function App() {
 
   }
 
+  // 1. Web visitors / Google Search Crawlers: Show Landing Page first
+  if (view === 'landing') {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white font-medium">{t("Loading MS Billings...")}</div>}>
+        <LandingPage 
+          isLoggedIn={!!user}
+          onLaunchApp={(targetView = 'floor') => {
+            setView(targetView);
+            try {
+              window.history.pushState(null, '', `/${targetView === 'floor' ? 'floor' : targetView}`);
+            } catch (e) {}
+          }} 
+        />
+      </Suspense>
+    );
+  }
+
+  // 2. POS App Terminal flow (Native APK/EXE or Web users entering /login or /app)
   if (!hasLicense) {
     return (
       <>
@@ -1044,15 +1077,6 @@ function App() {
           <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
-
-  }
-
-  if (view === 'landing') {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen">{t("Loading...")}</div>}>
-        <LandingPage />
-      </Suspense>
-    );
   }
 
   if (!user) {

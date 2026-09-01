@@ -18,7 +18,7 @@ const inView = (delay = 0, dir = 'up', duration = 0.9) => ({
 
 /* ─── Main Section ───────────────────────────────────────────────── */
 
-const CallToAction = () => {
+const CallToAction = ({ onLaunchApp }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -27,6 +27,14 @@ const CallToAction = () => {
     message: ''
   });
   const [status, setStatus] = useState('idle'); // idle, loading, success, error
+
+  const handleLaunch = (target = 'login') => {
+    if (onLaunchApp) {
+      onLaunchApp(target === 'login' ? 'floor' : target);
+    } else {
+      window.location.href = `/${target}`;
+    }
+  };
 
   const handleChange = (e) => {
     let { name, value } = e.target;
@@ -99,16 +107,16 @@ const CallToAction = () => {
               </Motion.p>
 
               <Motion.div className="cta-actions" {...inView(0.4, 'up')}>
-                <a href="/signup" className="cta-btn cta-btn--primary" aria-label="Get Started">
+                <button type="button" onClick={() => handleLaunch('login')} className="cta-btn cta-btn--primary" aria-label="Get Started">
                   <span className="cta-btn__text">Get Started</span>
                   <ArrowRight strokeWidth={1.5} size={18} className="cta-btn__icon" aria-hidden="true" />
                   <div className="cta-btn__shine" aria-hidden="true" />
-                </a>
+                </button>
                 
-                <a href="/login" className="cta-btn cta-btn--secondary" aria-label="Login">
+                <button type="button" onClick={() => handleLaunch('login')} className="cta-btn cta-btn--secondary" aria-label="Login">
                   <span className="cta-btn__text">Login</span>
                   <LogIn size={18} className="cta-btn__icon" aria-hidden="true" />
-                </a>
+                </button>
               </Motion.div>
             </div>
 

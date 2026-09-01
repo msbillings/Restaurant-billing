@@ -3,12 +3,24 @@ import { motion as Motion } from 'framer-motion';
 import { 
   Instagram, 
   Twitter, 
-  Linkedin, 
+  Linkedin,
+  Youtube,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  Download,
+  Monitor,
+  Smartphone,
+  Apple,
 } from 'lucide-react';
 import './Footer.css';
+
+/* ─── GitHub Release URLs ─────────────────────────────────────────── */
+const GITHUB_RELEASES = 'https://github.com/msbillings/Restaurant-billing/releases/latest';
+const WINDOWS_EXE_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-Setup-6.0.73.exe';
+const ANDROID_APK_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/app-release.apk';
+// Play Store URL — update once published
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.msbillings.restopos';
 
 /* ─── Components ─────────────────────────────────────────────────── */
 
@@ -21,10 +33,30 @@ const SocialIcon = memo(({ icon, label, url = "#" }) => {
   );
 });
 
+/* ─── Download Button ────────────────────────────────────────────── */
+const DownloadBtn = memo(({ icon, title, subtitle, url, badge }) => {
+  const Icon = icon;
+  return (
+    <a
+      href={url}
+      className={`f-dl-btn ${badge ? 'f-dl-btn--badge' : ''}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+    >
+      <Icon size={20} strokeWidth={1.5} className="f-dl-icon" />
+      <div className="f-dl-text">
+        <span className="f-dl-title">{title}</span>
+        <span className="f-dl-sub">{subtitle}</span>
+      </div>
+      {badge && <span className="f-dl-badge">{badge}</span>}
+    </a>
+  );
+});
+
 /* ─── Main Section ───────────────────────────────────────────────── */
 
 const Footer = () => {
-  
 
   return (
     <footer id="contact" className="f-section" aria-label="Footer">
@@ -49,7 +81,8 @@ const Footer = () => {
             </p>
             <div className="f-socials">
               <SocialIcon icon={Instagram} label="Instagram" url="https://www.instagram.com/msbillling?igsh=cmZoOTRobGM2ZzJ6" />
-              <SocialIcon icon={Twitter} label="Twitter" />
+              <SocialIcon icon={Twitter} label="Twitter / X" url="https://x.com/msbilling_1" />
+              <SocialIcon icon={Youtube} label="YouTube" url="https://www.youtube.com/@msbillling" />
               <SocialIcon icon={Linkedin} label="LinkedIn" />
             </div>
           </div>
@@ -71,6 +104,11 @@ const Footer = () => {
             <ul className="f-links">
               <li><a href="#cta" className="f-link">Help Center</a></li>
               <li><a href="#reviews" className="f-link">Blog</a></li>
+              <li>
+                <a href={GITHUB_RELEASES} className="f-link" target="_blank" rel="noopener noreferrer">
+                  Release Notes
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -100,10 +138,50 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* ══ 2. FOOTER BOTTOM ══ */}
+        {/* ══ 2. DOWNLOAD SECTION ══ */}
+        <div className="f-downloads">
+          <div className="f-downloads__header">
+            <Download size={16} strokeWidth={2} className="f-downloads__icon" />
+            <span className="f-downloads__title">Download MS Billings</span>
+          </div>
+          <div className="f-downloads__grid">
+            {/* Windows — available now */}
+            <DownloadBtn
+              icon={Monitor}
+              title="Windows"
+              subtitle=".exe · v6.0.73 · 225 MB"
+              url={WINDOWS_EXE_URL}
+            />
+            {/* macOS — coming soon */}
+            <DownloadBtn
+              icon={Apple}
+              title="macOS"
+              subtitle=".dmg · Coming Soon"
+              url={GITHUB_RELEASES}
+              badge="Soon"
+            />
+            {/* Android APK direct */}
+            <DownloadBtn
+              icon={Smartphone}
+              title="Android APK"
+              subtitle=".apk · v6.0.73 · 58.5 MB"
+              url={ANDROID_APK_URL}
+            />
+            {/* Google Play Store — in review */}
+            <DownloadBtn
+              icon={Smartphone}
+              title="Google Play"
+              subtitle="Android · Under Review"
+              url={PLAY_STORE_URL}
+              badge="Review"
+            />
+          </div>
+        </div>
+
+        {/* ══ 3. FOOTER BOTTOM ══ */}
         <div className="f-bottom">
           <div className="f-copyright">
-            &copy; {new Date().getFullYear()} MS Billings. All rights reserved.
+            &copy; {new Date().getFullYear()} MS Billings · MS Tech Hive. All rights reserved.
           </div>
           
           <div className="f-legal">
