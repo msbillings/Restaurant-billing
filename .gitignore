@@ -19,6 +19,8 @@ coverage/
 .nyc_output/
 tools/
 Backend/backups/
+Backend/auth_info_baileys*/
+auth_info_baileys*/
 Backend/auth_info_baileys/
 auth_info_baileys/
 firebase-service-account.json

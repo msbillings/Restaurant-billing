@@ -62,7 +62,10 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (!isOpen) return;
     fetchStatus();
-    const interval = setInterval(fetchStatus, 2000);
+
+    // Slower polling when already connected to keep connection rock-solid
+    const pollTime = statusData.status === 'CONNECTED' ? 8000 : 2500;
+    const interval = setInterval(fetchStatus, pollTime);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -81,7 +84,6 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
           fetchStatus();
           setTimeout(fetchStatus, 800);
           setTimeout(fetchStatus, 1800);
-          setTimeout(fetchStatus, 3200);
         }
       }).then(l => { appListener = l; }).catch(() => {});
     }
@@ -92,7 +94,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
       window.removeEventListener('focus', handleFocus);
       if (appListener) appListener.remove();
     };
-  }, [isOpen]);
+  }, [isOpen, statusData.status]);
 
   const handleRefreshQR = async () => {
     setRefreshingQR(true);
@@ -201,8 +203,10 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
     ? statusData.platform.toLowerCase().includes('mac') 
     : (typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.userAgent)));
   
+  const savedSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+  const activeRestaurantName = statusData?.restaurantName || savedSettings?.restaurantName || 'MS Billings';
   const currentPlatformName = statusData?.platform || (isAndroid ? 'Android APK' : isIOS ? 'iOS App' : isMac ? 'Mac OS' : 'Windows');
-  const currentDeviceName = statusData?.deviceName || `MS Billings POS (${currentPlatformName})`;
+  const currentDeviceName = statusData?.deviceName || `${activeRestaurantName} Gateway`;
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9999] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overscroll-contain">
@@ -220,7 +224,9 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
               </svg>
             </div>
             <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">{t("WhatsApp Automated Bot")}</h2>
+              <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+                {activeRestaurantName} {t("WhatsApp Automated Bot")}
+              </h2>
               <p className="text-[11px] sm:text-xs text-gray-400 truncate">{t("Direct background e-Bills & DayBook reports")}</p>
             </div>
           </div>

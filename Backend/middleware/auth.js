@@ -68,6 +68,10 @@ const authenticateToken = async (req, res, next) => {
     }
 
     req.user = user;
+    if (decoded.db) {
+      req.user.db = decoded.db;
+      req.tenantDb = decoded.db;
+    }
     next();
   } catch (error) {
     console.error('Authentication error:', error);

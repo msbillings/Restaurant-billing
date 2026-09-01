@@ -237,13 +237,21 @@ const Analytics = ({ onNavigate, onGoBack }) => {
         return;
       }
 
-      let cleanPhone = String(statusRes.connectedNumber).replace(/[^0-9]/g, '');
+      let restSettings = {};
+      try {
+        const configRes = await api.get('/config/info');
+        restSettings = configRes.data?.restaurantSettings || configRes.data || {};
+      } catch (e) {
+        restSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      }
+
+      const targetPhone = restSettings.whatsappNumber || statusRes.connectedNumber || restSettings.phone;
+      let cleanPhone = String(targetPhone).replace(/[^0-9]/g, '');
       if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
       setToast({ message: t("Generating & sending WhatsApp analytics report..."), type: 'info' });
 
-      const restSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-      const restName = restSettings.restaurantName || 'MS BILLINGS RESTAURANT';
+      const restName = restSettings.restaurantName || statusRes.restaurantName || 'MS BILLINGS RESTAURANT';
 
       const getPeriodLabelText = () => {
         if (viewMode === 'month') return `${getMonthName(selectedMonth)} ${selectedYear}`;

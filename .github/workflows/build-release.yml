@@ -9,6 +9,7 @@ on:
       - 'Frontend/**'
       - 'Backend/**'
       - '.github/workflows/**'
+      - 'package.json'
   workflow_dispatch:
 
 concurrency:
@@ -103,6 +104,10 @@ jobs:
         if: success()
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
+          name: MS Billings ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          make_latest: true
           files: |
             Desktop/dist/*.exe
             Desktop/dist/*.blockmap

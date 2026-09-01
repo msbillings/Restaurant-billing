@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getEditedBills } from '../api/billing';
 import { useLanguage } from '../context/LanguageContext';
-import { ArrowLeft, Clock, FileText, Search, User, Eye, AlertCircle, Calendar, ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Clock, FileText, Search, User, Eye, AlertCircle, Calendar, ChevronLeft, ChevronRight, RotateCcw, Loader2 } from 'lucide-react';
 import EditHistoryModal from './EditHistoryModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -33,24 +33,22 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
   };
 
   useEffect(() => {
-    // 1. Instant Cache Load (0ms delay) on mount
+    // 1. Instant Cache Load (0ms delay) on mount if cached data exists
     getCachedEditedBills().then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
-        setBills(filterGenuineEdits(cached));
+        const filtered = filterGenuineEdits(cached);
+        if (filtered.length > 0) {
+          setBills(filtered);
+          setLoading(false);
+        }
       }
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    }).catch(() => {});
 
-    // 2. Background Revalidation
-    fetchBills(true);
+    // 2. Fetch fresh data from backend
+    fetchBills();
   }, []);
 
-  const fetchBills = async (isBackground = false) => {
-    if (!isBackground && bills.length === 0) {
-      setLoading(true);
-    }
+  const fetchBills = async () => {
     try {
       const data = await getEditedBills();
       const onlyEdited = filterGenuineEdits(data);
@@ -143,8 +141,15 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
             </button>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">{t("Edited Bills History")}</h1>
-              <span className="bg-amber-100 text-amber-800 text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold">
-                {filteredBills.length} {t("Bills")}
+              <span className="bg-amber-100 text-amber-800 text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1.5">
+                {loading && bills.length === 0 ? (
+                  <>
+                    <Loader2 size={11} className="animate-spin text-amber-800 shrink-0" />
+                    <span>{t("Loading...")}</span>
+                  </>
+                ) : (
+                  `${filteredBills.length} ${t("Bills")}`
+                )}
               </span>
             </div>
           </div>
@@ -224,10 +229,14 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-1.5 sm:p-2.5 md:p-3 custom-scrollbar">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
-            <p className="text-slate-500 font-medium text-sm">{t("Loading history...")}</p>
+        {loading && bills.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full min-h-[350px]">
+            <div className="relative flex items-center justify-center mb-4">
+              <div className="w-12 h-12 rounded-full border-4 border-orange-100 border-t-orange-600 animate-spin" />
+              <Loader2 size={20} className="text-orange-600 animate-spin absolute" />
+            </div>
+            <p className="text-slate-700 font-bold text-sm tracking-wide">{t("Loading edited bills...")}</p>
+            <span className="text-slate-400 text-xs mt-1">{t("Fetching history, please wait...")}</span>
           </div>
         ) : paginatedBills.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full max-w-sm mx-auto text-center p-6">

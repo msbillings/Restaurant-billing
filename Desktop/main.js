@@ -127,12 +127,12 @@ function createMenu() {
         {
           label: '🔄 Check for Updates',
           click: () => {
-            autoUpdater.checkForUpdatesAndNotify();
-            dialog.showMessageBox({
-              type: 'info',
-              title: 'Check for Updates',
-              message: 'Checking for updates in the background. You will be notified if a new version is available.',
-              buttons: ['OK']
+            isManualUpdateCheck = true;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('checking-for-update');
+            }
+            autoUpdater.checkForUpdates().catch((err) => {
+              console.error('[AutoUpdater] Manual menu check error:', err);
             });
           }
         },
@@ -524,6 +524,8 @@ ipcMain.on('print-preview', async (event, { htmlContent, printerName, billNumber
   });
 });
 
+let isManualUpdateCheck = false;
+
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -533,6 +535,9 @@ function setupAutoUpdater() {
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for updates...');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('checking-for-update');
+    }
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -542,25 +547,45 @@ function setupAutoUpdater() {
     }
   });
 
-  autoUpdater.on('update-not-available', () => {
+  autoUpdater.on('download-progress', (progressObj) => {
+    const percent = progressObj.percent ? progressObj.percent.toFixed(1) : 0;
+    console.log(`[AutoUpdater] Download speed: ${progressObj.bytesPerSecond} - Downloaded ${percent}% (${progressObj.transferred}/${progressObj.total})`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('download-progress', progressObj);
+    }
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
     console.log('[AutoUpdater] Application is up to date.');
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-not-available');
+      mainWindow.webContents.send('update-not-available', info);
+    }
+    if (isManualUpdateCheck) {
+      isManualUpdateCheck = false;
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Check for Updates',
+        message: `Your software is completely up to date! (Current version: v${app.getVersion()})`,
+        buttons: ['OK']
+      });
     }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info ? info.version : 'ready');
+    isManualUpdateCheck = false;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-ready', info);
     } else {
       dialog.showMessageBox({
         type: 'info',
         title: 'Update Ready',
-        message: 'A new version of MS Billing has been downloaded. The application will now restart to apply updates.',
-        buttons: ['Restart Now']
-      }).then(() => {
-        autoUpdater.quitAndInstall(false, true);
+        message: `MS Billings v${info?.version || ''} is downloaded and ready to install. Click Restart Now to apply updates.`,
+        buttons: ['Restart Now', 'Later']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall(false, true);
+        }
       });
     }
   });
@@ -571,14 +596,30 @@ function setupAutoUpdater() {
   });
 
   ipcMain.on('check-for-updates', () => {
-    console.log('[AutoUpdater] Manual check triggered.');
-    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.log('[AutoUpdater] Manual check triggered via IPC.');
+    isManualUpdateCheck = true;
+    autoUpdater.checkForUpdates().catch((err) => {
       console.error('[AutoUpdater] Check error:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-error', err ? err.message : 'Failed to check updates');
+      }
     });
   });
 
   autoUpdater.on('error', (err) => {
     console.error('[AutoUpdater] Error:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-error', err ? err.message : 'Unknown update error');
+    }
+    if (isManualUpdateCheck) {
+      isManualUpdateCheck = false;
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Update Check',
+        message: `Could not check for updates: ${err?.message || 'Network error'}\nPlease ensure you have an active internet connection.`,
+        buttons: ['OK']
+      });
+    }
   });
 }
 

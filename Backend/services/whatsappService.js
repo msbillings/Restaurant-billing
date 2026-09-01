@@ -55,9 +55,12 @@ function getAuthDir(tenantId = 'default') {
   }
 }
 
+import { getTenantModels } from '../utils/tenantManager.js';
+
 class WhatsAppService {
-  constructor(tenantId = 'default') {
+  constructor(tenantId = 'default', restaurantName = null) {
     this.tenantId = tenantId;
+    this.restaurantName = restaurantName;
     this.sock = null;
     this.qrDataUrl = null;
     this.status = 'DISCONNECTED'; // 'DISCONNECTED', 'SCAN_QR', 'CONNECTING', 'CONNECTED'
@@ -67,11 +70,18 @@ class WhatsAppService {
     this.authDir = getAuthDir(this.tenantId);
   }
 
+  setRestaurantName(name) {
+    if (name && typeof name === 'string' && name.trim()) {
+      this.restaurantName = name.trim();
+    }
+  }
+
   getPlatformInfo() {
+    const rawName = this.restaurantName || 'MS Billings POS';
     return {
       browserConfig: Browsers.macOS('Chrome'),
-      platformName: 'MS Billings POS',
-      deviceName: 'MS Billings Gateway'
+      platformName: rawName,
+      deviceName: `${rawName} Gateway`
     };
   }
 
@@ -150,19 +160,30 @@ class WhatsAppService {
           const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
           
           if (isLoggedOut) {
-            console.log('[WhatsApp Service] Logged out. Clearing credentials...');
+            console.log(`[WhatsApp Service - ${this.tenantId}] Logged out. Clearing credentials...`);
             this.status = 'DISCONNECTED';
             this.connectedNumber = null;
             this.qrDataUrl = null;
             this.clearAuth();
             this.notifyListeners();
 
+            // Persist disconnected status in MongoDB
+            getTenantModels(this.tenantId).then(models => {
+              if (models?.Setting) {
+                models.Setting.findOneAndUpdate(
+                  { key: 'whatsapp_status' },
+                  { value: { status: 'DISCONNECTED', connectedNumber: null, updatedAt: new Date().toISOString() } },
+                  { upsert: true }
+                ).catch(() => {});
+              }
+            }).catch(() => {});
+
             setTimeout(() => {
               this.isInitializing = false;
               this.init();
             }, 2000);
           } else {
-            console.log(`[WhatsApp Service] Reconnecting (status: ${statusCode}, restartRequired: ${isRestartRequired})...`);
+            console.log(`[WhatsApp Service - ${this.tenantId}] Reconnecting (status: ${statusCode}, restartRequired: ${isRestartRequired})...`);
             this.status = isRestartRequired ? 'CONNECTING' : 'DISCONNECTED';
             this.notifyListeners();
 
@@ -178,15 +199,43 @@ class WhatsAppService {
           this.linkedAt = this.linkedAt || new Date().toISOString();
           const rawJid = this.sock?.user?.id || state?.creds?.me?.id || '';
           this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0] || null;
-          console.log(`[WhatsApp Service] Connected successfully as +${this.connectedNumber}`);
+          console.log(`[WhatsApp Service - ${this.tenantId}] Connected successfully as +${this.connectedNumber} (${platformInfo.deviceName})`);
           this.notifyListeners();
+
+          // Attempt to sync WhatsApp account profile name to restaurant name
+          if (this.restaurantName && this.sock?.updateProfileName) {
+            this.sock.updateProfileName(this.restaurantName)
+              .then(() => console.log(`[WhatsApp Service - ${this.tenantId}] Synced profile name to "${this.restaurantName}"`))
+              .catch(err => console.warn(`[WhatsApp Service - ${this.tenantId}] Note: Profile name update:`, err.message));
+          }
+
+          // Persist connected status in MongoDB for cross-platform visibility (.exe, .apk, Vercel)
+          getTenantModels(this.tenantId).then(models => {
+            if (models?.Setting) {
+              models.Setting.findOneAndUpdate(
+                { key: 'whatsapp_status' },
+                {
+                  value: {
+                    status: 'CONNECTED',
+                    connectedNumber: this.connectedNumber,
+                    restaurantName: this.restaurantName || '',
+                    platformName: platformInfo.platformName,
+                    deviceName: platformInfo.deviceName,
+                    linkedAt: this.linkedAt,
+                    updatedAt: new Date().toISOString()
+                  }
+                },
+                { upsert: true }
+              ).catch(() => {});
+            }
+          }).catch(() => {});
         } else if (connection === 'connecting') {
           this.status = 'CONNECTING';
           this.notifyListeners();
         }
       });
     } catch (err) {
-      console.error('[WhatsApp Service] Init error:', err);
+      console.error(`[WhatsApp Service - ${this.tenantId}] Init error:`, err);
       this.status = 'DISCONNECTED';
       this.notifyListeners();
     } finally {
@@ -328,7 +377,8 @@ class WhatsAppService {
     return {
       status: isActuallyConnected ? 'CONNECTED' : (this.qrDataUrl ? 'SCAN_QR' : this.status),
       connectedNumber: phone,
-      userName: isActuallyConnected ? (this.sock?.user?.name || 'MS Billings User') : null,
+      userName: isActuallyConnected ? (this.sock?.user?.name || this.restaurantName || 'MS Billings User') : null,
+      restaurantName: this.restaurantName || null,
       platform: platformName,
       deviceName: deviceName,
       linkedAt: isActuallyConnected ? (this.linkedAt || new Date().toISOString()) : null,
@@ -493,9 +543,11 @@ class WhatsAppManager {
     this.instances = new Map();
   }
 
-  getInstance(tenantId = 'default') {
+  getInstance(tenantId = 'default', restaurantName = null) {
     if (!this.instances.has(tenantId)) {
-      this.instances.set(tenantId, new WhatsAppService(tenantId));
+      this.instances.set(tenantId, new WhatsAppService(tenantId, restaurantName));
+    } else if (restaurantName) {
+      this.instances.get(tenantId).setRestaurantName(restaurantName);
     }
     return this.instances.get(tenantId);
   }

@@ -3,7 +3,7 @@ import { getDayBook, downloadDayBookExcel } from '../api/analytics';
 import { Calendar, Download, TrendingUp, TrendingDown, RefreshCw, CreditCard, Wallet, Smartphone, Banknote, Loader2 } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
-import { sendWhatsAppMessage, sendWhatsAppBill } from '../api/whatsapp';
+import { sendWhatsAppMessage, sendWhatsAppBill, getWhatsAppStatus } from '../api/whatsapp';
 import api from '../api/axios';
 
 const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
@@ -49,11 +49,29 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const handleShareWhatsApp = async (customPhone = null) => {
     try {
-      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      let s = {};
+      try {
+        const configRes = await api.get('/config/info');
+        s = configRes.data?.restaurantSettings || configRes.data || {};
+      } catch (e) {
+        s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      }
       const restName = (s.restaurantName || 'MS Billings Restaurant').trim();
-      const rawPhone = customPhone || s.whatsappNumber || s.phone || '';
+      
+      let rawPhone = customPhone || s.whatsappNumber;
+      if (!rawPhone) {
+        try {
+          const waStatus = await getWhatsAppStatus();
+          if (waStatus?.status === 'CONNECTED' && waStatus?.connectedNumber) {
+            rawPhone = waStatus.connectedNumber;
+          }
+        } catch (e) {}
+      }
+      if (!rawPhone) {
+        rawPhone = s.phone || '';
+      }
 
-      let cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+      let cleanPhone = String(rawPhone).replace(/[^0-9]/g, '');
       if (cleanPhone.length === 10) {
         cleanPhone = '91' + cleanPhone; // Default country code for 10-digit Indian numbers
       }

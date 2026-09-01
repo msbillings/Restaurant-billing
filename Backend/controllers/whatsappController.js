@@ -1,14 +1,78 @@
 import whatsappManager from '../services/whatsappService.js';
+import { getTenantModels } from '../utils/tenantManager.js';
 
-const getWhatsAppService = (req) => {
-  const tenantId = req.user?.db || 'default';
-  return whatsappManager.getInstance(tenantId);
+export const resolveTenantInfo = async (req) => {
+  const tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name || 'default';
+  
+  let restaurantName = req.headers?.['x-restaurant-name'] || null;
+  try {
+    const models = req.models || (await getTenantModels(tenantId));
+    if (models?.Setting) {
+      const settingsDoc = await models.Setting.findOne({ key: 'restaurantSettings' }).lean();
+      let settings = settingsDoc?.value;
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) {}
+      }
+      if (settings?.restaurantName) {
+        restaurantName = settings.restaurantName;
+      }
+    }
+  } catch (e) {}
+
+  const whatsappService = whatsappManager.getInstance(tenantId, restaurantName);
+  return { tenantId, restaurantName, whatsappService };
 };
 
 export const getStatus = async (req, res) => {
   try {
-    const whatsappService = getWhatsAppService(req);
+    const { tenantId, restaurantName, whatsappService } = await resolveTenantInfo(req);
     const status = whatsappService.getStatus();
+
+    // If live in-memory service is CONNECTED, return immediately
+    if (status.status === 'CONNECTED' && status.connectedNumber) {
+      return res.json(status);
+    }
+
+    // Check if tenant database has a verified connected session for cross-device sync (.apk, Vercel, .exe)
+    try {
+      const models = req.models || (await getTenantModels(tenantId));
+      if (models?.Setting) {
+        const dbStatusDoc = await models.Setting.findOne({ key: 'whatsapp_status' }).lean();
+        if (dbStatusDoc?.value?.status === 'CONNECTED' && dbStatusDoc?.value?.connectedNumber) {
+          const dbVal = dbStatusDoc.value;
+          // Return synchronized connected info if not actively scanning QR or initializing locally
+          if (status.status !== 'SCAN_QR' && status.status !== 'CONNECTING') {
+            const dispName = dbVal.restaurantName || restaurantName || 'MS Billings POS';
+            const devName = dbVal.deviceName || `${dispName} Gateway`;
+            return res.json({
+              status: 'CONNECTED',
+              connectedNumber: dbVal.connectedNumber,
+              userName: dispName,
+              restaurantName: dispName,
+              platform: `${dispName} POS`,
+              deviceName: devName,
+              linkedAt: dbVal.linkedAt || new Date().toISOString(),
+              linkedDevices: [
+                {
+                  id: 'dev_1',
+                  name: devName,
+                  platform: `${dispName} Gateway`,
+                  status: 'Active',
+                  lastActive: 'Just now',
+                  phoneNumber: `+${dbVal.connectedNumber}`
+                }
+              ],
+              totalLinkedDevices: 1,
+              hasQr: false,
+              qr: null
+            });
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn(`[WhatsApp Controller - ${tenantId}] DB status check warning:`, dbErr.message);
+    }
+
     res.json(status);
   } catch (error) {
     console.error('Error fetching WhatsApp status:', error);
@@ -18,8 +82,21 @@ export const getStatus = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    const whatsappService = getWhatsAppService(req);
+    const { tenantId, whatsappService } = await resolveTenantInfo(req);
     const result = await whatsappService.logout();
+
+    // Clear database status as well
+    try {
+      const models = req.models || (await getTenantModels(tenantId));
+      if (models?.Setting) {
+        await models.Setting.findOneAndUpdate(
+          { key: 'whatsapp_status' },
+          { value: { status: 'DISCONNECTED', connectedNumber: null, updatedAt: new Date().toISOString() } },
+          { upsert: true }
+        );
+      }
+    } catch (e) {}
+
     res.json(result);
   } catch (error) {
     console.error('Error logging out of WhatsApp:', error);
@@ -34,7 +111,7 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ error: 'Phone number and message are required.' });
     }
 
-    const whatsappService = getWhatsAppService(req);
+    const { whatsappService } = await resolveTenantInfo(req);
     await whatsappService.sendMessage(phone, message);
     res.json({ success: true, message: 'WhatsApp message sent successfully!' });
   } catch (error) {
@@ -50,7 +127,7 @@ export const sendBill = async (req, res) => {
       return res.status(400).json({ error: 'Destination phone number is required.' });
     }
 
-    const whatsappService = getWhatsAppService(req);
+    const { whatsappService } = await resolveTenantInfo(req);
     if (imageBase64 || pdfBase64 || documentBase64) {
       await whatsappService.sendBillMedia(phone, {
         imageBase64,
@@ -77,7 +154,7 @@ export const requestPairingCode = async (req, res) => {
     if (!phone) {
       return res.status(400).json({ error: 'Phone number is required.' });
     }
-    const whatsappService = getWhatsAppService(req);
+    const { whatsappService } = await resolveTenantInfo(req);
     const result = await whatsappService.requestPairingCode(phone);
     res.json(result);
   } catch (error) {
@@ -88,7 +165,7 @@ export const requestPairingCode = async (req, res) => {
 
 export const refreshQR = async (req, res) => {
   try {
-    const whatsappService = getWhatsAppService(req);
+    const { whatsappService } = await resolveTenantInfo(req);
     const result = await whatsappService.refreshQR();
     res.json(result);
   } catch (error) {
@@ -96,4 +173,3 @@ export const refreshQR = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-

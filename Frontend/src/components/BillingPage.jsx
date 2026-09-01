@@ -333,9 +333,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   // Only resets to false when the order is explicitly saved, KOT'd, billed, or table is changed.
   const hasPendingLocalChanges = useRef(false);
   const cartRef = useRef(cart);
+  const activeTableRef = useRef(activeTable);
+  const prevActiveTableRef = useRef(activeTable);
+  const activeFetchReqIdRef = useRef(0);
+
   useEffect(() => {
     cartRef.current = cart;
   }, [cart]);
+
+  useEffect(() => {
+    activeTableRef.current = activeTable;
+  }, [activeTable]);
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -390,7 +398,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         newlyGeneratedTables.current.add(generatedOrderNo);
         setActiveTable(generatedOrderNo);
       } else {
-
         setActiveTable(initialTable);
         if (initialTable.startsWith('DEL-')) {
           setBillType('Delivery');
@@ -399,12 +406,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         } else {
           setBillType('Dine-In');
         }
-        fetchActiveOrder(initialTable, true);
       }
     }
   }, [initialTable]);
 
   useEffect(() => {
+    const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
     if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || activeTable === 'DEL-NEW' || activeTable === 'TAK-NEW' || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
       const isRecentOrder = (o) => {
@@ -417,17 +424,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         (o.status === 'Open' || o.status === 'Billed') &&
         isRecentOrder(o)
       );
-      if (existingOrder && !initialTable) {
+      if (existingOrder && !initialTable && !hasLocalCart) {
         newlyGeneratedTables.current.delete(existingOrder.tableNo);
         setActiveTable(existingOrder.tableNo);
         if (existingOrder.orderSource) {
           setOrderSource(existingOrder.orderSource);
         }
         fetchActiveOrder(existingOrder.tableNo, true);
-      } else {
+      } else if (!hasLocalCart) {
         const generatedOrderNo = generateSequentialOrderNo(billType);
         newlyGeneratedTables.current.add(generatedOrderNo);
         setCart([]);
+        cartRef.current = [];
         setOrderId(null);
         setOrderStatus('Open');
         setBillNumber(null);
@@ -440,29 +448,37 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         setActiveTable(generatedOrderNo);
       }
     } else if (billType === 'Dine-In' && activeTable && (activeTable.startsWith('DEL-') || activeTable.startsWith('TAK-'))) {
-      setActiveTable('');
-      setCart([]);
-      setOrderId(null);
-      setOrderStatus('Open');
-      setBillNumber(null);
-      setCompletedBill(null);
-      setCustomerPhone('');
-      setCustomerName('');
-      setDiscount({ type: 'percentage', value: '' });
-      setDeliveryCharge('');
-      setContainerCharge('');
+      if (!hasLocalCart) {
+        setActiveTable('');
+        setCart([]);
+        cartRef.current = [];
+        setOrderId(null);
+        setOrderStatus('Open');
+        setBillNumber(null);
+        setCompletedBill(null);
+        setCustomerPhone('');
+        setCustomerName('');
+        setDiscount({ type: 'percentage', value: '' });
+        setDeliveryCharge('');
+        setContainerCharge('');
+      }
     }
   }, [billType, openOrdersList]);
 
   useEffect(() => {
-    // Reset pending local changes flag whenever the table changes.
-    // This ensures that switching tables doesn't carry over the protection from the previous table.
-    hasPendingLocalChanges.current = false;
+    // Only reset pending local changes flag when the table actually changes.
+    // This ensures that switching tables doesn't carry over the protection from the previous table,
+    // while modal toggles (showInvoice, showPayment) will NOT reset active local cart state.
+    const isTableChanged = prevActiveTableRef.current !== activeTable;
+    if (isTableChanged) {
+      hasPendingLocalChanges.current = false;
+      prevActiveTableRef.current = activeTable;
+    }
 
     const isExistingInOpenOrders = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, activeTable));
     if (activeTable && (isExistingInOpenOrders || !newlyGeneratedTables.current.has(activeTable))) {
       newlyGeneratedTables.current.delete(activeTable);
-      fetchActiveOrder(activeTable, true);
+      fetchActiveOrder(activeTable, isTableChanged);
     } else if (activeTable && newlyGeneratedTables.current.has(activeTable)) {
       if (cart.length === 0) {
         setOrderId(null);
@@ -815,13 +831,22 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    const msSinceEdit = Date.now() - lastLocalEditTime.current;
-    const isEditLocked = msSinceEdit < LOCAL_EDIT_LOCK_MS;
+    const reqId = ++activeFetchReqIdRef.current;
+    const fetchStartTime = Date.now();
+
+    const hasLocalEdits = () => {
+      const msSinceEdit = Date.now() - lastLocalEditTime.current;
+      const isWithinLockWindow = msSinceEdit < LOCAL_EDIT_LOCK_MS;
+      const hasItems = cartRef.current && cartRef.current.length > 0;
+      const hasPending = hasPendingLocalChanges.current;
+      const wasEditedSinceFetchStart = lastLocalEditTime.current >= fetchStartTime;
+      return hasPending || hasItems || isWithinLockWindow || wasEditedSinceFetchStart;
+    };
 
     // Helper to check orders array and apply order immediately (0ms delay)
     const checkAndApplyCache = (ordersArr) => {
       if (!ordersArr || !Array.isArray(ordersArr) || ordersArr.length === 0) return false;
-      if (isEditLocked && !forceReset) return false; // Never let stale cache clobber local edits
+      if (hasLocalEdits() && !forceReset) return false; // Never let stale cache clobber local edits
 
       const cached = ordersArr.find(o => {
         if (!o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
@@ -855,7 +880,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
         if (validItems.length > 0) {
           setCart(prev => {
-            if (!prev || prev.length === 0 || forceReset) return validItems;
+            if (hasLocalEdits() && prev && prev.length > 0) {
+              const localOnlyItems = prev.filter(pItem => !validItems.some(vItem => (vItem._id && vItem._id === pItem._id) || vItem.name === pItem.name));
+              const merged = [...validItems, ...localOnlyItems];
+              cartRef.current = merged;
+              return merged;
+            }
+            if (!prev || prev.length === 0 || forceReset) {
+              cartRef.current = validItems;
+              return validItems;
+            }
             return prev;
           });
           setOrderId(cached._id);
@@ -867,8 +901,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           } else if (cached.billType === 'Delivery' || cached.tableNo?.startsWith('DEL-')) {
             setOrderSource('Direct');
           }
-          setCustomerPhone(cached.customerPhone || '');
-          setCustomerName(cached.customerName || '');
+          if (!hasLocalEdits()) {
+            setCustomerPhone(cached.customerPhone || '');
+            setCustomerName(cached.customerName || '');
+          }
           setDeliveryCharge(cached.deliveryCharge !== undefined ? String(cached.deliveryCharge) : '0');
           setContainerCharge(cached.containerCharge !== undefined ? String(cached.containerCharge) : '0');
           if (cached.discountType || cached.discountValue !== undefined) {
@@ -898,10 +934,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
+    if (reqId !== activeFetchReqIdRef.current || !isTableMatching(tableToFetch, activeTableRef.current)) {
+      return;
+    }
+
     // If the user has local cart items or pending changes:
     // NEVER clear or clobber the cart during any background or poll fetch!
-    const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
-    if (isBackground && !forceReset && hasLocalCart) {
+    if (isBackground && !forceReset && hasLocalEdits()) {
       return;
     }
 
@@ -909,13 +948,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const isNewlyGenerated = newlyGeneratedTables.current && newlyGeneratedTables.current.has(tableToFetch);
     const isKnownOrder = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, tableToFetch));
     if (isNewlyGenerated && !isKnownOrder) {
-      if (hasLocalCart) {
+      if (hasLocalEdits()) {
         newlyGeneratedTables.current.delete(tableToFetch);
         return;
       }
       newlyGeneratedTables.current.delete(tableToFetch);
       setLoading(false);
       setCart([]);
+      cartRef.current = [];
       setOrderId(null);
       setOrderStatus('Open');
       setBillNumber(null);
@@ -928,16 +968,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // If the user has local items in cart, protect them until user saves or navigates away
-    if (hasLocalCart && !forceReset) {
-      return;
-    }
-
     // Only set loading for tables that are actively fetching their order items
     if (!isBackground) setLoading(true);
 
     try {
       let order = await getActiveOrder(tableToFetch);
+
+      // Discard if a newer fetch was started or active table changed during async call
+      if (reqId !== activeFetchReqIdRef.current || !isTableMatching(tableToFetch, activeTableRef.current)) {
+        return;
+      }
+
       if (order && (!order.tableNo || !isTableMatching(order.tableNo, tableToFetch))) {
         order = null;
       }
@@ -972,14 +1013,34 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }));
 
         if (backendItems.length === 0) {
+          if (hasLocalEdits()) {
+            setOrderId(order._id);
+            setOrderStatus(order.status || 'Open');
+            setLoading(false);
+            return;
+          }
           setCart([]);
+          cartRef.current = [];
           setOrderId(null);
           setOrderStatus('Open');
           setBillNumber(null);
+          setLoading(false);
           return;
         }
 
-        setCart(backendItems);
+        if (hasLocalEdits()) {
+          setCart(prev => {
+            const current = prev || [];
+            const localOnlyItems = current.filter(pItem => !backendItems.some(bItem => (bItem._id && bItem._id === pItem._id) || bItem.name === pItem.name));
+            const merged = [...backendItems, ...localOnlyItems];
+            cartRef.current = merged;
+            return merged;
+          });
+        } else {
+          setCart(backendItems);
+          cartRef.current = backendItems;
+        }
+
         setOrderId(order._id);
         setOrderStatus(order.status);
         setBillNumber(order.billNumber);
@@ -987,8 +1048,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         if (order.billType === 'Delivery') {
           setOrderSource(order.orderSource || 'Direct');
         }
-        setCustomerPhone(order.customerPhone || '');
-        setCustomerName(order.customerName || '');
+        if (!hasLocalEdits()) {
+          setCustomerPhone(order.customerPhone || '');
+          setCustomerName(order.customerName || '');
+        }
         setDeliveryCharge(order.deliveryCharge !== undefined ? String(order.deliveryCharge) : '0');
         setContainerCharge(order.containerCharge !== undefined ? String(order.containerCharge) : '0');
         if (!isBackground || forceReset) {
@@ -1010,23 +1073,25 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
       } else {
         // If user has local cart items or pending local changes, NEVER reset cart!
-        const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
-        if (hasLocalCart && !forceReset) {
+        if (hasLocalEdits()) {
+          setLoading(false);
           return;
         }
 
         if (isBackground && !forceReset) {
+          setLoading(false);
           return;
         }
 
         // If it's a delivery or takeaway table that has no active order (e.g. already settled/paid),
         // transition away ONLY on direct navigation when cart is completely empty!
-        if (!isBackground && !hasLocalCart && tableToFetch && (tableToFetch.startsWith('DEL-') || tableToFetch.startsWith('TAK-')) && !newlyGeneratedTables.current.has(tableToFetch)) {
+        if (!isBackground && !hasLocalEdits() && tableToFetch && (tableToFetch.startsWith('DEL-') || tableToFetch.startsWith('TAK-')) && !newlyGeneratedTables.current.has(tableToFetch)) {
           newlyGeneratedTables.current.add(tableToFetch); // Mark tableToFetch as used
           const freshOrderNo = generateSequentialOrderNo(tableToFetch.startsWith('DEL-') ? 'Delivery' : 'Takeaway');
           newlyGeneratedTables.current.add(freshOrderNo);
           setActiveTable(freshOrderNo);
           setCart([]);
+          cartRef.current = [];
           setOrderId(null);
           setOrderStatus('Open');
           setBillNumber(null);
@@ -1036,6 +1101,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
 
         setCart([]);
+        cartRef.current = [];
         setOrderId(null);
         setOrderStatus('Open');
         setBillNumber(null);
@@ -1064,7 +1130,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     } catch (error) {
       console.error('Error fetching active order:', error);
     } finally {
-      if (!isBackground) setLoading(false);
+      if (reqId === activeFetchReqIdRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1163,7 +1231,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, [billType, onOrderUpdate]);
 
   const addToCart = (item) => {
-    let currentTable = activeTable;
+    let currentTable = activeTableRef.current || activeTable;
     if (!currentTable) {
       if (billType === 'Takeaway' || billType === 'Delivery') {
         currentTable = generateSequentialOrderNo(billType);
@@ -1183,17 +1251,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
       return;
     }
-    const existing = cart.find((i) => i.name === item.name);
+    const currentCart = cartRef.current || [];
+    const existingIndex = currentCart.findIndex((i) => (i._id && item._id && i._id === item._id) || i.name === item.name);
     let newCart;
-    if (existing) {
+    if (existingIndex > -1) {
       showToast(`${t('increasedQty', { defaultValue: 'Increased quantity of' })} ${item.name}`, 'success');
-      newCart = cart.map((i) => i.name === item.name ? { ...i, quantity: i.quantity + 1, specialNote: i.specialNote || '', orderedAt: i.orderedAt || new Date().toISOString() } : i);
+      newCart = currentCart.map((i, idx) => idx === existingIndex ? { ...i, quantity: i.quantity + 1, specialNote: i.specialNote || '', orderedAt: i.orderedAt || new Date().toISOString() } : i);
     } else {
       showToast(`${t('addedToOrder', { defaultValue: 'Added to order' })} ${item.name}`, 'success');
-      newCart = [...cart, { ...item, quantity: 1, specialNote: item.specialNote || '', orderedAt: item.orderedAt || new Date().toISOString() }];
+      newCart = [...currentCart, { ...item, quantity: 1, specialNote: item.specialNote || '', orderedAt: item.orderedAt || new Date().toISOString() }];
     }
-    setCart(newCart);
     cartRef.current = newCart;
+    setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
     // Mark that user has pending local changes — prevents any background poll
     // from clearing the cart until the user explicitly saves/KOTs/cancels.
@@ -1206,7 +1275,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   };
 
   const updateQuantity = (id, delta) => {
-    let currentTable = activeTable;
+    let currentTable = activeTableRef.current || activeTable;
     if (!currentTable) {
       if (billType === 'Takeaway' || billType === 'Delivery') {
         currentTable = generateSequentialOrderNo(billType);
@@ -1226,7 +1295,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(t('Order is billed. Click EDIT to modify.', { defaultValue: 'Order is billed. Click EDIT to modify.' }), 'warning');
       return;
     }
-    const newCart = cart.map((i) => {
+    const currentCart = cartRef.current || [];
+    const newCart = currentCart.map((i) => {
       const idStr = String(id || '').trim().toLowerCase();
       const iIdStr = String(i._id || '').trim().toLowerCase();
       const iNameStr = String(i.name || '').trim().toLowerCase();
@@ -1246,8 +1316,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return i;
     }).filter((i) => i.quantity > 0 || (i.printedQuantity || 0) > 0);
 
-    setCart(newCart);
     cartRef.current = newCart;
+    setCart(newCart);
     lastLocalEditTime.current = Date.now(); // Mark local edit time
     // Mark pending local changes if cart still has items
     if (newCart.length > 0) {

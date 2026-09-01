@@ -144,7 +144,10 @@ function App() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [appVersion, setAppVersion] = useState('6.0.0');
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
+  const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
+  const [appVersion, setAppVersion] = useState('6.0.73');
 
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
@@ -617,36 +620,77 @@ function App() {
     // Poll SuperAdmin for broadcasts every 60 seconds
     const intervalId = setInterval(fetchSuperAdminConfig, 60000);
 
-    // Listen for Force Sync from Electron menu
-    if (window.electronAPI && window.electronAPI.onForceSync) {
-      window.electronAPI.onForceSync(() => {
-        fetchSuperAdminConfig();
-      });
-    }
+    if (window.electronAPI) {
+      if (window.electronAPI.onForceSync) {
+        window.electronAPI.onForceSync(() => {
+          fetchSuperAdminConfig();
+        });
+      }
 
-    if (window.electronAPI && window.electronAPI.onShowContactSupport) {
-      window.electronAPI.onShowContactSupport(() => {
-        setShowContactModal(true);
-      });
-    }
+      if (window.electronAPI.onShowContactSupport) {
+        window.electronAPI.onShowContactSupport(() => {
+          setShowContactModal(true);
+        });
+      }
 
-    if (window.electronAPI && window.electronAPI.onShowUserManual) {
-      window.electronAPI.onShowUserManual(() => {
-        setShowManualModal(true);
-      });
-    }
+      if (window.electronAPI.onShowUserManual) {
+        window.electronAPI.onShowUserManual(() => {
+          setShowManualModal(true);
+        });
+      }
 
-    if (window.electronAPI && window.electronAPI.onShowAbout) {
-      window.electronAPI.onShowAbout((version) => {
-        if (version) setAppVersion(version);
-        setShowAboutModal(true);
-      });
-    }
+      if (window.electronAPI.onShowAbout) {
+        window.electronAPI.onShowAbout((version) => {
+          if (version) setAppVersion(version);
+          setShowAboutModal(true);
+        });
+      }
 
-    if (window.electronAPI && window.electronAPI.onUpdateReady) {
-      window.electronAPI.onUpdateReady(() => {
-        setShowUpdateModal(true);
-      });
+      if (window.electronAPI.onCheckingForUpdate) {
+        window.electronAPI.onCheckingForUpdate(() => {
+          console.log('[App] Checking for auto-updates...');
+        });
+      }
+
+      if (window.electronAPI.onUpdateAvailable) {
+        window.electronAPI.onUpdateAvailable((info) => {
+          console.log('[App] Update available info:', info);
+          setUpdateInfo(info);
+          setIsUpdateDownloading(true);
+          setUpdateDownloadProgress(0);
+          setShowUpdateModal(true);
+        });
+      }
+
+      if (window.electronAPI.onDownloadProgress) {
+        window.electronAPI.onDownloadProgress((progress) => {
+          setIsUpdateDownloading(true);
+          setUpdateDownloadProgress(Math.round(progress?.percent || 0));
+        });
+      }
+
+      if (window.electronAPI.onUpdateReady) {
+        window.electronAPI.onUpdateReady((info) => {
+          console.log('[App] Update downloaded and ready:', info);
+          if (info) setUpdateInfo(info);
+          setIsUpdateDownloading(false);
+          setUpdateDownloadProgress(100);
+          setShowUpdateModal(true);
+        });
+      }
+
+      if (window.electronAPI.onUpdateNotAvailable) {
+        window.electronAPI.onUpdateNotAvailable((info) => {
+          console.log('[App] App is up to date:', info);
+        });
+      }
+
+      if (window.electronAPI.onUpdateError) {
+        window.electronAPI.onUpdateError((err) => {
+          console.error('[App] Auto-updater error:', err);
+          setIsUpdateDownloading(false);
+        });
+      }
     }
 
     return () => clearInterval(intervalId);
@@ -960,7 +1004,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+          <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
   }
@@ -981,7 +1025,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+          <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
 
@@ -997,7 +1041,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+          <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
         </Suspense>
       </>);
 
@@ -1021,7 +1065,7 @@ function App() {
           <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
           <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
           <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-          <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+          <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
           <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
         </Suspense>
       </>);
@@ -2377,7 +2421,7 @@ function App() {
         <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
         <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
         <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-        <UpdateModal isOpen={showUpdateModal} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+        <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
       </Suspense>
 
       {/* Logout Confirmation Toast Modal */}

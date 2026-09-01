@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "6.0.72",
+  "version": "6.0.73",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -43,7 +43,8 @@
     "win": {
       "compression": "store",
       "target": "nsis",
-      "icon": "icon.ico"
+      "icon": "icon.ico",
+      "artifactName": "MS-Billings-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
