@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, HelpCircle, ExternalLink, ArrowRight, Sparkles } from 'lucide-react';
+import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, HelpCircle, ExternalLink, ArrowRight } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { 
   requestCameraPermissions, 
@@ -281,7 +281,7 @@ const SystemPermissionsModal = ({ onComplete }) => {
               </>
             ) : (
               <>
-                <Sparkles size={18} />
+                
                 <span>{t("Allow All Permissions")}</span>
                 <ArrowRight size={16} />
               </>

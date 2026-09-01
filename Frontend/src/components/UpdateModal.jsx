@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLanguage } from "../context/LanguageContext";
-import { ArrowRight, Download, CheckCircle2, X, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowRight, Download, CheckCircle2, X, RefreshCw, AlertCircle } from 'lucide-react';
 
 const UpdateModal = ({ isOpen, onInstall, onClose, isDownloading, downloadProgress = 0, updateInfo }) => {
   const { t } = useLanguage();
@@ -29,7 +29,7 @@ const UpdateModal = ({ isOpen, onInstall, onClose, isDownloading, downloadProgre
                 </h2>
                 {newVersion && (
                   <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                    <Sparkles size={12} /> {newVersion}
+                     {newVersion}
                   </span>
                 )}
               </div>
@@ -75,7 +75,7 @@ const UpdateModal = ({ isOpen, onInstall, onClose, isDownloading, downloadProgre
               </div>
 
               <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/40 rounded-xl border border-blue-100 dark:border-blue-900/60 text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2.5">
-                <Sparkles size={16} className="text-blue-600 shrink-0" />
+                
                 <span>{t("Once the download finishes, you will be prompted to restart and apply updates.")}</span>
               </div>
             </div>

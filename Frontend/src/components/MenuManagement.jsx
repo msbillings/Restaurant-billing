@@ -5,7 +5,7 @@ import { getAllCategories, createCategory, updateCategory, deleteCategory } from
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
 import { getInventory } from '../api/inventory';
 import Papa from 'papaparse';
-import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft, Loader2, RefreshCw, MoreVertical, Tag, Percent, Hash, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Search, FolderPlus, Folder, FolderOpen, ChevronLeft, ChevronRight, Eye, Download, Upload, ToggleLeft, Loader2, RefreshCw, MoreVertical, Tag, Percent, Hash } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
@@ -1174,7 +1174,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             <div className="flex justify-between items-center px-4 py-2.5 border-b border-border bg-background/50">
               <div className="flex items-center gap-2">
                 <span className="p-1 bg-primary/10 text-primary rounded-lg">
-                  <Sparkles size={15} />
+                  
                 </span>
                 <h2 className="text-sm sm:text-base font-bold text-text-main">
                   {t("Product Overview")}

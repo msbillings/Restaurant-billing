@@ -1,7 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Sparkles, Settings, X, Save, Wifi, CheckCircle2, Smartphone, Server } from 'lucide-react';
+import { Shield, Key, Loader2, ServerCrash, User, Eye, EyeOff, Settings, X, Save, Wifi, CheckCircle2, Smartphone, Server } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import BackgroundSlideshow from './BackgroundSlideshow';
 import logoImg from '../assets/images/logo.png';
@@ -220,7 +220,7 @@ const LicenseScreen = ({ onValidLicense }) => {
           
           <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 mb-3 sm:mb-6 shadow-2xl rounded-full relative mt-2 sm:mt-4">
             <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
-            <Sparkles className="absolute -top-1 -right-1 text-yellow-400 animate-pulse z-20" size={16} />
+            
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-white mb-1 sm:mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}</h1>
           <p className="text-gray-300 font-bold uppercase tracking-widest text-xs sm:text-sm">{t("Software Activation")}</p>

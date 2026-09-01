@@ -5,7 +5,7 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { 
   X, CheckCircle2, RefreshCw, Smartphone, LogOut, Send, 
-  AlertCircle, QrCode, Phone, Copy, Check, Info, ShieldCheck, Sparkles, Laptop
+  AlertCircle, QrCode, Phone, Copy, Check, Info, ShieldCheck, Laptop
 } from 'lucide-react';
 import { 
   getWhatsAppStatus, 
@@ -268,7 +268,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
               </div>
               <div className="space-y-1">
                 <h3 className="text-sm sm:text-base font-bold text-white flex items-center justify-center gap-1.5">
-                  <Sparkles size={16} className="text-[#25D366]" />
+                  
                   <span>{t("Connecting to WhatsApp...")}</span>
                 </h3>
                 <p className="text-[11px] sm:text-xs text-gray-300 max-w-xs mx-auto leading-relaxed">
@@ -483,7 +483,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                         type="submit"
                         disabled={loadingPairing}
                         className="px-3 sm:px-4 py-2 sm:py-2.5 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap">
-                        {loadingPairing ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        {loadingPairing ? <RefreshCw size={14} className="animate-spin" /> : null}
                         <span>{loadingPairing ? t("Generating...") : t("Get Code")}</span>
                       </button>
                     </div>

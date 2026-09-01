@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { Sparkles, UtensilsCrossed, Leaf, Award, Flame, ChefHat } from 'lucide-react';
+import {  UtensilsCrossed, Leaf, Award, Flame, ChefHat } from 'lucide-react';
 import { FOOD_SHOWCASE_IMAGES } from '../constants/landingData';
 import './FoodShowcase.css';
 
@@ -49,9 +49,7 @@ const FoodShowcase = () => {
         
         {/* ══ 1. HEADER ══ */}
         <div className="fs-header">
-          <Motion.div className="fs-header__icon-wrap" {...inView(0, 'up')}>
-            <Sparkles size={24} className="fs-header__icon" />
-          </Motion.div>
+          {/* Removed fs-header__icon-wrap */}
           <Motion.h2 className="fs-heading" {...inView(0.1, 'up')}>
             Every Dish Tells A Story.
             <br />
@@ -229,7 +227,7 @@ const FoodShowcase = () => {
               <img src={FOOD_SHOWCASE_IMAGES.masonry2} alt="Luxury Chocolate Dessert" className="fs-img" loading="lazy" />
               <div className="fs-overlay fs-overlay--hover-only" />
               <div className="fs-masonry__meta">
-                <Tag icon={Sparkles} text="Patisserie" />
+                <Tag icon={Award} text="Patisserie" />
                 <h4>Velvet Chocolate Dome</h4>
               </div>
             </div>

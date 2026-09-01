@@ -1,5 +1,5 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, Component } from 'react';
-import { X, Delete, Sparkles, Receipt, Coins, ArrowRight, SplitSquareHorizontal, Percent, Mic, Copy, Check } from 'lucide-react';
+import { X, Delete, Receipt, Coins, ArrowRight, SplitSquareHorizontal, Percent, Mic, Copy, Check } from 'lucide-react';
 import WhisperWorker from '../workers/whisperWorker.js?worker';
 
 class ErrorBoundary extends Component {
@@ -483,7 +483,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
           
           <div className="px-3 sm:px-6 py-2 sm:py-4 flex justify-between items-center relative z-10 border-b border-white/10 shrink-0">
             <h3 className="font-black text-sm sm:text-xl flex items-center gap-1.5 sm:gap-2 text-white">
-              <Sparkles size={16} className="text-primary sm:w-[18px] sm:h-[18px]" />
+              
               <span>{t("Smart Calculator")}</span>
             </h3>
             <button onClick={onClose} className="p-1 sm:p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors touch-target flex items-center justify-center">

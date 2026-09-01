@@ -1,7 +1,7 @@
 import { getApiUrl } from "../../config.js";
 import React, { useState, memo } from 'react';
 import { motion as Motion } from 'framer-motion';
-import { ArrowRight, LogIn, Sparkles, Send } from 'lucide-react';
+import { ArrowRight, LogIn, Send } from 'lucide-react';
 import './CallToAction.css';
 
 /* ─── Animation Helpers ──────────────────────────────────────────── */
@@ -91,9 +91,7 @@ const CallToAction = ({ onLaunchApp }) => {
             
             {/* Left Column: Text & Actions */}
             <div className="cta-panel__left">
-              <Motion.div className="cta-icon-wrap" {...inView(0.1, 'up')}>
-                <Sparkles size={28} className="cta-icon" aria-hidden="true" />
-              </Motion.div>
+              {/* Removed cta-icon-wrap */}
 
               <Motion.h2 className="cta-heading" {...inView(0.2, 'up')}>
                 Modern Restaurant Management

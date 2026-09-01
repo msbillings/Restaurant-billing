@@ -1,5 +1,5 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Send, X, Bot, User, ShoppingCart, Check, Sparkles } from 'lucide-react';
+import { MessageCircle, Send, X, Bot, User, ShoppingCart, Check } from 'lucide-react';
 import api from '../api/axios';
 
 const WhatsAppSimulator = () => {const { t } = useLanguage();
@@ -152,9 +152,7 @@ const WhatsAppSimulator = () => {const { t } = useLanguage();
 
             </p>
             </div>
-            <div className="bg-white/10 p-1.5 rounded-lg">
-              <Sparkles size={16} className="text-yellow-300" />
-            </div>
+            {/* Removed empty icon container */}
           </div>
 
           {/* Customer Info (Collapsible) */}
