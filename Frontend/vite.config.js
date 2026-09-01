@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.png', 'favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
-        name: 'msbillings - Restaurant POS',
-        short_name: 'msbillings',
-        description: 'Enterprise Restaurant Billing & POS System',
+        name: 'MS Billings - Restaurant POS & QR Ordering',
+        short_name: 'MS Billings',
+        description: 'Smart Restaurant Billing, POS & QR Code Customer Ordering System',
         theme_color: '#6366f1',
         background_color: '#0f172a',
         display: 'standalone',

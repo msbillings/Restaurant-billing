@@ -1,0 +1,6 @@
+# robots.txt for MS Billings
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://restaurant-billing-seven.vercel.app/sitemap.xml
