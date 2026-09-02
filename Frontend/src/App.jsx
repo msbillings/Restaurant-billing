@@ -187,7 +187,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState('6.0.73');
+  const [appVersion, setAppVersion] = useState('6.0.75');
 
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);

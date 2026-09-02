@@ -213,10 +213,25 @@ const Analytics = ({ onNavigate, onGoBack }) => {
   const handleDownloadReport = async () => {
     try {
       setToast({ message: 'Generating report...', type: 'info' });
-      if (viewMode === 'month') {
-        await downloadMonthlyReportExcel(selectedMonth, selectedYear);
+      let restSettings = {};
+      try {
+        const configRes = await api.get('/config/info');
+        restSettings = configRes.data?.restaurantSettings || configRes.data || {};
+      } catch (e) {
+        restSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      }
+      const restName = restSettings.restaurantName || 'RESTAURANT';
+
+      if (viewMode === 'custom' && customStart && customEnd) {
+        await downloadMonthlyReportExcel(null, null, null, null, customStart, customEnd, restName);
+      } else if (viewMode === 'month') {
+        await downloadMonthlyReportExcel(selectedMonth, selectedYear, null, null, null, null, restName);
+      } else if (viewMode === 'day') {
+        await downloadMonthlyReportExcel(null, null, null, selectedDate, null, null, restName);
+      } else if (days) {
+        await downloadMonthlyReportExcel(null, null, days, null, null, null, restName);
       } else {
-        await downloadMonthlyReportExcel(new Date().getMonth() + 1, new Date().getFullYear());
+        await downloadMonthlyReportExcel(new Date().getMonth() + 1, new Date().getFullYear(), null, null, null, null, restName);
       }
       setToast({ message: 'Report downloaded successfully!', type: 'success' });
     } catch (error) {
@@ -291,24 +306,39 @@ const Analytics = ({ onNavigate, onGoBack }) => {
         `_Generated automatically via MS Billings POS_`;
 
       let excelBase64 = null;
-      const fileName = `Analytics-Report-${viewMode === 'month' ? `${selectedMonth}-${selectedYear}` : viewMode === 'day' ? selectedDate : `${days}days`}.xlsx`;
+      let fileSuffix = 'report';
+      let endpoint = `/analytics/download/monthly/excel?restaurantName=${encodeURIComponent(restName)}&`;
+      
+      if (viewMode === 'custom' && customStart && customEnd) {
+        endpoint += `customStart=${customStart}&customEnd=${customEnd}`;
+        fileSuffix = `${customStart}-to-${customEnd}`;
+      } else if (viewMode === 'month') {
+        endpoint += `month=${selectedMonth}&year=${selectedYear}`;
+        fileSuffix = `${selectedMonth}-${selectedYear}`;
+      } else if (viewMode === 'day') {
+        endpoint += `date=${selectedDate}`;
+        fileSuffix = selectedDate;
+      } else if (days) {
+        endpoint += `days=${days}`;
+        fileSuffix = `${days}days`;
+      } else {
+        endpoint += `month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`;
+        fileSuffix = `${new Date().getMonth() + 1}-${new Date().getFullYear()}`;
+      }
+
+      const fileName = `Analytics-Report-${fileSuffix}.xlsx`;
 
       try {
-        let endpoint = `/analytics/download/monthly/excel?`;
-        if (viewMode === 'month') {
-          endpoint += `month=${selectedMonth}&year=${selectedYear}`;
-        } else {
-          endpoint += `month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`;
-        }
         const response = await api.get(endpoint, { responseType: 'arraybuffer' });
         const bytes = new Uint8Array(response.data);
         let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
           binary += String.fromCharCode(bytes[i]);
         }
         excelBase64 = window.btoa(binary);
       } catch (excelErr) {
-        console.warn('Could not generate Excel attachment, sending text only:', excelErr);
+        console.error('Could not generate Excel attachment for WhatsApp, sending text only:', excelErr);
       }
 
       let res;

@@ -16,9 +16,9 @@ router.get('/daybook', authenticateToken, getDayBook);
 // Export DayBook - Available to Cashier & Admin
 router.get('/daybook/export', authenticateToken, exportDayBookExcel);
 
-// Download reports - Admin users only
-router.get('/download/daily/csv', authenticateToken, requireAdmin, downloadDailyReportCSV);
-router.get('/download/monthly/excel', authenticateToken, requireAdmin, downloadMonthlyReportExcel);
+// Download reports - Available to Cashier & Admin
+router.get('/download/daily/csv', authenticateToken, downloadDailyReportCSV);
+router.get('/download/monthly/excel', authenticateToken, downloadMonthlyReportExcel);
 
 
 export default router;

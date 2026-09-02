@@ -63,20 +63,30 @@ export const downloadDailyReportCSV = async (month = null, year = null, days = n
   window.URL.revokeObjectURL(urlBlob);
 };
 
-export const downloadMonthlyReportExcel = async (month = null, year = null) => {
+export const downloadMonthlyReportExcel = async (month = null, year = null, days = null, date = null, customStart = null, customEnd = null, restaurantName = null) => {
   let url = '/analytics/download/monthly/excel?';
-  if (month && year) {
-    url += `month=${month}&year=${year}`;
+  const params = [];
+  if (restaurantName) params.push(`restaurantName=${encodeURIComponent(restaurantName)}`);
+  if (customStart && customEnd) {
+    params.push(`customStart=${customStart}&customEnd=${customEnd}`);
+  } else if (date) {
+    params.push(`date=${date}`);
+  } else if (month && year) {
+    params.push(`month=${month}&year=${year}`);
+  } else if (days) {
+    params.push(`days=${days}`);
   }
+  url += params.join('&');
 
   const response = await api.get(url, {
     responseType: 'blob'
   });
 
+  const fileSuffix = date || (month && year ? `${month}-${year}` : days ? `${days}days` : (customStart && customEnd ? `${customStart}-to-${customEnd}` : 'report'));
   const urlBlob = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
   link.href = urlBlob;
-  link.setAttribute('download', `monthly-report-${month || 'current'}.xlsx`);
+  link.setAttribute('download', `Analytics-Report-${fileSuffix}.xlsx`);
   document.body.appendChild(link);
   link.click();
   link.remove();

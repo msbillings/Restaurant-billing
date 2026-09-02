@@ -2,6 +2,7 @@ import BillDefault from '../models/Bill.js';
 import ExpenseDefault from '../models/Expense.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { generateDayBookWorkbook } from '../utils/excelGenerator.js';
+import ExcelJS from 'exceljs';
 
 // Get comprehensive analytics
 export const getAnalytics = async (req, res) => {
@@ -331,20 +332,39 @@ export const downloadDailyReportCSV = async (req, res) => {
   }
 };
 
-// Download monthly report in Excel format
+// Download monthly/custom report in Excel format
 export const downloadMonthlyReportExcel = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const { month, year } = req.query;
+    const { month, year, days, date, customStart, customEnd, restaurantName } = req.query;
 
     let startDate, endDate, periodName;
 
-    if (month && year) {
+    if (customStart && customEnd) {
+      const parsedStart = new Date(customStart);
+      startDate = new Date(Date.UTC(parsedStart.getUTCFullYear(), parsedStart.getUTCMonth(), parsedStart.getUTCDate(), 0, 0, 0, 0));
+      const parsedEnd = new Date(customEnd);
+      endDate = new Date(Date.UTC(parsedEnd.getUTCFullYear(), parsedEnd.getUTCMonth(), parsedEnd.getUTCDate(), 23, 59, 59, 999));
+      periodName = `${parsedStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} to ${parsedEnd.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    } else if (date) {
+      const parsedDate = new Date(date);
+      startDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 0, 0, 0, 0));
+      endDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 23, 59, 59, 999));
+      periodName = `${parsedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+    } else if (month && year) {
       const monthNum = parseInt(month) - 1;
       const yearNum = parseInt(year);
       startDate = new Date(Date.UTC(yearNum, monthNum, 1, 0, 0, 0, 0));
       endDate = new Date(Date.UTC(yearNum, monthNum + 1, 0, 23, 59, 59, 999));
       periodName = `${new Date(yearNum, monthNum).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`;
+    } else if (days) {
+      const daysCount = parseInt(days);
+      const now = new Date();
+      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+      startDate = new Date(endDate);
+      startDate.setUTCDate(startDate.getUTCDate() - daysCount);
+      startDate.setUTCHours(0, 0, 0, 0);
+      periodName = `Last ${daysCount} Days`;
     } else {
       const now = new Date();
       startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -361,14 +381,15 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     .lean();
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Monthly Report');
+    const worksheet = workbook.addWorksheet('Sales Report');
 
     // Row 1: Title
     worksheet.mergeCells('A1:L1');
     const titleRow = worksheet.getRow(1);
     titleRow.height = 36;
     const titleCell = titleRow.getCell(1);
-    titleCell.value = `Restaurant Billing Report - ${periodName}`;
+    const displayRestName = restaurantName ? restaurantName.toUpperCase() : 'RESTAURANT';
+    titleCell.value = `${displayRestName} - Sales Report (${periodName})`;
     titleCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FF1E293B' } };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
