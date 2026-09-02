@@ -18,6 +18,7 @@ const billSchema = new mongoose.Schema({
   },
   items: [{
     name: String,
+    category: { type: mongoose.Schema.Types.Mixed },
     price: { type: Number, min: [0, 'Price cannot be negative'] },
     quantity: { type: Number, min: [0, 'Quantity cannot be negative'] },
     printedQuantity: {
@@ -64,12 +65,25 @@ const billSchema = new mongoose.Schema({
   },
   discountType: {
     type: String,
-    enum: ['percentage', 'flat', 'complimentary'],
+    enum: ['percentage', 'flat', 'complimentary', 'bogo'],
     default: 'flat'
   },
   discountValue: {
     type: Number,
     default: 0
+  },
+  discountName: {
+    type: String,
+    default: ''
+  },
+  applicableTo: {
+    type: String,
+    enum: ['all', 'category', 'items'],
+    default: 'all'
+  },
+  targetCategory: {
+    type: String,
+    default: ''
   },
   deliveryCharge: {
     type: Number,

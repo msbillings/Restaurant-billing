@@ -79,13 +79,44 @@ function createMenu() {
           }
         },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        {
+          label: 'Zoom In',
+          accelerator: 'CommandOrControl+=',
+          click: (item, focusedWindow) => {
+            if (focusedWindow) {
+              const currentZoom = focusedWindow.webContents.getZoomLevel();
+              focusedWindow.webContents.setZoomLevel(Math.min(currentZoom + 0.5, 3));
+            }
+          }
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CommandOrControl+-',
+          click: (item, focusedWindow) => {
+            if (focusedWindow) {
+              const currentZoom = focusedWindow.webContents.getZoomLevel();
+              focusedWindow.webContents.setZoomLevel(Math.max(currentZoom - 0.5, -2));
+            }
+          }
+        },
+        {
+          label: 'Reset Zoom',
+          accelerator: 'CommandOrControl+0',
+          click: (item, focusedWindow) => {
+            if (focusedWindow) {
+              focusedWindow.webContents.setZoomLevel(0);
+            }
+          }
+        },
         { type: 'separator' },
         {
-          role: 'togglefullscreen',
-          accelerator: 'F11'
+          label: 'Toggle Full Screen',
+          accelerator: 'F11',
+          click: (item, focusedWindow) => {
+            if (focusedWindow) {
+              focusedWindow.setFullScreen(!focusedWindow.isFullScreen());
+            }
+          }
         }
       ]
     },
@@ -128,11 +159,26 @@ function createMenu() {
           label: '🔄 Check for Updates',
           click: () => {
             isManualUpdateCheck = true;
+            if (!app.isPackaged) {
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Check for Updates',
+                message: `You are currently running in Local Development / Test Mode (v${app.getVersion()}).\n\nLive GitHub auto-updates are active and operational in the installed production setup.`,
+                buttons: ['OK']
+              });
+              return;
+            }
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('checking-for-update');
             }
             autoUpdater.checkForUpdates().catch((err) => {
               console.error('[AutoUpdater] Manual menu check error:', err);
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Check for Updates',
+                message: `Your software is completely up to date! (Current version: v${app.getVersion()})`,
+                buttons: ['OK']
+              });
             });
           }
         },

@@ -68,7 +68,21 @@ export const getActiveOrder = asyncHandler(async (req, res, next) => {
       const dVal = order.discountValue || 0;
       let calculatedDiscount = 0;
       if (order.discountType === 'percentage') {
-        calculatedDiscount = (subtotal * dVal) / 100;
+        if (order.applicableTo === 'category' && order.targetCategory) {
+          const targetCat = String(order.targetCategory).trim().toLowerCase();
+          const eligibleSubtotal = (order.items || []).reduce((acc, i) => {
+            if (i.isCancelled) return acc;
+            const itemCat = typeof i.category === 'object' && i.category !== null ? i.category.name : i.category;
+            if (itemCat && String(itemCat).trim().toLowerCase() === targetCat) {
+              const activeQty = Math.max(0, Number(i.quantity || 0) - (i.cancelledQuantity || 0));
+              return acc + (Number(i.price || 0) * activeQty);
+            }
+            return acc;
+          }, 0);
+          calculatedDiscount = (eligibleSubtotal * dVal) / 100;
+        } else {
+          calculatedDiscount = (subtotal * dVal) / 100;
+        }
       } else if (order.discountType === 'complimentary') {
         calculatedDiscount = subtotal;
       } else {
@@ -106,8 +120,12 @@ export const saveOrder = async (req, res) => {
       billType,
       orderSource,
       id,
+      discount,
       discountType,
       discountValue,
+      discountName,
+      applicableTo,
+      targetCategory,
       tax,
       deliveryCharge,
       containerCharge
@@ -176,6 +194,7 @@ export const saveOrder = async (req, res) => {
         return {
           ...(validId && { _id: validId }),
           name: item.name,
+          category: item.category,
           price: Number(item.price || 0),
           quantity: Number(item.quantity || 0),
           total: Number(item.price || 0) * activeQty,
@@ -306,10 +325,28 @@ export const saveOrder = async (req, res) => {
       }, 0);
 
       const dType = discountType || order.discountType || 'flat';
-      const dValue = discountValue !== undefined ? discountValue : (order.discountValue || 0);
+      const dValue = discountValue !== undefined ? (Number(discountValue) || 0) : (order.discountValue || 0);
+      const dName = discountName !== undefined ? discountName : (order.discountName || '');
+      const dApplicableTo = applicableTo || order.applicableTo || 'all';
+      const dTargetCategory = targetCategory !== undefined ? targetCategory : (order.targetCategory || '');
+
       let calculatedDiscount = 0;
       if (dType === 'percentage') {
-        calculatedDiscount = (subtotal * dValue) / 100;
+        if (dApplicableTo === 'category' && dTargetCategory) {
+          const targetCat = String(dTargetCategory).trim().toLowerCase();
+          const eligibleSubtotal = updatedItems.reduce((sum, item) => {
+            if (item.isCancelled) return sum;
+            const itemCat = typeof item.category === 'object' && item.category !== null ? item.category.name : item.category;
+            if (itemCat && String(itemCat).trim().toLowerCase() === targetCat) {
+              const activeQty = Math.max(0, Number(item.quantity || 0) - (item.cancelledQuantity || 0));
+              return sum + (Number(item.price || 0) * activeQty);
+            }
+            return sum;
+          }, 0);
+          calculatedDiscount = (eligibleSubtotal * dValue) / 100;
+        } else {
+          calculatedDiscount = (subtotal * dValue) / 100;
+        }
       } else if (dType === 'complimentary') {
         calculatedDiscount = subtotal;
       } else {
@@ -388,6 +425,9 @@ export const saveOrder = async (req, res) => {
       order.billType = billType || order.billType;
       order.discountType = dType;
       order.discountValue = dValue;
+      order.discountName = dName;
+      order.applicableTo = dApplicableTo;
+      order.targetCategory = dTargetCategory;
       order.discount = calculatedDiscount;
       order.deliveryCharge = dCharge;
       order.containerCharge = cCharge;
@@ -491,10 +531,28 @@ export const saveOrder = async (req, res) => {
       }, 0);
 
       const dType = discountType || 'flat';
-      const dValue = discountValue || 0;
+      const dValue = discountValue !== undefined ? (Number(discountValue) || 0) : 0;
+      const dName = discountName || '';
+      const dApplicableTo = applicableTo || 'all';
+      const dTargetCategory = targetCategory || '';
+
       let calculatedDiscount = 0;
       if (dType === 'percentage') {
-        calculatedDiscount = (subtotal * dValue) / 100;
+        if (dApplicableTo === 'category' && dTargetCategory) {
+          const targetCat = String(dTargetCategory).trim().toLowerCase();
+          const eligibleSubtotal = sanitizedItems.reduce((sum, item) => {
+            if (item.isCancelled) return sum;
+            const itemCat = typeof item.category === 'object' && item.category !== null ? item.category.name : item.category;
+            if (itemCat && String(itemCat).trim().toLowerCase() === targetCat) {
+              const activeQty = Math.max(0, Number(item.quantity || 0) - (item.cancelledQuantity || 0));
+              return sum + (Number(item.price || 0) * activeQty);
+            }
+            return sum;
+          }, 0);
+          calculatedDiscount = (eligibleSubtotal * dValue) / 100;
+        } else {
+          calculatedDiscount = (subtotal * dValue) / 100;
+        }
       } else if (dType === 'complimentary') {
         calculatedDiscount = subtotal;
       } else {
@@ -526,6 +584,11 @@ export const saveOrder = async (req, res) => {
         items: sanitizedItems,
         subtotal,
         discount: calculatedDiscount,
+        discountType: dType,
+        discountValue: dValue,
+        discountName: dName,
+        applicableTo: dApplicableTo,
+        targetCategory: dTargetCategory,
         tax: tRate,
         deliveryCharge: dChargeNew,
         containerCharge: cChargeNew,
@@ -535,8 +598,6 @@ export const saveOrder = async (req, res) => {
         customerName,
         customerPhone,
         kitchenNotes,
-        discountType: dType,
-        discountValue: dValue,
         queueNumber: nextQueueNo,
         tokenNo: nextQueueNo
       };
@@ -588,7 +649,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, discountType, discountValue, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
+    const { discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -622,6 +683,9 @@ export const generateBill = async (req, res) => {
     if (discount !== undefined) order.discount = Number(discount) || 0;
     if (discountType) order.discountType = discountType;
     if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
+    if (discountName !== undefined) order.discountName = discountName;
+    if (applicableTo !== undefined) order.applicableTo = applicableTo;
+    if (targetCategory !== undefined) order.targetCategory = targetCategory;
     if (tax !== undefined) order.tax = Number(tax) || 0;
     if (taxBreakdown) {
       order.taxBreakdown = taxBreakdown;
@@ -745,7 +809,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -779,6 +843,9 @@ export const settleBill = async (req, res) => {
     if (discount !== undefined) order.discount = Number(discount) || 0;
     if (discountType) order.discountType = discountType;
     if (discountValue !== undefined) order.discountValue = Number(discountValue) || 0;
+    if (discountName !== undefined) order.discountName = discountName;
+    if (applicableTo !== undefined) order.applicableTo = applicableTo;
+    if (targetCategory !== undefined) order.targetCategory = targetCategory;
     if (tax !== undefined) order.tax = Number(tax) || 0;
     if (taxBreakdown) order.taxBreakdown = taxBreakdown;
     if (total !== undefined && Number(total) > 0) order.total = Number(total);
@@ -942,7 +1009,7 @@ export const getOpenOrders = async (req, res) => {
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
     })
-    .select('tableNo items total subtotal tax discount discountType discountValue deliveryCharge containerCharge customerName customerPhone status billNumber billType orderSource queueNumber tokenNo createdAt')
+    .select('tableNo items total subtotal tax discount discountType discountValue discountName applicableTo targetCategory deliveryCharge containerCharge customerName customerPhone status billNumber billType orderSource queueNumber tokenNo createdAt')
     .sort({ createdAt: -1 })
     .limit(100)
     .lean();

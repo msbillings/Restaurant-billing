@@ -63,6 +63,7 @@ const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
 const LandingPage = React.lazy(() => import('./landing/LandingPage'));
 import GlobalHeader from './components/GlobalHeader';
+import packageJson from '../package.json';
 import useBroadcasts from './hooks/useBroadcasts';
 import useNotifications from './hooks/useNotifications';
 import { clearMenuCache } from './api/menu';
@@ -101,9 +102,20 @@ function App() {
       return 'floor';
     }
 
-    // 4. Web browser (Vercel / Localhost) always defaults to Landing Page!
+    // 4. Direct route paths on web (e.g. /discount, /menu, /settings, /floor, /orders, /history, /analytics, /inventory, etc.)
+    if (path && path !== '' && path !== 'landing' && path !== 'home' && path !== 'index.html') {
+      return path;
+    }
+
+    // 5. If user is logged in, navigate to floor rather than landing on refresh
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    if (token) {
+      return 'floor';
+    }
+
+    // 6. Web browser (Vercel / Localhost) without login defaults to Landing Page!
     return 'landing';
-  }); // Initialize from URL or default to landing on web / floor on native
+  });
 
   // Keep URL clean as '/' when on the landing page in a web browser
   useEffect(() => {
@@ -122,7 +134,8 @@ function App() {
       const path = window.location.pathname.replace(/^\/+/, '');
       if (isNative || window.location.protocol === 'file:') return;
       if (!path || path === '' || path === 'landing' || path === 'home' || path === 'index.html') {
-        setView('landing');
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        setView(token ? 'floor' : 'landing');
       } else if (path === 'login' || path === 'app' || path === 'floor') {
         setView('floor');
       } else {
@@ -187,7 +200,38 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState('6.0.75');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.76');
+  const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
+    try {
+      const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+      const saved = localStorage.getItem(`update_snooze_${tenantKey}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.snoozeUntil && Date.now() < parsed.snoozeUntil) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  });
+
+  const handleSnoozeUpdate = (durationMs, label) => {
+    try {
+      const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+      const snoozeUntil = Date.now() + durationMs;
+      const data = {
+        snoozeUntil,
+        label,
+        version: updateInfo?.version || appVersion,
+        snoozedAt: Date.now()
+      };
+      localStorage.setItem(`update_snooze_${tenantKey}`, JSON.stringify(data));
+      setUpdateSnoozeInfo(data);
+    } catch (e) {
+      console.error('[App] Failed to save snooze info:', e);
+    }
+    setShowUpdateModal(false);
+  };
 
   // AI Clock-In State
   const [isClockingIn, setIsClockingIn] = useState(false);
@@ -698,7 +742,28 @@ function App() {
           setUpdateInfo(info);
           setIsUpdateDownloading(true);
           setUpdateDownloadProgress(0);
-          setShowUpdateModal(true);
+
+          // Check tenant-scoped snooze
+          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+          const savedSnooze = localStorage.getItem(`update_snooze_${tenantKey}`);
+          let isSnoozed = false;
+          if (savedSnooze) {
+            try {
+              const parsed = JSON.parse(savedSnooze);
+              if (parsed.snoozeUntil && Date.now() < parsed.snoozeUntil) {
+                isSnoozed = true;
+                setUpdateSnoozeInfo(parsed);
+              } else {
+                localStorage.removeItem(`update_snooze_${tenantKey}`);
+                setUpdateSnoozeInfo(null);
+              }
+            } catch {
+              localStorage.removeItem(`update_snooze_${tenantKey}`);
+            }
+          }
+          if (!isSnoozed) {
+            setShowUpdateModal(true);
+          }
         });
       }
 
@@ -715,7 +780,28 @@ function App() {
           if (info) setUpdateInfo(info);
           setIsUpdateDownloading(false);
           setUpdateDownloadProgress(100);
-          setShowUpdateModal(true);
+
+          // Check tenant-scoped snooze
+          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
+          const savedSnooze = localStorage.getItem(`update_snooze_${tenantKey}`);
+          let isSnoozed = false;
+          if (savedSnooze) {
+            try {
+              const parsed = JSON.parse(savedSnooze);
+              if (parsed.snoozeUntil && Date.now() < parsed.snoozeUntil) {
+                isSnoozed = true;
+                setUpdateSnoozeInfo(parsed);
+              } else {
+                localStorage.removeItem(`update_snooze_${tenantKey}`);
+                setUpdateSnoozeInfo(null);
+              }
+            } catch {
+              localStorage.removeItem(`update_snooze_${tenantKey}`);
+            }
+          }
+          if (!isSnoozed) {
+            setShowUpdateModal(true);
+          }
         });
       }
 
@@ -1321,6 +1407,19 @@ function App() {
               <span className="text-xs font-bold text-gray-800">9701800140</span>
             </div>
           </div>
+
+          {/* Snoozed Update Pill Badge */}
+          {updateInfo && updateSnoozeInfo && Date.now() < updateSnoozeInfo.snoozeUntil && (
+            <button
+              onClick={() => setShowUpdateModal(true)}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer animate-pulse"
+              title={t("New update ready — Click to install now")}
+            >
+              <Clock size={13} className="text-amber-600 shrink-0" />
+              <span className="hidden sm:inline">{t("Update Snoozed")} ({updateSnoozeInfo.label || 'Later'})</span>
+              <span className="sm:hidden">{t("Update")}</span>
+            </button>
+          )}
 
           {/* Hold Bills Badge Button (Visible on mobile & desktop except KDS and Chef) */}
           {view !== 'kds' && !isChef && (
@@ -2446,7 +2545,7 @@ function App() {
         <ContactSupportModal isOpen={showContactModal} onClose={() => setShowContactModal(false)} />
         <UserManualModal isOpen={showManualModal} onClose={() => setShowManualModal(false)} />
         <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} version={appVersion} />
-        <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} />
+        <UpdateModal isOpen={showUpdateModal} isDownloading={isUpdateDownloading} downloadProgress={updateDownloadProgress} updateInfo={updateInfo} onInstall={() => window.electronAPI?.installUpdate()} onClose={() => setShowUpdateModal(false)} onSnooze={handleSnoozeUpdate} />
       </Suspense>
 
       {/* Logout Confirmation Toast Modal */}

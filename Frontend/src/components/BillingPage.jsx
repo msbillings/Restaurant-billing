@@ -81,10 +81,33 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [floors, setFloors] = useState([]);
   const [openOrdersList, setOpenOrdersList] = useState([]);
   const [reservations, setReservations] = useState([]);
-  const [isLayoutLocked, setIsLayoutLocked] = useState(false);
+  const [isLayoutLocked, setIsLayoutLocked] = useState(() => {
+    try {
+      return localStorage.getItem('ms_billing_layout_locked') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
-  const [rightPanelWidth, setRightPanelWidth] = useState(400);
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ms_billing_right_panel_width');
+      return saved ? Number(saved) : 400;
+    } catch {
+      return 400;
+    }
+  });
   const isResizing = useRef(false);
+
+  const toggleLayoutLock = () => {
+    setIsLayoutLocked(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('ms_billing_layout_locked', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   const startResizing = useCallback((e) => {
     isResizing.current = true;
@@ -104,6 +127,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const newWidth = window.innerWidth - e.clientX;
       if (newWidth > 320 && newWidth < 800) {
         setRightPanelWidth(newWidth);
+        try {
+          localStorage.setItem('ms_billing_right_panel_width', String(newWidth));
+        } catch (err) {}
       }
     }
   }, []);
@@ -907,10 +933,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }
           setDeliveryCharge(cached.deliveryCharge !== undefined ? String(cached.deliveryCharge) : '0');
           setContainerCharge(cached.containerCharge !== undefined ? String(cached.containerCharge) : '0');
-          if (cached.discountType || cached.discountValue !== undefined) {
+          if (cached.discountType || cached.discountValue !== undefined || cached.discountName) {
             setDiscount({
               type: cached.discountType || 'percentage',
-              value: cached.discountValue !== undefined && cached.discountValue !== null ? cached.discountValue : ''
+              value: cached.discountValue !== undefined && cached.discountValue !== null ? cached.discountValue : '',
+              name: cached.discountName || '',
+              applicableTo: cached.applicableTo || 'all',
+              targetCategory: cached.targetCategory || ''
             });
           }
           setLoading(false);
@@ -1055,10 +1084,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         setDeliveryCharge(order.deliveryCharge !== undefined ? String(order.deliveryCharge) : '0');
         setContainerCharge(order.containerCharge !== undefined ? String(order.containerCharge) : '0');
         if (!isBackground || forceReset) {
-          setDiscount({
-            type: order.discountType || 'percentage',
-            value: order.discountValue !== undefined && order.discountValue !== null ? order.discountValue : ''
-          });
+          if (order.discountType || order.discountValue !== undefined || order.discountName) {
+            setDiscount({
+              type: order.discountType || 'percentage',
+              value: order.discountValue !== undefined && order.discountValue !== null ? order.discountValue : '',
+              name: order.discountName || '',
+              applicableTo: order.applicableTo || 'all',
+              targetCategory: order.targetCategory || ''
+            });
+          }
         }
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -1178,10 +1212,50 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const calculateDiscount = (subtotal) => {
     if (discount.type === 'complimentary') return subtotal;
     const val = discount.value === '' ? 0 : parseFloat(discount.value) || 0;
-    if (discount.type === 'percentage') {
-      return subtotal * val / 100;
+
+    // Handle category-specific discount
+    if (discount.applicableTo === 'category' && discount.targetCategory) {
+      const targetCat = String(discount.targetCategory).trim().toLowerCase();
+      const targetWords = targetCat.split(/\s+/).filter(w => w.length > 2);
+      const eligibleSubtotal = (cart || []).reduce((acc, item) => {
+        if (item.isCancelled) return acc;
+        let itemCat = '';
+        if (item.category) {
+          itemCat = typeof item.category === 'object' && item.category !== null ? (item.category.name || item.category._id) : item.category;
+        }
+        let isMatch = false;
+        if (itemCat) {
+          const itemCatNorm = String(itemCat).trim().toLowerCase();
+          if (itemCatNorm === targetCat || itemCatNorm.includes(targetCat) || targetCat.includes(itemCatNorm)) {
+            isMatch = true;
+          }
+        }
+        if (!isMatch && item.name) {
+          const itemNameNorm = item.name.toLowerCase();
+          if (targetWords.length > 0 && targetWords.every(w => itemNameNorm.includes(w))) {
+            isMatch = true;
+          }
+        }
+
+        if (isMatch) {
+          const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+          return acc + (Number(item.price || 0) * Math.max(0, qty));
+        }
+        return acc;
+      }, 0);
+
+      if (discount.type === 'percentage') {
+        const cappedPercent = Math.min(100, Math.max(0, val));
+        return Math.min(eligibleSubtotal, (eligibleSubtotal * cappedPercent) / 100);
+      }
+      return Math.min(eligibleSubtotal, Math.max(0, val));
     }
-    return val;
+
+    if (discount.type === 'percentage') {
+      const cappedPercent = Math.min(100, Math.max(0, val));
+      return Math.min(subtotal, (subtotal * cappedPercent) / 100);
+    }
+    return Math.min(subtotal, Math.max(0, val));
   };
 
   const subtotal = calculateSubtotal();
@@ -1393,8 +1467,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         billType,
         customerName,
         customerPhone,
+        discount: discountAmount,
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        discountName: discount.name || discount.offerName || '',
+        applicableTo: discount.applicableTo || 'all',
+        targetCategory: discount.targetCategory || '',
         tax: taxVal,
         deliveryCharge: parseFloat(deliveryCharge || 0),
         containerCharge: parseFloat(containerCharge || 0),
@@ -1406,6 +1484,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const savedOrder = await saveOrder(orderData);
       setOrderId(savedOrder._id);
       setActiveTable(tableNo);
+      if (savedOrder) {
+        if (savedOrder.discountType || savedOrder.discountValue !== undefined || savedOrder.discountName) {
+          setDiscount({
+            type: savedOrder.discountType || discount.type || 'flat',
+            value: savedOrder.discountValue !== undefined && savedOrder.discountValue !== null ? savedOrder.discountValue : discount.value,
+            name: savedOrder.discountName || discount.name || '',
+            applicableTo: savedOrder.applicableTo || discount.applicableTo || 'all',
+            targetCategory: savedOrder.targetCategory || discount.targetCategory || ''
+          });
+        }
+      }
       // Apply the backend-confirmed items directly (instant 0ms update)
       // This ensures removals are reflected immediately without a refetch race
       if (savedOrder.items && savedOrder.items.length > 0) {
@@ -1541,8 +1630,12 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         billType,
         customerName,
         customerPhone,
+        discount: discountAmount,
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        discountName: discount.name || discount.offerName || '',
+        applicableTo: discount.applicableTo || 'all',
+        targetCategory: discount.targetCategory || '',
         tax: taxVal,
         deliveryCharge: parseFloat(deliveryCharge || 0),
         containerCharge: parseFloat(containerCharge || 0),
@@ -1586,6 +1679,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discount: discountAmount,
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        discountName: discount.name || discount.offerName || '',
         tax: taxVal,
         deliveryCharge: parseFloat(deliveryCharge || 0),
         containerCharge: parseFloat(containerCharge || 0),
@@ -1697,6 +1791,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           discount: discountAmount,
           discountType: discount.type,
           discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+          discountName: discount.name || discount.offerName || '',
           total,
           billType,
           orderSource: billType === 'Delivery' ? orderSource : undefined,
@@ -1730,6 +1825,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           discount: discountAmount,
           discountType: discount.type,
           discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+          discountName: discount.name || discount.offerName || '',
           tax: taxVal,
           total,
           deliveryCharge: parseFloat(deliveryCharge || 0),
@@ -1850,6 +1946,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         discount: discountAmount,
         discountType: discount.type,
         discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        discountName: discount.name || discount.offerName || '',
+        applicableTo: discount.applicableTo || 'all',
+        targetCategory: discount.targetCategory || '',
         total,
         billType,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
@@ -2260,9 +2359,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             </div>
 
             <button
-              onClick={() => setIsLayoutLocked(!isLayoutLocked)}
-              className={`p-1.5 rounded-lg transition-all shrink-0 ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
-              title={isLayoutLocked ? "Unlock Layout" : "Lock Layout"}>
+              onClick={toggleLayoutLock}
+              className={`p-1.5 rounded-lg transition-all shrink-0 cursor-pointer ${isLayoutLocked ? 'text-primary bg-primary/10' : 'text-text-muted hover:text-primary hover:bg-primary/5'}`}
+              title={isLayoutLocked ? t("Unlock Layout") : t("Lock Layout")}>
 
               {isLayoutLocked ? <Lock size={16} /> : <Unlock size={16} />}
             </button>
@@ -2528,8 +2627,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
       {/* Customer CRM Modal (Only Name and Phone Number) */}
       {showCustomerModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl border border-gray-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-slide-up">
             <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-orange-500/10 to-amber-500/10">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-orange-500 text-white rounded-xl shadow-xs">

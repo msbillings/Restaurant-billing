@@ -1,7 +1,7 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft } from 'lucide-react';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2 } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import { getCachedBillHistory, cacheBillHistory } from '../db/offlineDb';
 import useDebounce from '../hooks/useDebounce';
@@ -15,7 +15,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [bills, setBills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState(null);
-  const [loadingBill, setLoadingBill] = useState(false);
+  const [loadingBillId, setLoadingBillId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [startDate, setStartDate] = useState('');
@@ -31,7 +31,6 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
   useEffect(() => {
     fetchBills();
-
   }, [currentPage, debouncedSearchTerm, filterType]);
 
   // Refresh bills when component mounts to show latest bills first
@@ -40,15 +39,13 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     getCachedBillHistory().then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
         setBills(cached);
+        setLoading(false);
       }
-      setLoading(false);
-    }).catch(() => {
-      setLoading(false);
-    });
+    }).catch(() => {});
 
     // Reset to page 1 and fetch latest bills when component mounts
     setCurrentPage(1);
-    fetchBills(true);
+    fetchBills();
 
     // Listen for real-time settlement and refund events
     const handleBillSettled = (data) => {
@@ -349,26 +346,19 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
-                [...Array(8)].map((_, i) => (
-                  <tr key={i} className="border-b border-border animate-pulse">
-                    <td className="px-3 py-2.5"><div className="w-8 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="px-3 py-2.5">
-                      <div className="w-16 h-4 bg-text-muted/20 rounded mb-1"></div>
-                      <div className="w-12 h-3 bg-text-muted/20 rounded"></div>
-                    </td>
-                    <td className="px-3 py-2.5"><div className="w-12 h-5 bg-text-muted/20 rounded"></div></td>
-                    <td className="px-3 py-2.5"><div className="w-16 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="px-3 py-2.5"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="px-3 py-2.5"><div className="w-10 h-4 bg-text-muted/20 rounded"></div></td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex justify-center gap-1.5">
-                        <div className="w-7 h-7 bg-text-muted/20 rounded"></div>
-                        <div className="w-7 h-7 bg-text-muted/20 rounded"></div>
+              {loading && bills.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-12 text-center">
+                    <div className="flex flex-col items-center justify-center min-h-[300px]">
+                      <div className="relative flex items-center justify-center mb-4">
+                        <div className="w-12 h-12 rounded-full border-4 border-orange-100 border-t-orange-600 animate-spin" />
+                        <Loader2 size={20} className="text-orange-600 animate-spin absolute" />
                       </div>
-                    </td>
-                  </tr>
-                ))
+                      <p className="text-slate-700 font-bold text-sm tracking-wide">{t("Loading bills...")}</p>
+                      <span className="text-slate-400 text-xs mt-1">{t("Fetching bill history, please wait...")}</span>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredBills.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-text-muted font-medium">{t("No transactions found")}</td>
@@ -417,7 +407,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                       <div className="flex justify-center items-center gap-1">
                         <button
                           onClick={async () => {
-                            setLoadingBill(true);
+                            setLoadingBillId(bill._id);
                             try {
                               const fullBill = await getBillById(bill._id);
                               setSelectedBill(fullBill);
@@ -425,18 +415,22 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                               console.error('Error fetching bill details:', error);
                               setToast({ message: 'Failed to load bill details', type: 'error' });
                             } finally {
-                              setLoadingBill(false);
+                              setLoadingBillId(null);
                             }
                           }}
-                          disabled={loadingBill}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center gap-1 touch-target disabled:opacity-50" 
+                          disabled={loadingBillId === bill._id}
+                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center justify-center gap-1 touch-target disabled:opacity-75 cursor-pointer" 
                           title={t("View Invoice")}>
-                          <Eye size={18} />
+                          {loadingBillId === bill._id ? (
+                            <Loader2 size={18} className="animate-spin text-orange-600" />
+                          ) : (
+                            <Eye size={18} />
+                          )}
                         </button>
                         {bill.status === 'Paid' && (
                           <button
                             onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-1 touch-target" 
+                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-1 touch-target cursor-pointer" 
                             title={t("Refund Bill")}>
                             <RefreshCcw size={18} />
                           </button>
@@ -444,7 +438,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                         {bill.status !== 'Deleted' && (
                           <button
                             onClick={() => handleDeleteClick(bill._id)}
-                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-1 touch-target" 
+                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-1 touch-target cursor-pointer" 
                             title={t("Delete Bill (Requires Password)")}>
                             <Trash2 size={18} />
                           </button>
@@ -460,10 +454,14 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
         {/* Mobile Responsive Stacked Card List (Visible on screens < 768px) */}
         <div className="md:hidden overflow-y-auto flex-1 p-3 space-y-3">
-          {loading ? (
-            [...Array(5)].map((_, i) => (
-              <div key={i} className="bg-background rounded-xl p-3.5 border border-border h-24 animate-pulse"></div>
-            ))
+          {loading && bills.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-10">
+              <div className="relative flex items-center justify-center mb-3">
+                <div className="w-10 h-10 rounded-full border-4 border-orange-100 border-t-orange-600 animate-spin" />
+                <Loader2 size={18} className="text-orange-600 animate-spin absolute" />
+              </div>
+              <p className="text-slate-700 font-bold text-xs">{t("Loading bills...")}</p>
+            </div>
           ) : filteredBills.length === 0 ? (
             <div className="p-8 text-center text-text-muted text-sm font-medium">{t("No transactions found")}</div>
           ) : (
@@ -502,7 +500,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={async () => {
-                        setLoadingBill(true);
+                        setLoadingBillId(bill._id);
                         try {
                           const fullBill = await getBillById(bill._id);
                           setSelectedBill(fullBill);
@@ -510,19 +508,23 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                           console.error('Error fetching bill details:', error);
                           setToast({ message: 'Failed to load bill details', type: 'error' });
                         } finally {
-                          setLoadingBill(false);
+                          setLoadingBillId(null);
                         }
                       }}
-                      disabled={loadingBill}
-                      className="px-3 py-1.5 bg-surface text-primary border border-border rounded-lg text-xs font-bold flex items-center gap-1 touch-target"
+                      disabled={loadingBillId === bill._id}
+                      className="px-3 py-1.5 bg-surface text-primary border border-border rounded-lg text-xs font-bold flex items-center gap-1.5 touch-target cursor-pointer disabled:opacity-75"
                       title={t("View Invoice")}>
-                      <Eye size={15} />
+                      {loadingBillId === bill._id ? (
+                        <Loader2 size={15} className="animate-spin text-orange-600" />
+                      ) : (
+                        <Eye size={15} />
+                      )}
                       <span>{t("Invoice")}</span>
                     </button>
                     {bill.status === 'Paid' && (
                       <button
                         onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                        className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target"
+                        className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target cursor-pointer"
                         title={t("Refund Bill")}>
                         <RefreshCcw size={15} />
                       </button>
@@ -530,7 +532,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     {bill.status !== 'Deleted' && (
                       <button
                         onClick={() => handleDeleteClick(bill._id)}
-                        className="p-2 bg-red-50 text-danger border border-red-200 rounded-lg text-xs font-bold touch-target"
+                        className="p-2 bg-red-50 text-danger border border-red-200 rounded-lg text-xs font-bold touch-target cursor-pointer"
                         title={t("Delete Bill")}>
                         <Trash2 size={15} />
                       </button>

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
 import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 import Toast from './Toast';
@@ -95,6 +95,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [selectedBillForPrint, setSelectedBillForPrint] = useState(null);
   const [selectedOrderForView, setSelectedOrderForView] = useState(null);
+  const [actionLoadingKey, setActionLoadingKey] = useState(null);
   const [menuImagesMap, setMenuImagesMap] = useState({});
   const [reservations, setReservations] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -754,20 +755,37 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={(e) => {e.stopPropagation(); setSelectedOrderForView(activeOrder);}}
-                  className="bg-white rounded-full p-1 sm:p-1.5 hover:text-emerald-600 transition-colors shadow-xs text-gray-500" title={t("View Order Details")}>
-                  <Eye size={13} strokeWidth={2.5} />
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const key = `view_${activeOrder._id || activeOrder.tableNo}`;
+                    setActionLoadingKey(key);
+                    setSelectedOrderForView(activeOrder);
+                    setTimeout(() => setActionLoadingKey(null), 300);
+                  }}
+                  className="bg-white rounded-full p-1 sm:p-1.5 hover:text-emerald-600 transition-colors shadow-xs text-gray-500 cursor-pointer" title={t("View Order Details")}>
+                  {actionLoadingKey === `view_${activeOrder._id || activeOrder.tableNo}` ? (
+                    <Loader2 size={13} className="animate-spin text-emerald-600" />
+                  ) : (
+                    <Eye size={13} strokeWidth={2.5} />
+                  )}
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!activeOrder?.items || activeOrder.items.length === 0) return;
+                    const key = `print_${activeOrder._id || activeOrder.tableNo}`;
+                    setActionLoadingKey(key);
                     setSelectedBillForPrint(activeOrder);
+                    setTimeout(() => setActionLoadingKey(null), 300);
                   }}
                   disabled={!activeOrder?.items || activeOrder.items.length === 0}
-                  className={`bg-white rounded-full p-1 sm:p-1.5 transition-colors shadow-xs ${!activeOrder?.items || activeOrder.items.length === 0 ? 'opacity-50 cursor-not-allowed text-gray-300' : 'hover:text-blue-600 hover:bg-blue-50 text-gray-500'}`} 
+                  className={`bg-white rounded-full p-1 sm:p-1.5 transition-colors shadow-xs cursor-pointer ${!activeOrder?.items || activeOrder.items.length === 0 ? 'opacity-50 cursor-not-allowed text-gray-300' : 'hover:text-blue-600 hover:bg-blue-50 text-gray-500'}`} 
                   title={!activeOrder?.items || activeOrder.items.length === 0 ? t("No items to print") : t("Print KOT & Bill directly")}>
-                  <Printer size={13} strokeWidth={2.5} />
+                  {actionLoadingKey === `print_${activeOrder._id || activeOrder.tableNo}` ? (
+                    <Loader2 size={13} className="animate-spin text-blue-600" />
+                  ) : (
+                    <Printer size={13} strokeWidth={2.5} />
+                  )}
                 </button>
               </div>
             </div>

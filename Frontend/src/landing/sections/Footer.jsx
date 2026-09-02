@@ -17,8 +17,9 @@ import './Footer.css';
 
 /* ─── GitHub Release URLs ─────────────────────────────────────────── */
 const GITHUB_RELEASES = 'https://github.com/msbillings/Restaurant-billing/releases/latest';
-const WINDOWS_EXE_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-Setup-6.0.75.exe';
+const WINDOWS_EXE_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-Setup-6.0.76.exe';
 const ANDROID_APK_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/app-release.apk';
+const IOS_IPA_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings.ipa';
 // Play Store URL — update once published
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.msbillings.restopos';
 
@@ -149,7 +150,7 @@ const Footer = () => {
             <DownloadBtn
               icon={Monitor}
               title="Windows"
-              subtitle=".exe · v6.0.75 · 225 MB"
+              subtitle=".exe · v6.0.76 · 225 MB"
               url={WINDOWS_EXE_URL}
             />
             {/* macOS — coming soon */}
@@ -160,11 +161,18 @@ const Footer = () => {
               url={GITHUB_RELEASES}
               badge="Soon"
             />
+            {/* iPhone / iOS IPA direct */}
+            <DownloadBtn
+              icon={Apple}
+              title="iPhone / iOS"
+              subtitle=".ipa · v6.0.76 · Direct"
+              url={IOS_IPA_URL}
+            />
             {/* Android APK direct */}
             <DownloadBtn
               icon={Smartphone}
               title="Android APK"
-              subtitle=".apk · v6.0.75 · 58.5 MB"
+              subtitle=".apk · v6.0.76 · 58.5 MB"
               url={ANDROID_APK_URL}
             />
             {/* Google Play Store — in review */}

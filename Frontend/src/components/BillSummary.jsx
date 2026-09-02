@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import axios from 'axios';
+import { getApiUrl } from '../config.js';
+import { getCachedMenuItems } from '../db/offlineDb';
 import { useLanguage } from '../context/LanguageContext';
-import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2, Gift, Tags, Clock, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
 
 const BillSummary = ({
   orderId,
@@ -127,6 +130,161 @@ const BillSummary = ({
     }
   };
 
+  const [tenantDiscounts, setTenantDiscounts] = useState([]);
+  const [showOffersModal, setShowOffersModal] = useState(false);
+  const [cachedMenuMap, setCachedMenuMap] = useState({});
+
+  useEffect(() => {
+    getCachedMenuItems().then((items) => {
+      if (items && Array.isArray(items)) {
+        const map = {};
+        items.forEach(i => {
+          const catName = typeof i.category === 'object' && i.category !== null ? i.category.name : i.category;
+          if (i.name) map[i.name.trim().toLowerCase()] = catName || '';
+        });
+        setCachedMenuMap(map);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const checkCategoryMatch = (item, targetCategory) => {
+    if (!targetCategory) return true;
+    const targetNorm = String(targetCategory).trim().toLowerCase();
+
+    // 1. Direct category on item (name or _id)
+    let itemCat = '';
+    if (item.category) {
+      itemCat = typeof item.category === 'object' && item.category !== null ? (item.category.name || item.category._id) : item.category;
+    }
+
+    // 2. Cached menu lookup by item name (fallback for legacy order items)
+    if (!itemCat && item.name && cachedMenuMap[item.name.trim().toLowerCase()]) {
+      itemCat = cachedMenuMap[item.name.trim().toLowerCase()];
+    }
+
+    if (itemCat) {
+      const itemCatNorm = String(itemCat).trim().toLowerCase();
+      if (itemCatNorm === targetNorm || itemCatNorm.includes(targetNorm) || targetNorm.includes(itemCatNorm)) {
+        return true;
+      }
+    }
+
+    // 3. Fallback: check if item name contains the target category words (e.g., "Fish Fry Mandi (Full)" matches "Fish Mandi")
+    if (item.name) {
+      const itemNameNorm = item.name.toLowerCase();
+      const targetWords = targetNorm.split(/\s+/).filter(w => w.length > 2);
+      if (targetWords.length > 0 && targetWords.every(w => itemNameNorm.includes(w))) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  const isOfferValid = (d) => {
+    if (!d || d.isActive === false) return false;
+    if (d.hasTimeline && d.endDate) {
+      const endStr = `${d.endDate.split('T')[0]}T${d.endTime || '23:59'}:59`;
+      const startStr = `${(d.startDate || d.endDate).split('T')[0]}T${d.startTime || '00:00'}:00`;
+      const now = new Date();
+      const end = new Date(endStr);
+      const start = new Date(startStr);
+      if (now > end || now < start) return false;
+    }
+    return true;
+  };
+
+  const getOfferValidityStatus = (d) => {
+    if (!d || d.isActive === false) return { label: 'Inactive', timeRemaining: '' };
+    if (d.hasTimeline && d.endDate) {
+      const endStr = `${d.endDate.split('T')[0]}T${d.endTime || '23:59'}:59`;
+      const now = new Date();
+      const end = new Date(endStr);
+      if (now > end) {
+        return { label: 'Expired', isExpired: true };
+      }
+      const diffMs = end - now;
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      return {
+        label: 'Active',
+        timeRemaining: diffDays > 0 ? `${diffDays}d ${diffHours}h left` : `${diffHours}h left`
+      };
+    }
+    return { label: 'Active', timeRemaining: 'Ongoing' };
+  };
+
+  const applyPresetOffer = (rule) => {
+    if (!rule) return;
+    if (!isOfferValid(rule)) {
+      alert(t("This offer has expired or is not currently active."));
+      return;
+    }
+
+    if (rule.type === 'bogo') {
+      const buyQty = Math.max(1, Number(rule.buyQty) || 2);
+      const getQty = Math.max(1, Number(rule.getQty) || 1);
+
+      let bogoDiscount = 0;
+      cart.forEach((item) => {
+        const isCategoryMatch = rule.applicableTo === 'category'
+          ? checkCategoryMatch(item, rule.targetCategory)
+          : true;
+
+        if (isCategoryMatch && item.quantity >= buyQty) {
+          const freeSets = Math.floor(item.quantity / buyQty);
+          const freeItems = freeSets * getQty;
+          bogoDiscount += freeItems * (item.price || 0);
+        }
+      });
+
+      if (bogoDiscount > 0) {
+        setDiscount({
+          type: 'flat',
+          value: bogoDiscount,
+          name: rule.name,
+          offerName: rule.name,
+          applicableTo: rule.applicableTo || 'all',
+          targetCategory: rule.targetCategory || ''
+        });
+        setShowCharges(true);
+        setShowOffersModal(false);
+      } else {
+        const catMsg = rule.applicableTo === 'category' ? ` on Category "${rule.targetCategory}"` : '';
+        alert(`${t("No eligible items for")} "${rule.name}" (${t("Buy")} ${buyQty} ${t("Get")} ${getQty} ${t("Free")}${catMsg}). ${t("Add required quantities to cart.")}`);
+      }
+    } else {
+      setDiscount({
+        type: rule.type,
+        value: rule.value,
+        name: rule.name,
+        offerName: rule.name,
+        applicableTo: rule.applicableTo || 'all',
+        targetCategory: rule.targetCategory || ''
+      });
+      setShowCharges(true);
+      setShowOffersModal(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchTenantDiscounts = async () => {
+      try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        if (!token) return;
+        const res = await axios.get(`${getApiUrl()}/discounts`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (Array.isArray(res.data)) {
+          setTenantDiscounts(res.data);
+        }
+      } catch (err) {
+        console.error('Error loading tenant discounts in BillSummary:', err);
+      }
+    };
+    fetchTenantDiscounts();
+  }, []);
+
   useEffect(() => {
     if (total > 0) {
       setSettlementAmount(total.toFixed(2));
@@ -135,22 +293,95 @@ const BillSummary = ({
     }
   }, [total]);
 
-  const handleBogoOffer = () => {
-    let bogoDiscount = 0;
-    cart.forEach((item) => {
-      if (item.quantity >= 2) {
-        // For every 2 items, 1 is free
-        const freeItems = Math.floor(item.quantity / 2);
-        bogoDiscount += freeItems * item.price;
+  // Keep applied BOGO offer discount amount synchronized dynamically as cart items change
+  useEffect(() => {
+    if (discount?.name && tenantDiscounts && tenantDiscounts.length > 0 && cart && cart.length > 0) {
+      const matchedBogo = tenantDiscounts.find(d => d.type === 'bogo' && d.name === discount.name && isOfferValid(d));
+      if (matchedBogo) {
+        const buyQty = Math.max(1, Number(matchedBogo.buyQty) || 2);
+        const getQty = Math.max(1, Number(matchedBogo.getQty) || 1);
+        let bogoDiscount = 0;
+        cart.forEach((item) => {
+          const isCategoryMatch = matchedBogo.applicableTo === 'category'
+            ? checkCategoryMatch(item, matchedBogo.targetCategory)
+            : true;
+
+          if (isCategoryMatch && item.quantity >= buyQty) {
+            const freeSets = Math.floor(item.quantity / buyQty);
+            const freeItems = freeSets * getQty;
+            bogoDiscount += freeItems * (item.price || 0);
+          }
+        });
+        if (bogoDiscount !== discount.value) {
+          setDiscount(prev => ({
+            ...prev,
+            type: 'flat',
+            value: bogoDiscount,
+            name: matchedBogo.name,
+            offerName: matchedBogo.name,
+            applicableTo: matchedBogo.applicableTo || 'all',
+            targetCategory: matchedBogo.targetCategory || ''
+          }));
+        }
       }
-    });
+    }
+  }, [cart, tenantDiscounts]);
+
+  const handleBogoOffer = () => {
+    if (!cart || cart.length === 0) {
+      alert(t("Cart is empty. Please add items to calculate BOGO offer."));
+      return;
+    }
+
+    const activeBogoRules = (tenantDiscounts || []).filter(d => d.type === 'bogo' && isOfferValid(d));
+
+    let bogoDiscount = 0;
+    let appliedRuleNames = [];
+
+    if (activeBogoRules.length > 0) {
+      // Apply configured tenant BOGO rules
+      activeBogoRules.forEach((rule) => {
+        const buyQty = Math.max(1, Number(rule.buyQty) || 2);
+        const getQty = Math.max(1, Number(rule.getQty) || 1);
+
+        cart.forEach((item) => {
+          const isCategoryMatch = rule.applicableTo === 'category'
+            ? checkCategoryMatch(item, rule.targetCategory)
+            : true;
+
+          if (isCategoryMatch && item.quantity >= buyQty) {
+            const freeSets = Math.floor(item.quantity / buyQty);
+            const freeItems = freeSets * getQty;
+            const itemDiscount = freeItems * (item.price || 0);
+            bogoDiscount += itemDiscount;
+            if (itemDiscount > 0 && !appliedRuleNames.includes(rule.name)) {
+              appliedRuleNames.push(rule.name);
+            }
+          }
+        });
+      });
+    } else {
+      // Universal fallback: Buy 2 get 1 free on all items
+      cart.forEach((item) => {
+        if (item.quantity >= 2) {
+          const freeItems = Math.floor(item.quantity / 2);
+          bogoDiscount += freeItems * (item.price || 0);
+        }
+      });
+      appliedRuleNames.push("Buy 2 Get 1 Free");
+    }
 
     if (bogoDiscount > 0) {
-      setDiscount({ type: 'flat', value: bogoDiscount });
+      setDiscount({ type: 'flat', value: bogoDiscount, name: appliedRuleNames.join(', '), offerName: appliedRuleNames.join(', ') });
       setShowCharges(true);
       setShowDiscountInput(true);
     } else {
-      alert("No eligible items for BOGO. Add at least 2 quantities of the same item.");
+      if (activeBogoRules.length > 0) {
+        const ruleDescriptions = activeBogoRules.map(r => `• ${r.name}: Buy ${r.buyQty} Get ${r.getQty} Free ${r.applicableTo === 'category' ? `(${r.targetCategory})` : '(All Items)'}`).join('\n');
+        alert(`${t("No eligible items for active BOGO offer(s):")}\n${ruleDescriptions}`);
+      } else {
+        alert(t("No eligible items for BOGO. Add at least 2 quantities of the same item."));
+      }
     }
   };
 
@@ -416,7 +647,7 @@ const BillSummary = ({
           <div 
             onClick={onOpenCustomerModal} 
             title={customerPhone || customerName ? `${customerName || 'Customer'} (${customerPhone || 'CRM'}) - ${t("Click to edit")}` : t("Customer CRM - Link Phone & Name")}
-            className={`flex items-center justify-center gap-1 min-w-[30px] max-w-[85px] sm:max-w-[100px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all shrink-0 ${
+            className={`flex items-center justify-center gap-1 min-w-[30px] max-w-[85px] sm:max-w-[100px] h-7 px-1.5 rounded-lg cursor-pointer shadow-2xs transition-all active:scale-95 shrink-0 ${
               customerPhone || customerName 
                 ? 'bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 font-bold' 
                 : 'bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-500 hover:text-gray-800'
@@ -809,10 +1040,30 @@ const BillSummary = ({
                 <span className="w-1/3 text-right">{subtotal.toFixed(2)}</span>
               </div>
               <div className={`flex items-center justify-between ${discountAmount > 0 ? 'font-black text-emerald-700 bg-emerald-50/80 p-1.5 rounded-lg border border-emerald-200/60' : 'font-bold'}`}>
-                <span className="w-1/2 flex items-center gap-1">
-                  {t("Discount")}
-                  {discount?.type === 'percentage' && discount?.value ? ` (${discount.value}%)` : (discount?.type === 'complimentary' ? ' (100%)' : '')}
-                  <button disabled={isLocked} className="text-primary underline text-[11px] ml-1 hover:text-red-700 font-bold disabled:opacity-50" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button>
+                <span className="w-1/2 flex items-center gap-1 min-w-0">
+                  <span className="truncate">
+                    {t("Discount")}
+                    {discount?.name ? (
+                      <span className="text-[10px] font-bold text-emerald-800 ml-1 bg-emerald-100/90 px-1.5 py-0.5 rounded-md border border-emerald-300/70 inline-block truncate max-w-[140px]" title={discount.name}>
+                        {discount.name}{discount.type === 'percentage' && discount.value ? ` (${discount.value}%)` : (discount.type === 'flat' && discount.value ? ` (${currencySymbol}${discount.value})` : '')}
+                      </span>
+                    ) : (
+                      discount?.type === 'percentage' && discount?.value ? ` (${discount.value}%)` : (discount?.type === 'complimentary' ? ' (100%)' : '')
+                    )}
+                  </span>
+                  <button disabled={isLocked} className="text-primary underline text-[11px] ml-1 hover:text-red-700 font-bold disabled:opacity-50 cursor-pointer shrink-0" onClick={() => setShowDiscountInput(!showDiscountInput)}>{showDiscountInput ? t("Less") : t("More")}</button>
+                  {discountAmount > 0 && !isLocked && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDiscount({ type: 'flat', value: '', name: '' });
+                      }}
+                      className="text-red-500 hover:text-red-700 p-0.5 rounded-full hover:bg-red-100 transition-colors ml-1 cursor-pointer shrink-0"
+                      title={t("Remove Discount / Offer")}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </span>
                 <span className={`w-1/2 text-right ${discountAmount > 0 ? 'text-emerald-700 font-black text-sm' : 'text-green-600'}`}>
                   {discountAmount > 0 ? `-${currencySymbol}${discountAmount.toFixed(2)}` : `(${discountAmount.toFixed(2)})`}
@@ -824,23 +1075,67 @@ const BillSummary = ({
                     disabled={isLocked}
                     className={`${discount?.type === 'complimentary' ? 'w-full' : 'w-1/2'} bg-white border border-gray-300 rounded text-[12px] h-7 outline-none focus:border-primary px-1 disabled:opacity-50`}
                     value={discount?.type || 'percentage'}
-                    onChange={(e) => setDiscount({ ...(discount || {}), type: e.target.value })}>
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      if (selectedVal.startsWith('preset_')) {
+                        const presetId = selectedVal.replace('preset_', '');
+                        const found = (tenantDiscounts || []).find(d => d._id === presetId);
+                        if (found) {
+                          applyPresetOffer(found);
+                        }
+                      } else {
+                        let currentVal = discount?.value;
+                        if (selectedVal === 'percentage' && Number(currentVal) > 100) {
+                          currentVal = '';
+                        }
+                        setDiscount({ ...(discount || {}), type: selectedVal, value: currentVal, applicableTo: 'all', targetCategory: '', name: '' });
+                      }
+                    }}>
 
                     <option value="percentage">{t("% Percent")}</option>
                     <option value="flat">{currencySymbol}{t("Flat")}</option>
                     <option value="complimentary">{t("Complimentary")}</option>
+                    {(tenantDiscounts || []).filter(d => isOfferValid(d)).length > 0 && (
+                      <optgroup label={t("Active Store Offers")}>
+                        {(tenantDiscounts || []).filter(d => isOfferValid(d)).map(d => {
+                          const catLabel = d.applicableTo === 'category' && d.targetCategory ? ` on ${d.targetCategory}` : '';
+                          const statusInfo = getOfferValidityStatus(d);
+                          const timeStr = statusInfo.timeRemaining ? ` • ${statusInfo.timeRemaining}` : '';
+                          return (
+                            <option key={d._id} value={`preset_${d._id}`}>
+                              {d.name} ({d.type === 'percentage' ? `${d.value}%` : (d.type === 'bogo' ? 'BOGO' : `${currencySymbol}${d.value}`)}{catLabel}{timeStr})
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
                   </select>
                   {discount?.type !== 'complimentary' && (
                     <input
                       type="number"
                       min="0"
+                      max={discount?.type === 'percentage' ? '100' : undefined}
                       disabled={isLocked}
                       onWheel={(e) => e.target.blur()}
                       onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                       className="w-1/2 bg-white border border-gray-300 text-gray-800 text-right px-2 rounded h-7 outline-none focus:border-primary text-[12px] font-bold disabled:opacity-50"
-                      placeholder={t('Value')}
-                      value={discount?.value || ''}
-                      onChange={(e) => setDiscount({ ...(discount || {}), value: Math.max(0, parseFloat(e.target.value) || 0) })} />
+                      placeholder={discount?.type === 'percentage' ? t('0-100%') : t('Value')}
+                      value={discount?.value ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          setDiscount({ ...(discount || {}), value: '' });
+                          return;
+                        }
+                        let num = parseFloat(raw);
+                        if (isNaN(num)) num = 0;
+                        if (discount?.type === 'percentage') {
+                          num = Math.min(100, Math.max(0, num));
+                        } else {
+                          num = Math.max(0, num);
+                        }
+                        setDiscount({ ...(discount || {}), value: num });
+                      }} />
                   )}
                 </div>
               }
@@ -889,7 +1184,19 @@ const BillSummary = ({
 
         <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-gray-100 overflow-x-auto no-scrollbar w-full gap-1">
           <div className="flex items-center gap-1 shrink-0">
-            <button disabled={isLocked} onClick={handleBogoOffer} className="bg-red-50 text-red-600 px-2 py-0.5 rounded-md text-[11px] font-bold border border-red-100 hover:bg-red-100 transition-colors whitespace-nowrap disabled:opacity-50">{t("Bogo Offer")}</button>
+            <button
+              disabled={isLocked}
+              onClick={() => setShowOffersModal(true)}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1 cursor-pointer ${
+                discount?.name
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs hover:bg-emerald-700'
+                  : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'
+              }`}
+              title={t("Browse & apply active discounts, percentage offers, and BOGO deals")}
+            >
+              <Tags size={12} />
+              <span>{discount?.name ? `${discount.name}` : t("Offers")}</span>
+            </button>
             <button
               disabled={isLocked}
               onClick={() => {
@@ -902,9 +1209,9 @@ const BillSummary = ({
               disabled={isLocked}
               onClick={() => {
                 if (discount?.type === 'complimentary') {
-                  setDiscount({ type: 'flat', value: '' });
+                  setDiscount({ type: 'flat', value: '', name: '' });
                 } else {
-                  setDiscount({ type: 'complimentary', value: '' });
+                  setDiscount({ type: 'complimentary', value: '', name: 'Complimentary' });
                 }
               }}
               className={`${discount?.type === 'complimentary' ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'} px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap disabled:opacity-50`}>
@@ -1588,6 +1895,161 @@ const BillSummary = ({
         </div>,
         document.body
       )}
+
+      {/* Available Offers & Discounts Modal */}
+      {showOffersModal &&
+        createPortal(
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up border border-gray-200 flex flex-col max-h-[85vh]">
+              {/* Modal Header */}
+              <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-orange-500/10 to-amber-500/10 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-orange-500 text-white rounded-xl shadow-xs">
+                    <Tags size={18} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-gray-900">{t("Available Offers & Discounts")}</h2>
+                    <p className="text-[11px] text-gray-500">{t("Select an active store offer to apply to this bill")}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowOffersModal(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-1">
+                {tenantDiscounts.filter(d => isOfferValid(d)).length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <Tags size={32} className="mx-auto mb-2 text-gray-300" />
+                    <p className="font-bold text-sm text-gray-700">{t("No active offers available")}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{t("Configure discounts and BOGO rules in the Discounts & Offers page.")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {tenantDiscounts.filter(d => isOfferValid(d)).map((offer) => {
+                      const isCurrent = discount?.name === offer.name;
+                      const statusInfo = getOfferValidityStatus(offer);
+                      return (
+                        <div
+                          key={offer._id}
+                          className={`p-3.5 rounded-xl border transition-all flex items-start justify-between gap-3 ${
+                            isCurrent
+                              ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20 shadow-xs'
+                              : 'bg-white hover:bg-orange-50/40 border-gray-200 shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                              offer.type === 'bogo'
+                                ? 'bg-amber-100 text-amber-700'
+                                : offer.type === 'percentage'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {offer.type === 'bogo' ? <Gift size={16} /> : <Tags size={16} />}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-sm text-gray-900 truncate">{offer.name}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                  offer.type === 'bogo'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                    : offer.type === 'percentage'
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                }`}>
+                                  {offer.type === 'bogo'
+                                    ? `Buy ${offer.buyQty || 2} Get ${offer.getQty || 1} Free`
+                                    : offer.type === 'percentage'
+                                    ? `${offer.value}% Off`
+                                    : `${currencySymbol}${offer.value} Flat`}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 flex-wrap">
+                                <span className="font-medium text-gray-600">
+                                  {offer.applicableTo === 'category'
+                                    ? `${t("Applies to")}: ${typeof offer.targetCategory === 'object' && offer.targetCategory !== null ? offer.targetCategory.name : (offer.targetCategory || t("Category"))}`
+                                    : `${t("Applies to")}: ${t("All Menu Items")}`}
+                                </span>
+                                {statusInfo.timeRemaining && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 font-bold">
+                                    <Clock size={10} />
+                                    {statusInfo.timeRemaining}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => applyPresetOffer(offer)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                              isCurrent
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                                : 'bg-primary hover:bg-primary-hover text-white shadow-xs'
+                            }`}
+                          >
+                            {isCurrent ? t("Applied ✓") : t("Apply")}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Expired Offers List */}
+                {tenantDiscounts.filter(d => !isOfferValid(d) && d.hasTimeline).length > 0 && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
+                      {t("Expired / Scheduled Offers (Not Currently Applicable)")}
+                    </span>
+                    <div className="space-y-1.5">
+                      {tenantDiscounts.filter(d => !isOfferValid(d) && d.hasTimeline).map((expired) => (
+                        <div key={expired._id} className="p-2 rounded-lg bg-gray-50 border border-gray-200/60 flex items-center justify-between opacity-60">
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <AlertTriangle size={13} className="text-red-400" />
+                            <span className="font-medium line-through">{expired.name}</span>
+                            <span className="text-[10px] text-red-600 font-bold bg-red-50 px-1.5 rounded">
+                              {t("Expired")}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3.5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-2 shrink-0">
+                {discount?.name || discountAmount > 0 ? (
+                  <button
+                    onClick={() => {
+                      setDiscount({ type: 'flat', value: '', name: '' });
+                      setShowOffersModal(false);
+                    }}
+                    className="text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                  >
+                    {t("Remove Applied Offer")}
+                  </button>
+                ) : <div />}
+                <button
+                  onClick={() => setShowOffersModal(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  {t("Close")}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
     </div>
   );
