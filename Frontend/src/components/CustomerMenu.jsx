@@ -942,6 +942,14 @@ const CustomerMenu = () => {
         setTimeout(() => setServiceMessage(''), 5000);
         checkOrderStatus();
       });
+      socket.on('settingsUpdated', (data) => {
+        if (data) {
+          setRestaurantSettings(prev => ({ ...prev, ...data }));
+          if (data.enableGeoFencing !== undefined) {
+            requestLocationVerification(data);
+          }
+        }
+      });
       socket.on('cancellationResolved', (data) => {
         if (data?.action === 'accept') {
           setServiceMessage(`✅ Cancellation Accepted: "${data.itemName || 'Your dish'}" has been cancelled.`);
