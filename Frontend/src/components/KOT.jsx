@@ -93,21 +93,21 @@ const KOT = ({ order, onClose }) => {
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
           fontWeight: 'normal',
-          fontSize: '11px',
+          fontSize: '13px',
           lineHeight: '1.3',
           width: '100%'
         }}>
         
-        <div style={{ padding: '0 4px', boxSizing: 'border-box' }}>
+        <div style={{ padding: '0 8px', boxSizing: 'border-box' }}>
           
           {/* Header - Centered */}
           <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </div>
-            <div className="text-lg font-bold" style={{ fontSize: '14px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
+            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
             {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
-              <div className="text-base font-bold text-gray-900" style={{ fontSize: '12px', fontWeight: 'bold', color: '#111827' }}>
+              <div className="text-base font-bold text-gray-900" style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
                 {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
               </div>
             )}
@@ -117,31 +117,31 @@ const KOT = ({ order, onClose }) => {
                 const partner = (order.orderSource || '').trim() || 'DIRECT';
                 return (
                   <>
-                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '14px', fontWeight: '900', color: '#dc2626' }}>
+                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626' }}>
                       DELIVERY: {partner.toUpperCase()}
                     </div>
-                    <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>
                       Order #{order.tableNo}
                     </div>
                   </>
                 );
               } else if (bType === 'Takeaway') {
                 return (
-                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '14px', fontWeight: '900', color: '#2563eb' }}>
+                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#2563eb' }}>
                     TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
                   </div>
                 );
               } else {
                 return (
                   <>
-                    <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>Dine In</div>
-                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
+                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>Dine In</div>
+                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
                   </>
                 );
               }
             })()}
             {order.customerName && (
-              <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '2px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>
                 Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
               </div>
             )}
