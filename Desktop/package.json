@@ -1,6 +1,6 @@
 {
   "name": "msbilling",
-  "version": "6.0.76",
+  "version": "6.0.80",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -38,7 +38,8 @@
     "mac": {
       "target": "dmg",
       "icon": "icon.png",
-      "identity": null
+      "identity": null,
+      "artifactName": "MS-Billings-${version}.${ext}"
     },
     "win": {
       "compression": "store",

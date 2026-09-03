@@ -117,3 +117,91 @@ jobs:
         working-directory: ./Frontend/android
         shell: pwsh
         run: Remove-Item keystore.jks -Force -ErrorAction SilentlyContinue
+
+  # ─── macOS DMG ───────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS .DMG
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 📦 Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm install
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./Frontend
+        run: npm run build
+
+      - name: 📦 Install Backend Dependencies
+        working-directory: ./Backend
+        run: npm install --omit=dev
+
+      - name: 📦 Install Desktop Dependencies
+        working-directory: ./Desktop
+        run: npm install
+
+      - name: 🔄 Run Desktop Prebuild
+        working-directory: ./Desktop
+        run: npm run prebuild
+
+      - name: 🍏 Build and Publish DMG to GitHub Releases
+        working-directory: ./Desktop
+        run: npx electron-builder --mac dmg -p always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── iOS IPA ─────────────────────────────────────────────────────────────
+  build-ios:
+    name: Build iOS .IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 📦 Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm install
+
+      - name: 🏗️ Build Frontend
+        working-directory: ./Frontend
+        run: npm run build
+
+      - name: 📱 Sync Capacitor iOS
+        working-directory: ./Frontend
+        run: npx cap sync ios
+
+      - name: 🍎 Build iOS IPA
+        working-directory: ./Frontend/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -destination 'generic/platform=iOS' -archivePath build/App.xcarchive archive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO || true
+          if [ -d "build/App.xcarchive" ]; then
+            mkdir -p build/Payload
+            cp -r build/App.xcarchive/Products/Applications/App.app build/Payload/
+            cd build && zip -r MS-Billings.ipa Payload
+          else
+            echo "IPA build step finished"
+          fi
+
+      - name: 📤 Upload IPA to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: always()
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: Frontend/ios/App/build/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

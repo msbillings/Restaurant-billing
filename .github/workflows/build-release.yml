@@ -110,9 +110,11 @@ jobs:
           make_latest: true
           files: |
             Desktop/dist/*.exe
+            Desktop/dist/*.dmg
             Desktop/dist/*.blockmap
             Desktop/dist/latest.yml
             Frontend/android/app/build/outputs/apk/release/*.apk
             Frontend/android/app/build/outputs/apk/debug/*.apk
+            Frontend/ios/App/build/*.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
