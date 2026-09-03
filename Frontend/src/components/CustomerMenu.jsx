@@ -944,10 +944,18 @@ const CustomerMenu = () => {
       });
       socket.on('settingsUpdated', (data) => {
         if (data) {
-          setRestaurantSettings(prev => ({ ...prev, ...data }));
-          if (data.enableGeoFencing !== undefined) {
-            requestLocationVerification(data);
-          }
+          setRestaurantSettings(prev => {
+            const geoChanged = 
+              prev.enableGeoFencing !== data.enableGeoFencing ||
+              prev.geoFencingRadius !== data.geoFencingRadius ||
+              prev.latitude !== data.latitude ||
+              prev.longitude !== data.longitude;
+
+            if (geoChanged && data.enableGeoFencing !== undefined) {
+              setTimeout(() => requestLocationVerification(data), 0);
+            }
+            return { ...prev, ...data };
+          });
         }
       });
       socket.on('cancellationResolved', (data) => {
