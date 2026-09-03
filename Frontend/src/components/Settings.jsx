@@ -155,13 +155,29 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     const trimmed = String(val).trim();
     if (trimmed) {
       if (field === 'phone' || field === 'whatsappNumber') {
-        if (!/^\d{10}$/.test(trimmed)) errorMsg = t('Must be exactly 10 digits');
+        if (trimmed.length !== 10) {
+          errorMsg = t('Phone number must be exactly 10 digits');
+        } else if (!/^\d{10}$/.test(trimmed)) {
+          errorMsg = t('Phone number must contain only numbers');
+        }
       } else if (field === 'gstin') {
-        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(trimmed)) errorMsg = t('Invalid GSTIN format');
+        if (trimmed.length !== 15) {
+          errorMsg = t('GSTIN must be exactly 15 characters');
+        } else if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(trimmed)) {
+          errorMsg = t('Invalid GSTIN format (e.g., 22AAAAA0000A1Z5)');
+        }
       } else if (field === 'fssai') {
-        if (!/^\d{14}$/.test(trimmed)) errorMsg = t('Must be exactly 14 digits');
+        if (trimmed.length !== 14) {
+          errorMsg = t('FSSAI License must be exactly 14 digits');
+        } else if (!/^\d{14}$/.test(trimmed)) {
+          errorMsg = t('FSSAI License must contain only numbers');
+        }
       } else if (field === 'upiId') {
-        if (!/^[\w.-]+@[\w.-]+$/.test(trimmed)) errorMsg = t('Invalid UPI format (e.g. name@bank)');
+        if (!trimmed.includes('@')) {
+          errorMsg = t('UPI ID must contain an @ symbol');
+        } else if (!/^[\w.-]+@[\w.-]+$/.test(trimmed)) {
+          errorMsg = t('Invalid UPI format (e.g., restaurantname@bank)');
+        }
       }
     }
     setErrors((prev) => {
