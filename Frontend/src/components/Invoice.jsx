@@ -68,7 +68,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
       const parsed = JSON.parse(savedSettings);
-      if (!parsed.upiId || parsed.upiId === 'msbillings@upi') parsed.upiId = 'maheshsiva864@oksbi';
       setSettings((prev) => ({ ...prev, ...parsed }));
     }
   }, []);
@@ -954,6 +953,9 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) */}
           {settings.enableQrPayment !== false && (() => {
+            const pa = (settings.upiId || '').trim();
+            if (!pa) return null;
+
             const isMixed = bill.paymentMode === 'Mixed';
             const upiSplit = Number(bill.splitPayments?.upi || 0);
             
@@ -968,7 +970,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
             
             if (Number(am) <= 0) return null;
 
-            const pa = (settings.upiId || 'maheshsiva864@oksbi').trim();
             const pn = (settings.restaurantName || 'MSBILLINGS').trim();
             const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
             const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
@@ -990,7 +991,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 </div>
               
                 <div className="mt-0.5" style={{ fontSize: '13px', fontWeight: 'normal', textAlign: 'center' }}>
-                  {t("UPI ID:")} {settings.upiId || 'maheshsiva864@oksbi'}
+                  {t("UPI ID:")} {pa}
                 </div>
               </div>
             );

@@ -236,17 +236,23 @@ export const updateRestaurantInfo = async (req, res) => {
     if (licenseExpiry) {
       updatePromises.push(Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true }).maxTimeMS(4000));
     }
+
+    let mergedSettings = null;
     if (settingsToSave) {
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: settingsToSave }, { upsert: true }).maxTimeMS(4000));
+      const existingDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+      const existingSettings = existingDoc?.value || {};
+      mergedSettings = { ...existingSettings, ...settingsToSave };
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true }).maxTimeMS(4000));
     }
+    
     if (spaces) {
       updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(4000));
     }
 
     await Promise.all(updatePromises);
 
-    if (settingsToSave) {
-      emitSocketEvent(req, 'settingsUpdated', settingsToSave);
+    if (mergedSettings) {
+      emitSocketEvent(req, 'settingsUpdated', mergedSettings);
       try {
         clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
       } catch (e) { }
