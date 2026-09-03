@@ -1,7 +1,7 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2 } from 'lucide-react';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2, ChevronDown } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import { getCachedBillHistory, cacheBillHistory } from '../db/offlineDb';
 import useDebounce from '../hooks/useDebounce';
@@ -25,7 +25,12 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [toast, setToast] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
+  const [expandedRows, setExpandedRows] = useState({});
   const itemsPerPage = 20; // Server-side pagination - Show 20 bills per page (latest first)
+
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -338,6 +343,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     <span className="text-[10px] text-primary font-normal">{t("(Latest First)")}</span>
                   </div>
                 </th>
+                <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Customer")}</th>
                 <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Type")}</th>
                 <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Status")}</th>
                 <th className="px-3 py-2.5 font-bold text-xs uppercase text-text-muted tracking-wider border-b border-border">{t("Payment")}</th>
@@ -361,24 +367,38 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                 </tr>
               ) : filteredBills.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-text-muted font-medium">{t("No transactions found")}</td>
+                  <td colSpan="8" className="p-8 text-center text-text-muted font-medium">{t("No transactions found")}</td>
                 </tr>
               ) : (
                 filteredBills.map((bill) => (
-                  <tr key={bill._id} className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
-                    <td className="px-3 py-2.5 font-bold text-text-main font-mono text-xs sm:text-sm whitespace-nowrap">
-                      #{bill.billNumber || 'CANCELLED'}
-                      {bill.status === 'Cancelled' && bill.cancelReason && (
-                        <div className="text-[10px] text-danger mt-0.5">{t("Reason:")} {bill.cancelReason}</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
-                      <div className="flex flex-col text-xs">
-                        <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
-                        <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
+                  <React.Fragment key={bill._id}>
+                    <tr className={`border-b border-border hover:bg-surface-hover transition-colors group ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
+                      <td className="px-3 py-2.5 font-bold text-text-main font-mono text-xs sm:text-sm whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => toggleRow(bill._id)} className="p-1 hover:bg-surface rounded-md text-text-muted cursor-pointer transition-transform duration-200" style={{ transform: expandedRows[bill._id] ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                            <ChevronDown size={14} />
+                          </button>
+                          <div>
+                            #{bill.billNumber || 'CANCELLED'}
+                            {bill.status === 'Cancelled' && bill.cancelReason && (
+                              <div className="text-[10px] text-danger mt-0.5">{t("Reason:")} {bill.cancelReason}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
+                        <div className="flex flex-col text-xs">
+                          <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+                          <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex flex-col text-xs">
+                          <span className="font-semibold text-text-main">{bill.customerName || '-'}</span>
+                          {bill.customerPhone && <span className="font-mono text-text-muted text-[11px]">{bill.customerPhone}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
                       <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${
                         bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
@@ -446,6 +466,32 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                       </div>
                     </td>
                   </tr>
+                  {expandedRows[bill._id] && (
+                    <tr className="bg-surface/50 border-b border-border">
+                      <td colSpan="8" className="p-0">
+                        <div className="p-4 border-l-4 border-primary ml-10 my-1 bg-white rounded-r-lg shadow-sm">
+                          <div className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">{t("Order Items")}</div>
+                          {bill.items && bill.items.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-4xl">
+                              {bill.items.map((item, idx) => {
+                                if (item.isCancelled && item.quantity === item.cancelledQuantity) return null;
+                                const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                                return (
+                                  <div key={idx} className="flex justify-between items-center text-sm border-b border-border/40 pb-1 last:border-0">
+                                    <span className="text-text-main font-medium truncate pr-2">{item.name} <span className="text-text-muted text-xs ml-1">x{qty}</span></span>
+                                    <span className="font-mono text-text-muted shrink-0">₹{((item.price || 0) * qty).toFixed(2)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-text-muted italic">{t("No items data available")}</div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 ))
               )}
             </tbody>
@@ -482,6 +528,15 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     {t(bill.status || 'Paid')}
                   </span>
                 </div>
+                
+                {/* Mobile Customer Info */}
+                {(bill.customerName || bill.customerPhone) && (
+                  <div className="flex flex-col text-xs bg-surface-hover/50 p-2 rounded-lg border border-border/50">
+                    <div className="text-[10px] uppercase font-bold text-text-muted mb-0.5">{t("Customer Details")}</div>
+                    {bill.customerName && <div className="font-semibold text-text-main">{bill.customerName}</div>}
+                    {bill.customerPhone && <div className="font-mono text-text-muted">{bill.customerPhone}</div>}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between text-xs text-text-muted">
                   <span className="font-mono">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '../config.js';
 import api from '../api/axios';
 import { useLanguage } from '../context/LanguageContext';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
@@ -171,31 +171,41 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setSettings((prev) => ({
-          ...prev,
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        }));
-        setLoading(false);
-        setToast({ message: t("Location captured successfully via GPS!"), type: 'success' });
-      },
-      (err) => {
-        console.error('Geolocation error:', err);
-        setLoading(false);
-        if (err.code === 1) {
-          setToast({ message: t("Location permission denied. Please allow location access in your browser settings."), type: 'error' });
-        } else if (err.code === 2) {
-          setToast({ message: t("GPS position unavailable. Please ensure location is enabled on your device."), type: 'error' });
-        } else if (err.code === 3) {
-          setToast({ message: t("Location request timed out. Please try again."), type: 'error' });
-        } else {
-          setToast({ message: err.message || t("Could not capture GPS location."), type: 'error' });
-        }
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
+    const requestLocation = (highAccuracy) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setSettings((prev) => ({
+            ...prev,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          }));
+          setLoading(false);
+          setToast({ message: t("Location captured successfully!"), type: 'success' });
+        },
+        (err) => {
+          if (highAccuracy && err.code === 2) {
+            // Fallback for Windows/Electron laptops without GPS hardware
+            console.log("High accuracy failed, retrying with low accuracy...");
+            requestLocation(false);
+            return;
+          }
+          console.error('Geolocation error:', err);
+          setLoading(false);
+          if (err.code === 1) {
+            setToast({ message: t("Location permission denied. Please allow location access in your browser settings."), type: 'error' });
+          } else if (err.code === 2) {
+            setToast({ message: t("GPS position unavailable. This is common on desktop PCs. Please try on a mobile device or enter manually if possible."), type: 'error' });
+          } else if (err.code === 3) {
+            setToast({ message: t("Location request timed out. Please try again."), type: 'error' });
+          } else {
+            setToast({ message: err.message || t("Could not capture GPS location."), type: 'error' });
+          }
+        },
+        { timeout: 15000, enableHighAccuracy: highAccuracy }
+      );
+    };
+
+    requestLocation(true);
   };
 
   const handleLogoUpload = (e) => {
@@ -816,8 +826,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                           </div>
                           <button
                             onClick={(e) => { e.preventDefault(); handleGetLocation(); }}
-                            className="w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100 flex items-center justify-center gap-1">
-                            <MapPin size={12} /> {t("Set to Current Location")}
+                            disabled={loading}
+                            className="w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer">
+                            {loading ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} 
+                            {loading ? t("Getting Location...") : t("Set to Current Location")}
                           </button>
                         </div>
                       </div>

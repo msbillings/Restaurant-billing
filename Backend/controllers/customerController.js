@@ -1,5 +1,6 @@
 import CustomerSchema from '../models/Customer.js';
 import BillDefault from '../models/Bill.js';
+import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 
 export const searchCustomers = async (req, res) => {
@@ -131,8 +132,16 @@ export const updateCustomerFromBill = async (req, bill) => {
     customer.totalSpend += bill.total;
     customer.lastVisit = new Date();
 
-    // Check VIP status (e.g., spent more than 5000 or visited more than 5 times)
-    if (customer.totalSpend > 5000 || customer.totalVisits >= 5) {
+    // Fetch dynamic VIP thresholds from settings
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    const settings = settingsDoc?.value || {};
+    
+    const visitLimit = settings.vipVisitThreshold !== undefined ? settings.vipVisitThreshold : 5;
+    const spendLimit = settings.vipSpendThreshold !== undefined ? settings.vipSpendThreshold : 5000;
+
+    // Check VIP status dynamically
+    if (customer.totalSpend >= spendLimit || customer.totalVisits >= visitLimit) {
       customer.isVIP = true;
     }
 
@@ -149,10 +158,10 @@ export const updateCustomerFromBill = async (req, bill) => {
       }
     }
 
-    // Keep only top 5 favorites
+    // Keep top 20 favorites for detailed CRM view
     customer.favoriteItems.sort((a, b) => b.count - a.count);
-    if (customer.favoriteItems.length > 5) {
-      customer.favoriteItems = customer.favoriteItems.slice(0, 5);
+    if (customer.favoriteItems.length > 20) {
+      customer.favoriteItems = customer.favoriteItems.slice(0, 20);
     }
 
     await customer.save();

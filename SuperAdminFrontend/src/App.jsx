@@ -943,7 +943,7 @@ function App() {
                     <td className="p-4 font-medium text-gray-200">
                       {client.staffAccounts?.length > 0 
                         ? (client.staffAccounts.find(s => s.role === 'Admin')?.username || client.staffAccounts[0].username) 
-                        : (client.appUsername || (client.users?.length > 0 ? client.users[0].username : '-'))}
+                        : client.email}
                     </td>
                     <td className="p-4 text-gray-300">{client.email}</td>
                     <td className="p-4">

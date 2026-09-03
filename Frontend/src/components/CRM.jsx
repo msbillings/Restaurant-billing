@@ -1,8 +1,11 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Star, TrendingUp, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, Search, Star, TrendingUp, Calendar, ChevronLeft, ChevronRight, FileText, X, Loader2, Eye, Settings, ChevronDown, ChevronUp, Save, CheckCircle2 } from 'lucide-react';
 import BackButton from './common/BackButton';
+import Invoice from './Invoice';
+import { getBills, getBillById } from '../api/billing';
+import api from '../api/axios';
 
 const CRM = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -12,6 +15,59 @@ const CRM = ({ onNavigate, onGoBack }) => {
   const [filterType, setFilterType] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  
+  // Modal states for viewing bills
+  const [billsModal, setBillsModal] = useState({ isOpen: false, customer: null, bills: [], loading: false, error: '' });
+  const [selectedBill, setSelectedBill] = useState(null);
+  const [loadingBillId, setLoadingBillId] = useState(null);
+
+  const [expandedFavorites, setExpandedFavorites] = useState({});
+  const [vipSettingsOpen, setVipSettingsOpen] = useState(false);
+  const [vipSettings, setVipSettings] = useState({ vipVisitThreshold: 5, vipSpendThreshold: 5000 });
+  const [fullSettings, setFullSettings] = useState({});
+  const [savingVipSettings, setSavingVipSettings] = useState(false);
+
+  const toggleFavorites = (customerId) => {
+    setExpandedFavorites(prev => ({
+      ...prev,
+      [customerId]: !prev[customerId]
+    }));
+  };
+
+  const loadVipSettings = async () => {
+    try {
+      const res = await api.get('/config/info');
+      if (res.data?.restaurantSettings) {
+        setFullSettings(res.data.restaurantSettings);
+        setVipSettings({
+          vipVisitThreshold: res.data.restaurantSettings.vipVisitThreshold !== undefined ? res.data.restaurantSettings.vipVisitThreshold : 5,
+          vipSpendThreshold: res.data.restaurantSettings.vipSpendThreshold !== undefined ? res.data.restaurantSettings.vipSpendThreshold : 5000
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load VIP settings', err);
+    }
+  };
+
+  const saveVipSettings = async () => {
+    setSavingVipSettings(true);
+    try {
+      const updatedSettings = { ...fullSettings, ...vipSettings };
+      await api.post('/config/info', { restaurantSettings: updatedSettings });
+      setFullSettings(updatedSettings);
+      setVipSettingsOpen(false);
+    } catch (err) {
+      console.error('Failed to save VIP settings', err);
+    } finally {
+      setSavingVipSettings(false);
+    }
+  };
+
+  const isCustomerVIP = (customer) => {
+    const visits = vipSettings.vipVisitThreshold || 5;
+    const spend = vipSettings.vipSpendThreshold || 5000;
+    return customer.totalVisits >= visits || customer.totalSpend >= spend;
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -34,7 +90,9 @@ const CRM = ({ onNavigate, onGoBack }) => {
   };
 
   useEffect(() => {
+    loadVipSettings();
     fetchCustomers();
+    // eslint-disable-next-line
   }, []);
 
   useEffect(() => {
@@ -80,6 +138,28 @@ const CRM = ({ onNavigate, onGoBack }) => {
         {t("Dine-In")}
       </span>
     );
+  };
+
+  const handleViewBills = async (customer) => {
+    if (!customer.phone) return; // Need phone to search bills
+    setBillsModal({ isOpen: true, customer, bills: [], loading: true, error: '' });
+    try {
+      const data = await getBills({ limit: 50, search: customer.phone });
+      let customerBills = [];
+      if (Array.isArray(data)) {
+        customerBills = data;
+      } else if (data && data.bills) {
+        customerBills = data.bills;
+      }
+      
+      // Double check filtering in case search returned fuzzy matches
+      customerBills = customerBills.filter(b => b.customerPhone === customer.phone);
+      
+      setBillsModal(prev => ({ ...prev, bills: customerBills, loading: false }));
+    } catch (err) {
+      console.error('Error fetching customer bills:', err);
+      setBillsModal(prev => ({ ...prev, loading: false, error: 'Failed to fetch bills' }));
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-text-muted">{t("Loading CRM...")}</div>;
@@ -158,6 +238,17 @@ const CRM = ({ onNavigate, onGoBack }) => {
               <ChevronRight size={13} />
             </button>
           </div>
+
+          <button
+            onClick={() => {
+              loadVipSettings();
+              setVipSettingsOpen(true);
+            }}
+            className="p-1.5 sm:p-2 bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border border-purple-500/20 rounded-xl transition-colors shrink-0 shadow-2xs cursor-pointer"
+            title={t("VIP Settings")}
+          >
+            <Settings size={14} />
+          </button>
         </div>
       </div>
 
@@ -179,7 +270,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
           </div>
           <div className="min-w-0 w-full">
             <p className="text-[10px] sm:text-[11px] text-text-muted font-bold truncate">{t("VIP")}</p>
-            <p className="text-sm sm:text-base md:text-lg font-bold text-text-main leading-tight">{customers.filter((c) => c.isVIP).length}</p>
+            <p className="text-sm sm:text-base md:text-lg font-bold text-text-main leading-tight">{customers.filter(c => isCustomerVIP(c)).length}</p>
           </div>
         </div>
 
@@ -206,6 +297,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border text-right whitespace-nowrap">{t("Total Spend")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Last Visit")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Favorites")}</th>
+              <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-center">{t("Action")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border text-xs">
@@ -222,7 +314,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
                   <td className="px-3 py-2 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-text-main truncate max-w-[140px]">{t(customer.name || 'Guest')}</span>
-                      {customer.isVIP && <span className="bg-purple-100 text-purple-700 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider shrink-0">{t("VIP")}</span>}
+                      {isCustomerVIP(customer) && <span className="bg-purple-100 text-purple-700 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider shrink-0">{t("VIP")}</span>}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-text-muted font-mono whitespace-nowrap">{customer.phone}</td>
@@ -234,19 +326,48 @@ const CRM = ({ onNavigate, onGoBack }) => {
                   <td className="px-3 py-2 text-text-muted whitespace-nowrap">
                     <div className="flex items-center gap-1 text-[11px]"><Calendar size={12} /> {new Date(customer.lastVisit).toLocaleDateString()}</div>
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <div className="flex items-center gap-1 max-w-[200px]">
-                      {customer.favoriteItems?.slice(0, 1).map((item, i) =>
-                        <span key={i} className="text-[10px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted truncate max-w-[140px]" title={item.itemName}>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1 w-full max-w-[280px]">
+                      {customer.favoriteItems?.slice(0, 2).map((item, i) =>
+                        <span key={i} className="text-[10px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted truncate max-w-[120px]" title={item.itemName}>
                           {t(item.itemName)} ({item.count})
                         </span>
                       )}
-                      {customer.favoriteItems?.length > 1 && (
-                        <span className="text-[9px] bg-surface-hover text-text-muted px-1 py-0.5 rounded font-bold shrink-0">
-                          +{customer.favoriteItems.length - 1}
-                        </span>
+                      {customer.favoriteItems?.length > 2 && (
+                        <div className="relative">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main rounded transition-colors cursor-pointer border border-border shrink-0"
+                          >
+                            +{customer.favoriteItems.length - 2} <ChevronDown size={10} />
+                          </button>
+                          {expandedFavorites[customer._id] && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }} />
+                              <div className="absolute top-full right-0 mt-1.5 w-48 bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                                <div className="text-[9px] font-bold text-text-muted px-1 pb-1 mb-0.5 border-b border-border uppercase tracking-wider">{t("All Favorites")}</div>
+                                {customer.favoriteItems.map((item, idx) => (
+                                  <div key={idx} className="text-[10px] bg-surface-hover px-2 py-1.5 rounded-lg text-text-main flex justify-between items-center">
+                                    <span className="truncate pr-2" title={item.itemName}>{t(item.itemName)}</span>
+                                    <span className="font-bold text-primary shrink-0 bg-primary/10 px-1.5 rounded">x{item.count}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-center">
+                    <button
+                      onClick={() => handleViewBills(customer)}
+                      disabled={!customer.phone}
+                      className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center cursor-pointer"
+                      title={t("View Customer Bills")}
+                    >
+                      <FileText size={15} />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -268,7 +389,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-bold text-text-main text-xs sm:text-sm truncate">{t(customer.name || 'Guest')}</span>
-                  {customer.isVIP && <span className="bg-purple-100 text-purple-700 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">{t("VIP")}</span>}
+                  {isCustomerVIP(customer) && <span className="bg-purple-100 text-purple-700 text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider">{t("VIP")}</span>}
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <p className="text-[11px] text-text-muted font-mono">{customer.phone}</p>
@@ -282,17 +403,223 @@ const CRM = ({ onNavigate, onGoBack }) => {
               {customer.lastVisit && <span className="flex items-center gap-1"><Calendar size={11} />{new Date(customer.lastVisit).toLocaleDateString()}</span>}
             </div>
             {customer.favoriteItems?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {customer.favoriteItems.slice(0, 3).map((item, i) => (
-                  <span key={i} className="text-[9px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted whitespace-nowrap">{t(item.itemName)}</span>
+              <div className="flex items-center gap-1 mt-1.5 relative">
+                {customer.favoriteItems.slice(0, 2).map((item, i) => (
+                  <span key={i} className="text-[9px] bg-background border border-border px-1.5 py-0.5 rounded text-text-muted whitespace-nowrap truncate max-w-[120px]">
+                    {t(item.itemName)} ({item.count})
+                  </span>
                 ))}
+                {customer.favoriteItems.length > 2 && (
+                  <div className="relative">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main rounded transition-colors cursor-pointer border border-border shrink-0"
+                    >
+                      +{customer.favoriteItems.length - 2} <ChevronDown size={10} />
+                    </button>
+                    {expandedFavorites[customer._id] && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }} />
+                        <div className="absolute top-full left-0 mt-1.5 w-48 bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                          <div className="text-[9px] font-bold text-text-muted px-1 pb-1 mb-0.5 border-b border-border uppercase tracking-wider">{t("All Favorites")}</div>
+                          {customer.favoriteItems.map((item, idx) => (
+                            <div key={idx} className="text-[10px] bg-surface-hover px-2 py-1.5 rounded-lg text-text-main flex justify-between items-center">
+                              <span className="truncate pr-2" title={item.itemName}>{t(item.itemName)}</span>
+                              <span className="font-bold text-primary shrink-0 bg-primary/10 px-1.5 rounded">x{item.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
+            <div className="mt-2 pt-2 border-t border-border flex justify-end">
+              <button
+                onClick={() => handleViewBills(customer)}
+                disabled={!customer.phone}
+                className="px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileText size={14} />
+                {t("View Bills")}
+              </button>
+            </div>
           </div>
         ))}
       </div>
-    </div>);
 
+      {/* Customer Bills Modal */}
+      {billsModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
+          <div className="w-full sm:w-[450px] bg-background h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div className="p-4 border-b border-border bg-surface flex items-start justify-between sticky top-0 z-10">
+              <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-text-main leading-tight">{t("Customer Bills")}</h2>
+                  <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
+                    <span className="font-medium">{billsModal.customer?.name || 'Guest'}</span>
+                    <span>•</span>
+                    <span className="font-mono">{billsModal.customer?.phone}</span>
+                  </div>
+                </div>
+                {!billsModal.loading && billsModal.bills.length > 0 && (
+                  <div className="bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-xl flex flex-col items-center justify-center shadow-xs">
+                    <span className="text-[9px] font-bold uppercase tracking-wider leading-none mb-1 opacity-80">{t("Total Bills")}</span>
+                    <span className="text-base font-black leading-none">{billsModal.bills.length}</span>
+                  </div>
+                )}
+              </div>
+              <button 
+                onClick={() => setBillsModal({ isOpen: false, customer: null, bills: [], loading: false, error: '' })}
+                className="p-2 hover:bg-surface-hover rounded-full text-text-muted cursor-pointer transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {billsModal.loading ? (
+                <div className="flex flex-col items-center justify-center h-40 gap-3">
+                  <Loader2 size={24} className="animate-spin text-primary" />
+                  <p className="text-sm text-text-muted">{t("Loading bills...")}</p>
+                </div>
+              ) : billsModal.error ? (
+                <div className="p-4 bg-danger/10 text-danger rounded-xl text-sm font-medium text-center">
+                  {t(billsModal.error)}
+                </div>
+              ) : billsModal.bills.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 gap-3 text-text-muted">
+                  <FileText size={32} className="opacity-50" />
+                  <p className="text-sm font-medium">{t("No bills found for this customer")}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {billsModal.bills.map(bill => (
+                    <div key={bill._id} className="bg-surface border border-border rounded-xl p-3.5 hover:border-primary/30 transition-colors shadow-xs group">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="font-mono font-bold text-sm text-text-main group-hover:text-primary transition-colors">
+                            #{bill.billNumber}
+                          </div>
+                          <div className="text-[11px] text-text-muted mt-0.5">
+                            {new Date(bill.createdAt || bill.updatedAt).toLocaleDateString()} {new Date(bill.createdAt || bill.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                          bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                          bill.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {t(bill.status)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between border-t border-border/60 pt-2 mt-2">
+                        <div className="font-black text-text-main">
+                          ₹{(bill.total || 0).toFixed(2)}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            setLoadingBillId(bill._id);
+                            try {
+                              const fullBill = await getBillById(bill._id);
+                              setSelectedBill(fullBill);
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setLoadingBillId(null);
+                            }
+                          }}
+                          disabled={loadingBillId === bill._id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-bold text-text-main hover:bg-surface-hover hover:text-primary transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {loadingBillId === bill._id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                          {t("Invoice")}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIP Settings Modal */}
+      {vipSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border flex items-center justify-between bg-surface">
+              <div className="flex items-center gap-2">
+                <Star className="text-purple-500" size={18} />
+                <h3 className="font-bold text-text-main text-sm">{t("VIP Customer Settings")}</h3>
+              </div>
+              <button onClick={() => setVipSettingsOpen(false)} className="text-text-muted hover:text-text-main hover:bg-surface-hover p-1.5 rounded-lg transition-colors cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-text-muted mb-2">
+                {t("Configure when a customer automatically becomes a VIP based on their loyalty.")}
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-text-main mb-1.5">{t("Visits Required")}</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={vipSettings.vipVisitThreshold}
+                    onChange={(e) => setVipSettings({ ...vipSettings, vipVisitThreshold: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-text-main"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">{t("Visits")}</div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-main mb-1.5">{t("Total Spend Required (₹)")}</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={vipSettings.vipSpendThreshold}
+                    onChange={(e) => setVipSettings({ ...vipSettings, vipSpendThreshold: e.target.value === '' ? '' : Number(e.target.value) })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-text-main"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">₹</div>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-border bg-surface flex justify-end gap-2">
+              <button
+                onClick={() => setVipSettingsOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-text-muted hover:text-text-main hover:bg-surface-hover rounded-xl transition-colors cursor-pointer"
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                onClick={saveVipSettings}
+                disabled={savingVipSettings}
+                className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md"
+              >
+                {savingVipSettings ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {t("Save Settings")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Modal for Viewing Full Bill */}
+      {selectedBill && (
+        <Invoice
+          bill={selectedBill}
+          onClose={() => setSelectedBill(null)}
+        />
+      )}
+
+    </div>);
 };
 
 export default CRM;

@@ -847,7 +847,7 @@ const CustomerMenu = () => {
     }
 
     try {
-      const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}`, {
+      const menuRes = await apiClient.get(`${API_BASE_URL}/public/menu?tenant=${encodeURIComponent(tenant)}&_t=${Date.now()}`, {
         headers: {
           'X-Tenant-DB': tenant
         },
@@ -1757,11 +1757,11 @@ const CustomerMenu = () => {
           <div className="flex items-center gap-1.5 bg-emerald-600/30 border border-emerald-400/40 text-emerald-100 text-[11px] font-bold px-3 py-1 rounded-full mt-2 backdrop-blur-sm shadow-xs animate-fade-in">
             <ShieldCheck size={13} className="text-emerald-300" />
             <span>
-              {t("Location Verified • Seated at Table")} {locationState.distanceMeters != null ? `(~${Math.max(0, Math.round(locationState.distanceMeters))}m)` : ''}
+              {t("Location Verified • Seated at Table")} {locationState.distanceMeters != null ? `(${Math.max(0, Math.round(locationState.distanceMeters))}m)` : ''}
             </span>
             {locationState.accuracy != null && locationState.accuracy > 0 && (
               <span className="text-[9px] opacity-80 border-l border-emerald-400/40 pl-1.5 ml-0.5 font-mono">
-                ±{Math.round(locationState.accuracy)}m
+                {Math.round(locationState.accuracy)}m
               </span>
             )}
           </div>

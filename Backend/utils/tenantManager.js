@@ -29,6 +29,7 @@ import PrinterConfigDefault from '../models/PrinterConfig.js';
 import OnlineConfigDefault from '../models/OnlineConfig.js';
 import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
 import { NotificationDefault } from '../models/Notification.js';
+import WhatsAppAuthDefault from '../models/WhatsAppAuth.js';
 
 const tenantModelsCache = new Map();
 
@@ -83,6 +84,7 @@ export const getTenantModels = async (databaseName) => {
   const OnlineConfig = conn.models.OnlineConfig || conn.model('OnlineConfig', OnlineConfigDefault.schema);
   const LoyaltyConfig = conn.models.LoyaltyConfig || conn.model('LoyaltyConfig', LoyaltyConfigDefault.schema);
   const Notification = conn.models.Notification || conn.model('Notification', NotificationDefault.schema);
+  const WhatsAppAuth = conn.models.WhatsAppAuth || conn.model('WhatsAppAuth', WhatsAppAuthDefault.schema);
 
   const models = {
     Menu,
@@ -110,6 +112,7 @@ export const getTenantModels = async (databaseName) => {
     OnlineConfig,
     LoyaltyConfig,
     Notification,
+    WhatsAppAuth,
     connection: conn
   };
 

@@ -1,61 +1,13 @@
 import makeWASocket, {
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import path from 'path';
-import fs from 'fs';
 import os from 'os';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function getAuthDir(tenantId = 'default') {
-  const dirName = `auth_info_baileys_${tenantId}`;
-  if (process.env.APP_USER_DATA_PATH) {
-    const dir = path.join(process.env.APP_USER_DATA_PATH, dirName);
-    try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    } catch (e) {
-      console.warn('[WhatsApp Service] Failed to create dir in APP_USER_DATA_PATH, using fallback:', e);
-    }
-  }
-
-  if (process.env.VERCEL || process.env.VERCEL_ENV) {
-    const dir = path.join(os.tmpdir(), dirName);
-    try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      return dir;
-    } catch (e) {}
-  }
-
-  // Development / Standard directory
-  const localDir = path.join(__dirname, '..', dirName);
-  try {
-    if (!fs.existsSync(localDir)) fs.mkdirSync(localDir, { recursive: true });
-    // Verify write permissions
-    const testFile = path.join(localDir, '.write_test');
-    fs.writeFileSync(testFile, '1');
-    fs.unlinkSync(testFile);
-    return localDir;
-  } catch (e) {
-    // If packaged in read-only path (e.g. Program Files), fallback to OS temp or home directory
-    const fallbackDir = path.join(os.tmpdir(), `msbilling_baileys_auth_${tenantId}`);
-    try {
-      if (!fs.existsSync(fallbackDir)) fs.mkdirSync(fallbackDir, { recursive: true });
-      return fallbackDir;
-    } catch (err) {
-      return localDir;
-    }
-  }
-}
-
 import { getTenantModels } from '../utils/tenantManager.js';
+import { useMongoDBAuthState } from '../utils/useMongoDBAuthState.js';
 
 class WhatsAppService {
   constructor(tenantId = 'default', restaurantName = null) {
@@ -67,7 +19,7 @@ class WhatsAppService {
     this.connectedNumber = null;
     this.connectionListeners = new Set();
     this.isInitializing = false;
-    this.authDir = getAuthDir(this.tenantId);
+    this.authState = null;
   }
 
   setRestaurantName(name) {
@@ -78,8 +30,13 @@ class WhatsAppService {
 
   getPlatformInfo() {
     const rawName = this.restaurantName || 'MS Billings POS';
+    const osPlatform = os.platform();
+    let browserConfig = Browsers.windows('Chrome');
+    if (osPlatform === 'darwin') browserConfig = Browsers.macOS('Chrome');
+    else if (osPlatform === 'linux') browserConfig = Browsers.ubuntu('Chrome');
+    
     return {
-      browserConfig: Browsers.macOS('Chrome'),
+      browserConfig,
       platformName: rawName,
       deviceName: `${rawName} Gateway`
     };
@@ -98,12 +55,11 @@ class WhatsAppService {
         this.sock = null;
       }
 
-      this.authDir = getAuthDir(this.tenantId);
-      if (!fs.existsSync(this.authDir)) {
-        fs.mkdirSync(this.authDir, { recursive: true });
-      }
-
-      const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+      const models = await getTenantModels(this.tenantId);
+      const WhatsAppAuthModel = models.WhatsAppAuth;
+      
+      this.authState = await useMongoDBAuthState(WhatsAppAuthModel);
+      const { state, saveCreds } = this.authState;
       let version;
       try {
         const vInfo = await fetchLatestBaileysVersion();
@@ -245,14 +201,8 @@ class WhatsAppService {
 
   clearAuth() {
     try {
-      const targetDir = this.authDir || getAuthDir();
-      if (fs.existsSync(targetDir)) {
-        const files = fs.readdirSync(targetDir);
-        for (const file of files) {
-          try {
-            fs.unlinkSync(path.join(targetDir, file));
-          } catch (e) {}
-        }
+      if (this.authState && this.authState.clearState) {
+        this.authState.clearState();
       }
     } catch (e) {
       console.error('[WhatsApp Service] Clear auth error:', e);
@@ -452,7 +402,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      if (this.sock.waitForSocketOpen) {
+      if (this.sock.waitForSocketOpen && !this.sock.ws?.isOpen) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       const result = await this.sock.sendMessage(jid, { text: String(text) });
@@ -461,7 +411,7 @@ class WhatsAppService {
       console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr);
       this.isInitializing = false;
       await this.init();
-      if (this.sock?.waitForSocketOpen) {
+      if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       if (this.sock && this.sock.user?.id) {
@@ -490,7 +440,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     const sendAction = async () => {
-      if (this.sock?.waitForSocketOpen) {
+      if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       if (imageBase64) {
@@ -526,7 +476,7 @@ class WhatsAppService {
         console.warn('[WhatsApp Service] Connection dropped during fallback. Re-initializing & retrying once...');
         this.isInitializing = false;
         await this.init();
-        if (this.sock?.waitForSocketOpen) {
+        if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
           try { await this.sock.waitForSocketOpen(); } catch (e) {}
         }
         if (this.sock) {

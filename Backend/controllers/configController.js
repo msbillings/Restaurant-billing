@@ -208,6 +208,8 @@ export const getRestaurantInfo = async (req, res) => {
       serverIp: restaurantSettings.serverIp || '',
       autoSendDaybook: restaurantSettings.autoSendDaybook !== undefined ? restaurantSettings.autoSendDaybook : false,
       autoSendTime: restaurantSettings.autoSendTime || '22:00',
+      vipVisitThreshold: restaurantSettings.vipVisitThreshold !== undefined ? restaurantSettings.vipVisitThreshold : 5,
+      vipSpendThreshold: restaurantSettings.vipSpendThreshold !== undefined ? restaurantSettings.vipSpendThreshold : 5000,
       ...restaurantSettings
     };
 

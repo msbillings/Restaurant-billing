@@ -34,7 +34,7 @@ const KOT = ({ order, onClose }) => {
 
   const getFormatClasses = () => {
     switch (settings.printFormat) {
-      case 'A4': return 'w-full max-w-3xl print:w-full print:max-w-full';
+      case 'A4': return 'w-full max-w-[320px] print:max-w-full';
       case '58mm': return 'w-[200px] print:w-full print:max-w-full print:m-0';
       case '80mm':
       default: return 'w-[280px] print:w-full print:max-w-full print:m-0';
@@ -42,7 +42,7 @@ const KOT = ({ order, onClose }) => {
   };
 
   return (
-    <div id="kot-print-area" className="invoice-container fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
+    <div id="kot-print-area" className="invoice-container fixed inset-0 bg-black/30 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
       <style>
         {`
           @media print {
@@ -71,7 +71,7 @@ const KOT = ({ order, onClose }) => {
       </style>
 
       {/* Controls - Hidden on Print */}
-      <div className="sticky top-4 flex items-center justify-center sm:justify-end gap-2.5 print:hidden w-full max-w-xl mx-auto z-30 px-3 py-2 bg-slate-900/85 backdrop-blur-md rounded-2xl border border-white/20 shadow-2xl mb-4">
+      <div className="sticky top-4 flex items-center justify-center gap-2.5 print:hidden w-full max-w-xl mx-auto z-30 px-3 py-2 bg-transparent mb-4">
         <button
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-4 py-2 bg-white text-gray-900 rounded-xl hover:bg-gray-100 transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
@@ -95,7 +95,8 @@ const KOT = ({ order, onClose }) => {
           fontWeight: 'normal',
           fontSize: '13px',
           lineHeight: '1.3',
-          width: '100%'
+          width: settings.printFormat === 'A4' ? '100%' : undefined,
+          maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
         }}>
         
         <div style={{ padding: '0 8px', boxSizing: 'border-box' }}>
