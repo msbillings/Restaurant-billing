@@ -1291,7 +1291,7 @@ const CustomerMenu = () => {
   const handleRequestBill = async () => {
     if (!table) return;
     try {
-      await apiClient.post(`${API_BASE_URL}/public/service-request`, {
+      await apiClient.post(`${API_BASE_URL}/public/request-service`, {
         tableNumber: table,
         requestType: 'Bill',
         tenant: tenant
@@ -1310,7 +1310,7 @@ const CustomerMenu = () => {
   const requestService = async (type) => {
     setIsServiceOpen(false);
     try {
-      await apiClient.post(`${API_BASE_URL}/public/service-request`, {
+      await apiClient.post(`${API_BASE_URL}/public/request-service`, {
         tableNumber: table,
         requestType: type,
         tenant: tenant
