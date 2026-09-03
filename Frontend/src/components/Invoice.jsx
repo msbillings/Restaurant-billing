@@ -609,18 +609,18 @@ const Invoice = ({ bill, onClose, onSave }) => {
         document.body
       )}
 
-      {/* Receipt Preview */}
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:mx-auto print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
           fontWeight: 'normal',
           fontSize: '14px',
-          lineHeight: '1.3'
+          lineHeight: '1.3',
+          margin: '0 auto'
         }}>
         
-        <div className="p-3 print:pl-4 print:pr-2 print:py-0 print:pb-2">
+        <div className="p-3 print:pl-4 print:pr-2 print:py-0 print:pb-2" style={{ paddingLeft: '12px', paddingRight: '12px' }}>
           
           {/* Header */}
           <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>

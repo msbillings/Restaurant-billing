@@ -35,9 +35,9 @@ const KOT = ({ order, onClose }) => {
   const getFormatClasses = () => {
     switch (settings.printFormat) {
       case 'A4': return 'w-full max-w-3xl print:w-full print:max-w-full';
-      case '58mm': return 'w-[200px] print:w-[58mm] print:max-w-[58mm] mx-auto print:m-0';
+      case '58mm': return 'w-[200px] print:w-[58mm] print:max-w-[58mm] mx-auto print:mx-auto';
       case '80mm':
-      default: return 'w-[280px] print:w-[80mm] print:max-w-[80mm] mx-auto print:m-0';
+      default: return 'w-[280px] print:w-[80mm] print:max-w-[80mm] mx-auto print:mx-auto';
     }
   };
 
@@ -88,13 +88,14 @@ const KOT = ({ order, onClose }) => {
 
       {/* KOT Preview */}
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-6 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-6 print:mx-auto print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
           fontWeight: 'normal',
           fontSize: '14px',
-          lineHeight: '1.3'
+          lineHeight: '1.3',
+          margin: '0 auto'
         }}>
         
         <div style={{ padding: '12px' }}>
@@ -173,7 +174,7 @@ const KOT = ({ order, onClose }) => {
               const cancelCount = item.cancelledQuantity || item.quantity || 1;
               return (
                 <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
-                  <div className="flex w-full items-start justify-between">
+                  <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                     <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
                       {item.name || 'Unknown Item'}
                       {isCancelled && <span className="text-[10px] ml-1 font-black text-red-600" style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
