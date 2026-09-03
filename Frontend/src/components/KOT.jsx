@@ -35,9 +35,9 @@ const KOT = ({ order, onClose }) => {
   const getFormatClasses = () => {
     switch (settings.printFormat) {
       case 'A4': return 'w-full max-w-3xl print:w-full print:max-w-full';
-      case '58mm': return 'w-[200px] print:w-[58mm] print:max-w-[58mm] mx-auto print:mx-auto';
+      case '58mm': return 'w-[200px] print:w-full print:max-w-full print:m-0';
       case '80mm':
-      default: return 'w-[280px] print:w-[80mm] print:max-w-[80mm] mx-auto print:mx-auto';
+      default: return 'w-[280px] print:w-full print:max-w-full print:m-0';
     }
   };
 
@@ -88,26 +88,26 @@ const KOT = ({ order, onClose }) => {
 
       {/* KOT Preview */}
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-6 print:mx-auto print:border-0 overflow-hidden ${getFormatClasses()}`}
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-6 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
           fontWeight: 'normal',
-          fontSize: '14px',
+          fontSize: '11px',
           lineHeight: '1.3',
-          margin: '0 auto'
+          width: '100%'
         }}>
         
-        <div style={{ padding: '12px' }}>
+        <div style={{ padding: '0 4px', boxSizing: 'border-box' }}>
           
           {/* Header - Centered */}
           <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </div>
-            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
+            <div className="text-lg font-bold" style={{ fontSize: '14px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
             {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
-              <div className="text-base font-bold text-gray-900" style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
+              <div className="text-base font-bold text-gray-900" style={{ fontSize: '12px', fontWeight: 'bold', color: '#111827' }}>
                 {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
               </div>
             )}
@@ -117,31 +117,31 @@ const KOT = ({ order, onClose }) => {
                 const partner = (order.orderSource || '').trim() || 'DIRECT';
                 return (
                   <>
-                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626' }}>
+                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '14px', fontWeight: '900', color: '#dc2626' }}>
                       DELIVERY: {partner.toUpperCase()}
                     </div>
-                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                    <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>
                       Order #{order.tableNo}
                     </div>
                   </>
                 );
               } else if (bType === 'Takeaway') {
                 return (
-                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#2563eb' }}>
+                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '14px', fontWeight: '900', color: '#2563eb' }}>
                     TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
                   </div>
                 );
               } else {
                 return (
                   <>
-                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>Dine In</div>
-                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
+                    <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>Dine In</div>
+                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '12px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
                   </>
                 );
               }
             })()}
             {order.customerName && (
-              <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', marginTop: '2px' }}>
                 Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
               </div>
             )}
