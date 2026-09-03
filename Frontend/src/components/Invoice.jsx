@@ -112,10 +112,64 @@ const Invoice = ({ bill, onClose, onSave }) => {
       .join('\n');
 
     const totalQty = (bill?.items || []).filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0);
-    const subtotal = Number(bill?.subtotal || bill?.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2);
-    const discount = bill?.discount > 0 ? `\n• *Discount:* -₹${Number(bill.discount).toFixed(2)}` : '';
-    const tax = bill?.tax > 0 ? `\n• *GST/Tax:* +₹${Number(bill.tax).toFixed(2)}` : '';
-    const total = Number(bill?.total || 0).toFixed(2);
+    const sub = Number(bill?.subtotal || bill?.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0);
+    const subtotal = sub.toFixed(2);
+    const disc = Number(bill?.discount || 0);
+    const discount = disc > 0 ? `\n• *Discount:* -₹${disc.toFixed(2)}` : '';
+    const taxable = Math.max(0, sub - disc);
+
+    // Dynamic tax calculation identical to printed receipt invoice
+    const cRate = s.enableCgst === true ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
+    const sRate = s.enableSgst === true ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
+    const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+    const totRate = cRate + sRate + gRate;
+
+    let rate = totRate;
+    let taxRupees = 0;
+
+    if (bill?.tax !== undefined && bill?.tax !== null) {
+      if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+        rate = Number(bill.tax);
+        taxRupees = (taxable * rate) / 100;
+      } else {
+        taxRupees = Number(bill.tax);
+        rate = bill.taxRate || Math.round((taxRupees / Math.max(1, taxable)) * 100) || totRate;
+      }
+    } else if (totRate > 0) {
+      rate = totRate;
+      taxRupees = (taxable * rate) / 100;
+    }
+
+    let taxBreakdown = '';
+    if (taxRupees > 0 && rate > 0) {
+      if (cRate > 0 && sRate > 0) {
+        const cEff = rate * (cRate / Math.max(1, totRate));
+        const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+        const sEff = rate * (sRate / Math.max(1, totRate));
+        const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+        taxBreakdown += `\n• *CGST (${cEff.toFixed(1)}%):* +₹${cAmt.toFixed(2)}`;
+        taxBreakdown += `\n• *SGST (${sEff.toFixed(1)}%):* +₹${sAmt.toFixed(2)}`;
+      } else if (gRate > 0) {
+        const gEff = rate * (gRate / Math.max(1, totRate));
+        const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+        taxBreakdown += `\n• *GST (${gEff.toFixed(1)}%):* +₹${gAmt.toFixed(2)}`;
+      } else {
+        taxBreakdown += `\n• *GST/Tax (${rate}%):* +₹${taxRupees.toFixed(2)}`;
+      }
+    }
+
+    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\n• *Delivery Charge:* +₹${Number(bill.deliveryCharge).toFixed(2)}` : '';
+    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\n• *Container Charge:* +₹${Number(bill.containerCharge).toFixed(2)}` : '';
+
+    let finalTotal = Number(bill?.total || 0);
+    const addCharges = Number(bill?.deliveryCharge || 0) + Number(bill?.containerCharge || 0);
+    if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+      finalTotal = taxable + taxRupees + addCharges;
+    }
+    const roundedTotal = Math.round(finalTotal);
+    const roundOff = roundedTotal - finalTotal;
+    const roundOffText = roundOff !== 0 ? `\n• *Round Off:* ${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}` : '';
+    const total = finalTotal.toFixed(2);
 
     let paymentInfo = bill?.paymentMethod || 'Cash';
     if (bill?.paymentBreakdown && (bill.paymentBreakdown.cash > 0 || bill.paymentBreakdown.upi > 0 || bill.paymentBreakdown.card > 0)) {
@@ -128,9 +182,25 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
     const READ_MORE = String.fromCharCode(8206).repeat(4001);
 
-    const header = customerName
-      ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-      : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\n🏨 *${restName.toUpperCase()}* | Bill #${billNo}`;
+    let header = '';
+    let footerMessage = s.footerMessage;
+
+    if (bType === 'Delivery') {
+      header = customerName
+        ? `🛵 Dear *${customerName}*, thank you for ordering delivery with us!\n🧾 *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛵 *HOME DELIVERY E-BILL* 🛵\n🏠 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR YOUR DELIVERY ORDER! ENJOY YOUR MEAL ***';
+    } else if (bType === 'Takeaway') {
+      header = customerName
+        ? `🛍️ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛍️ *TAKEAWAY E-BILL RECEIPT* 🛍️\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR ORDERING TAKEAWAY! VISIT AGAIN ***';
+    } else {
+      header = customerName
+        ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\n🏨 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU! VISIT AGAIN ***';
+    }
 
     return `${header}\n${READ_MORE}\n` +
       (s.address ? `📍 ${s.address.split('\n')[0]}\n` : '') +
@@ -149,11 +219,14 @@ const Invoice = ({ bill, onClose, onSave }) => {
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `• *Subtotal:* ₹${subtotal}` +
       discount +
-      tax +
+      taxBreakdown +
+      deliveryCharge +
+      containerCharge +
+      roundOffText +
       `\n• *GRAND TOTAL:* *₹${total}*\n` +
       `• *Payment Mode:* ${paymentInfo}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `_${s.footerMessage || '*** THANK YOU! VISIT AGAIN ***'}_`;
+      `_${footerMessage}_`;
   };
 
   const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null) => {
@@ -173,81 +246,71 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
     setSendingAutomated(true);
 
-    // CRITICAL: Yield 2 animation frames so React can PAINT the loading spinner
-    // before html2canvas blocks the main thread. Without this, the animation
-    // never visually appears even though the state is already set to true.
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // Yield animation frame so React paints spinner immediately
+    await new Promise(resolve => requestAnimationFrame(resolve));
 
-    // Capture receipt image with crisp resolution & pure white background (no shadows or grey vignette)
+    // High-speed, crisp receipt capture
     let imageBase64 = null;
     try {
       const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
       if (receiptElement) {
-        const canvas = await html2canvas(receiptElement, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff',
-          imageTimeout: 4000,
-          onclone: (clonedDoc) => {
-            const el = clonedDoc.querySelector('.receipt-print');
-            if (el) {
-              el.style.boxShadow = 'none';
-              el.style.filter = 'none';
-              el.style.backdropFilter = 'none';
-              el.style.margin = '0 auto';
-              el.style.backgroundColor = '#ffffff';
-              el.style.border = 'none';
-              el.style.borderRadius = '0px';
-              // Force a narrow, vertical thermal-printer style layout for the WhatsApp image
-              el.style.width = '320px';
-              el.style.maxWidth = '320px';
-              el.style.minWidth = '320px';
+        const canvas = await Promise.race([
+          html2canvas(receiptElement, {
+            scale: 1.2,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            imageTimeout: 1000,
+            onclone: (clonedDoc) => {
+              const el = clonedDoc.querySelector('.receipt-print');
+              if (el) {
+                el.style.boxShadow = 'none';
+                el.style.filter = 'none';
+                el.style.backdropFilter = 'none';
+                el.style.margin = '0 auto';
+                el.style.backgroundColor = '#ffffff';
+                el.style.border = 'none';
+                el.style.borderRadius = '0px';
+                el.style.width = '320px';
+                el.style.maxWidth = '320px';
+                el.style.minWidth = '320px';
+              }
             }
-          }
-        });
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error(t('Receipt capture timed out'))), 4000))
+        ]);
 
-        // Ensure canvas draws over a solid, pure #ffffff white canvas with no shadow blending
-        const whiteCanvas = document.createElement('canvas');
-        whiteCanvas.width = canvas.width;
-        whiteCanvas.height = canvas.height;
-        const ctx = whiteCanvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
-        ctx.drawImage(canvas, 0, 0);
-
-        imageBase64 = whiteCanvas.toDataURL('image/jpeg', 0.95);
+        if (canvas) {
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+        }
       }
     } catch (captureErr) {
-      console.warn('Could not generate receipt image, falling back to text-only:', captureErr);
+      console.error('Could not generate receipt image:', captureErr);
+    }
+
+    if (!imageBase64) {
+      setToast({ message: t("Could not capture bill image. Please try again."), type: 'error' });
+      setSendingAutomated(false);
+      return;
     }
 
     try {
       const res = await Promise.race([
         sendWhatsAppBill(cleanPhone, msg, imageBase64, null, `Bill_${bill?.billNumber || 'Receipt'}.jpg`),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(t("Image upload timed out, falling back to text"))), 8000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 15000))
       ]);
+
       if (res && res.success) {
-        setToast({ message: `${t("e-Bill sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+        setToast({ message: `${t("e-Bill with receipt image sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setShowWhatsAppModal(false);
-        setSendingAutomated(false);
-        return;
+      } else {
+        throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
       }
     } catch (err) {
-      console.error('WhatsApp background send error:', err);
-      // If media send failed, try sending formatted text bill directly
-      try {
-        const textRes = await sendWhatsAppBill(cleanPhone, msg);
-        if (textRes && textRes.success) {
-          setToast({ message: `${t("e-Bill text sent successfully to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
-          setShowWhatsAppModal(false);
-          setSendingAutomated(false);
-          return;
-        }
-      } catch (fallbackErr) {
-        const errorMsg = fallbackErr.response?.data?.error || fallbackErr.message || t('Failed to send WhatsApp e-Bill');
-        setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
-      }
+      console.error('WhatsApp send error:', err);
+      const errorMsg = err.response?.data?.error || err.message || t('Failed to send WhatsApp e-Bill');
+      setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
     } finally {
       setSendingAutomated(false);
     }

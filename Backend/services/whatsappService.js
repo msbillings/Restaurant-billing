@@ -9,6 +9,11 @@ import os from 'os';
 import { getTenantModels } from '../utils/tenantManager.js';
 import { useMongoDBAuthState } from '../utils/useMongoDBAuthState.js';
 
+const isSocketOpen = (sock) => {
+  if (!sock || !sock.ws) return false;
+  return sock.ws.readyState === 1 || sock.ws.isOpen === true;
+};
+
 class WhatsAppService {
   constructor(tenantId = 'default', restaurantName = null) {
     this.tenantId = tenantId;
@@ -44,6 +49,9 @@ class WhatsAppService {
 
   async init() {
     if (this.isInitializing) return;
+    if (this.status === 'CONNECTED' && this.sock?.user?.id && isSocketOpen(this.sock)) {
+      return;
+    }
     this.isInitializing = true;
 
     try {
@@ -84,6 +92,9 @@ class WhatsAppService {
 
       this.sock.ev.on('creds.update', async () => {
         try {
+          if (this.sock?.user?.id && state?.creds) {
+            state.creds.registered = true;
+          }
           await saveCreds();
         } catch (e) {
           console.warn('[WhatsApp Service] creds.update error:', e);
@@ -268,7 +279,7 @@ class WhatsAppService {
       throw new Error('WhatsApp is already connected. Please disconnect first to link another device.');
     }
 
-    if (!this.sock || typeof this.sock.requestPairingCode !== 'function' || !this.sock.ws?.isOpen) {
+    if (!this.sock || typeof this.sock.requestPairingCode !== 'function' || !isSocketOpen(this.sock)) {
       this.isInitializing = false;
       await this.init();
       let waited = 0;
@@ -363,23 +374,23 @@ class WhatsAppService {
   }
 
   async ensureConnection() {
-    const isReady = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user) && this.sock?.ws?.isOpen;
-    if (!isReady) {
-      console.log('[WhatsApp Service] Ensuring socket connection is open and user is verified...');
-      if (!this.sock || this.status === 'DISCONNECTED') {
-        this.isInitializing = false;
-        await this.init();
-      }
-      if (this.sock?.waitForSocketOpen) {
-        try {
-          await this.sock.waitForSocketOpen();
-        } catch (e) {}
-      }
-      let count = 0;
-      while (count < 30 && (this.status !== 'CONNECTED' || !this.sock?.user?.id)) {
-        await new Promise(r => setTimeout(r, 200));
-        count++;
-      }
+    const isReady = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user) && isSocketOpen(this.sock);
+    if (isReady) return; // Immediately return if already fully connected and socket is open!
+
+    console.log(`[WhatsApp Service - ${this.tenantId}] Ensuring socket connection is open and ready...`);
+    if (!this.sock || this.status === 'DISCONNECTED') {
+      this.isInitializing = false;
+      await this.init();
+    }
+    if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
+      try {
+        await this.sock.waitForSocketOpen();
+      } catch (e) {}
+    }
+    let count = 0;
+    while (count < 30 && (this.status !== 'CONNECTED' || !this.sock?.user?.id || !isSocketOpen(this.sock))) {
+      await new Promise(r => setTimeout(r, 200));
+      count++;
     }
   }
 
@@ -402,7 +413,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      if (this.sock.waitForSocketOpen && !this.sock.ws?.isOpen) {
+      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       const result = await this.sock.sendMessage(jid, { text: String(text) });
@@ -411,7 +422,7 @@ class WhatsAppService {
       console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr);
       this.isInitializing = false;
       await this.init();
-      if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
+      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       if (this.sock && this.sock.user?.id) {
@@ -440,7 +451,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     const sendAction = async () => {
-      if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
+      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
         try { await this.sock.waitForSocketOpen(); } catch (e) {}
       }
       if (imageBase64) {
@@ -469,21 +480,14 @@ class WhatsAppService {
     try {
       return await sendAction();
     } catch (sendErr) {
-      console.warn('[WhatsApp Service] Media upload failed, falling back to instant formatted text:', sendErr?.message);
-      try {
-        return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
-      } catch (fallbackErr) {
-        console.warn('[WhatsApp Service] Connection dropped during fallback. Re-initializing & retrying once...');
-        this.isInitializing = false;
-        await this.init();
-        if (this.sock?.waitForSocketOpen && !this.sock.ws?.isOpen) {
-          try { await this.sock.waitForSocketOpen(); } catch (e) {}
-        }
-        if (this.sock) {
-          return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
-        }
-        throw fallbackErr;
+      console.warn('[WhatsApp Service] Media upload attempt failed, retrying media send after reconnect...', sendErr?.message);
+      this.isInitializing = false;
+      await this.init();
+      await this.ensureConnection();
+      if (this.sock && isSocketOpen(this.sock)) {
+        return await sendAction();
       }
+      throw sendErr;
     }
   }
 }
@@ -495,7 +499,10 @@ class WhatsAppManager {
 
   getInstance(tenantId = 'default', restaurantName = null) {
     if (!this.instances.has(tenantId)) {
-      this.instances.set(tenantId, new WhatsAppService(tenantId, restaurantName));
+      const instance = new WhatsAppService(tenantId, restaurantName);
+      this.instances.set(tenantId, instance);
+      // Auto initialize in background so WhatsApp socket is pre-connected & warm
+      instance.init().catch(() => {});
     } else if (restaurantName) {
       this.instances.get(tenantId).setRestaurantName(restaurantName);
     }
