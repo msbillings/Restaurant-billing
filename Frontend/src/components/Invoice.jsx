@@ -407,7 +407,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
                     type="tel"
                     value={whatsappPhone}
                     onChange={(e) => {
-                      setWhatsappPhone(e.target.value);
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setWhatsappPhone(val);
                       setShowSuggestions(true);
                     }}
                     onFocus={() => setShowSuggestions(true)}

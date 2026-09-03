@@ -330,6 +330,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [crmLoading, setCrmLoading] = useState(false);
   const [crmSaving, setCrmSaving] = useState(false);
   const [crmCustomerFound, setCrmCustomerFound] = useState(null);
+  const [crmSuggestions, setCrmSuggestions] = useState([]);
+  const [showCrmSuggestions, setShowCrmSuggestions] = useState(false);
 
   const searchInputRef = useRef(null);
   const isViewingInvoiceRef = useRef(false);
@@ -641,12 +643,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   }, [billType, activeTable]);
 
-  const handleOpenCustomerModal = async () => {
-    // 1. Check local state first
+  const handleOpenCustomerModal = () => {
     let phoneToUse = customerPhone || '';
     let nameToUse = customerName || '';
 
-    // 2. Fallback to openOrdersList
     if (!phoneToUse || !nameToUse) {
       const matchingOrder = openOrdersList.find(o => isTableMatching(o.tableNo, activeTable));
       if (matchingOrder) {
@@ -655,33 +655,43 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
     }
 
-    // 3. Fallback to active order from API if table selected
-    if ((!phoneToUse || !nameToUse) && activeTable) {
-      try {
-        const orderData = await getActiveOrder(activeTable);
-        if (orderData) {
-          phoneToUse = phoneToUse || orderData.customerPhone || '';
-          nameToUse = nameToUse || orderData.customerName || '';
-          if (orderData.customerPhone) setCustomerPhone(orderData.customerPhone);
-          if (orderData.customerName) setCustomerName(orderData.customerName);
-        }
-      } catch (e) { }
-    }
-
     setTempCustomerPhone(phoneToUse);
     setTempCustomerName(nameToUse);
     setCrmCustomerFound(null);
+    setShowCustomerModal(true);
+
     if (phoneToUse && phoneToUse.length === 10) {
       handleCrmPhoneChange(phoneToUse);
     }
-    setShowCustomerModal(true);
   };
 
   const handleCrmPhoneChange = async (val) => {
     const digits = val.replace(/\D/g, '').slice(0, 10);
     setTempCustomerPhone(digits);
+    setCrmCustomerFound(null);
+
+    if (digits.length >= 3 && digits.length < 10) {
+      try {
+        const API_BASE_URL = getApiUrl();
+        const res = await fetch(`${API_BASE_URL}/customers/search?q=${digits}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
+            'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setCrmSuggestions(data || []);
+          setShowCrmSuggestions(true);
+        }
+      } catch (err) {}
+    } else {
+      setShowCrmSuggestions(false);
+    }
+
     if (digits.length === 10) {
       setCrmLoading(true);
+      setShowCrmSuggestions(false);
       try {
         const API_BASE_URL = getApiUrl();
         const res = await fetch(`${API_BASE_URL}/customers/${digits}`, {
@@ -705,8 +715,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       } finally {
         setCrmLoading(false);
       }
-    } else {
-      setCrmCustomerFound(null);
     }
   };
 
@@ -2306,47 +2314,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               </button>
             )}
 
-            {/* Customer CRM button beside Transfer Table */}
-            <div className="relative flex items-center shrink-0">
-              {customerPhone || customerName ? (
-                <div className="flex items-center gap-1 bg-orange-50 border border-orange-200/90 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl shadow-xs">
-                  <User size={13} className="text-orange-600 shrink-0" />
-                  <button
-                    type="button"
-                    onClick={handleOpenCustomerModal}
-                    className="text-xs font-bold text-orange-950 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[100px] sm:max-w-[130px]"
-                    title={t("Click to edit customer details")}
-                  >
-                    <span className="truncate">{customerName || 'Customer'}</span>
-                    {customerPhone && <span className="text-[10px] text-orange-600 font-mono hidden md:inline">({customerPhone})</span>}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCustomerPhone('');
-                      setCustomerName('');
-                      setCustomerInfo(null);
-                    }}
-                    className="p-0.5 hover:bg-orange-200/80 rounded-full text-orange-400 hover:text-orange-800 transition-colors ml-0.5 cursor-pointer"
-                    title={t("Clear customer")}
-                  >
-                    <X size={11} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleOpenCustomerModal}
-                  className="bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 sm:px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 shrink-0"
-                  title={t("Customer CRM - Add Name & Phone")}
-                >
-                  <UserPlus size={14} className="text-orange-600 shrink-0" />
-                  <span className="hidden lg:inline">{t("Customer CRM")}</span>
-                  <span className="lg:hidden">{t("CRM")}</span>
-                </button>
-              )}
-            </div>
+            {/* Removed redundant Customer CRM button */}
 
             {/* Sales stat badge - visible on large screens */}
             <div className="hidden lg:flex items-center gap-2 bg-background px-2.5 py-1 rounded-xl border border-border/50 shrink-0">
@@ -2661,9 +2629,33 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                     placeholder="e.g. 9876543210"
                     value={tempCustomerPhone}
                     onChange={(e) => handleCrmPhoneChange(e.target.value)}
+                    onFocus={() => { if (crmSuggestions.length > 0) setShowCrmSuggestions(true); }}
+                    onBlur={() => setTimeout(() => setShowCrmSuggestions(false), 200)}
                     autoFocus
                     className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
                   />
+                  {/* Suggestions Dropdown */}
+                  {showCrmSuggestions && crmSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                      {crmSuggestions.map((cust, idx) => (
+                        <div
+                          key={idx}
+                          className="px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-zinc-700 cursor-pointer border-b border-gray-100 dark:border-zinc-700 last:border-0 flex justify-between items-center"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleCrmPhoneChange(cust.phone);
+                            setTempCustomerName(cust.name && cust.name !== 'Guest' ? cust.name : '');
+                            setShowCrmSuggestions(false);
+                          }}
+                        >
+                          <div className="flex flex-col">
+                             <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">{cust.phone}</span>
+                             <span className="text-xs text-gray-500 dark:text-gray-400">{cust.name}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {crmLoading && (
                   <p className="text-[11px] text-orange-600 mt-1 flex items-center gap-1 font-medium animate-pulse">

@@ -58,6 +58,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [username, setUsername] = useState(user ? user.username : '');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [errors, setErrors] = useState({});
   const [systemPrinters, setSystemPrinters] = useState([]);
   const [showOwnerPin, setShowOwnerPin] = useState(false);
   const [showWhatsAppConnectModal, setShowWhatsAppConnectModal] = useState(false);
@@ -149,6 +150,28 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     }
   };
 
+  const validateField = (field, val) => {
+    let errorMsg = '';
+    const trimmed = String(val).trim();
+    if (trimmed) {
+      if (field === 'phone' || field === 'whatsappNumber') {
+        if (!/^\d{10}$/.test(trimmed)) errorMsg = t('Must be exactly 10 digits');
+      } else if (field === 'gstin') {
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(trimmed)) errorMsg = t('Invalid GSTIN format');
+      } else if (field === 'fssai') {
+        if (!/^\d{14}$/.test(trimmed)) errorMsg = t('Must be exactly 14 digits');
+      } else if (field === 'upiId') {
+        if (!/^[\w.-]+@[\w.-]+$/.test(trimmed)) errorMsg = t('Invalid UPI format (e.g. name@bank)');
+      }
+    }
+    setErrors((prev) => {
+      const newErrors = { ...prev };
+      if (errorMsg) newErrors[field] = errorMsg;
+      else delete newErrors[field];
+      return newErrors;
+    });
+  };
+
   const handleInputChange = (field, value) => {
     if (field === 'phone') {
       value = value.replace(/\D/g, '').slice(0, 10);
@@ -156,10 +179,14 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     if (field === 'ownerPin') {
       value = value.replace(/\D/g, '').slice(0, 6);
     }
+    if (field === 'whatsappNumber') {
+      value = value.replace(/\D/g, '').slice(0, 10);
+    }
     setSettings((prev) => ({
       ...prev,
       [field]: value
     }));
+    validateField(field, value);
   };
 
   const handleGetLocation = () => {
@@ -470,7 +497,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         e.preventDefault();
                       }
                     }}
-                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter phone number")} />
+                    className={`w-full px-4 py-2 border ${errors.phone ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-border focus:ring-primary/20 focus:border-primary'} rounded-xl focus:outline-none focus:ring-2 bg-background text-text-main`} placeholder={t("Enter phone number")} />
+                  {errors.phone && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.phone}</p>}
                 </div>
 
                 {/* WhatsApp Report Number */}
@@ -487,8 +515,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         e.preventDefault();
                       }
                     }}
-                    className="w-full px-4 py-2 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main"
+                    className={`w-full px-4 py-2 border ${errors.whatsappNumber ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-border focus:ring-primary/20 focus:border-primary'} rounded-xl focus:outline-none focus:ring-2 bg-background text-text-main`}
                     placeholder={t("e.g. 9876543210 (Defaults to Phone Number)")} />
+                  {errors.whatsappNumber && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.whatsappNumber}</p>}
                 </div>
 
                 {/* Email */}
@@ -520,10 +549,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   <input
                     type="text"
                     value={settings.gstin}
-                    onChange={(e) => handleInputChange('gstin', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter GSTIN")} />
-
-
+                    onChange={(e) => handleInputChange('gstin', e.target.value.toUpperCase())}
+                    className={`w-full px-4 py-3 border ${errors.gstin ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-border focus:ring-primary/20 focus:border-primary'} rounded-xl focus:outline-none focus:ring-2 bg-background text-text-main`} placeholder={t("Enter GSTIN")} />
+                  {errors.gstin && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.gstin}</p>}
                 </div>
 
                 {/* Left Column Settings (FSSAI, UPI, WhatsApp, Footer) */}
@@ -537,8 +565,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     <input
                       type="text"
                       value={settings.fssai || ''}
-                      onChange={(e) => handleInputChange('fssai', e.target.value)}
-                      className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter FSSAI License Number")} />
+                      onChange={(e) => handleInputChange('fssai', e.target.value.replace(/\D/g, '').slice(0, 14))}
+                      className={`w-full px-4 py-3 border ${errors.fssai ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-border focus:ring-primary/20 focus:border-primary'} rounded-xl focus:outline-none focus:ring-2 bg-background text-text-main`} placeholder={t("Enter FSSAI License Number")} />
+                    {errors.fssai && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.fssai}</p>}
                   </div>
 
                   {/* UPI ID */}
@@ -550,7 +579,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       type="text"
                       value={settings.upiId || ''}
                       onChange={(e) => handleInputChange('upiId', e.target.value)}
-                      className="w-full px-4 py-3 border border-blue-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-blue-50 text-blue-900 font-mono" placeholder={t("e.g. restaurant@upi")} />
+                      className={`w-full px-4 py-3 border ${errors.upiId ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-blue-200 focus:ring-blue-500/20 focus:border-blue-500'} rounded-xl focus:outline-none focus:ring-2 bg-blue-50 text-blue-900 font-mono`} placeholder={t("e.g. restaurant@upi")} />
+                    {errors.upiId && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.upiId}</p>}
                   </div>
 
                   {/* WhatsApp Automated Bot Configuration */}
@@ -1061,15 +1091,17 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         </div>
 
         {/* Save Button */}
-        <div className="flex justify-center">
+        <div className="flex justify-center flex-col items-center gap-2">
           <button
             onClick={handleSave}
-            disabled={loading}
-            className="flex items-center gap-3 px-8 py-4 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold transition-all shadow-lg shadow-primary/40 hover:shadow-xl hover:shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98]">
-
+            disabled={loading || Object.keys(errors).length > 0}
+            className={`flex items-center gap-3 px-8 py-4 ${Object.keys(errors).length > 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover shadow-lg shadow-primary/40 hover:shadow-xl hover:shadow-primary/50'} text-white rounded-xl font-bold transition-all disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]`}>
             <Save size={20} />
             <span>{loading ? 'Saving...' : 'Save Settings'}</span>
           </button>
+          {Object.keys(errors).length > 0 && (
+            <p className="text-xs font-bold text-red-500 mt-1">{t("Please fix the validation errors above before saving.")}</p>
+          )}
         </div>
       </div>
 
