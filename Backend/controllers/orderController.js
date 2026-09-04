@@ -26,12 +26,104 @@ const toValidObjectId = (val) => {
   return undefined;
 };
 
+export const generateUniqueBillNumber = async (BillModel) => {
+  const recentBills = await BillModel.find(
+    { billNumber: /^MS\d+$/ },
+    { billNumber: 1 }
+  )
+    .sort({ billNumber: -1, createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  let maxNum = 0;
+  if (recentBills && recentBills.length > 0) {
+    for (const b of recentBills) {
+      if (b.billNumber) {
+        const num = parseInt(b.billNumber.replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  }
+
+  return `MS${(maxNum + 1).toString().padStart(4, '0')}`;
+};
+
+export const getRestaurantSnapshot = async (req, clientDetails) => {
+  try {
+    let settings = null;
+    const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || req?.user?.db || 'default';
+    const cacheKey = cache.getCacheKey('restaurantSettings', tenantDb);
+
+    // 0ms Cache Fast Path: Try reading from Node memory first
+    settings = cache.get(cacheKey);
+
+    if (!settings) {
+      const Setting = getTenantModel(req, 'Setting', SettingDefault);
+      if (Setting) {
+        const doc = await Setting.findOne({ key: 'restaurantSettings' }).maxTimeMS(300).lean().catch(() => null);
+        if (doc && doc.value) {
+          settings = typeof doc.value === 'string' ? JSON.parse(doc.value) : doc.value;
+          cache.set(cacheKey, settings, 5 * 60 * 1000); // Cache for 5 minutes
+        }
+      }
+    }
+
+    const c = (clientDetails && typeof clientDetails === 'object') ? clientDetails : {};
+    const s = (settings && typeof settings === 'object') ? settings : {};
+
+    const name = (c.restaurantName || s.restaurantName || '').trim();
+    const type = (c.restaurantType || s.restaurantType || '').trim();
+    const addr = (c.address !== undefined ? c.address : (s.address || '')).trim();
+    const ph = (c.phone !== undefined ? c.phone : (s.phone || '')).trim();
+    const em = (c.email !== undefined ? c.email : (s.email || '')).trim();
+    const gst = (c.gstin !== undefined ? c.gstin : (s.gstin || '')).trim();
+    const fss = (c.fssai !== undefined ? c.fssai : (s.fssai || '')).trim();
+    const rawLogo = c.logo !== undefined ? c.logo : (s.logo || '');
+    const logo = rawLogo === '[logo_stored]' ? '' : rawLogo;
+    const upi = (c.upiId !== undefined ? c.upiId : (s.upiId || '')).trim();
+    const enableQr = c.enableQrPayment !== undefined ? c.enableQrPayment : (s.enableQrPayment !== undefined ? s.enableQrPayment : true);
+    const footer = (c.footerMessage !== undefined ? c.footerMessage : (s.footerMessage || '')).trim();
+    const tag = (c.tagline !== undefined ? c.tagline : (s.tagline || '')).trim();
+    const printFmt = c.printFormat || s.printFormat || '80mm';
+    const taxSet = {
+      enableCgst: c.enableCgst !== undefined ? c.enableCgst : (s.enableCgst !== undefined ? s.enableCgst : true),
+      enableSgst: c.enableSgst !== undefined ? c.enableSgst : (s.enableSgst !== undefined ? s.enableSgst : true),
+      enableGst: c.enableGst !== undefined ? c.enableGst : (s.enableGst !== undefined ? s.enableGst : false),
+      cgstRate: c.cgstRate !== undefined ? Number(c.cgstRate) : (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5),
+      sgstRate: c.sgstRate !== undefined ? Number(c.sgstRate) : (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5),
+      gstRate: c.gstRate !== undefined ? Number(c.gstRate) : (s.gstRate !== undefined ? Number(s.gstRate) : 5)
+    };
+
+    return {
+      restaurantName: name,
+      restaurantType: type,
+      address: addr,
+      phone: ph,
+      email: em,
+      gstin: gst,
+      fssai: fss,
+      logo: logo,
+      upiId: upi,
+      enableQrPayment: enableQr,
+      footerMessage: footer,
+      tagline: tag,
+      printFormat: printFmt,
+      taxSettings: taxSet
+    };
+  } catch (err) {
+    console.error('[getRestaurantSnapshot] Error capturing snapshot:', err);
+    return clientDetails || {};
+  }
+};
+
 export const getActiveOrder = asyncHandler(async (req, res, next) => {
   const Bill = getTenantModel(req, 'Bill', BillDefault);
   const { tableNo } = req.params;
-  let order = await Bill.findOne({ 
-    tableNo: getTableMatchCondition(tableNo), 
-    status: { $in: ['Open', 'Billed'] } 
+  let order = await Bill.findOne({
+    tableNo: getTableMatchCondition(tableNo),
+    status: { $in: ['Open', 'Billed'] }
   }).sort({ updatedAt: -1, createdAt: -1 }).lean();
 
   if (order) {
@@ -111,12 +203,12 @@ export const getActiveOrder = asyncHandler(async (req, res, next) => {
 export const saveOrder = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const { 
-      tableNo, 
-      items, 
-      customerName, 
-      customerPhone, 
-      kitchenNotes, 
+    const {
+      tableNo,
+      items,
+      customerName,
+      customerPhone,
+      kitchenNotes,
       billType,
       orderSource,
       id,
@@ -128,27 +220,31 @@ export const saveOrder = async (req, res) => {
       targetCategory,
       tax,
       deliveryCharge,
-      containerCharge
+      containerCharge,
+      restaurantDetails
     } = req.body;
 
     // Validate required fields
     if (!tableNo) {
       return res.status(400).json({ message: 'Table number is required' });
     }
-    
+
     // Handle empty items array or removing all items from a table:
     if (!items || !Array.isArray(items) || items.length === 0) {
       let existingOrder = null;
       if (id) {
         existingOrder = await Bill.findById(id);
       } else if (tableNo) {
-        existingOrder = await Bill.findOne({ 
-          tableNo: getTableMatchCondition(tableNo), 
-          status: { $in: ['Open', 'Billed'] } 
+        existingOrder = await Bill.findOne({
+          tableNo: getTableMatchCondition(tableNo),
+          status: { $in: ['Open', 'Billed'] }
         });
       }
 
       if (existingOrder) {
+        if (existingOrder.status === 'Paid') {
+          return res.status(400).json({ message: 'Audit Security: Cannot modify an already paid and settled bill' });
+        }
         const hasPrintedKots = existingOrder.kots && existingOrder.kots.length > 0;
         const hasPrintedItems = (existingOrder.items || []).some(i => (i.printedQuantity || 0) > 0);
 
@@ -167,15 +263,15 @@ export const saveOrder = async (req, res) => {
           emitSocketEvent(req, 'orderUpdated', { tableNo: existingOrder.tableNo, status: 'Cancelled', orderId: existingOrder._id });
 
           if (existingOrder.billType === 'Dine-In') {
-            updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => {});
+            updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => { });
           }
 
-          return res.status(200).json({ 
-            _id: existingOrder._id, 
-            tableNo: existingOrder.tableNo, 
-            status: 'Cancelled', 
-            items: [], 
-            total: 0 
+          return res.status(200).json({
+            _id: existingOrder._id,
+            tableNo: existingOrder.tableNo,
+            status: 'Cancelled',
+            items: [],
+            total: 0
           });
         }
       }
@@ -213,9 +309,9 @@ export const saveOrder = async (req, res) => {
       if (id) {
         existingOrder = await Bill.findById(id);
       } else if (tableNo) {
-        existingOrder = await Bill.findOne({ 
-          tableNo: getTableMatchCondition(tableNo), 
-          status: { $in: ['Open', 'Billed'] } 
+        existingOrder = await Bill.findOne({
+          tableNo: getTableMatchCondition(tableNo),
+          status: { $in: ['Open', 'Billed'] }
         });
       }
 
@@ -233,15 +329,15 @@ export const saveOrder = async (req, res) => {
         emitSocketEvent(req, 'orderUpdated', { tableNo: existingOrder.tableNo, status: 'Cancelled', orderId: existingOrder._id });
 
         if (existingOrder.billType === 'Dine-In') {
-          updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => {});
+          updateTableStatusHelper(req, existingOrder.tableNo, 'Available', null).catch(() => { });
         }
 
-        return res.status(200).json({ 
-          _id: existingOrder._id, 
-          tableNo: existingOrder.tableNo, 
-          status: 'Cancelled', 
-          items: [], 
-          total: 0 
+        return res.status(200).json({
+          _id: existingOrder._id,
+          tableNo: existingOrder.tableNo,
+          status: 'Cancelled',
+          items: [],
+          total: 0
         });
       }
 
@@ -252,16 +348,24 @@ export const saveOrder = async (req, res) => {
     if (id) {
       order = await Bill.findById(id);
     } else {
-      order = await Bill.findOne({ 
-        tableNo: getTableMatchCondition(tableNo), 
-        status: { $in: ['Open', 'Billed'] } 
+      order = await Bill.findOne({
+        tableNo: getTableMatchCondition(tableNo),
+        status: { $in: ['Open', 'Billed'] }
       });
     }
 
     if (order) {
+      if (order.status === 'Paid') {
+        return res.status(400).json({ message: 'Audit Security: Cannot modify an already paid and settled bill' });
+      }
+
+      if (!order.restaurantDetails || !order.restaurantDetails.restaurantName) {
+        order.restaurantDetails = await getRestaurantSnapshot(req, restaurantDetails);
+      }
+
       // Preserve printedQuantity and cancellation status for existing items
       const updatedItems = sanitizedItems.map(newItem => {
-        const existingItem = order.items.find(i => 
+        const existingItem = order.items.find(i =>
           (newItem._id && i._id && String(i._id) === String(newItem._id)) ||
           (i.name && newItem.name && i.name.trim().toLowerCase() === newItem.name.trim().toLowerCase())
         );
@@ -275,9 +379,9 @@ export const saveOrder = async (req, res) => {
 
           const validResolvedId = toValidObjectId(existingItem._id) || toValidObjectId(newItem._id);
 
-          return { 
+          return {
             ...(validResolvedId && { _id: validResolvedId }),
-            ...newItem, 
+            ...newItem,
             printedQuantity: existingItem.printedQuantity !== undefined ? existingItem.printedQuantity : newItem.printedQuantity,
             specialNote: resolvedNote,
             lastPrintedNote: existingItem.lastPrintedNote || '',
@@ -296,7 +400,7 @@ export const saveOrder = async (req, res) => {
       // Preserve items that were already printed or cancelled for KOT tracking
       order.items.forEach(oldItem => {
         if ((oldItem.printedQuantity || 0) > 0 || oldItem.isCancelled) {
-          const stillExists = updatedItems.find(i => 
+          const stillExists = updatedItems.find(i =>
             (oldItem._id && i._id && String(i._id) === String(oldItem._id)) ||
             (i.name && oldItem.name && i.name.trim().toLowerCase() === oldItem.name.trim().toLowerCase())
           );
@@ -354,8 +458,8 @@ export const saveOrder = async (req, res) => {
       }
 
       const taxableAmount = Math.max(0, subtotal - calculatedDiscount);
-      const tRate = (tax !== undefined && tax !== null && Number(tax) >= 0) 
-        ? Number(tax) 
+      const tRate = (tax !== undefined && tax !== null && Number(tax) >= 0)
+        ? Number(tax)
         : (order.status === 'Billed' && order.tax !== undefined && order.tax !== null ? Number(order.tax) : await getDynamicTaxRate(req));
       const calculatedTax = (taxableAmount * tRate) / 100;
       const dCharge = deliveryCharge !== undefined ? (Number(deliveryCharge) || 0) : (Number(order.deliveryCharge) || 0);
@@ -419,7 +523,7 @@ export const saveOrder = async (req, res) => {
       if (customerName !== undefined) order.customerName = customerName;
       if (customerPhone !== undefined) order.customerPhone = customerPhone;
       if (order.customerPhone) {
-        syncCustomer(req, order.customerPhone, order.customerName, billType || order.billType).catch(() => {});
+        syncCustomer(req, order.customerPhone, order.customerName, billType || order.billType).catch(() => { });
       }
       order.kitchenNotes = kitchenNotes;
       order.billType = billType || order.billType;
@@ -432,20 +536,15 @@ export const saveOrder = async (req, res) => {
       order.deliveryCharge = dCharge;
       order.containerCharge = cCharge;
 
-      try {
-        const activeBills = await Bill.find({
-          status: { $in: ['Open', 'Billed'] }
-        })
-        .select('_id tableNo createdAt')
-        .sort({ createdAt: 1 })
-        .lean();
+      if (!order.queueNumber) {
+        try {
+          const activeCount = await Bill.countDocuments({ status: { $in: ['Open', 'Billed'] } });
+          const qNo = activeCount + 1;
+          order.queueNumber = qNo;
+          order.tokenNo = qNo;
+        } catch (e) { }
+      }
 
-        const activeIdx = activeBills.findIndex(b => b._id.toString() === order._id.toString() || b.tableNo === order.tableNo);
-        const qNo = activeIdx !== -1 ? (activeIdx + 1) : (activeBills.length || 1);
-        order.queueNumber = qNo;
-        order.tokenNo = qNo;
-      } catch (e) {}
-      
       // Update delivery fields if delivery order
       if (billType === 'Delivery') {
         order.orderSource = orderSource || 'Direct';
@@ -455,7 +554,7 @@ export const saveOrder = async (req, res) => {
         order.orderSource = undefined;
         order.deliveryStatus = undefined;
       }
-      
+
       syncOrderKotsWithItems(order);
 
       order.subtotal = subtotal;
@@ -566,22 +665,17 @@ export const saveOrder = async (req, res) => {
       const cChargeNew = Number(containerCharge) || 0;
       const calculatedTotal = Math.round(taxableAmount + calculatedTax + dChargeNew + cChargeNew);
 
-      // Calculate current active KDS queue position for the new bill
       let nextQueueNo = 1;
       try {
-        const activeBills = await Bill.find({
-          status: { $in: ['Open', 'Billed'] }
-        })
-        .select('_id tableNo createdAt')
-        .sort({ createdAt: 1 })
-        .lean();
+        const activeCount = await Bill.countDocuments({ status: { $in: ['Open', 'Billed'] } }).maxTimeMS(200).catch(() => 0);
+        nextQueueNo = activeCount + 1;
+      } catch (e) { }
 
-        nextQueueNo = activeBills.length + 1;
-      } catch (e) {}
-
+      const restSnapshot = await getRestaurantSnapshot(req, restaurantDetails);
       const orderData = {
         tableNo,
         items: sanitizedItems,
+        restaurantDetails: restSnapshot,
         subtotal,
         discount: calculatedDiscount,
         discountType: dType,
@@ -611,11 +705,11 @@ export const saveOrder = async (req, res) => {
 
       order = await Bill.create(orderData);
     }
-    
+
     // Clear cache when order is updated
     cache.clear('dailyStats');
     cache.clear('openOrders');
-    
+
     emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status, order });
 
     if (!req.body.skipNotification) {
@@ -625,7 +719,7 @@ export const saveOrder = async (req, res) => {
         emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
       }
     }
-    
+
     // Update Floor/Table status in DB in background
     if (order.status === 'Open' && order.billType === 'Dine-In') {
       updateTableStatusHelper(req, order.tableNo, 'Occupied', order._id).catch(err => console.error('Table status update error:', err));
@@ -634,7 +728,7 @@ export const saveOrder = async (req, res) => {
     if (order.customerPhone) {
       syncCustomer(req, order.customerPhone, order.customerName).catch(err => console.error('Immediate CRM sync error:', err));
     }
-    
+
     res.status(200).json(order);
   } catch (error) {
     console.error('Error in saveOrder:', error);
@@ -649,7 +743,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
+    const { discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -663,7 +757,14 @@ export const generateBill = async (req, res) => {
       });
     }
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    if (order.status === 'Paid') return res.status(400).json({ message: 'Order already paid' });
+    if (order.status === 'Paid') return res.status(400).json({ message: 'Audit Security: Cannot modify an already paid and settled bill' });
+
+    if (!order.billedAt) {
+      order.billedAt = new Date();
+    }
+    if (!order.restaurantDetails || !order.restaurantDetails.restaurantName) {
+      order.restaurantDetails = await getRestaurantSnapshot(req, restaurantDetails);
+    }
     const isExistingBilled = !!(order.billNumber || order.status === 'Billed');
     const prevSubtotal = order.subtotal || 0;
     const prevTotal = order.total || 0;
@@ -678,7 +779,7 @@ export const generateBill = async (req, res) => {
     if (customerName) order.customerName = customerName;
     if (customerPhone) order.customerPhone = customerPhone;
     if (order.customerPhone) {
-      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => { });
     }
     if (discount !== undefined) order.discount = Number(discount) || 0;
     if (discountType) order.discountType = discountType;
@@ -693,7 +794,7 @@ export const generateBill = async (req, res) => {
 
     // Ensure subtotal is valid and recomputed from active items if missing/0
     if (!order.subtotal || order.subtotal <= 0) {
-      order.subtotal = (order.items || []).reduce((acc, i) => 
+      order.subtotal = (order.items || []).reduce((acc, i) =>
         acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
     }
 
@@ -703,26 +804,14 @@ export const generateBill = async (req, res) => {
     const computedTotal = Math.round(taxableAmount + taxAmount + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
     order.total = (req.body.total !== undefined && Number(req.body.total) > 0) ? Number(req.body.total) : computedTotal;
 
-    const amountChanged = Math.abs(prevTotal - order.total) > 0.01 || 
-      Math.abs(prevDeliveryCharge - (Number(order.deliveryCharge) || 0)) > 0.01 || 
+    const amountChanged = Math.abs(prevTotal - order.total) > 0.01 ||
+      Math.abs(prevDeliveryCharge - (Number(order.deliveryCharge) || 0)) > 0.01 ||
       Math.abs(prevContainerCharge - (Number(order.containerCharge) || 0)) > 0.01 ||
       Math.abs(prevDiscount - (Number(order.discount) || 0)) > 0.01;
 
     let billNumber = order.billNumber;
     if (!billNumber) {
-      // Generate Sequential Bill Number (e.g. MS0001, MS0002)
-      let nextNum = 1;
-      const latestBill = await Bill.findOne({ billNumber: /^MS\d+$/ })
-        .sort({ billNumber: -1 })
-        .collation({ locale: 'en_US', numericOrdering: true });
-
-      if (latestBill && latestBill.billNumber) {
-        const currentNum = parseInt(latestBill.billNumber.replace('MS', ''), 10);
-        if (!isNaN(currentNum)) {
-          nextNum = currentNum + 1;
-        }
-      }
-      billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+      billNumber = await generateUniqueBillNumber(Bill);
     }
 
     if (isExistingBilled && amountChanged && billNumber) {
@@ -758,44 +847,75 @@ export const generateBill = async (req, res) => {
     order.status = 'Billed';
     order.billNumber = billNumber;
 
-    try {
-      await order.save();
-    } catch (saveErr) {
-      if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
-        console.warn('[generateBill] VersionError caught, re-fetching fresh document...');
-        const freshOrder = await Bill.findById(order._id);
-        if (!freshOrder) return res.status(404).json({ message: 'Order not found after retry' });
-        freshOrder.status = 'Billed';
-        freshOrder.billNumber = billNumber;
-        freshOrder.discount = order.discount;
-        freshOrder.discountType = order.discountType;
-        freshOrder.discountValue = order.discountValue;
-        freshOrder.tax = order.tax;
-        freshOrder.deliveryCharge = order.deliveryCharge;
-        freshOrder.containerCharge = order.containerCharge;
-        if (taxBreakdown) freshOrder.taxBreakdown = taxBreakdown;
-        freshOrder.total = order.total;
-        await freshOrder.save();
-        order = freshOrder;
-      } else {
-        throw saveErr;
+    let saveSuccess = false;
+    let attempts = 0;
+    while (!saveSuccess && attempts < 5) {
+      attempts++;
+      try {
+        await order.save();
+        saveSuccess = true;
+      } catch (saveErr) {
+        const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
+        if (isDupKey && attempts < 5) {
+          console.warn(`[generateBill] Duplicate billNumber ${order.billNumber} detected (attempt ${attempts}), regenerating...`);
+          billNumber = await generateUniqueBillNumber(Bill);
+          order.billNumber = billNumber;
+          continue;
+        }
+
+        if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
+          console.warn('[generateBill] VersionError caught, re-fetching fresh document...');
+          const freshOrder = await Bill.findById(order._id);
+          if (!freshOrder) return res.status(404).json({ message: 'Order not found after retry' });
+          freshOrder.status = 'Billed';
+          freshOrder.billNumber = billNumber;
+          freshOrder.discount = order.discount;
+          freshOrder.discountType = order.discountType;
+          freshOrder.discountValue = order.discountValue;
+          freshOrder.tax = order.tax;
+          freshOrder.deliveryCharge = order.deliveryCharge;
+          freshOrder.containerCharge = order.containerCharge;
+          if (taxBreakdown) freshOrder.taxBreakdown = taxBreakdown;
+          freshOrder.total = order.total;
+          if (order.restaurantDetails && !freshOrder.restaurantDetails) {
+            freshOrder.restaurantDetails = order.restaurantDetails;
+          }
+          if (order.billedAt && !freshOrder.billedAt) {
+            freshOrder.billedAt = order.billedAt;
+          }
+          try {
+            await freshOrder.save();
+            order = freshOrder;
+            saveSuccess = true;
+          } catch (freshSaveErr) {
+            const freshDup = freshSaveErr.code === 11000 || freshSaveErr.message?.includes('E11000') || freshSaveErr.message?.includes('duplicate key');
+            if (freshDup && attempts < 5) {
+              billNumber = await generateUniqueBillNumber(Bill);
+              order.billNumber = billNumber;
+              continue;
+            }
+            throw freshSaveErr;
+          }
+        } else {
+          throw saveErr;
+        }
       }
     }
-    
+
     // Clear cache when bill is generated
     cache.clear('dailyStats');
     cache.clear('openOrders');
-    
+
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
     if (!isExistingBilled) {
       emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
     }
-    
+
     // Update Floor/Table status in DB in background
     if (order.billType === 'Dine-In') {
       updateTableStatusHelper(req, order.tableNo, 'Billed', order._id).catch(err => console.error('Table status error:', err));
     }
-    
+
     return res.json(order);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -809,13 +929,13 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails } = req.body;
 
     let order = null;
-    if (mongoose.Types.ObjectId.isValid(id)) {
+    if (id && id !== 'new' && mongoose.Types.ObjectId.isValid(id)) {
       order = await Bill.findById(id);
     }
-    if (!order) {
+    if (!order && id && id !== 'new') {
       order = await Bill.findOne({
         $or: [
           { billNumber: id },
@@ -823,17 +943,51 @@ export const settleBill = async (req, res) => {
         ]
       }).sort({ updatedAt: -1, createdAt: -1 });
     }
-    if (!order) return res.status(404).json({ message: 'Order not found' });
-    
+    if (!order) {
+      // Direct settlement support: if order does not exist yet, create and settle in one atomic step
+      if (req.body.items && Array.isArray(req.body.items) && req.body.items.length > 0) {
+        const tableNoToUse = req.body.tableNo || (id && id !== 'new' ? id : 'Walk-In');
+        const restSnapshot = await getRestaurantSnapshot(req, restaurantDetails);
+        order = new Bill({
+          tableNo: tableNoToUse,
+          items: req.body.items,
+          billType: req.body.billType || 'Takeaway',
+          status: 'Open',
+          restaurantDetails: restSnapshot,
+          billedAt: new Date(),
+          settledAt: new Date()
+        });
+      } else {
+        return res.status(404).json({ message: 'Order not found' });
+      }
+    }
+
     if (order.status === 'Paid') {
       return res.json(order);
+    }
+
+    if (!order.settledAt) {
+      order.settledAt = new Date();
+    }
+    if (!order.billedAt) {
+      order.billedAt = order.createdAt || new Date();
+    }
+    if (!order.restaurantDetails || !order.restaurantDetails.restaurantName) {
+      order.restaurantDetails = await getRestaurantSnapshot(req, restaurantDetails);
+    }
+
+    if (req.body.items && Array.isArray(req.body.items) && (!order.items || order.items.length === 0)) {
+      order.items = req.body.items;
+    }
+    if (req.body.billType) {
+      order.billType = req.body.billType;
     }
 
     if (orderSource) order.orderSource = orderSource;
     if (customerName) order.customerName = customerName;
     if (customerPhone) order.customerPhone = customerPhone;
     if (order.customerPhone) {
-      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => {});
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType).catch(() => { });
     }
 
     if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
@@ -853,7 +1007,7 @@ export const settleBill = async (req, res) => {
 
     // Safeguard against zero total/subtotal
     if (!order.subtotal || order.subtotal <= 0) {
-      order.subtotal = (order.items || []).reduce((acc, i) => 
+      order.subtotal = (order.items || []).reduce((acc, i) =>
         acc + (i.isCancelled ? 0 : (Number(i.price || 0) * Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0)))), 0);
     }
     if (!order.total || order.total <= 0) {
@@ -881,86 +1035,94 @@ export const settleBill = async (req, res) => {
         card: Number(splitPayments.card) || 0
       };
     }
-    
+
     // Explicitly update the updatedAt timestamp to ensure latest bills show first
     order.updatedAt = new Date();
-    
+
     // Ensure billNumber exists if not previously generated (Ultra-fast indexed lookup)
     if (!order.billNumber) {
-      let nextNum = 1;
-      const latestBill = await Bill.findOne({ billNumber: /^MS\d+$/ })
-        .sort({ createdAt: -1 })
-        .select('billNumber')
-        .lean();
-
-      if (latestBill && latestBill.billNumber) {
-        const currentNum = parseInt(latestBill.billNumber.replace('MS', ''), 10);
-        if (!isNaN(currentNum)) {
-          nextNum = currentNum + 1;
-        }
-      }
-      order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+      order.billNumber = await generateUniqueBillNumber(Bill);
     }
 
-    // Save the bill with version retry protection
-    try {
-      await order.save();
-    } catch (saveErr) {
-      if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
-        console.warn('[settleBill] VersionError caught, retrying on fresh document...');
-        const freshOrder = await Bill.findById(order._id);
-        if (freshOrder) {
-          freshOrder.status = 'Paid';
-          freshOrder.paymentMode = paymentMode;
-          if (upiApp) freshOrder.upiApp = upiApp;
-          if (amountPaid !== undefined) {
-            freshOrder.amountPaid = Number(amountPaid) || 0;
-            freshOrder.changeAmount = changeAmount !== undefined ? Number(changeAmount) || 0 : Math.max(0, (Number(amountPaid) || 0) - (freshOrder.total || 0));
-          }
-          if (paymentMode === 'Mixed' && splitPayments) {
-            freshOrder.splitPayments = {
-              cash: Number(splitPayments.cash) || 0,
-              upi: Number(splitPayments.upi) || 0,
-              card: Number(splitPayments.card) || 0
-            };
-          }
-          freshOrder.updatedAt = new Date();
-          if (!freshOrder.billNumber) freshOrder.billNumber = order.billNumber;
-          await freshOrder.save();
-          order = freshOrder;
+    // Save the bill with version retry protection & duplicate key retry protection
+    let saveSuccess = false;
+    let attempts = 0;
+    while (!saveSuccess && attempts < 5) {
+      attempts++;
+      try {
+        await order.save();
+        saveSuccess = true;
+      } catch (saveErr) {
+        const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
+        if (isDupKey && attempts < 5) {
+          console.warn(`[settleBill] Duplicate billNumber ${order.billNumber} detected (attempt ${attempts}), regenerating...`);
+          order.billNumber = await generateUniqueBillNumber(Bill);
+          continue;
         }
-      } else {
-        throw saveErr;
+
+        if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
+          console.warn('[settleBill] VersionError caught, retrying on fresh document...');
+          const freshOrder = await Bill.findById(order._id);
+          if (freshOrder) {
+            freshOrder.status = 'Paid';
+            freshOrder.paymentMode = paymentMode;
+            if (upiApp) freshOrder.upiApp = upiApp;
+            if (amountPaid !== undefined) {
+              freshOrder.amountPaid = Number(amountPaid) || 0;
+              freshOrder.changeAmount = changeAmount !== undefined ? Number(changeAmount) || 0 : Math.max(0, (Number(amountPaid) || 0) - (freshOrder.total || 0));
+            }
+            if (paymentMode === 'Mixed' && splitPayments) {
+              freshOrder.splitPayments = {
+                cash: Number(splitPayments.cash) || 0,
+                upi: Number(splitPayments.upi) || 0,
+                card: Number(splitPayments.card) || 0
+              };
+            }
+            freshOrder.updatedAt = new Date();
+            if (!freshOrder.billNumber) freshOrder.billNumber = order.billNumber;
+            if (order.restaurantDetails && !freshOrder.restaurantDetails) {
+              freshOrder.restaurantDetails = order.restaurantDetails;
+            }
+            if (order.settledAt && !freshOrder.settledAt) {
+              freshOrder.settledAt = order.settledAt;
+            }
+            if (order.billedAt && !freshOrder.billedAt) {
+              freshOrder.billedAt = order.billedAt;
+            }
+            try {
+              await freshOrder.save();
+              order = freshOrder;
+              saveSuccess = true;
+            } catch (freshSaveErr) {
+              const freshDup = freshSaveErr.code === 11000 || freshSaveErr.message?.includes('E11000') || freshSaveErr.message?.includes('duplicate key');
+              if (freshDup && attempts < 5) {
+                order.billNumber = await generateUniqueBillNumber(Bill);
+                continue;
+              }
+              throw freshSaveErr;
+            }
+          }
+        } else {
+          throw saveErr;
+        }
       }
     }
-    
-    // Automatically deduct inventory stock based on recipe maps
-    deductStockForBillItems(req, order.items, 'POS Billing Counter').catch(err => console.error('Auto stock deduction error:', err));
-
-    // Update VIP CRM Data
-    updateCustomerFromBill(req, order).catch(err => console.error('Customer CRM update error:', err));
 
     // Clear cache when bill is settled (most important for dashboard)
     cache.clear('dailyStats');
     cache.clear('openOrders');
-    
+
+    // ⚡ INSTANT NOTIFICATION & SOCKET BROADCAST (0ms delay)
     emitSocketEvent(req, 'billSettled', { tableNo: order.tableNo, billNumber: order.billNumber, order, bill: order });
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Paid', order });
 
-    // Fetch shop name instantly from memory cache
-    const shopName = await getTenantShopName(req);
-
     const cleanTable = (order.tableNo || '').replace(/^Table\s*/i, '');
     const billNumDisplay = order.billNumber ? `#${order.billNumber}` : '';
-    const notifTitle = shopName 
-      ? `${shopName} | Bill ${billNumDisplay} Settled`.trim()
-      : `Bill ${billNumDisplay} Settled`.trim();
-
+    const notifTitle = `Bill ${billNumDisplay} Settled`.trim();
     const notifMessage = order.billType === 'Dine-In'
       ? `Bill ${billNumDisplay} of ₹${order.total || 0} for Table ${cleanTable} settled via ${order.paymentMode || 'Cash'}`
       : `Bill ${billNumDisplay} of ₹${order.total || 0} settled via ${order.paymentMode || 'Cash'} (${order.billType || 'Takeaway'})`;
 
-    // ⚡ INSTANT NOTIFICATION BROADCAST (0ms socket emit)
     emitNotification(
       req,
       notifTitle,
@@ -974,16 +1136,19 @@ export const settleBill = async (req, res) => {
         tableNo: order.tableNo,
         total: order.total,
         paymentMode: order.paymentMode,
-        billType: order.billType,
-        shopName
+        billType: order.billType
       }
     );
-    
+
+    // Automatically deduct inventory stock & update CRM in background
+    deductStockForBillItems(req, order.items, 'POS Billing Counter').catch(err => console.error('Auto stock deduction error:', err));
+    updateCustomerFromBill(req, order).catch(err => console.error('Customer CRM update error:', err));
+
     // Free up the table in DB in background
     if (order.billType === 'Dine-In') {
       updateTableStatusHelper(req, order.tableNo, 'Available', null).catch(err => console.error('Table status error:', err));
     }
-    
+
     // Return the saved bill with all details immediately
     res.json(order);
   } catch (error) {
@@ -1005,14 +1170,14 @@ export const getOpenOrders = async (req, res) => {
     // if (cached) {
     //   return res.json(cached);
     // }
-    
+
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
     })
-    .select('tableNo items total subtotal tax discount discountType discountValue discountName applicableTo targetCategory deliveryCharge containerCharge customerName customerPhone status billNumber billType orderSource queueNumber tokenNo createdAt')
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .lean();
+      .select('tableNo items total subtotal tax discount discountType discountValue discountName applicableTo targetCategory deliveryCharge containerCharge customerName customerPhone status billNumber billType orderSource queueNumber tokenNo createdAt')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
 
     // Auto-clean ONLY bills that are completely empty (no items at all, or all items have qty=0 AND printedQty=0 AND are not KOT-printed).
     // IMPORTANT: Do NOT use cross-array conditions — they incorrectly match orders with a mix of cancelled + active items.
@@ -1038,7 +1203,7 @@ export const getOpenOrders = async (req, res) => {
             { $set: { status: 'Cancelled', cancelReason: 'Auto-cleaned empty zero-item bill' } }
           );
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
 
     const dynamicTaxRate = await getDynamicTaxRate(req);
@@ -1126,7 +1291,7 @@ export const cancelOrder = async (req, res) => {
     await bill.save();
 
     emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Cancelled' });
-    
+
     // Free up the table in DB in background
     if (bill.billType === 'Dine-In') {
       updateTableStatusHelper(req, bill.tableNo, 'Available', null).catch(err => console.error('Table status error:', err));
@@ -1190,7 +1355,7 @@ export const reopenOrder = async (req, res) => {
     bill.status = 'Open';
     // Clear the bill number so it's regenerated when they finalize? 
     // No, standard POS practice is to keep the same bill number and just update the amount.
-    
+
     await bill.save();
 
     emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Open' });
@@ -1240,14 +1405,14 @@ export const updateBillCustomer = async (req, res) => {
     cache.clear('openOrders');
 
     if (order.customerPhone) {
-      syncCustomer(req, order.customerPhone, order.customerName, order.billType || billType).catch(() => {});
+      syncCustomer(req, order.customerPhone, order.customerName, order.billType || billType).catch(() => { });
     }
 
-    emitSocketEvent(req, 'orderUpdated', { 
-      tableNo: order.tableNo, 
-      orderId: order._id, 
-      customerName: order.customerName, 
-      customerPhone: order.customerPhone 
+    emitSocketEvent(req, 'orderUpdated', {
+      tableNo: order.tableNo,
+      orderId: order._id,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone
     });
 
     res.json({ success: true, order });
@@ -1255,4 +1420,4 @@ export const updateBillCustomer = async (req, res) => {
     console.error('Error updating bill customer:', err);
     res.status(500).json({ message: err.message });
   }
-};
+};

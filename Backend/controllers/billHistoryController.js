@@ -87,9 +87,10 @@ export const getBills = async (req, res) => {
     }
 
     // Run query and count concurrently in parallel for 2x faster execution
+    // Note: Exclude heavy arrays (items, restaurantDetails) from summary list to keep pagination ultra-light (<10KB)
     const [bills, total] = await Promise.all([
       Bill.find(query)
-        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax discount discountType discountValue deliveryCharge containerCharge total orderSource items status customerName customerPhone createdAt updatedAt')
+        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone billedAt settledAt createdAt updatedAt')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -127,10 +128,51 @@ export const getBillById = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const bill = await Bill.findById(id);
-    if (!bill) {
+    const billDoc = await Bill.findById(id).lean();
+    if (!billDoc) {
       return res.status(404).json({ message: 'Bill not found' });
     }
+
+    const bill = { ...billDoc };
+
+    // Freeze snapshot for legacy bills that were created before snapshotting (computed in-memory without blocking writes)
+    if (!bill.restaurantDetails || !bill.restaurantDetails.restaurantName) {
+      try {
+        const Setting = getTenantModel(req, 'Setting', SettingDefault);
+        const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+        const settings = settingsDoc?.value ? (typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value) : {};
+        if (settings && (settings.restaurantName || settings.address)) {
+          bill.restaurantDetails = {
+            restaurantName: settings.restaurantName || 'MSBILLINGS',
+            restaurantType: settings.restaurantType || 'Restaurant',
+            address: settings.address || '',
+            phone: settings.phone || '',
+            email: settings.email || '',
+            gstin: settings.gstin || '',
+            fssai: settings.fssai || '',
+            logo: (settings.logo && settings.logo !== '[logo_stored]') ? settings.logo : '',
+            upiId: settings.upiId || '',
+            enableQrPayment: settings.enableQrPayment !== false,
+            footerMessage: settings.footerMessage || '',
+            tagline: settings.tagline || '',
+            printFormat: settings.printFormat || '80mm',
+            taxSettings: {
+              enableCgst: settings.enableCgst !== false,
+              enableSgst: settings.enableSgst !== false,
+              enableGst: settings.enableGst === true,
+              cgstRate: settings.cgstRate !== undefined ? Number(settings.cgstRate) : 2.5,
+              sgstRate: settings.sgstRate !== undefined ? Number(settings.sgstRate) : 2.5,
+              gstRate: settings.gstRate !== undefined ? Number(settings.gstRate) : 5
+            }
+          };
+          if (bill.status === 'Paid' || bill.status === 'Billed') {
+            // Non-blocking background sync for legacy bills
+            Bill.findByIdAndUpdate(bill._id, { restaurantDetails: bill.restaurantDetails }).catch(() => {});
+          }
+        }
+      } catch (e) {}
+    }
+
     res.json(bill);
   } catch (error) {
     console.error('Error fetching bill by ID:', error);

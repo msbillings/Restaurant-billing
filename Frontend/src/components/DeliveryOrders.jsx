@@ -38,8 +38,10 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const itemsPerPage = 20;
 
-  const fetchDeliveryOrders = async () => {
-    setLoading(true);
+  const fetchDeliveryOrders = async (isBackground = false) => {
+    if (!isBackground && orders.length === 0) {
+      setLoading(true);
+    }
     setHasError(false);
     try {
       const data = await getBills({

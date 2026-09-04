@@ -14,13 +14,24 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Online'
 
   useEffect(() => {
-    // 1. Initial Load directly from server
+    // 1. Instant Cache Load (0ms delay) for immediate UI rendering
+    getCachedOpenOrders().then((cached) => {
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        const validOpen = cached.filter(o => o.status === 'Open' || o.status === 'Billed');
+        if (validOpen.length > 0) {
+          setOrders(validOpen);
+          setLoading(false);
+        }
+      }
+    }).catch(() => {});
+
+    // 2. Initial Load directly from server
     fetchOrders(false);
 
-    // 2. Continuous 3-second live revalidation
+    // 2. Background revalidation every 10s (down from 3s) — real-time socket handles instant updates
     const interval = setInterval(() => {
       fetchOrders(true);
-    }, 3000);
+    }, 10000);
 
     // Listen for real-time events via singleton RealtimeService
     const handleRealtimeOrders = (data) => {

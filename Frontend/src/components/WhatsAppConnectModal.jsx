@@ -63,8 +63,8 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
     if (!isOpen) return;
     fetchStatus();
 
-    // Slower polling when already connected to keep connection rock-solid
-    const pollTime = statusData.status === 'CONNECTED' ? 8000 : (statusData.status === 'SCAN_QR' || statusData.status === 'CONNECTING' ? 1000 : 2500);
+    // Responsive polling while linking (1.5s), relaxed (10s) once solidly connected
+    const pollTime = statusData.status === 'CONNECTED' ? 10000 : 1500;
     const interval = setInterval(fetchStatus, pollTime);
 
     const handleVisibility = () => {

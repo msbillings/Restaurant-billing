@@ -1668,8 +1668,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                             const img = new Image();
                             img.onload = () => {
                               const canvas = document.createElement('canvas');
-                              const MAX_WIDTH = 600;
-                              const MAX_HEIGHT = 600;
+                              const MAX_WIDTH = 400;
+                              const MAX_HEIGHT = 400;
                               let width = img.width;
                               let height = img.height;
 
@@ -1689,7 +1689,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                               canvas.height = height;
                               const ctx = canvas.getContext('2d');
                               ctx.drawImage(img, 0, 0, width, height);
-                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
                               setFormData({ ...formData, image: compressedDataUrl });
                             };
                             img.src = event.target.result;

@@ -98,7 +98,7 @@ const Feedback = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     let customLogo = '';
     try {
       const savedSettings = JSON.parse(localStorage.getItem('restaurantSettings'));
-      if (savedSettings && savedSettings.logo) {
+      if (savedSettings && savedSettings.logo && savedSettings.logo !== '[logo_stored]') {
         customLogo = savedSettings.logo;
       }
     } catch(e) {}

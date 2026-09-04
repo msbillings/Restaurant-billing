@@ -9,6 +9,7 @@ import FloorDefault from '../models/Floor.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { clearPublicMenuCache } from '../routes/publicRoutes.js';
+import cache from '../utils/cache.js';
 
 export let isSettingUpDB = false;
 
@@ -197,7 +198,7 @@ export const getRestaurantInfo = async (req, res) => {
       sgstRate: restaurantSettings.sgstRate !== undefined ? restaurantSettings.sgstRate : 2.5,
       enableGst: restaurantSettings.enableGst !== undefined ? restaurantSettings.enableGst : false,
       gstRate: restaurantSettings.gstRate !== undefined ? restaurantSettings.gstRate : 5,
-      logo: restaurantSettings.logo || '',
+      logo: restaurantSettings.logo === '[logo_stored]' ? '' : (restaurantSettings.logo || ''),
       printFormat: restaurantSettings.printFormat || '80mm',
       enableGeoFencing: restaurantSettings.enableGeoFencing !== undefined ? restaurantSettings.enableGeoFencing : false,
       geoFencingRadius: restaurantSettings.geoFencingRadius || 50,
@@ -210,7 +211,8 @@ export const getRestaurantInfo = async (req, res) => {
       autoSendTime: restaurantSettings.autoSendTime || '22:00',
       vipVisitThreshold: restaurantSettings.vipVisitThreshold !== undefined ? restaurantSettings.vipVisitThreshold : 5,
       vipSpendThreshold: restaurantSettings.vipSpendThreshold !== undefined ? restaurantSettings.vipSpendThreshold : 5000,
-      ...restaurantSettings
+      ...restaurantSettings,
+      logo: restaurantSettings.logo === '[logo_stored]' ? '' : (restaurantSettings.logo || '')
     };
 
     const spaces = spacesDoc && spacesDoc.length > 0 ? spacesDoc : null;
@@ -219,7 +221,8 @@ export const getRestaurantInfo = async (req, res) => {
       licenseExpiry,
       restaurantSettings,
       spaces,
-      ...restaurantSettings
+      ...restaurantSettings,
+      logo: restaurantSettings.logo
     });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching config', error: error.message });
@@ -234,26 +237,41 @@ export const updateRestaurantInfo = async (req, res) => {
     const updatePromises = [];
 
     if (licenseExpiry) {
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true }).maxTimeMS(4000));
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'licenseExpiry' }, { value: licenseExpiry }, { upsert: true }).maxTimeMS(3000));
     }
 
     let mergedSettings = null;
     if (settingsToSave) {
-      const existingDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+      const existingDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean().maxTimeMS(2500);
       const existingSettings = existingDoc?.value || {};
+      
+      // CRITICAL FIX: If client sent dummy '[logo_stored]', never overwrite the existing stored logo
+      if (settingsToSave.logo === '[logo_stored]') {
+        delete settingsToSave.logo;
+      }
+      
       mergedSettings = { ...existingSettings, ...settingsToSave };
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true }).maxTimeMS(4000));
+      if (mergedSettings.logo === '[logo_stored]') {
+        mergedSettings.logo = '';
+      }
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true }).maxTimeMS(3000));
     }
     
     if (spaces) {
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(4000));
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(3000));
     }
 
     await Promise.all(updatePromises);
 
     if (mergedSettings) {
-      emitSocketEvent(req, 'settingsUpdated', mergedSettings);
+      const socketPayload = { ...mergedSettings };
+      // Keep network fast: If logo exceeds 200KB omit from websocket payload, NEVER send '[logo_stored]' string
+      if (typeof socketPayload.logo === 'string' && socketPayload.logo.length > 200000) {
+        delete socketPayload.logo;
+      }
+      emitSocketEvent(req, 'settingsUpdated', socketPayload);
       try {
+        cache.clear('restaurantSettings');
         clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
       } catch (e) { }
     }

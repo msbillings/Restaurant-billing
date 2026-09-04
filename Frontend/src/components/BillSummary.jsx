@@ -1316,7 +1316,7 @@ const BillSummary = ({
       <div className="grid grid-cols-3 gap-1.5 px-2 py-2 bg-white border-t border-gray-200 w-full shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         <button
           onClick={onSaveOrder}
-          disabled={loading || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked}
+          disabled={actionLoading !== null || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked || (!!orderId && !hasPendingChanges)}
           className="col-span-1 bg-red-50 text-red-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'save' ? (
             <>
@@ -1329,7 +1329,7 @@ const BillSummary = ({
         </button>
         <button
           onClick={onHoldOrder}
-          disabled={loading || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked}
+          disabled={actionLoading !== null || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked || (!!orderId && !hasPendingChanges)}
           className="col-span-1 bg-orange-50 text-orange-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'hold' ? (
             <>
@@ -1342,7 +1342,7 @@ const BillSummary = ({
         </button>
         <button
           onClick={onGenerateBill}
-          disabled={loading || cart.length === 0 || orderStatus === 'Paid'}
+          disabled={actionLoading !== null || cart.length === 0 || orderStatus === 'Paid'}
           className="col-span-1 bg-gradient-to-r from-red-600 to-orange-500 text-white py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black tracking-wide hover:shadow-lg active:scale-95 transition-all shadow-md disabled:opacity-50 flex items-center justify-center text-center gap-1">
           {actionLoading === 'print' ? (
             <>
@@ -1350,7 +1350,9 @@ const BillSummary = ({
               <span>{t("Printing...")}</span>
             </>
           ) : (
-            (orderStatus === 'Billed' && !hasPendingChanges) ? t("PRINT BILL") : t("SAVE & PRINT")
+            (orderStatus === 'Billed' && !hasPendingChanges)
+              ? <><span>🧾</span><span>{t("PRINT BILL")}</span></>
+              : t("SAVE & PRINT")
           )}
         </button>
         {(() => {
@@ -1378,7 +1380,7 @@ const BillSummary = ({
         })()}
         <button
           onClick={onReopenOrder}
-          disabled={loading || orderStatus === 'Open' || (!orderId && cart.length === 0)}
+          disabled={actionLoading !== null || orderStatus === 'Open' || (!orderId && cart.length === 0)}
           className="col-span-1 bg-blue-50 text-blue-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold hover:bg-blue-100 active:scale-95 transition-all shadow-sm border border-blue-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'edit' ? (
             <>
@@ -1391,7 +1393,7 @@ const BillSummary = ({
         </button>
         <button
           onClick={onCancelOrder}
-          disabled={loading || orderStatus === 'Paid' || (!orderId && cart.length === 0)}
+          disabled={actionLoading !== null || orderStatus === 'Paid' || (!orderId && cart.length === 0)}
           className="col-span-1 bg-gray-50 text-gray-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold hover:bg-gray-100 active:scale-95 transition-all shadow-sm border border-gray-200 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'cancel' ? (
             <>

@@ -99,23 +99,6 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Log errors for debugging in production
-    if (error.response) {
-      console.error('API Error:', {
-        status: error.response.status,
-        url: error.config?.url,
-        message: error.response.data?.message || error.message,
-        data: error.response.data
-      });
-    } else if (error.request) {
-      console.error('Network Error:', {
-        url: error.config?.url,
-        message: 'No response received from server'
-      });
-    } else {
-      console.error('Request Error:', error.message);
-    }
-
     // Check if we are on the public customer QR menu page.
     // This page is public and requires NO authentication — never force-logout from here.
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
@@ -199,25 +182,28 @@ api.interceptors.response.use(
     const isGetRequest = (originalRequest?.method || 'get').toLowerCase() === 'get';
     const isNetworkOrTimeout = !error.response || error.code === 'ECONNABORTED' || error.code === 'ERR_NETWORK' || error.message?.includes('Network Error');
 
-    // 1. SMART CLOUD FALLBACK: If local IP is unreachable (e.g. phone switched from Wi-Fi to 5G cellular)
+    // 1. SMART CLOUD FALLBACK: For LAN mobile devices on Wi-Fi (192.168.x.x) if local IP is unreachable
     const currentBase = originalRequest?.baseURL || '';
-    const isLocalNetworkIp = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|localhost|127\.0\.0\.1)/i.test(currentBase);
+    const isLanDeviceIp = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/i.test(currentBase);
     const isWhatsAppEndpoint = originalRequest?.url?.includes('/whatsapp/');
     
-    if (isNetworkOrTimeout && isLocalNetworkIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
-      console.warn('[axios] Local server unreachable, automatically falling back to live Cloud API:', originalRequest.url);
+    if (isNetworkOrTimeout && isLanDeviceIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
       originalRequest._fallbackToCloud = true;
       originalRequest.baseURL = 'https://msbillings-backend.onrender.com/api';
       return api(originalRequest);
     }
 
-    // 2. TRANSIENT NETWORK ERROR RETRY for GET requests (cold start / temporary latency spike)
+    // 2. TRANSIENT RETRY for GET requests (cold start / momentary network glitch)
     if (isNetworkOrTimeout && isGetRequest && (!originalRequest._retryCount || originalRequest._retryCount < 2)) {
       originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
-      const delay = originalRequest._retryCount * 600;
-      console.warn(`[axios] Transient network error on GET ${originalRequest.url}. Retrying attempt ${originalRequest._retryCount} in ${delay}ms...`);
+      const delay = originalRequest._retryCount * 500;
       await new Promise(resolve => setTimeout(resolve, delay));
       return api(originalRequest);
+    }
+
+    // Quiet warning for final unhandled error without filling console with red exceptions
+    if (error.response && error.response.status !== 401 && error.response.status !== 403) {
+      console.warn('[API Notice]', error.response.status, originalRequest?.url, error.response.data?.message || error.message);
     }
 
     return Promise.reject(error);

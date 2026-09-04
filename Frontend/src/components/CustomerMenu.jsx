@@ -945,16 +945,20 @@ const CustomerMenu = () => {
       socket.on('settingsUpdated', (data) => {
         if (data) {
           setRestaurantSettings(prev => {
-            const geoChanged = 
-              prev.enableGeoFencing !== data.enableGeoFencing ||
-              prev.geoFencingRadius !== data.geoFencingRadius ||
-              prev.latitude !== data.latitude ||
-              prev.longitude !== data.longitude;
-
-            if (geoChanged && data.enableGeoFencing !== undefined) {
-              setTimeout(() => requestLocationVerification(data), 0);
+            const cleanData = { ...data };
+            if (cleanData.logo === '[logo_stored]') {
+              delete cleanData.logo;
             }
-            return { ...prev, ...data };
+            const geoChanged = 
+              prev.enableGeoFencing !== cleanData.enableGeoFencing ||
+              prev.geoFencingRadius !== cleanData.geoFencingRadius ||
+              prev.latitude !== cleanData.latitude ||
+              prev.longitude !== cleanData.longitude;
+
+            if (geoChanged && cleanData.enableGeoFencing !== undefined) {
+              setTimeout(() => requestLocationVerification(cleanData), 0);
+            }
+            return { ...prev, ...cleanData };
           });
         }
       });

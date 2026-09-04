@@ -665,9 +665,14 @@ function App() {
             if (saData.plainTextPassword || saData.staffAccounts && saData.staffAccounts.length > 0) {
               try {
                 const API_BASE_URL = getApiUrl();
+                const token = localStorage.getItem('accessToken');
+                const tenantDb = localStorage.getItem('resto_db_name');
+                const headers = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                if (tenantDb) headers['X-Tenant-DB'] = tenantDb;
                 await fetch(`${API_BASE_URL}/config/sync-users`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers,
                   body: JSON.stringify({
                     plainTextPassword: saData.plainTextPassword,
                     staffAccounts: saData.staffAccounts
@@ -873,12 +878,17 @@ function App() {
         const res = await api.get('/config/info');
         const settingsData = res.data?.restaurantSettings || res.data;
         if (settingsData && (settingsData.restaurantName || typeof settingsData === 'object')) {
-          localStorage.setItem('restaurantSettings', JSON.stringify(settingsData));
-          if (settingsData.restaurantName) {
-            setRestaurantName(settingsData.restaurantName);
-            document.title = `${settingsData.restaurantName} - Restaurant Management`;
+          const cached = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          const cleanSettings = { ...cached, ...settingsData };
+          if (cleanSettings.logo === '[logo_stored]') {
+            cleanSettings.logo = (cached.logo && cached.logo !== '[logo_stored]') ? cached.logo : '';
           }
-          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settingsData }));
+          localStorage.setItem('restaurantSettings', JSON.stringify(cleanSettings));
+          if (cleanSettings.restaurantName) {
+            setRestaurantName(cleanSettings.restaurantName);
+            document.title = `${cleanSettings.restaurantName} - Restaurant Management`;
+          }
+          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: cleanSettings }));
         }
       } catch (e) {
         console.warn('Could not fetch latest settings from backend, using cached:', e);
@@ -1011,7 +1021,16 @@ function App() {
       const unsubKOT = realtimeService.subscribe('newKOT', fetchActiveOrdersCount);
       const unsubSettings = realtimeService.subscribe('settingsUpdated', (newSettings) => {
         const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-        const updated = { ...newSettings, requireMasterPin: s.requireMasterPin, customLocks: s.customLocks };
+        const resolvedLogo = (newSettings?.logo && newSettings.logo !== '[logo_stored]')
+          ? newSettings.logo
+          : (s.logo && s.logo !== '[logo_stored]' ? s.logo : '');
+        const updated = { 
+          ...s, 
+          ...newSettings, 
+          logo: resolvedLogo,
+          requireMasterPin: s.requireMasterPin, 
+          customLocks: s.customLocks 
+        };
         localStorage.setItem('restaurantSettings', JSON.stringify(updated));
         setSettingsUpdateTicker(prev => prev + 1);
       });

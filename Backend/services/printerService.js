@@ -24,6 +24,9 @@ const CMD = {
   LINE_FEED: '\n'
 };
 
+// In-memory cache for menu item categories per tenant to avoid full collection scans on every print
+const categoryMapCache = new Map();
+
 /**
  * Sends a Buffer directly to a TCP Network Thermal Printer on IP:Port (standard 9100)
  */
@@ -36,7 +39,7 @@ export const sendRawToNetworkPrinter = (ipAddress, port = 9100, buffer) => {
     const socket = new net.Socket();
     let isHandled = false;
 
-    socket.setTimeout(2000); // 2 second connection timeout
+    socket.setTimeout(1000); // Fast 1 second connection timeout
 
     socket.connect(port, ipAddress, () => {
       isHandled = true;
@@ -44,7 +47,7 @@ export const sendRawToNetworkPrinter = (ipAddress, port = 9100, buffer) => {
         setTimeout(() => {
           socket.end();
           resolve({ success: true, message: `Successfully printed to ${ipAddress}:${port}` });
-        }, 300);
+        }, 150);
       });
     });
 
@@ -185,17 +188,25 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       return;
     }
 
-    // Build item name to category mapping from Database
-    const categoryMap = {};
-    try {
-      const menuList = await Menu.find().populate('category', 'name');
-      menuList.forEach(m => {
-        if (m.name) {
-          categoryMap[m.name.toLowerCase()] = (m.category?.name || '').toLowerCase();
-        }
-      });
-    } catch (e) {
-      console.warn('[PrinterService] Could not load menu categories for routing:', e.message);
+    // Build item name to category mapping (cached for 120s)
+    const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || 'default';
+    const cachedMap = categoryMapCache.get(tenantDb);
+    let categoryMap = {};
+
+    if (cachedMap && (Date.now() - cachedMap.time < 120000)) {
+      categoryMap = cachedMap.map;
+    } else {
+      try {
+        const menuList = await Menu.find({}, { name: 1, category: 1 }).populate('category', 'name').maxTimeMS(400).lean();
+        menuList.forEach(m => {
+          if (m.name) {
+            categoryMap[m.name.toLowerCase()] = (m.category?.name || '').toLowerCase();
+          }
+        });
+        categoryMapCache.set(tenantDb, { map: categoryMap, time: Date.now() });
+      } catch (e) {
+        console.warn('[PrinterService] Could not load menu categories for routing:', e.message);
+      }
     }
 
     // Process all configured KOT printers in parallel
@@ -205,11 +216,12 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
         return;
       }
 
-      // If running on cloud serverless (Vercel) and printer IP is a private LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.0.0.1):
+      // If running on cloud (Render or Vercel) and printer IP is a private LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.0.0.1):
       // The cloud server cannot reach the local LAN printer directly via TCP. Local POS Desktop app handles printing.
       const isPrivateLanIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(printer.ipAddress);
-      if (process.env.VERCEL && isPrivateLanIp) {
-        console.log(`[PrinterService] Cloud environment (Vercel) cannot reach private LAN printer '${printer.name}' (${printer.ipAddress}). Skipping cloud TCP.`);
+      const isCloudEnv = process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || (process.env.NODE_ENV === 'production' && !process.env.APP_USER_DATA_PATH);
+      if (isCloudEnv && isPrivateLanIp) {
+        console.log(`[PrinterService] Cloud environment (Render/Vercel) cannot reach private LAN printer '${printer.name}' (${printer.ipAddress}). Skipping cloud TCP.`);
         return;
       }
 

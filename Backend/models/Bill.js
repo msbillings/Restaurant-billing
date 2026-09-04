@@ -231,12 +231,23 @@ const billSchema = new mongoose.Schema({
       discountType: String,
       discountValue: Number
     }
-  }]
+  }],
+  billedAt: {
+    type: Date
+  },
+  settledAt: {
+    type: Date
+  },
+  restaurantDetails: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  }
 }, {
   timestamps: true
 });
 
 // Add indexes for performance optimization (critical for 150+ orders/day)
+billSchema.index({ status: 1, updatedAt: -1 }); // For fast recent orders & bill settlement queries
 billSchema.index({ status: 1, createdAt: -1 }); // For getBills and getOpenOrders
 billSchema.index({ status: 1, billType: 1, updatedAt: -1 }); // For server-paginated delivery/pickup/history
 billSchema.index({ status: 1, updatedAt: -1, createdAt: -1 }); // For getBills sorting

@@ -125,30 +125,25 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `_Generated automatically via MS Billings POS_`;
 
-      // Try fetching Excel report as base64 document attachment
-      let excelBase64 = null;
+      // Direct server-side WhatsApp delivery (fast, zero client download/upload overhead)
       try {
-        const url = `/analytics/daybook/export?date=${date}&restaurantName=${encodeURIComponent(restName)}`;
-        const response = await api.get(url, { responseType: 'arraybuffer' });
-        const bytes = new Uint8Array(response.data);
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        const directRes = await api.post('/analytics/daybook/whatsapp', {
+          phone: cleanPhone,
+          date,
+          restaurantName: restName,
+          message: msg
+        });
+        if (directRes.data && directRes.data.success) {
+          setToast({ message: `${t("Daily sales report sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+          return;
         }
-        excelBase64 = window.btoa(binary);
-      } catch (excelErr) {
-        console.warn('Could not generate Excel attachment for WhatsApp, sending text only:', excelErr);
+      } catch (directErr) {
+        console.warn('Direct server-side DayBook WhatsApp send failed, falling back to text send:', directErr);
       }
 
+      // Fallback: send summary text message directly
       try {
-        let res;
-        if (excelBase64) {
-          res = await sendWhatsAppBill(cleanPhone, msg, null, null, `DayBook-${date}.xlsx`, excelBase64, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        } else {
-          res = await sendWhatsAppMessage(cleanPhone, msg);
-        }
-
+        const res = await sendWhatsAppMessage(cleanPhone, msg);
         if (res && res.success) {
           setToast({ message: `${t("Daily sales report sent automatically to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
           return;

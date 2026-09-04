@@ -4,7 +4,7 @@ dotenv.config();
 import dns from 'dns';
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
-} catch (e) {}
+} catch (e) { }
 
 import express from 'express';
 import mongoose from 'mongoose';
@@ -156,7 +156,7 @@ const connectDB = async () => {
   if (isConnected) return;
   try {
     let uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/restopos_superadmin';
-    
+
     // Force connection to mscurechain where the clients are actually provisioned
     if (uri.includes('mongodb+srv')) {
       const parts = uri.split('?');
@@ -165,7 +165,7 @@ const connectDB = async () => {
       uri = connectionPart.substring(0, lastSlashIndex) + '/mscurechain';
       if (parts[1]) uri += '?' + parts[1];
     }
-    
+
     await mongoose.connect(uri);
     isConnected = true;
     console.log('Connected to SuperAdmin Database (mscurechain)');

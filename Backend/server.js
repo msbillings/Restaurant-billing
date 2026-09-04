@@ -3,7 +3,7 @@ import _crypto from 'crypto';
 import dns from 'dns';
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
-} catch (e) {}
+} catch (e) { }
 if (!globalThis.crypto) {
   try {
     Object.defineProperty(globalThis, 'crypto', { value: _crypto });
@@ -25,6 +25,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import compression from 'compression';
+import { execSync } from 'child_process';
 import { initFirebase } from './utils/firebase.js';
 
 // __dirname is not available in ES modules — polyfill it
@@ -526,10 +527,52 @@ if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) {
 if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   // The Desktop app's frontend falls back to localhost:5002 when process.env.VITE_API_URL is undefined
   const PORT = process.env.PORT || 5002;
-  connectDB().then(() => {
+
+  const startListening = () => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server & Socket.io running on 0.0.0.0:${PORT}`);
     });
+  };
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${PORT} is already in use. Attempting to free port...`);
+      try {
+        if (process.platform === 'win32') {
+          const out = execSync(`netstat -ano | findstr :${PORT}`).toString();
+          const lines = out.split('\n');
+          for (const line of lines) {
+            if (line.includes('LISTENING')) {
+              const parts = line.trim().split(/\s+/);
+              const pid = parts[parts.length - 1];
+              if (pid && pid !== '0' && parseInt(pid) !== process.pid) {
+                console.warn(`[Server] Force terminating occupying PID ${pid} on port ${PORT}...`);
+                try {
+                  execSync(`taskkill /F /PID ${pid}`);
+                } catch (_) {}
+              }
+            }
+          }
+        } else {
+          try {
+            execSync(`fuser -k ${PORT}/tcp`);
+          } catch (_) {}
+        }
+      } catch (e) {
+        console.error(`[Server] Could not automatically kill process on port ${PORT}:`, e.message);
+      }
+
+      setTimeout(() => {
+        console.log(`[Server] Retrying to listen on port ${PORT}...`);
+        startListening();
+      }, 1000);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
+  connectDB().then(() => {
+    startListening();
   }).catch((err) => {
     console.error('Failed to start server:', err);
     process.exit(1);

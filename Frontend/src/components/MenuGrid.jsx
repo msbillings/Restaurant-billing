@@ -83,11 +83,14 @@ const formatImageUrl = (url) => {
 const loadedImageCache = new Set();
 
 // Instant & Lazy Menu Image Component with zero-delay cached display & complete check
-const LazyMenuImage = ({ src, alt, className }) => {
+const LazyMenuImage = ({ src, alt, className, index = 999 }) => {
   const isCached = Boolean(src && loadedImageCache.has(src));
   const [loaded, setLoaded] = useState(isCached);
   const [error, setError] = useState(false);
   const imgRef = useRef(null);
+  // Only the first 6 images on screen get high-priority eager loading;
+  // the rest use native lazy loading to avoid saturating the network.
+  const isAboveFold = index < 6;
 
   useEffect(() => {
     if (!src) return;
@@ -134,9 +137,9 @@ const LazyMenuImage = ({ src, alt, className }) => {
         ref={imgRef}
         src={src}
         alt={alt}
-        loading="eager"
+        loading={isAboveFold ? 'eager' : 'lazy'}
         decoding="async"
-        fetchPriority="high"
+        fetchPriority={isAboveFold ? 'high' : 'low'}
         onLoad={() => {
           setLoaded(true);
           loadedImageCache.add(src);
@@ -375,36 +378,43 @@ const MenuGrid = ({
     };
   }, []);
 
-  // Proactively preload images across all pages for instant 0ms rendering
+  // Proactively preload images in staggered batches to avoid saturating the network
   useEffect(() => {
     if (items && items.length > 0 && showImages) {
       const urls = items
         .map((i) => formatImageUrl(i.image))
         .filter((url) => url && !loadedImageCache.has(url));
 
-      // Batch 1: first 60 items (Pages 1 & 2) immediately with async decoding
-      const priorityBatch = urls.slice(0, 60);
-      const remainingBatch = urls.slice(60);
+      // Batch 1: first 6 images (above the fold) — immediate, high priority
+      const aboveFoldBatch = urls.slice(0, 6);
+      // Batch 2: rest of page 1 (up to 30 items) — after 800ms
+      const page1Rest = urls.slice(6, 30);
+      // Batch 3+: remaining pages — staggered every 2s
+      const remaining = urls.slice(30);
 
-      priorityBatch.forEach((url) => {
+      const preload = (url) => {
         const img = new Image();
         img.decoding = 'async';
         img.src = url;
         img.onload = () => loadedImageCache.add(url);
-      });
+      };
 
-      // Batch 2: remaining items smoothly in background
-      if (remainingBatch.length > 0) {
-        const timer = setTimeout(() => {
-          remainingBatch.forEach((url) => {
-            const img = new Image();
-            img.decoding = 'async';
-            img.src = url;
-            img.onload = () => loadedImageCache.add(url);
-          });
-        }, 1000);
-        return () => clearTimeout(timer);
+      aboveFoldBatch.forEach(preload);
+
+      const timers = [];
+
+      if (page1Rest.length > 0) {
+        timers.push(setTimeout(() => page1Rest.forEach(preload), 800));
       }
+
+      // Load subsequent pages in batches of 30 with 2s spacing
+      for (let i = 0; i < remaining.length; i += 30) {
+        const batch = remaining.slice(i, i + 30);
+        const delay = 2000 + Math.floor(i / 30) * 2000;
+        timers.push(setTimeout(() => batch.forEach(preload), delay));
+      }
+
+      return () => timers.forEach(clearTimeout);
     }
   }, [items, showImages]);
 
@@ -830,7 +840,7 @@ const MenuGrid = ({
 
                     {showImages && (
                       <div className="w-full h-28 sm:h-30 shrink-0 bg-gray-100 relative overflow-hidden">
-                        <LazyMenuImage src={formatImageUrl(item.image)} alt={item.name} />
+                        <LazyMenuImage src={formatImageUrl(item.image)} alt={item.name} index={idx} />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
                       </div>
                     )}

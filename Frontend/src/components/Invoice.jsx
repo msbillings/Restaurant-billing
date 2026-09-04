@@ -67,20 +67,41 @@ const Invoice = ({ bill, onClose, onSave }) => {
   useEffect(() => {
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
-      const parsed = JSON.parse(savedSettings);
-      setSettings((prev) => ({ ...prev, ...parsed }));
+      try {
+        const parsed = JSON.parse(savedSettings);
+        if (parsed.logo === '[logo_stored]') parsed.logo = '';
+        setSettings((prev) => ({ ...prev, ...parsed }));
+      } catch (e) {}
     }
   }, []);
+
+  // STRICT AUDIT SECURITY: Prioritize frozen bill restaurantDetails snapshot
+  const activeSettings = {
+    ...settings,
+    ...(bill?.restaurantDetails || {})
+  };
+  if (activeSettings.logo === '[logo_stored]') {
+    activeSettings.logo = '';
+  }
+  const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
+    enableCgst: activeSettings.enableCgst !== false,
+    enableSgst: activeSettings.enableSgst !== false,
+    enableGst: activeSettings.enableGst === true,
+    cgstRate: activeSettings.cgstRate !== undefined ? Number(activeSettings.cgstRate) : 2.5,
+    sgstRate: activeSettings.sgstRate !== undefined ? Number(activeSettings.sgstRate) : 2.5,
+    gstRate: activeSettings.gstRate !== undefined ? Number(activeSettings.gstRate) : 5
+  };
+  const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
 
   const handlePrint = () => {
     if (window.electronAPI) {
       const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-      const isSilent = settings.silentPrinting !== false;
-      if (isSilent && settings.billingPrinter) {
-        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter, true);
+      const isSilent = activeSettings.silentPrinting !== false;
+      if (isSilent && activeSettings.billingPrinter) {
+        window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
       } else {
-        window.electronAPI.silentPrint(htmlContent, settings.billingPrinter || '', false);
+        window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
       }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
@@ -90,11 +111,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
   };
 
   const generateEBillWhatsAppText = (overrideName = null) => {
-    const s = settings || {};
+    const s = activeSettings;
     const restName = (s.restaurantName || 'MS Billings Restaurant').trim();
     const billNo = bill?.billNumber || 'PREVIEW';
-    const dateStr = new Date(bill?.createdAt || Date.now()).toLocaleDateString('en-GB');
-    const timeStr = new Date(bill?.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = new Date(billDateTime).toLocaleDateString('en-GB');
+    const timeStr = new Date(billDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const bType = bill?.billType || (bill?.tableNo?.startsWith('DEL') ? 'Delivery' : (bill?.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
     const tableInfo = bType === 'Dine-In' ? `Table: ${bill?.tableNo || 'N/A'}` : `${bType} ${bill?.tableNo ? `(${bill?.tableNo})` : ''}`;
     const customerName = overrideName || whatsappCustomerName || bill?.customerName || '';
@@ -119,9 +140,9 @@ const Invoice = ({ bill, onClose, onSave }) => {
     const taxable = Math.max(0, sub - disc);
 
     // Dynamic tax calculation identical to printed receipt invoice
-    const cRate = s.enableCgst === true ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
-    const sRate = s.enableSgst === true ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
-    const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+    const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+    const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+    const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
     const totRate = cRate + sRate + gRate;
 
     let rate = totRate;
@@ -249,19 +270,19 @@ const Invoice = ({ bill, onClose, onSave }) => {
     // Yield animation frame so React paints spinner immediately
     await new Promise(resolve => requestAnimationFrame(resolve));
 
-    // High-speed, crisp receipt capture
+    // High-speed receipt capture with fast fallback
     let imageBase64 = null;
     try {
       const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
       if (receiptElement) {
         const canvas = await Promise.race([
           html2canvas(receiptElement, {
-            scale: 1.2,
+            scale: 1.0,
             useCORS: true,
             allowTaint: true,
             logging: false,
             backgroundColor: '#ffffff',
-            imageTimeout: 1000,
+            imageTimeout: 800,
             onclone: (clonedDoc) => {
               const el = clonedDoc.querySelector('.receipt-print');
               if (el) {
@@ -278,21 +299,15 @@ const Invoice = ({ bill, onClose, onSave }) => {
               }
             }
           }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(t('Receipt capture timed out'))), 4000))
+          new Promise((resolve) => setTimeout(() => resolve(null), 1200)) // Non-blocking fast timeout
         ]);
 
         if (canvas) {
-          imageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.7);
         }
       }
     } catch (captureErr) {
-      console.error('Could not generate receipt image:', captureErr);
-    }
-
-    if (!imageBase64) {
-      setToast({ message: t("Could not capture bill image. Please try again."), type: 'error' });
-      setSendingAutomated(false);
-      return;
+      console.warn('Receipt image capture skipped, sending formatted text e-bill:', captureErr);
     }
 
     try {
@@ -302,7 +317,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
       ]);
 
       if (res && res.success) {
-        setToast({ message: `${t("e-Bill with receipt image sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+        setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setShowWhatsAppModal(false);
       } else {
         throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
@@ -317,7 +332,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
   };
 
   const getFormatClasses = () => {
-    switch (settings.printFormat) {
+    switch (activeSettings.printFormat) {
       case 'A4': return 'w-full max-w-sm print:max-w-full';
       case '58mm': return 'w-[200px] print:w-full print:max-w-full print:m-0';
       case '80mm':
@@ -331,7 +346,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
         {`
           @media print {
             @page {
-              size: ${settings.printFormat === 'A4' ? 'A4 portrait' : settings.printFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
+              size: ${activeSettings.printFormat === 'A4' ? 'A4 portrait' : activeSettings.printFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
               margin: 0 !important;
             }
             html, body {
@@ -677,29 +692,35 @@ const Invoice = ({ bill, onClose, onSave }) => {
           fontWeight: 'normal',
           fontSize: '13px',
           lineHeight: '1.3',
-          width: settings.printFormat === 'A4' ? '100%' : undefined,
-          maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
+          width: activeSettings.printFormat === 'A4' ? '100%' : undefined,
+          maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined
         }}>
         
         <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', boxSizing: 'border-box' }}>
           
           {/* Header */}
           <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
-            {settings.logo &&
-            <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
-                <img src={settings.logo} alt="Restaurant Logo" style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }} className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" />
+            {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]') &&
+              <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
+                <img 
+                  src={activeSettings.logo} 
+                  alt="Restaurant Logo" 
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }} 
+                  className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" 
+                />
               </div>
             }
             <div align="center" style={{ fontSize: '18px', lineHeight: '1.1', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
-              {(settings.restaurantName || 'MSBILLINGS').toUpperCase()}
+              {(activeSettings.restaurantName || 'MSBILLINGS').toUpperCase()}
             </div>
             <div align="center" style={{ fontSize: '12px', lineHeight: '1.2', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
-              {(settings.address || '').split('\n').map((line, i) =>
+              {(activeSettings.address || '').split('\n').map((line, i) =>
               <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
               )}
-              {settings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{settings.gstin}</div>}
-              {settings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{settings.phone}</div>}
-              {settings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{settings.fssai}</div>}
+              {activeSettings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{activeSettings.gstin}</div>}
+              {activeSettings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{activeSettings.phone}</div>}
+              {activeSettings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{activeSettings.fssai}</div>}
             </div>
           </div>
 
@@ -748,8 +769,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
           {/* Row 2: Date (left) | Time 12h (right) */}
           <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'normal', marginBottom: '2px' }}>
-            <span>{t('Date:')}{new Date(bill.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
-            <span style={{ fontWeight: 'bold' }}>{new Date(bill.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            <span>{t('Date:')}{new Date(billDateTime).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+            <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
           </div>
 
           {/* Row 3: Cashier (left) | Bill No (right) */}
@@ -821,10 +842,9 @@ const Invoice = ({ bill, onClose, onSave }) => {
             }
             
             {(() => {
-              const s = settings || {};
-              const cRate = s.enableCgst === true ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
-              const sRate = s.enableSgst === true ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
-              const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
               const totRate = cRate + sRate + gRate;
 
               const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
@@ -891,10 +911,9 @@ const Invoice = ({ bill, onClose, onSave }) => {
               const taxable = Math.max(0, sub - disc);
               let finalTotal = Number(bill.total);
 
-              const s = settings || {};
-              const cRate = s.enableCgst !== false ? (s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5) : 0;
-              const sRate = s.enableSgst !== false ? (s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5) : 0;
-              const gRate = s.enableGst === true ? (s.gstRate !== undefined ? Number(s.gstRate) : 5) : 0;
+              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
               const totRate = cRate + sRate + gRate;
               
               const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
@@ -1016,8 +1035,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
           })()}
 
           {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) */}
-          {settings.enableQrPayment !== false && (() => {
-            const pa = (settings.upiId || '').trim();
+          {activeSettings.enableQrPayment !== false && (() => {
+            const pa = (activeSettings.upiId || '').trim();
             if (!pa) return null;
 
             const isMixed = bill.paymentMode === 'Mixed';
@@ -1034,7 +1053,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             
             if (Number(am) <= 0) return null;
 
-            const pn = (settings.restaurantName || 'MSBILLINGS').trim();
+            const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
             const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
             const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
             const tr = `INV${Date.now()}`;
@@ -1062,7 +1081,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           })()}
 
           <div className="mt-2 mb-2 text-center" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-            <p>{settings.footerMessage || t("Thank You | Please visit Again")}</p>
+            <p>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
           </div>
           
         </div>

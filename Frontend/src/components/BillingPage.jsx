@@ -6,7 +6,7 @@ import BillSummary from './BillSummary';
 import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
-import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders } from '../api/billing';
+import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders, getDailyStats } from '../api/billing';
 import api from '../api/axios';
 import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder } from '../db/offlineDb';
 import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X, User, UserPlus, Phone, Loader2 } from 'lucide-react';
@@ -104,7 +104,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const next = !prev;
       try {
         localStorage.setItem('ms_billing_layout_locked', String(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   };
@@ -129,7 +129,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         setRightPanelWidth(newWidth);
         try {
           localStorage.setItem('ms_billing_right_panel_width', String(newWidth));
-        } catch (err) {}
+        } catch (err) { }
       }
     }
   }, []);
@@ -143,6 +143,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     };
   }, [resize, stopResizing]);
 
+  // Refs to track modal state inside intervals without causing effect re-runs
+  const showInvoiceRef = useRef(false);
+  const showPaymentRef = useRef(false);
+
   useEffect(() => {
     // Instant cache load (0ms delay)
     getCachedOpenOrders().then((cached) => {
@@ -152,6 +156,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }).catch(() => { });
 
     fetchOpenOrdersList();
+    fetchReservations();
 
     // Listen for real-time events via singleton RealtimeService
     const handleRealtimeUpdate = (data) => {
@@ -171,7 +176,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const unsubBillSettled = realtimeService.subscribe('billSettled', fetchOpenOrdersList);
     const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', fetchOpenOrdersList);
     const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeUpdate);
-    const unsubReservationUpdated = realtimeService.subscribe('reservationUpdated', fetchOpenOrdersList);
+    const unsubReservationUpdated = realtimeService.subscribe('reservationUpdated', () => {
+      fetchOpenOrdersList();
+      fetchReservations();
+    });
+
+    // Reservations change rarely — poll every 30s instead of every 5s
+    const reservationPollInterval = setInterval(() => {
+      fetchReservations();
+    }, 30000);
 
     const handleOfflineSave = (e) => {
       showToast(`⚠️ ${e.detail?.message || 'Order saved offline. Will sync when backend reconnects.'}`, 'error');
@@ -188,6 +201,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       unsubTableStatusChanged();
       unsubNewKOT();
       unsubReservationUpdated();
+      clearInterval(reservationPollInterval);
       window.removeEventListener('offlineOrderSaved', handleOfflineSave);
     };
   }, []);
@@ -199,7 +213,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     } catch (error) {
       console.error('Error fetching open orders list:', error);
     }
+  }
 
+  async function fetchReservations() {
     try {
       const API_BASE_URL = getApiUrl();
       const res = await fetch(`${API_BASE_URL}/reservations`, {
@@ -350,6 +366,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // 'save' | 'hold' | 'print' | 'kot' | 'edit' | 'cancel' | 'settle'
+
+  // Safety guard: Automatically reset actionLoading state after 10s so UI buttons never stay permanently frozen in "Saving..."
+  useEffect(() => {
+    if (actionLoading) {
+      const timer = setTimeout(() => {
+        console.warn('[BillingPage] actionLoading safety timeout reached - resetting loading state');
+        setActionLoading(null);
+        setLoading(false);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionLoading]);
   const newlyGeneratedTables = useRef(new Set());
   // Tracks the last time user manually edited the cart (add/remove/qty change)
   // Background fetches are suppressed for 8s after any local edit to prevent
@@ -493,6 +521,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   }, [billType, openOrdersList]);
 
+  // Keep modal-state refs in sync so the poll interval reads the latest value
+  // without needing to be re-created every time a modal opens/closes.
+  useEffect(() => { showInvoiceRef.current = showInvoice; }, [showInvoice]);
+  useEffect(() => { showPaymentRef.current = showPayment; }, [showPayment]);
+
   useEffect(() => {
     // Only reset pending local changes flag when the table actually changes.
     // This ensures that switching tables doesn't carry over the protection from the previous table,
@@ -517,7 +550,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const handleRemoteOrderUpdate = (e) => {
       // Pause updates if the user is currently viewing the invoice or payment modal
-      if (showInvoice || showPayment || isViewingInvoiceRef.current) return;
+      if (showInvoiceRef.current || showPaymentRef.current || isViewingInvoiceRef.current) return;
 
       const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
       if (hasLocalCart) {
@@ -546,10 +579,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     };
     window.addEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
 
-    // 5-Second polling to guarantee real-time bill summary UI updates
+    // 5-Second polling to guarantee real-time bill summary UI updates.
+    // Uses refs for modal state so the interval is NOT torn down on every modal open/close.
     const pollInterval = setInterval(() => {
       // Pause polling if the user is currently viewing the invoice or payment modal
-      if (showInvoice || showPayment || isViewingInvoiceRef.current) return;
+      if (showInvoiceRef.current || showPaymentRef.current || isViewingInvoiceRef.current) return;
 
       if (activeTable) {
         // If user has unsaved cart items or pending local edits, NEVER fetch or overwrite activeTable!
@@ -565,7 +599,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       window.removeEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
       clearInterval(pollInterval);
     };
-  }, [activeTable, showInvoice, showPayment]);
+    // Note: showInvoice/showPayment intentionally removed from deps — refs are used instead
+    // to prevent the interval from being torn down and causing a loading flash on modal toggle.
+  }, [activeTable]);
 
   useEffect(() => {
     const handleKotUpdatedSocket = (data) => {
@@ -684,7 +720,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           setCrmSuggestions(data || []);
           setShowCrmSuggestions(true);
         }
-      } catch (err) {}
+      } catch (err) { }
     } else {
       setShowCrmSuggestions(false);
     }
@@ -1001,12 +1037,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
 
     // Never clobber cart or completedBill while invoice or payment is active
-    if (isViewingInvoiceRef.current || showInvoice || showPayment) {
+    if (isViewingInvoiceRef.current || showInvoiceRef.current || showPaymentRef.current) {
       return;
     }
 
-    // Only set loading for tables that are actively fetching their order items
-    if (!isBackground) setLoading(true);
+    // Only set loading when the cart is currently empty — if we already have items
+    // showing, keep them visible while refreshing in the background to avoid flicker.
+    if (!isBackground && cartRef.current.length === 0) setLoading(true);
 
     try {
       let order = await getActiveOrder(tableToFetch);
@@ -1182,7 +1219,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   async function fetchDailyStats() {
     try {
-      const { getDailyStats } = await import('../api/billing');
       const stats = await getDailyStats();
       setDailyStats(stats);
     } catch (error) {
@@ -1491,7 +1527,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       };
       const savedOrder = await saveOrder(orderData);
       setOrderId(savedOrder._id);
-      setActiveTable(tableNo);
+      // Only setActiveTable if it's different to avoid triggering the activeTable
+      // useEffect which calls fetchActiveOrder(forceReset=true) unnecessarily.
+      if (tableNo !== activeTable) {
+        setActiveTable(tableNo);
+      }
       if (savedOrder) {
         if (savedOrder.discountType || savedOrder.discountValue !== undefined || savedOrder.discountName) {
           setDiscount({
@@ -1519,9 +1559,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           .filter(i => i.quantity > 0 || i.isCancelled)
           .map(i => ({ ...i, status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status }));
         setCart(confirmedItems);
+        cartRef.current = confirmedItems;
       }
       showToast(orderId ? t('orderUpdated', { defaultValue: 'Order updated successfully' }) : t('orderSaved'), 'success');
-      // Extend edit lock after save completes so poll doesn't overwrite confirmed state
+      // Extend edit lock after save so the 5s poll cannot fire immediately and
+      // trigger a fetchActiveOrder that shows the loading skeleton.
       lastLocalEditTime.current = Date.now();
       // Order is now saved to DB — clear pending local changes flag
       hasPendingLocalChanges.current = false;
@@ -1615,21 +1657,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // If order is ALREADY billed and no unsaved local changes exist, open the invoice preview directly!
+    // If order is ALREADY billed, open the invoice preview INSTANTLY.
+    // If completedBill is already in memory, show it immediately with zero delay.
+    // Then silently refresh from backend in the background if needed.
     if (orderStatus === 'Billed' && orderId && !hasPendingLocalChanges.current) {
       showToast(t('Bill already saved and printed'), 'info');
-      if (!completedBill || completedBill._id !== orderId) {
-        try {
-          const resp = await api.get(`/bills/${orderId}`);
-          if (resp.data) setCompletedBill(resp.data);
-        } catch (e) { }
-      }
+      // Instant open — use whatever we have in memory first
       isViewingInvoiceRef.current = true;
       setShowInvoice(true);
+      // Then silently fetch fresh data in background if completedBill is stale
+      if (!completedBill || completedBill._id !== orderId) {
+        api.get(`/bills/${orderId}`).then(resp => {
+          if (resp.data) setCompletedBill(resp.data);
+        }).catch(() => { });
+      }
       return;
     }
 
-    setLoading(true);
     setActionLoading('print');
     try {
       const orderData = {
@@ -1662,6 +1706,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       console.error('Error saving order before generating bill:', error);
       const errorMessage = error.response?.data?.message || error.message;
       showToast(`${t('failedToSave')}: ${errorMessage}`, 'error');
+    } finally {
       setLoading(false);
       setActionLoading(null);
     }
@@ -1695,6 +1740,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         orderSource: billType === 'Delivery' ? orderSource : undefined,
         customerName,
         customerPhone,
+        restaurantDetails: s,
         taxBreakdown: {
           cgst: cAmt,
           sgst: sAmt,
@@ -1716,6 +1762,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         customerPhone: customerPhone || billedOrder.customerPhone,
         deliveryCharge: deliveryCharge,
         containerCharge: containerCharge,
+        restaurantDetails: billedOrder.restaurantDetails || s,
+        billedAt: billedOrder.billedAt || new Date(),
         createdAt: billedOrder.createdAt || new Date()
       };
       setCompletedBill(billedData);
@@ -1779,136 +1827,112 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    setLoading(true);
     setActionLoading('settle');
+    setLoading(true);
     try {
-      let currentId = orderId;
-
-      if (!currentId) {
-        let tableToUse = activeTable;
-        if (!tableToUse) {
-          tableToUse = generateSequentialOrderNo(billType);
-          newlyGeneratedTables.current.add(tableToUse);
-          setActiveTable(tableToUse);
-        }
-        const orderData = {
-          tableNo: tableToUse,
-          items: cart,
-          subtotal,
-          tax: taxVal,
-          discount: discountAmount,
-          discountType: discount.type,
-          discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-          discountName: discount.name || discount.offerName || '',
-          total,
-          billType,
-          orderSource: billType === 'Delivery' ? orderSource : undefined,
-          customerPhone,
-          customerName,
-          deliveryCharge: parseFloat(deliveryCharge || 0),
-          containerCharge: parseFloat(containerCharge || 0)
-        };
-        const savedOrder = await saveOrder(orderData);
-        currentId = savedOrder._id;
-        setOrderId(savedOrder._id);
+      let tableToUse = activeTable;
+      if (!tableToUse) {
+        tableToUse = generateSequentialOrderNo(billType);
+        newlyGeneratedTables.current.add(tableToUse);
+        setActiveTable(tableToUse);
       }
 
-      let currentBillNum = billNumber;
-      let billDetails = null;
-      if (orderStatus !== 'Paid') {
-        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-        const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
-        const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
-        const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
-        const totRate = cRate + sRate + gRate;
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
+      const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
+      const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
+      const totRate = cRate + sRate + gRate;
 
-        let cAmt = 0, sAmt = 0, gAmt = 0;
-        if (totRate > 0) {
-          cAmt = taxVal * (cRate / totRate) || 0;
-          sAmt = taxVal * (sRate / totRate) || 0;
-          gAmt = taxVal * (gRate / totRate) || 0;
-        }
-
-        const billData = {
-          discount: discountAmount,
-          discountType: discount.type,
-          discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-          discountName: discount.name || discount.offerName || '',
-          tax: taxVal,
-          total,
-          deliveryCharge: parseFloat(deliveryCharge || 0),
-          containerCharge: parseFloat(containerCharge || 0),
-          orderSource: billType === 'Delivery' ? orderSource : undefined,
-          customerName,
-          customerPhone,
-          taxBreakdown: {
-            cgst: cAmt,
-            sgst: sAmt,
-            igst: gAmt
-          }
-        };
-        const billedOrder = await generateBill(currentId, billData);
-        setOrderStatus('Billed');
-        currentBillNum = billedOrder.billNumber;
-        setBillNumber(billedOrder.billNumber);
-        billDetails = billedOrder;
-        setCompletedBill(billedOrder);
+      let cAmt = 0, sAmt = 0, gAmt = 0;
+      if (totRate > 0) {
+        cAmt = taxVal * (cRate / totRate) || 0;
+        sAmt = taxVal * (sRate / totRate) || 0;
+        gAmt = taxVal * (gRate / totRate) || 0;
       }
 
-      const settledOrder = await settleBill(currentId, {
+      const settlementPayload = {
+        tableNo: tableToUse,
+        items: cart,
+        subtotal,
+        total,
+        tax: taxVal,
+        taxBreakdown: {
+          cgst: cAmt,
+          sgst: sAmt,
+          igst: gAmt
+        },
+        discount: discountAmount,
+        discountType: discount.type,
+        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+        discountName: discount.name || discount.offerName || '',
+        billType,
+        orderSource: billType === 'Delivery' ? orderSource : undefined,
+        customerPhone,
+        customerName,
+        deliveryCharge: parseFloat(deliveryCharge || 0),
+        containerCharge: parseFloat(containerCharge || 0),
+        restaurantDetails: s,
         paymentMode: paymentData.mode,
         splitPayments: paymentData.splitPayments,
         amountPaid: paymentData.amountPaid,
-        upiApp: paymentData.upiApp,
-        total,
-        deliveryCharge: parseFloat(deliveryCharge || 0),
-        containerCharge: parseFloat(containerCharge || 0),
-        orderSource: billType === 'Delivery' ? orderSource : undefined
-      });
-      setOrderStatus('Paid');
-      setShowPayment(false);
+        upiApp: paymentData.upiApp
+      };
 
-      // Remove from offline cache so table is immediately released
-      removeCachedOpenOrder(currentId).catch(() => { });
-      if (activeTable) removeCachedOpenOrder(activeTable).catch(() => { });
+      const targetId = orderId || 'new';
+
+      // ⚡ Ultra-fast network settlement (executes in ~50ms)
+      const settledOrder = await settleBill(targetId, settlementPayload);
+
+      // ⚡ SIMULTANEOUS LIGHTNING FAST UPDATE ("Merupu Teega" ⚡)
+      // Close payment modal, set status Paid, open Tax Invoice with confirmed bill number at the exact same millisecond
+      setShowPayment(false);
+      setOrderStatus('Paid');
+      hasPendingLocalChanges.current = false;
+
+      const confirmedBillNumber = settledOrder?.billNumber || billNumber || 'MS0001';
+      if (settledOrder?.billNumber) {
+        setBillNumber(settledOrder.billNumber);
+      }
 
       const finalBill = {
-        ...(billDetails || settledOrder),
         ...settledOrder,
-        items: (cart && cart.length > 0) ? cart : (settledOrder?.items || billDetails?.items || []),
+        items: (cart && cart.length > 0) ? cart : (settledOrder?.items || []),
         status: 'Paid',
         paymentMode: paymentData.mode,
         splitPayments: paymentData.splitPayments || settledOrder?.splitPayments,
         amountPaid: paymentData.amountPaid || settledOrder?.amountPaid,
         upiApp: paymentData.upiApp || settledOrder?.upiApp,
-        paymentMethod: paymentData.upiApp || settledOrder?.upiApp,
-        billNumber: currentBillNum || settledOrder?.billNumber,
-        tableNo: settledOrder?.tableNo || billDetails?.tableNo || activeTable,
+        billNumber: confirmedBillNumber,
+        tableNo: settledOrder?.tableNo || tableToUse || activeTable,
         subtotal: subtotal || settledOrder?.subtotal,
         tax: taxVal || settledOrder?.tax,
         discount: discountAmount || settledOrder?.discount,
-        discountType: discount.type || settledOrder?.discountType,
-        discountValue: discount.value || settledOrder?.discountValue,
         total: total || settledOrder?.total,
         billType: billType || settledOrder?.billType,
-        orderSource: orderSource || settledOrder?.orderSource,
+        orderSource: billType === 'Delivery' ? orderSource : undefined,
         customerName: customerName || settledOrder?.customerName,
         customerPhone: customerPhone || settledOrder?.customerPhone,
         deliveryCharge: deliveryCharge,
         containerCharge: containerCharge,
-        createdAt: new Date()
+        restaurantDetails: settledOrder?.restaurantDetails || s,
+        settledAt: settledOrder?.settledAt || new Date(),
+        createdAt: settledOrder?.createdAt || new Date()
       };
 
       isViewingInvoiceRef.current = true;
       setCompletedBill(finalBill);
       setShowInvoice(true);
-      // Persist invoice state so page refresh restores this view
+      showToast(t('billSettled'), 'success');
+
       try {
         sessionStorage.setItem('ms_invoice_open', 'true');
         sessionStorage.setItem('ms_completed_bill', JSON.stringify(finalBill));
       } catch (e) { }
-      showToast(t('billSettled'), 'success');
-      hasPendingLocalChanges.current = false;
+
+      // Remove from offline cache so table is immediately released
+      if (settledOrder?._id) removeCachedOpenOrder(settledOrder._id).catch(() => { });
+      if (activeTable) removeCachedOpenOrder(activeTable).catch(() => { });
+
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
@@ -1944,7 +1968,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const handlePrintKOTWithTable = async (tableNo) => {
     try {
-      setLoading(true);
       setActionLoading('kot');
       const orderData = {
         tableNo: tableNo,
@@ -2038,7 +2061,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       console.error('Error generating KOT:', error);
       showToast(error.response?.data?.message || error.message || t('failedToPrintKOT'), 'error');
     } finally {
-      setLoading(false);
       setActionLoading(null);
     }
   };
@@ -2092,8 +2114,19 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
 
   const handleCancelOrder = () => {
-    if (!orderId) {
+    if (orderStatus === 'Paid') {
+      showToast(t('Paid order cannot be cancelled. Use Refund in Bill History.', { defaultValue: 'Paid order cannot be cancelled. Use Refund in Bill History.' }), 'warning');
+      return;
+    }
+
+    if (!orderId && cart.length === 0) {
+      return;
+    }
+
+    if (!orderId && cart.length > 0) {
       setCart([]);
+      hasPendingLocalChanges.current = false;
+      showToast(t('Cleared cart items'), 'info');
       return;
     }
 
@@ -2104,7 +2137,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     setShowCancelModal(false);
 
     try {
-      setLoading(true);
       setActionLoading('cancel');
       const response = await apiCancelOrder(orderId, cancelReason);
 
@@ -2130,7 +2162,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       console.error('Error cancelling order:', error);
       showToast(error.response?.data?.message || t('failedToCancelOrder'), 'error');
     } finally {
-      setLoading(false);
       setActionLoading(null);
     }
   };
@@ -2139,7 +2170,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const idToTransfer = sourceOrderId || orderId;
     if (!idToTransfer) return;
     try {
-      setLoading(true);
       await apiTransferTable(idToTransfer, newTableNo);
       showToast(`${t('billTransferred')} ${newTableNo}`, 'success');
       setShowTransfer(false);
@@ -2152,7 +2182,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       console.error('Error transferring table:', error);
       showToast(error.response?.data?.message || t('failedToTransferTable'), 'error');
     } finally {
-      setLoading(false);
     }
   };
 
@@ -2272,8 +2301,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               type="button"
               onClick={() => setFoodTypeFilter('all')}
               className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${foodTypeFilter === 'all'
-                  ? 'bg-gray-900 text-white shadow-xs'
-                  : 'text-text-muted hover:text-text-main'
+                ? 'bg-gray-900 text-white shadow-xs'
+                : 'text-text-muted hover:text-text-main'
                 }`}
             >
               {t("All")}
@@ -2282,8 +2311,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               type="button"
               onClick={() => setFoodTypeFilter('veg')}
               className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'veg'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-emerald-600 hover:bg-emerald-50/50'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-emerald-600 hover:bg-emerald-50/50'
                 }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
@@ -2293,8 +2322,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               type="button"
               onClick={() => setFoodTypeFilter('non-veg')}
               className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${foodTypeFilter === 'non-veg'
-                  ? 'bg-rose-600 text-white shadow-xs'
-                  : 'text-rose-600 hover:bg-rose-50/50'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-rose-600 hover:bg-rose-50/50'
                 }`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
@@ -2348,8 +2377,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           <button
             onClick={() => setMobileTab('menu')}
             className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 ${mobileTab === 'menu' ?
-                'bg-primary text-white shadow-md' :
-                'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
+              'bg-primary text-white shadow-md' :
+              'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
 
             <span>🍽️ {t('menuItems')}</span>
@@ -2359,8 +2388,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             data-mobile-cart-tab="true"
             onClick={() => setMobileTab('cart')}
             className={`flex-1 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 relative ${mobileTab === 'cart' ?
-                'bg-primary text-white shadow-md' :
-                'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
+              'bg-primary text-white shadow-md' :
+              'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
 
             <span>🛒 {t('currentOrder')}</span>
@@ -2426,9 +2455,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setIsCartCollapsed(!isCartCollapsed)}
-              className={`hidden md:flex absolute top-1/2 -translate-y-1/2 z-30 bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xl rounded-l-2xl py-3.5 px-2 hover:opacity-95 transition-all items-center gap-1 border-y border-l border-white/25 cursor-pointer group ${
-                isCartCollapsed ? 'right-0' : 'left-0 -translate-x-full'
-              }`}
+              className={`hidden md:flex absolute top-1/2 -translate-y-1/2 z-30 bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-xl rounded-l-2xl py-3.5 px-2 hover:opacity-95 transition-all items-center gap-1 border-y border-l border-white/25 cursor-pointer group ${isCartCollapsed ? 'right-0' : 'left-0 -translate-x-full'
+                }`}
               title={isCartCollapsed ? t('expandCart') : t('collapseCart')}>
               {isCartCollapsed ? (
                 <ChevronLeft size={18} className="transition-transform group-hover:-translate-x-0.5" />
@@ -2458,6 +2486,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 onPrintKOT={handlePrintKOT}
                 onPrintBill={() => setShowInvoice(true)}
                 onReopenOrder={handleReopenOrder}
+                onCancelOrder={handleCancelOrder}
                 onTransferTable={() => {
                   if (billType !== 'Delivery' && billType !== 'Takeaway' && !activeTable?.startsWith('DEL-') && !activeTable?.startsWith('TAK-')) {
                     setShowTransfer(true);
@@ -2649,8 +2678,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                           }}
                         >
                           <div className="flex flex-col">
-                             <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">{cust.phone}</span>
-                             <span className="text-xs text-gray-500 dark:text-gray-400">{cust.name}</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">{cust.phone}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{cust.name}</span>
                           </div>
                         </div>
                       ))}

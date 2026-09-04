@@ -16,6 +16,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [selectedBill, setSelectedBill] = useState(null);
   const [loadingBillId, setLoadingBillId] = useState(null);
+  const [billCache, setBillCache] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [startDate, setStartDate] = useState('');
@@ -27,6 +28,24 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const [expandedRows, setExpandedRows] = useState({});
   const itemsPerPage = 20; // Server-side pagination - Show 20 bills per page (latest first)
+
+  const handleViewBill = async (billId) => {
+    if (billCache[billId]) {
+      setSelectedBill(billCache[billId]);
+      return;
+    }
+    setLoadingBillId(billId);
+    try {
+      const fullBill = await getBillById(billId);
+      setBillCache(prev => ({ ...prev, [billId]: fullBill }));
+      setSelectedBill(fullBill);
+    } catch (error) {
+      console.error('Error fetching bill details:', error);
+      setToast({ message: 'Failed to load bill details', type: 'error' });
+    } finally {
+      setLoadingBillId(null);
+    }
+  };
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -426,18 +445,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     <td className="px-3 py-2.5 text-center whitespace-nowrap">
                       <div className="flex justify-center items-center gap-1">
                         <button
-                          onClick={async () => {
-                            setLoadingBillId(bill._id);
-                            try {
-                              const fullBill = await getBillById(bill._id);
-                              setSelectedBill(fullBill);
-                            } catch (error) {
-                              console.error('Error fetching bill details:', error);
-                              setToast({ message: 'Failed to load bill details', type: 'error' });
-                            } finally {
-                              setLoadingBillId(null);
-                            }
-                          }}
+                          onClick={() => handleViewBill(bill._id)}
                           disabled={loadingBillId === bill._id}
                           className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center justify-center gap-1 touch-target disabled:opacity-75 cursor-pointer" 
                           title={t("View Invoice")}>
@@ -554,18 +562,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={async () => {
-                        setLoadingBillId(bill._id);
-                        try {
-                          const fullBill = await getBillById(bill._id);
-                          setSelectedBill(fullBill);
-                        } catch (error) {
-                          console.error('Error fetching bill details:', error);
-                          setToast({ message: 'Failed to load bill details', type: 'error' });
-                        } finally {
-                          setLoadingBillId(null);
-                        }
-                      }}
+                      onClick={() => handleViewBill(bill._id)}
                       disabled={loadingBillId === bill._id}
                       className="px-3 py-1.5 bg-surface text-primary border border-border rounded-lg text-xs font-bold flex items-center gap-1.5 touch-target cursor-pointer disabled:opacity-75"
                       title={t("View Invoice")}>

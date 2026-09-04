@@ -307,55 +307,39 @@ const Analytics = ({ onNavigate, onGoBack }) => {
 
       let excelBase64 = null;
       let fileSuffix = 'report';
-      let endpoint = `/analytics/download/monthly/excel?restaurantName=${encodeURIComponent(restName)}&`;
-      
+      // Direct server-side WhatsApp delivery (fast, zero client download/upload overhead)
+      const payload = {
+        phone: cleanPhone,
+        restaurantName: restName,
+        caption
+      };
       if (viewMode === 'custom' && customStart && customEnd) {
-        endpoint += `customStart=${customStart}&customEnd=${customEnd}`;
-        fileSuffix = `${customStart}-to-${customEnd}`;
+        payload.customStart = customStart;
+        payload.customEnd = customEnd;
       } else if (viewMode === 'month') {
-        endpoint += `month=${selectedMonth}&year=${selectedYear}`;
-        fileSuffix = `${selectedMonth}-${selectedYear}`;
+        payload.month = selectedMonth;
+        payload.year = selectedYear;
       } else if (viewMode === 'day') {
-        endpoint += `date=${selectedDate}`;
-        fileSuffix = selectedDate;
+        payload.date = selectedDate;
       } else if (days) {
-        endpoint += `days=${days}`;
-        fileSuffix = `${days}days`;
+        payload.days = days;
       } else {
-        endpoint += `month=${new Date().getMonth() + 1}&year=${new Date().getFullYear()}`;
-        fileSuffix = `${new Date().getMonth() + 1}-${new Date().getFullYear()}`;
+        payload.month = new Date().getMonth() + 1;
+        payload.year = new Date().getFullYear();
       }
-
-      const fileName = `Analytics-Report-${fileSuffix}.xlsx`;
 
       try {
-        const response = await api.get(endpoint, { responseType: 'arraybuffer' });
-        const bytes = new Uint8Array(response.data);
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        const directRes = await api.post('/analytics/whatsapp', payload);
+        if (directRes.data && directRes.data.success) {
+          setToast({ message: `${t("Analytics report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+          return;
         }
-        excelBase64 = window.btoa(binary);
-      } catch (excelErr) {
-        console.error('Could not generate Excel attachment for WhatsApp, sending text only:', excelErr);
+      } catch (directErr) {
+        console.warn('Direct server-side analytics WhatsApp send failed, falling back to text send:', directErr);
       }
 
-      let res;
-      if (excelBase64) {
-        res = await sendWhatsAppBill(
-          cleanPhone,
-          caption,
-          null,
-          null,
-          fileName,
-          excelBase64,
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        );
-      } else {
-        res = await sendWhatsAppMessage(cleanPhone, caption);
-      }
-
+      // Fallback: send summary text directly
+      const res = await sendWhatsAppMessage(cleanPhone, caption);
       if (res && res.success) {
         setToast({ message: `${t("Analytics report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
       }

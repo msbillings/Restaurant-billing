@@ -56,7 +56,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [toast, setToast] = useState(null);
   const [errors, setErrors] = useState({});
   const [systemPrinters, setSystemPrinters] = useState([]);
@@ -69,6 +70,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
+        if (parsed.logo === '[logo_stored]') {
+          parsed.logo = '';
+        }
         setSettings((prev) => ({ ...prev, ...parsed }));
       } catch (e) { }
     }
@@ -80,7 +84,13 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         const incoming = data?.restaurantSettings || data;
         if (incoming && typeof incoming === 'object') {
           setSettings((prev) => {
-            const updated = { ...prev, ...incoming };
+            const cleanIncoming = { ...incoming };
+            if (cleanIncoming.logo === '[logo_stored]') {
+              cleanIncoming.logo = '';
+            } else if (!cleanIncoming.logo && prev.logo && prev.logo !== '[logo_stored]') {
+              cleanIncoming.logo = prev.logo;
+            }
+            const updated = { ...prev, ...cleanIncoming };
             try {
               localStorage.setItem('restaurantSettings', JSON.stringify(updated));
               if (updated.vercelUrl) localStorage.setItem('resto_vercel_url', updated.vercelUrl);
@@ -102,20 +112,22 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   }, []);
 
   const handleSave = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
-      // 1. Immediately save restaurant settings locally
-      localStorage.setItem('restaurantSettings', JSON.stringify(settings));
-      if (settings.vercelUrl) localStorage.setItem('resto_vercel_url', settings.vercelUrl);
-      if (settings.serverIp) localStorage.setItem('resto_server_ip', settings.serverIp);
-      if (settings.qrMenuMode) localStorage.setItem('resto_qr_mode', settings.qrMenuMode);
-      window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: settings }));
+      // 1. Immediately save restaurant settings locally in localStorage (0ms instant)
+      const cleanSettings = { ...settings };
+      if (cleanSettings.logo === '[logo_stored]') cleanSettings.logo = '';
+      localStorage.setItem('restaurantSettings', JSON.stringify(cleanSettings));
+      if (cleanSettings.vercelUrl) localStorage.setItem('resto_vercel_url', cleanSettings.vercelUrl);
+      if (cleanSettings.serverIp) localStorage.setItem('resto_server_ip', cleanSettings.serverIp);
+      if (cleanSettings.qrMenuMode) localStorage.setItem('resto_qr_mode', cleanSettings.qrMenuMode);
+      window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: cleanSettings }));
 
-      // 2. Perform parallel network sync using api axios instance
+      // 2. Perform fast network sync in parallel
       const syncPromises = [];
 
       syncPromises.push(
-        api.post('/config/info', { restaurantSettings: settings })
+        api.post('/config/info', { restaurantSettings: cleanSettings })
           .catch(err => console.warn("Sync info notice:", err))
       );
 
@@ -139,14 +151,18 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         );
       }
 
-      await Promise.all(syncPromises);
+      // 3. Race sync with a 600ms threshold for ultra-responsive UI
+      await Promise.race([
+        Promise.all(syncPromises),
+        new Promise(resolve => setTimeout(resolve, 600))
+      ]);
 
       setToast({ message: t('Settings saved successfully!'), type: 'success' });
     } catch (error) {
       console.error('Error saving settings:', error);
       setToast({ message: t('Settings saved locally!'), type: 'success' });
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -205,65 +221,160 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     validateField(field, value);
   };
 
-  const handleGetLocation = () => {
-    setLoading(true);
+  const fetchIpLocation = async () => {
+    try {
+      const res = await fetch('https://ipapi.co/json/');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.latitude && data.longitude) {
+          setSettings((prev) => ({
+            ...prev,
+            latitude: Number(data.latitude),
+            longitude: Number(data.longitude)
+          }));
+          setLocating(false);
+          setToast({ message: t(`Location detected via network (${data.city || 'Local Area'})!`), type: 'success' });
+          return true;
+        }
+      }
+    } catch (e) {
+      try {
+        const res2 = await fetch('https://api.ipify.org?format=json');
+        if (res2.ok) {
+          const ipData = await res2.json();
+          const geoRes = await fetch(`https://ipwho.is/${ipData.ip}`);
+          const geoData = await geoRes.json();
+          if (geoData && geoData.latitude && geoData.longitude) {
+            setSettings((prev) => ({
+              ...prev,
+              latitude: Number(geoData.latitude),
+              longitude: Number(geoData.longitude)
+            }));
+            setLocating(false);
+            setToast({ message: t(`Location detected via network (${geoData.city || 'Local Area'})!`), type: 'success' });
+            return true;
+          }
+        }
+      } catch (err2) {}
+    }
+    return false;
+  };
+
+  const handleGetLocation = async () => {
+    setLocating(true);
+
+    const isElectron = (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().includes('electron')) || Boolean(window.electronAPI);
+
+    // If running inside Desktop Electron App, immediately use fast IP-based geolocation (<200ms)
+    if (isElectron) {
+      console.log('[Location] Running inside Desktop Electron app, using network geolocation...');
+      const success = await fetchIpLocation();
+      if (success) return;
+    }
 
     if (!navigator.geolocation) {
-      setLoading(false);
-      setToast({ message: t("Geolocation is not supported by your browser. Please use Chrome or Edge."), type: 'error' });
+      const success = await fetchIpLocation();
+      if (!success) {
+        setLocating(false);
+        setToast({ message: t("Geolocation is not supported. Please enter coordinates manually."), type: 'error' });
+      }
       return;
     }
 
-    const requestLocation = (highAccuracy) => {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setSettings((prev) => ({
-            ...prev,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          }));
-          setLoading(false);
-          setToast({ message: t("Location captured successfully!"), type: 'success' });
-        },
-        (err) => {
-          if (highAccuracy && err.code === 2) {
-            // Fallback for Windows/Electron laptops without GPS hardware
-            console.log("High accuracy failed, retrying with low accuracy...");
-            requestLocation(false);
-            return;
-          }
-          console.error('Geolocation error:', err);
-          setLoading(false);
-          if (err.code === 1) {
-            setToast({ message: t("Location permission denied. Please allow location access in your browser settings."), type: 'error' });
-          } else if (err.code === 2) {
-            setToast({ message: t("GPS position unavailable. This is common on desktop PCs. Please try on a mobile device or enter manually if possible."), type: 'error' });
-          } else if (err.code === 3) {
-            setToast({ message: t("Location request timed out. Please try again."), type: 'error' });
-          } else {
-            setToast({ message: err.message || t("Could not capture GPS location."), type: 'error' });
-          }
-        },
-        { timeout: 15000, enableHighAccuracy: highAccuracy }
-      );
-    };
+    let isResolved = false;
+    const gpsTimer = setTimeout(async () => {
+      if (!isResolved) {
+        isResolved = true;
+        console.log('[Location] GPS hardware taking too long, falling back to network IP location...');
+        const success = await fetchIpLocation();
+        if (!success) {
+          setLocating(false);
+          setToast({ message: t("Could not capture GPS location. Please enter coordinates manually."), type: 'error' });
+        }
+      }
+    }, 2500);
 
-    requestLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (isResolved) return;
+        isResolved = true;
+        clearTimeout(gpsTimer);
+        setSettings((prev) => ({
+          ...prev,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }));
+        setLocating(false);
+        setToast({ message: t("Location captured successfully!"), type: 'success' });
+      },
+      async (err) => {
+        if (isResolved) return;
+        isResolved = true;
+        clearTimeout(gpsTimer);
+        console.warn('GPS failed, attempting IP Geolocation fallback:', err.message);
+        const success = await fetchIpLocation();
+        if (!success) {
+          setLocating(false);
+          if (err.code === 1) {
+            setToast({ message: t("Location permission denied. Please enter coordinates manually."), type: 'error' });
+          } else {
+            setToast({ message: t("GPS unavailable on this PC. Please enter coordinates manually."), type: 'error' });
+          }
+        }
+      },
+      { timeout: 3000, enableHighAccuracy: false }
+    );
   };
 
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        setToast({ message: 'Image size should be less than 2MB', type: 'error' });
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        handleInputChange('logo', reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setToast({ message: t('Image size should be less than 5MB'), type: 'error' });
+      e.target.value = '';
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Automatically optimize and resize logo for instant rendering & printing
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 500;
+        const MAX_HEIGHT = 300;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const optimizedDataUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9);
+        handleInputChange('logo', optimizedDataUrl);
+      };
+      img.onerror = () => {
+        // If image loading fails, fallback to direct data URL
+        handleInputChange('logo', event.target.result);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   return (
@@ -419,10 +530,18 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
 
                   </label>
                   <div className="flex flex-wrap items-center gap-4 bg-background p-3 rounded-xl border border-border">
-                    {settings.logo ?
+                    {Boolean(settings.logo && settings.logo !== '[logo_stored]') ?
                       <div className="flex items-center gap-4">
-                        <div className="p-2 bg-white rounded-lg border border-border shadow-sm">
-                          <img src={settings.logo} alt="Restaurant Logo" className="h-14 max-w-[140px] object-contain" />
+                        <div className="p-2 bg-white rounded-lg border border-border shadow-sm flex items-center justify-center min-w-[60px] min-h-[56px]">
+                          <img 
+                            src={settings.logo} 
+                            alt="Restaurant Logo" 
+                            className="h-14 max-w-[140px] object-contain" 
+                            onError={() => {
+                              console.warn("Logo failed to load, resetting");
+                              handleInputChange('logo', '');
+                            }}
+                          />
                         </div>
                         <button
                           type="button"
@@ -872,10 +991,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                           </div>
                           <button
                             onClick={(e) => { e.preventDefault(); handleGetLocation(); }}
-                            disabled={loading}
+                            disabled={locating}
                             className="w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer">
-                            {loading ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} 
-                            {loading ? t("Getting Location...") : t("Set to Current Location")}
+                            {locating ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} 
+                            {locating ? t("Getting Location...") : t("Set to Current Location")}
                           </button>
                         </div>
                       </div>
@@ -1014,9 +1133,14 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
           <div className="lg:sticky lg:top-24 h-fit bg-surface rounded-2xl p-4 border border-border shadow-lg">
             <h2 className="text-xl font-bold text-text-main mb-4">{t("Receipt Preview")}</h2>
             <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm">
-              {settings.logo &&
+              {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
                 <div className="flex justify-center mb-2">
-                  <img src={settings.logo} alt="Logo Preview" className="max-h-14 max-w-[140px] object-contain" />
+                  <img 
+                    src={settings.logo} 
+                    alt="Logo Preview" 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    className="max-h-14 max-w-[140px] object-contain" 
+                  />
                 </div>
               }
               <div className="text-center font-bold text-lg mb-2">{settings.restaurantName || 'Restaurant Name'}</div>
@@ -1110,10 +1234,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         <div className="flex justify-center flex-col items-center gap-2">
           <button
             onClick={handleSave}
-            disabled={loading || Object.keys(errors).length > 0}
+            disabled={saving || Object.keys(errors).length > 0}
             className={`flex items-center gap-3 px-8 py-4 ${Object.keys(errors).length > 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover shadow-lg shadow-primary/40 hover:shadow-xl hover:shadow-primary/50'} text-white rounded-xl font-bold transition-all disabled:opacity-50 transform hover:scale-[1.02] active:scale-[0.98]`}>
-            <Save size={20} />
-            <span>{loading ? 'Saving...' : 'Save Settings'}</span>
+            <Save size={20} className={saving ? 'animate-spin' : ''} />
+            <span>{saving ? t('Saving...') : t('Save Settings')}</span>
           </button>
           {Object.keys(errors).length > 0 && (
             <p className="text-xs font-bold text-red-500 mt-1">{t("Please fix the validation errors above before saving.")}</p>

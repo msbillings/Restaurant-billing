@@ -1,5 +1,10 @@
 import mongoose from 'mongoose';
 
+// High-speed in-memory cache to prevent blocking Node.js event loop on repeated client polls
+let activeBroadcastsCache = null;
+let activeBroadcastsCacheTime = 0;
+const clientDocCache = new Map();
+
 /**
  * SuperAdmin: Get all broadcasts with populated client details
  */
@@ -173,15 +178,26 @@ export const deleteBroadcast = async (req, res) => {
  */
 export const getClientBroadcasts = async (req, res) => {
   try {
+    const db = mongoose.connection.useDb('mscurechain');
     const tenantDb = req.params.clientId || req.tenantDb || req.headers['x-tenant-db'] || req.query.tenant || req.query.clientId;
     const role = (req.query.role || req.user?.role || 'Admin').toLowerCase();
 
-    const db = mongoose.connection.useDb('mscurechain');
-    const activeBroadcasts = await db.collection('broadcasts').find({ active: true }).sort({ createdAt: -1 }).toArray();
+    const now = Date.now();
+    let activeBroadcasts = activeBroadcastsCache;
+    if (!activeBroadcasts || (now - activeBroadcastsCacheTime > 30000)) {
+      activeBroadcasts = await db.collection('broadcasts')
+        .find({ active: true })
+        .project({ title: 1, message: 1, imageUrl: 1, fileUrl: 1, fileType: 1, targetClients: 1, targetRoles: 1, allowReplies: 1, active: 1, createdAt: 1 })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .toArray();
+      activeBroadcastsCache = activeBroadcasts;
+      activeBroadcastsCacheTime = now;
+    }
 
     let realClientId = null;
-    let clientDoc = null;
-    if (tenantDb) {
+    let clientDoc = tenantDb ? clientDocCache.get(tenantDb) : null;
+    if (tenantDb && !clientDoc) {
       clientDoc = await db.collection('clients').findOne({ 
         $or: [
           { databaseName: tenantDb },
@@ -189,8 +205,11 @@ export const getClientBroadcasts = async (req, res) => {
         ]
       });
       if (clientDoc) {
-        realClientId = clientDoc._id.toString();
+        clientDocCache.set(tenantDb, clientDoc);
       }
+    }
+    if (clientDoc) {
+      realClientId = clientDoc._id.toString();
     }
 
     const filteredBroadcasts = activeBroadcasts.filter(b => {
@@ -212,7 +231,7 @@ export const getClientBroadcasts = async (req, res) => {
 
     // Fetch any existing replies for this client
     let clientReplies = [];
-    if (clientDoc) {
+    if (clientDoc && filteredBroadcasts.length > 0) {
       clientReplies = await db.collection('broadcastreplies').find({
         clientId: clientDoc._id,
         broadcastId: { $in: filteredBroadcasts.map(b => b._id) }

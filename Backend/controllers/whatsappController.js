@@ -4,6 +4,14 @@ import { getTenantModels } from '../utils/tenantManager.js';
 export const resolveTenantInfo = async (req) => {
   const tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name || 'default';
   
+  // High-speed fast path: If WhatsAppService already initialized in memory, return immediately (0ms)
+  if (whatsappManager.hasInstance(tenantId)) {
+    const existing = whatsappManager.getInstance(tenantId);
+    if (existing.restaurantName) {
+      return { tenantId, restaurantName: existing.restaurantName, whatsappService: existing };
+    }
+  }
+
   let restaurantName = req.headers?.['x-restaurant-name'] || null;
   try {
     const models = req.models || (await getTenantModels(tenantId));

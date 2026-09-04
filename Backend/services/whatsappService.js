@@ -35,10 +35,8 @@ class WhatsAppService {
 
   getPlatformInfo() {
     const rawName = this.restaurantName || 'MS Billings POS';
-    const osPlatform = os.platform();
-    let browserConfig = Browsers.windows('Chrome');
-    if (osPlatform === 'darwin') browserConfig = Browsers.macOS('Chrome');
-    else if (osPlatform === 'linux') browserConfig = Browsers.ubuntu('Chrome');
+    // ALWAYS identify as Windows Chrome so phone Linked Devices displays "Google Chrome (Windows)"
+    const browserConfig = Browsers.windows('Chrome');
     
     return {
       browserConfig,
@@ -94,6 +92,11 @@ class WhatsAppService {
         try {
           if (this.sock?.user?.id && state?.creds) {
             state.creds.registered = true;
+            this.status = 'CONNECTED';
+            this.qrDataUrl = null;
+            const rawJid = this.sock.user.id;
+            this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0] || null;
+            this.notifyListeners();
           }
           await saveCreds();
         } catch (e) {
@@ -119,6 +122,12 @@ class WhatsAppService {
           } catch (qrErr) {
             console.error('[WhatsApp Service] QR Generation Error:', qrErr);
           }
+        }
+
+        if (connection === 'connecting') {
+          this.status = 'CONNECTING';
+          this.qrDataUrl = null;
+          this.notifyListeners();
         }
 
         if (connection === 'close') {
@@ -325,19 +334,33 @@ class WhatsAppService {
     }
   }
 
-  getStatus() {
-    const isActuallyConnected = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user);
-    const rawJid = isActuallyConnected ? (this.sock?.user?.id || '') : '';
-    const phone = isActuallyConnected ? (this.connectedNumber || rawJid.split(':')[0] || rawJid.split('@')[0] || null) : null;
-    const { platformName, deviceName } = this.getPlatformInfo();
+  async refreshQR() {
+    this.isInitializing = false;
+    this.qrDataUrl = null;
+    this.status = 'DISCONNECTED';
+    await this.init();
+    return { success: true, message: 'QR regeneration triggered' };
+  }
 
-    if (!isActuallyConnected && !this.sock && !this.isInitializing) {
-      this.init().catch(() => {});
+  getStatus() {
+    const isActuallyConnected = (this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock);
+    const phone = isActuallyConnected ? (this.connectedNumber || (this.sock?.user?.id ? this.sock.user.id.split(':')[0].replace(/[^0-9]/g, '') : null)) : null;
+    const { name: deviceName, platform: platformName } = this.getPlatformInfo();
+
+    let currentStatus = this.status;
+    if (isActuallyConnected) {
+      currentStatus = 'CONNECTED';
+    } else if (this.status === 'CONNECTING') {
+      currentStatus = 'CONNECTING';
+    } else if (this.qrDataUrl) {
+      currentStatus = 'SCAN_QR';
     }
 
+    const showQr = Boolean(!isActuallyConnected && currentStatus === 'SCAN_QR' && this.qrDataUrl);
+
     return {
-      status: isActuallyConnected ? 'CONNECTED' : (this.qrDataUrl ? 'SCAN_QR' : this.status),
-      connectedNumber: phone,
+      status: currentStatus,
+      connectedNumber: isActuallyConnected ? phone : null,
       userName: isActuallyConnected ? (this.sock?.user?.name || this.restaurantName || 'MS Billings User') : null,
       restaurantName: this.restaurantName || null,
       platform: platformName,
@@ -354,8 +377,8 @@ class WhatsAppService {
         }
       ] : [],
       totalLinkedDevices: isActuallyConnected && phone ? 1 : 0,
-      hasQr: Boolean(this.qrDataUrl && !isActuallyConnected),
-      qr: isActuallyConnected ? null : this.qrDataUrl
+      hasQr: showQr,
+      qr: showQr ? this.qrDataUrl : null
     };
   }
 
@@ -374,8 +397,10 @@ class WhatsAppService {
   }
 
   async ensureConnection() {
-    const isReady = this.status === 'CONNECTED' && Boolean(this.sock?.user?.id || this.sock?.user) && isSocketOpen(this.sock);
-    if (isReady) return; // Immediately return if already fully connected and socket is open!
+    // Zero-delay fast path: already connected and ready
+    if ((this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock)) {
+      return;
+    }
 
     console.log(`[WhatsApp Service - ${this.tenantId}] Ensuring socket connection is open and ready...`);
     if (!this.sock || this.status === 'DISCONNECTED') {
@@ -384,47 +409,42 @@ class WhatsAppService {
     }
     if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
       try {
-        await this.sock.waitForSocketOpen();
+        await Promise.race([
+          this.sock.waitForSocketOpen(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+        ]);
       } catch (e) {}
     }
     let count = 0;
-    while (count < 30 && (this.status !== 'CONNECTED' || !this.sock?.user?.id || !isSocketOpen(this.sock))) {
-      await new Promise(r => setTimeout(r, 200));
+    while (count < 5 && (this.status !== 'CONNECTED' || !this.sock?.user?.id || !isSocketOpen(this.sock))) {
+      await new Promise(r => setTimeout(r, 100));
       count++;
     }
   }
 
   async sendMessage(rawPhone, text) {
     let cleanPhone = (rawPhone || '').replace(/[^0-9]/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = '91' + cleanPhone;
-    }
+    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
     if (!cleanPhone || cleanPhone.length < 10) {
-      throw new Error('Invalid destination phone number. Please enter a 10-digit mobile number.');
+      throw new Error('Invalid destination phone number.');
     }
 
     await this.ensureConnection();
 
-    if (!this.sock || this.status !== 'CONNECTED' || !this.sock?.user?.id) {
-      throw new Error('WhatsApp service is not connected. Please scan the QR code or link via phone code.');
+    if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
+      throw new Error('WhatsApp service is not connected.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
-        try { await this.sock.waitForSocketOpen(); } catch (e) {}
-      }
       const result = await this.sock.sendMessage(jid, { text: String(text) });
       return result;
     } catch (sendErr) {
-      console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr);
+      console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr.message);
       this.isInitializing = false;
       await this.init();
-      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
-        try { await this.sock.waitForSocketOpen(); } catch (e) {}
-      }
       if (this.sock && this.sock.user?.id) {
         return await this.sock.sendMessage(jid, { text: String(text) });
       }
@@ -434,47 +454,53 @@ class WhatsAppService {
 
   async sendBillMedia(rawPhone, { imageBase64, pdfBase64, documentBase64, mimetype, caption, fileName }) {
     let cleanPhone = (rawPhone || '').replace(/[^0-9]/g, '');
-    if (cleanPhone.length === 10) {
-      cleanPhone = '91' + cleanPhone;
-    }
+    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
     if (!cleanPhone || cleanPhone.length < 10) {
-      throw new Error('Invalid destination phone number. Please enter a 10-digit mobile number.');
+      throw new Error('Invalid destination phone number.');
     }
 
     await this.ensureConnection();
 
-    if (!this.sock || this.status === 'DISCONNECTED') {
-      throw new Error('WhatsApp service is not connected. Please scan the QR code or link via phone code.');
+    if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
+      throw new Error('WhatsApp service is not connected.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     const sendAction = async () => {
-      if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
-        try { await this.sock.waitForSocketOpen(); } catch (e) {}
-      }
-      if (imageBase64) {
-        const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-        const buffer = Buffer.from(cleanBase64, 'base64');
-        return await this.sock.sendMessage(jid, {
-          image: buffer,
-          mimetype: 'image/jpeg',
-          caption: caption || '🧾 *Your Digital e-Bill Receipt*'
-        });
-      } else if (pdfBase64 || documentBase64) {
-        const srcBase64 = documentBase64 || pdfBase64;
-        const cleanBase64 = srcBase64.replace(/^data:.*?;base64,/, '');
-        const buffer = Buffer.from(cleanBase64, 'base64');
-        return await this.sock.sendMessage(jid, {
+      let messagePayload = {};
+      if (pdfBase64 || (documentBase64 && (mimetype?.includes('pdf') || fileName?.endsWith('.pdf')))) {
+        const rawB64 = (pdfBase64 || documentBase64).replace(/^data:application\/pdf;base64,/, '').trim();
+        const buffer = Buffer.from(rawB64, 'base64');
+        messagePayload = {
           document: buffer,
-          mimetype: mimetype || (pdfBase64 ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
-          fileName: fileName || (pdfBase64 ? 'Receipt.pdf' : 'DayBook.xlsx'),
-          caption: caption || '🧾 *Document*'
-        });
+          mimetype: mimetype || 'application/pdf',
+          fileName: fileName || 'eBill.pdf',
+          caption: caption || ''
+        };
+      } else if (imageBase64) {
+        const rawB64 = imageBase64.replace(/^data:image\/\w+;base64,/, '').trim();
+        const buffer = Buffer.from(rawB64, 'base64');
+        messagePayload = {
+          image: buffer,
+          mimetype: mimetype || 'image/jpeg',
+          caption: caption || ''
+        };
+      } else if (documentBase64) {
+        const rawB64 = documentBase64.replace(/^data:[^;]+;base64,/, '').trim();
+        const buffer = Buffer.from(rawB64, 'base64');
+        messagePayload = {
+          document: buffer,
+          mimetype: mimetype || 'application/octet-stream',
+          fileName: fileName || 'document',
+          caption: caption || ''
+        };
       } else {
-        return await this.sock.sendMessage(jid, { text: caption || '🧾 *Your Digital e-Bill Receipt*' });
+        messagePayload = { text: caption || '🧾 *Your Digital e-Bill Receipt*' };
       }
+
+      return await this.sock.sendMessage(jid, messagePayload);
     };
 
     try {
@@ -495,6 +521,10 @@ class WhatsAppService {
 class WhatsAppManager {
   constructor() {
     this.instances = new Map();
+  }
+
+  hasInstance(tenantId = 'default') {
+    return this.instances.has(tenantId);
   }
 
   getInstance(tenantId = 'default', restaurantName = null) {

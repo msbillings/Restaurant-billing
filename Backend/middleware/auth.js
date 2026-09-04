@@ -34,7 +34,7 @@ const authenticateToken = async (req, res, next) => {
         if (tenantModels?.User) {
           req.models = tenantModels;
           TenantUser = tenantModels.User;
-          console.log(`[Auth] Strictly routed request to tenant DB: ${decoded.db} based on JWT`);
+          console.log(`[Auth] Strictly routed request to tenant DB: ${decoded.db} based on JWT for ${req.originalUrl}`);
         }
       } catch (err) {
         console.error('[Auth] Failed to connect to tenant DB from JWT:', err.message);

@@ -1,7 +1,7 @@
 import dns from 'dns';
 try {
   dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch (e) {}
+} catch (e) { }
 
 import mongoose from 'mongoose';
 import MenuDefault from '../models/Menu.js';

@@ -7,9 +7,14 @@ export const initFirebase = () => {
     const serviceAccountPath = path.resolve('firebase-service-account.json');
     if (fs.existsSync(serviceAccountPath)) {
       const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+      const certFunc = admin.credential?.cert || admin.cert || admin.default?.cert;
       
+      if (!certFunc) {
+        throw new Error('Unable to find cert function on firebase-admin package');
+      }
+
       admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+        credential: certFunc(serviceAccount)
       });
       
       global.firebaseAdmin = admin;

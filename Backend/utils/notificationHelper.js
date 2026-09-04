@@ -23,7 +23,7 @@ export const getTenantDbFromReq = (req) => {
         const decoded = jwt.decode(parts[1]);
         if (decoded?.db && decoded.db !== 'undefined' && decoded.db !== 'null') return decoded.db;
       }
-    } catch (e) {}
+    } catch (e) { }
   }
   return null;
 };
@@ -51,8 +51,11 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
 
       // ⚡ FAST-PATH: Broadcast immediately with 0ms delay to all connected sockets
       if (io) {
-        io.to(tenantDb).emit('new_notification', immediateNotification);
-        io.emit('new_notification', immediateNotification); // Universal tenant fallback
+        if (tenantDb) {
+          io.to(tenantDb).emit('new_notification', immediateNotification);
+        } else {
+          io.emit('new_notification', immediateNotification);
+        }
         console.log(`[Notification] ⚡ INSTANT broadcast (${title}) to tenant: ${tenantDb}`);
       }
 
@@ -174,7 +177,7 @@ export const sendFcmPushNotification = async (req, tenantDb, title, message, tar
       };
 
       const response = await global.firebaseAdmin.messaging().sendEachForMulticast(payload);
-      
+
       // Optional: Cleanup invalid tokens (NotRegistered)
       if (response.failureCount > 0) {
         const failedTokens = [];

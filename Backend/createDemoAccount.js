@@ -5,7 +5,7 @@
  */
 
 import dns from 'dns';
-try { dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']); } catch(e) {}
+try { dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']); } catch (e) { }
 
 import mongoose from 'mongoose';
 import crypto from 'crypto';
@@ -23,10 +23,10 @@ import License from './models/License.js';
 // ── Demo Credentials (share these with Google Play) ─────────────
 const DEMO = {
   restaurantName: 'Demo Restaurant',
-  ownerName:      'Demo Owner',
-  email:          'demo@msbilling.app',
-  password:       'Demo@1234',
-  plan:           'Yearly'
+  ownerName: 'Demo Owner',
+  email: 'demo@msbilling.app',
+  password: 'Demo@1234',
+  plan: 'Yearly'
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -57,9 +57,9 @@ async function createDemoAccount() {
 
     // Create client
     const client = await Client.create({
-      restaurantName:    DEMO.restaurantName,
-      ownerName:         DEMO.ownerName,
-      email:             DEMO.email,
+      restaurantName: DEMO.restaurantName,
+      ownerName: DEMO.ownerName,
+      email: DEMO.email,
       plainTextPassword: DEMO.password,
       licenseKey,
       status: 'Active',
@@ -68,9 +68,9 @@ async function createDemoAccount() {
 
     // Create license
     await License.create({
-      key:      licenseKey,
-      client:   client._id,
-      plan:     DEMO.plan,
+      key: licenseKey,
+      client: client._id,
+      plan: DEMO.plan,
       validUntil
     });
 
