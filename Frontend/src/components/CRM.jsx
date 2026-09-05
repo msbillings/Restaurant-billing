@@ -23,7 +23,13 @@ const CRM = ({ onNavigate, onGoBack }) => {
 
   const [expandedFavorites, setExpandedFavorites] = useState({});
   const [vipSettingsOpen, setVipSettingsOpen] = useState(false);
-  const [vipSettings, setVipSettings] = useState({ vipVisitThreshold: 5, vipSpendThreshold: 5000 });
+  const [vipSettings, setVipSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('resto_vip_settings');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return { vipVisitThreshold: 5, vipSpendThreshold: 5000 };
+  });
   const [fullSettings, setFullSettings] = useState({});
   const [savingVipSettings, setSavingVipSettings] = useState(false);
 
@@ -38,11 +44,24 @@ const CRM = ({ onNavigate, onGoBack }) => {
     try {
       const res = await api.get('/config/info');
       if (res.data?.restaurantSettings) {
-        setFullSettings(res.data.restaurantSettings);
-        setVipSettings({
-          vipVisitThreshold: res.data.restaurantSettings.vipVisitThreshold !== undefined ? res.data.restaurantSettings.vipVisitThreshold : 5,
-          vipSpendThreshold: res.data.restaurantSettings.vipSpendThreshold !== undefined ? res.data.restaurantSettings.vipSpendThreshold : 5000
-        });
+        const backendSettings = res.data.restaurantSettings;
+        setFullSettings(backendSettings);
+        
+        // Use local saved settings if user recently customized them, else sync from backend
+        const localSaved = localStorage.getItem('resto_vip_settings');
+        if (localSaved) {
+          try {
+            setVipSettings(JSON.parse(localSaved));
+            return;
+          } catch (e) {}
+        }
+        
+        const newVip = {
+          vipVisitThreshold: backendSettings.vipVisitThreshold !== undefined ? Number(backendSettings.vipVisitThreshold) : 5,
+          vipSpendThreshold: backendSettings.vipSpendThreshold !== undefined ? Number(backendSettings.vipSpendThreshold) : 5000
+        };
+        setVipSettings(newVip);
+        localStorage.setItem('resto_vip_settings', JSON.stringify(newVip));
       }
     } catch (err) {
       console.error('Failed to load VIP settings', err);
@@ -50,16 +69,17 @@ const CRM = ({ onNavigate, onGoBack }) => {
   };
 
   const saveVipSettings = async () => {
-    setSavingVipSettings(true);
+    // 1. Instant optimistic UI close & LocalStorage update (0ms delay)
+    localStorage.setItem('resto_vip_settings', JSON.stringify(vipSettings));
+    const newFullSettings = { ...fullSettings, ...vipSettings };
+    setFullSettings(newFullSettings);
+    setVipSettingsOpen(false);
+
+    // 2. Non-blocking background API update
     try {
-      const updatedSettings = { ...fullSettings, ...vipSettings };
-      await api.post('/config/info', { restaurantSettings: updatedSettings });
-      setFullSettings(updatedSettings);
-      setVipSettingsOpen(false);
+      await api.post('/config/info', { restaurantSettings: vipSettings });
     } catch (err) {
-      console.error('Failed to save VIP settings', err);
-    } finally {
-      setSavingVipSettings(false);
+      console.error('Background save VIP settings failed:', err);
     }
   };
 
@@ -71,6 +91,17 @@ const CRM = ({ onNavigate, onGoBack }) => {
 
   const fetchCustomers = async () => {
     try {
+      const cached = localStorage.getItem('resto_crm_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCustomers(parsed);
+          setLoading(false);
+        }
+      }
+    } catch (e) {}
+
+    try {
       const API_BASE_URL = getApiUrl();
       const response = await fetch(`${API_BASE_URL}/customers`, {
         headers: {
@@ -81,6 +112,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
       if (response.ok) {
         const data = await response.json();
         setCustomers(data);
+        localStorage.setItem('resto_crm_cache', JSON.stringify(data));
       }
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -162,7 +194,22 @@ const CRM = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-text-muted">{t("Loading CRM...")}</div>;
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-6 bg-background">
+        <div className="flex flex-col items-center justify-center gap-3 bg-surface p-8 rounded-3xl border border-border shadow-xl max-w-xs sm:max-w-sm w-full text-center animate-fade-in">
+          <div className="relative flex items-center justify-center my-2">
+            <div className="w-14 h-14 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
+            <Users size={22} className="text-primary absolute animate-pulse" />
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-text-main">{t("Loading CRM Directory")}</h3>
+            <p className="text-xs text-text-muted mt-1">{t("Fetching customer profiles & loyalty stats...")}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-y-auto w-full">

@@ -11,7 +11,7 @@ export const getActiveNotifications = async (req, res) => {
     const Settings = getTenantModel(req, 'Setting', SettingDefault);
     const ServiceRequest = getTenantModel(req, 'ServiceRequest', ServiceRequestDefault);
     const NotificationModel = getTenantModel(req, 'Notification', NotificationDefault);
-    
+
     const settings = await Settings.findOne().lean();
     const shopName = settings?.restaurantName || 'Restaurant';
 
@@ -23,7 +23,7 @@ export const getActiveNotifications = async (req, res) => {
       const persistentNotifs = await NotificationModel.find({
         createdAt: { $gte: oneDayAgo }
       }).sort({ createdAt: -1 }).limit(100).lean();
-      
+
       persistentNotifs.forEach(n => {
         notifications.push({
           id: n.data?.id || n._id.toString(),
@@ -93,7 +93,7 @@ export const getActiveNotifications = async (req, res) => {
       const cleanTable = (reqItem.tableNumber || '').replace('Table ', '');
       const reqType = reqItem.requestType || 'Service';
       const isPayBill = reqType === 'Pay the Bill';
-      
+
       notifications.push({
         id: `service-${reqItem._id}`,
         type: isPayBill ? 'warning' : 'info',
@@ -101,8 +101,8 @@ export const getActiveNotifications = async (req, res) => {
         message: reqType,
         time: reqItem.createdAt || new Date(),
         timestamp: new Date(reqItem.createdAt || Date.now()),
-        targetRoles: isPayBill 
-          ? ['Cashier', 'Captain', 'Manager', 'Admin'] 
+        targetRoles: isPayBill
+          ? ['Cashier', 'Captain', 'Manager', 'Admin']
           : ['Captain', 'Manager', 'Admin'],
         data: {
           serviceRequestId: reqItem._id,

@@ -28,6 +28,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const [expandedRows, setExpandedRows] = useState({});
+  const [loadingRowItems, setLoadingRowItems] = useState({});
   const [mixedModalBill, setMixedModalBill] = useState(null);
   const [showFilters, setShowFilters] = useState(false);
   const itemsPerPage = 20; // Server-side pagination - Show 20 bills per page (latest first)
@@ -56,10 +57,13 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
     if (isExpanding) {
       const targetBill = bills.find(b => b._id === id);
-      if (targetBill && (!targetBill.items || targetBill.items.length === 0)) {
-        if (billCache[id] && billCache[id].items && billCache[id].items.length > 0) {
+      const hasItems = targetBill && Array.isArray(targetBill.items) && targetBill.items.length > 0;
+
+      if (!hasItems) {
+        if (billCache[id] && Array.isArray(billCache[id].items) && billCache[id].items.length > 0) {
           setBills(prev => prev.map(b => b._id === id ? { ...b, items: billCache[id].items } : b));
         } else {
+          setLoadingRowItems(prev => ({ ...prev, [id]: true }));
           try {
             const fullBill = await getBillById(id);
             if (fullBill && fullBill.items) {
@@ -68,6 +72,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
             }
           } catch (err) {
             console.error('Error fetching items for bill:', err);
+          } finally {
+            setLoadingRowItems(prev => ({ ...prev, [id]: false }));
           }
         }
       }
@@ -145,7 +151,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   }, []);
 
   const fetchBills = async (isBackground = false) => {
-    if (!isBackground && bills.length === 0) {
+    if (!isBackground) {
       setLoading(true);
     }
     try {
@@ -203,9 +209,9 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     setDeleteModal((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       await deleteBill(deleteModal.billId, deleteModal.password);
-      setBills((prev) => prev.map((bill) => 
-        bill._id === deleteModal.billId 
-          ? { ...bill, status: 'Deleted', cancelReason: 'Manually deleted from History' } 
+      setBills((prev) => prev.map((bill) =>
+        bill._id === deleteModal.billId
+          ? { ...bill, status: 'Deleted', cancelReason: 'Manually deleted from History' }
           : bill
       ));
       setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
@@ -508,19 +514,19 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               </tr>
             </thead>
             <tbody>
-              {loading && bills.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="p-12 text-center">
-                    <div className="flex flex-col items-center justify-center min-h-[300px]">
-                      <div className="relative flex items-center justify-center mb-4">
-                        <div className="w-12 h-12 rounded-full border-4 border-orange-100 border-t-orange-600 animate-spin" />
-                        <Loader2 size={20} className="text-orange-600 animate-spin absolute" />
-                      </div>
-                      <p className="text-slate-700 font-bold text-sm tracking-wide">{t("Loading bills...")}</p>
-                      <span className="text-slate-400 text-xs mt-1">{t("Fetching bill history, please wait...")}</span>
-                    </div>
-                  </td>
-                </tr>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`skeleton-${i}`} className="border-b border-border/50 animate-pulse">
+                    <td className="px-3 py-3"><div className="h-4 w-20 bg-surface-hover rounded-md"></div></td>
+                    <td className="px-3 py-3"><div className="h-4 w-24 bg-surface-hover rounded-md"></div></td>
+                    <td className="px-3 py-3"><div className="h-4 w-28 bg-surface-hover rounded-md"></div></td>
+                    <td className="px-3 py-3"><div className="h-4 w-16 bg-surface-hover rounded-full"></div></td>
+                    <td className="px-3 py-3"><div className="h-4 w-16 bg-surface-hover rounded-full"></div></td>
+                    <td className="px-3 py-3"><div className="h-4 w-16 bg-surface-hover rounded-md"></div></td>
+                    <td className="px-3 py-3 text-right"><div className="h-4 w-16 bg-surface-hover rounded-md ml-auto"></div></td>
+                    <td className="px-3 py-3"><div className="h-6 w-16 bg-surface-hover rounded-md mx-auto"></div></td>
+                  </tr>
+                ))
               ) : filteredBills.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="p-8 text-center text-text-muted font-medium">{t("No transactions found")}</td>
@@ -607,11 +613,16 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                       </td>
                     </tr>
                     {expandedRows[bill._id] && (
-                      <tr className="bg-surface/50 border-b border-border">
+                      <tr className="bg-surface/50 border-b border-border animate-fade-in">
                         <td colSpan="8" className="p-0">
-                          <div className="p-4 border-l-4 border-primary ml-10 my-1 bg-white rounded-r-lg shadow-sm">
+                          <div className="p-4 border-l-4 border-primary ml-10 my-1 bg-surface/80 rounded-r-lg shadow-2xs">
                             <div className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">{t("Order Items")}</div>
-                            {bill.items && bill.items.length > 0 ? (
+                            {loadingRowItems[bill._id] ? (
+                              <div className="flex items-center gap-2 py-2 text-xs font-bold text-primary animate-pulse">
+                                <Loader2 size={16} className="animate-spin text-primary shrink-0" />
+                                <span>{t("Loading order items...")}</span>
+                              </div>
+                            ) : bill.items && bill.items.length > 0 ? (
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-4xl">
                                 {bill.items.map((item, idx) => {
                                   if (item.isCancelled && item.quantity === item.cancelledQuantity) return null;
@@ -640,14 +651,20 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
         {/* Mobile Responsive Stacked Card List (Visible on screens < 768px) */}
         <div className="md:hidden overflow-y-auto flex-1 p-3 space-y-3">
-          {loading && bills.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-10">
-              <div className="relative flex items-center justify-center mb-3">
-                <div className="w-10 h-10 rounded-full border-4 border-orange-100 border-t-orange-600 animate-spin" />
-                <Loader2 size={18} className="text-orange-600 animate-spin absolute" />
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={`mob-skeleton-${i}`} className="bg-background rounded-xl p-3.5 border border-border space-y-3 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-24 bg-surface-hover rounded-md"></div>
+                  <div className="h-4 w-14 bg-surface-hover rounded-full"></div>
+                </div>
+                <div className="h-3 w-36 bg-surface-hover rounded-md"></div>
+                <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                  <div className="h-5 w-20 bg-surface-hover rounded-md"></div>
+                  <div className="h-7 w-24 bg-surface-hover rounded-lg"></div>
+                </div>
               </div>
-              <p className="text-slate-700 font-bold text-xs">{t("Loading bills...")}</p>
-            </div>
+            ))
           ) : filteredBills.length === 0 ? (
             <div className="p-8 text-center text-text-muted text-sm font-medium">{t("No transactions found")}</div>
           ) : (
@@ -655,6 +672,15 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               <div key={bill._id} className={`bg-background rounded-xl p-3.5 border border-border space-y-2.5 ${bill.status === 'Cancelled' ? 'opacity-75 bg-danger/5' : ''}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleRow(bill._id)}
+                      className="p-1 hover:bg-surface rounded-lg text-text-muted transition-transform duration-200 cursor-pointer"
+                      style={{ transform: expandedRows[bill._id] ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                      title={t("Toggle order items")}
+                    >
+                      <ChevronDown size={16} />
+                    </button>
                     <span className="font-bold font-mono text-sm text-text-main">#{bill.billNumber || 'CANCELLED'}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
                       }`}>
@@ -684,6 +710,34 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     {renderPaymentCell(bill)}
                   </div>
                 </div>
+
+                {/* Mobile Expanded Items View */}
+                {expandedRows[bill._id] && (
+                  <div className="mt-2 pt-2 border-t border-border/60 bg-surface/50 p-2.5 rounded-xl space-y-1.5 animate-fade-in">
+                    <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider">{t("Order Items")}</div>
+                    {loadingRowItems[bill._id] ? (
+                      <div className="flex items-center gap-2 py-1 text-xs font-bold text-primary animate-pulse">
+                        <Loader2 size={14} className="animate-spin text-primary shrink-0" />
+                        <span>{t("Loading order items...")}</span>
+                      </div>
+                    ) : bill.items && bill.items.length > 0 ? (
+                      <div className="space-y-1">
+                        {bill.items.map((item, idx) => {
+                          if (item.isCancelled && item.quantity === item.cancelledQuantity) return null;
+                          const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                          return (
+                            <div key={idx} className="flex justify-between items-center text-xs border-b border-border/40 pb-1 last:border-0">
+                              <span className="text-text-main font-medium truncate pr-2">{item.name} <span className="text-text-muted text-[10px]">x{qty}</span></span>
+                              <span className="font-mono text-text-muted shrink-0">₹{((item.price || 0) * qty).toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-text-muted italic">{t("No items data available")}</div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-2 border-t border-border/50">
                   <span className={`text-base font-black text-text-main ${bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}`}>

@@ -1,7 +1,7 @@
 import api from '../api/axios';
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import React, { useState, useEffect } from 'react';
-import { getOpenOrders, mergeTableOrders, apiGenerateKOT } from '../api/billing';
+import { getOpenOrders, mergeTableOrders, apiGenerateKOT, getDailyStats } from '../api/billing';
 import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
 import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2 } from 'lucide-react';
@@ -99,6 +99,26 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [menuImagesMap, setMenuImagesMap] = useState({});
   const [reservations, setReservations] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
+
+  const fetchDailyStatsData = async () => {
+    try {
+      const stats = await getDailyStats();
+      if (stats) setDailyStats(stats);
+    } catch (e) {
+      console.error('Error fetching daily stats in FloorManagement:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailyStatsData();
+    const unsubBillSettled = realtimeService.subscribe('billSettled', () => {
+      fetchDailyStatsData();
+    });
+    return () => {
+      if (unsubBillSettled) unsubBillSettled();
+    };
+  }, []);
 
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
 
@@ -890,28 +910,127 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         </div>
       </div>
       
-      {/* Status Legend (Scrollable horizontal pill bar) */}
+      {/* Status Legend & Dynamic Live Counts Bar (Scrollable horizontal pill bar) */}
       <div className="px-2.5 sm:px-6 flex items-center gap-2 sm:gap-3 text-xs font-medium text-gray-600 overflow-x-auto no-scrollbar py-2 border-b border-gray-100 shrink-0">
-        <div className="flex items-center gap-1.5 whitespace-nowrap bg-emerald-50/60 px-2.5 py-1 rounded-full border border-emerald-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span>{t("Available")}</span>
-        </div>
-        <div className="flex items-center gap-1.5 whitespace-nowrap bg-blue-50/60 px-2.5 py-1 rounded-full border border-blue-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-          <span>{t("Running Table")}</span>
-        </div>
-        <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50/60 px-2.5 py-1 rounded-full border border-orange-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-          <span>{t("Printed Table")}</span>
-        </div>
-        <div className="flex items-center gap-1.5 whitespace-nowrap bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
-          <span>{t("Paid Table")}</span>
-        </div>
-        <div className="flex items-center gap-1.5 whitespace-nowrap bg-amber-50/60 px-2.5 py-1 rounded-full border border-amber-200">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-          <span>{t("Reserved KOT")}</span>
-        </div>
+        {(() => {
+          let totalCount = 0;
+          let runningCount = 0;
+          let printedCount = 0;
+          let paidTablesCount = 0;
+          let reservedCount = 0;
+          let availableCount = 0;
+
+          const todayString = new Date().toISOString().split('T')[0];
+
+          (floors || []).forEach((floor, fIdx) => {
+            const allSpaces = [
+              ...(floor.tables || []),
+              ...(floor.cabins || []),
+              ...(floor.sofas || []),
+              ...(floor.spaces || [])
+            ];
+            totalCount += allSpaces.length;
+
+            allSpaces.forEach((item) => {
+              const uniqueSpaceName = `${floor.name} - ${item.name}`;
+              const activeOrder = getSpaceOrder(uniqueSpaceName, item.name, fIdx === 0);
+
+              if (activeOrder) {
+                if (activeOrder.status === 'Open') {
+                  runningCount++;
+                } else if (activeOrder.status === 'Billed') {
+                  printedCount++;
+                } else if (activeOrder.status === 'Paid') {
+                  paidTablesCount++;
+                } else {
+                  runningCount++;
+                }
+              } else {
+                const isReserved = (reservations || []).some((res) => {
+                  if (res.status === 'cancelled' || res.status === 'completed' || res.status === 'no-show') return false;
+                  const resTable = res.tableType ? res.tableType.toLowerCase() : '';
+                  const tName = uniqueSpaceName.toLowerCase();
+                  const tNameShort = item.name.toLowerCase();
+                  const matchesTable = resTable === tName || tName.includes(resTable) || resTable.includes(tName) || resTable === tNameShort || tNameShort.includes(resTable);
+                  const resDateStr = new Date(res.date).toISOString().split('T')[0];
+                  return resDateStr === todayString && matchesTable;
+                });
+
+                if (isReserved) {
+                  reservedCount++;
+                } else {
+                  availableCount++;
+                }
+              }
+            });
+          });
+
+          const settledBillsToday = dailyStats.orders || paidTablesCount;
+          const deliveryOrdersToday = dailyStats.deliveryOrders || 0;
+          const takeawayOrdersToday = dailyStats.takeawayOrders || 0;
+
+          return (
+            <>
+              {/* 1) Available (green dot) */}
+              <div className="flex items-center gap-1.5 whitespace-nowrap bg-emerald-50/70 px-2.5 py-1 rounded-full border border-emerald-200 text-emerald-950 font-bold shadow-2xs">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <span>{t("Available")}</span>
+                <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{availableCount}</span>
+              </div>
+
+              {/* 2) Running Table (blue dot) */}
+              <div className="flex items-center gap-1.5 whitespace-nowrap bg-blue-50/70 px-2.5 py-1 rounded-full border border-blue-200 text-blue-950 font-bold shadow-2xs">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+                <span>{t("Running Table")}</span>
+                <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{runningCount}</span>
+              </div>
+
+              {/* 3) Printed Table (orange dot) */}
+              <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50/70 px-2.5 py-1 rounded-full border border-orange-200 text-orange-950 font-bold shadow-2xs">
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0"></span>
+                <span>{t("Printed Table")}</span>
+                <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{printedCount}</span>
+              </div>
+
+              {/* 4) Paid Table (gray dot - shows total settled bills today) */}
+              <div className="flex items-center gap-1.5 whitespace-nowrap bg-gray-100 px-2.5 py-1 rounded-full border border-gray-300 text-gray-800 font-bold shadow-2xs">
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-400 shrink-0"></span>
+                <span>{t("Paid Table")}</span>
+                <span className="bg-gray-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{settledBillsToday}</span>
+              </div>
+
+              {/* 5) Reserved KOT (amber dot) */}
+              <div className="flex items-center gap-1.5 whitespace-nowrap bg-amber-50/70 px-2.5 py-1 rounded-full border border-amber-200 text-amber-950 font-bold shadow-2xs">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                <span>{t("Reserved KOT")}</span>
+                <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{reservedCount}</span>
+              </div>
+
+              {/* Right Aligned Stat Cards (flex end) */}
+              <div className="ml-auto flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="h-4 w-[1px] bg-gray-300 mx-0.5 shrink-0"></div>
+
+                {/* 6) All Total Tables */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap bg-slate-100/90 text-slate-800 px-3 py-1 rounded-full border border-slate-300 shadow-2xs shrink-0 font-bold">
+                  <span className="text-[11px] uppercase tracking-wider text-slate-500 font-extrabold">{t("Total Tables")}:</span>
+                  <span className="bg-slate-800 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{totalCount}</span>
+                </div>
+
+                {/* 7) Delivery Orders Today */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap bg-indigo-50 text-indigo-900 px-3 py-1 rounded-full border border-indigo-200 shadow-2xs shrink-0 font-bold">
+                  <span className="text-[11px] uppercase tracking-wider text-indigo-600 font-extrabold">{t("Delivery Today")}:</span>
+                  <span className="bg-indigo-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{deliveryOrdersToday}</span>
+                </div>
+
+                {/* 8) Takeaway Orders Today */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap bg-teal-50 text-teal-900 px-3 py-1 rounded-full border border-teal-200 shadow-2xs shrink-0 font-bold">
+                  <span className="text-[11px] uppercase tracking-wider text-teal-600 font-extrabold">{t("Takeaway Today")}:</span>
+                  <span className="bg-teal-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{takeawayOrdersToday}</span>
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {/* Floor Tabs */}
@@ -963,16 +1082,28 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
           return Object.entries(grouped).map(([typeName, items], index) => (
             <section key={`${typeName}-${index}`}>
-              <div className="flex items-center gap-2 mb-3 group/section w-max">
-                <h3 className="text-xs font-black text-[#d32f2f] uppercase tracking-wider">
-                  {t(typeName)}
-                </h3>
-                <button
-                  onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
-                  className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50"
-                  title={`Delete all ${typeName}s`}>
-                  <Trash2 size={13} />
-                </button>
+              <div className="flex items-center justify-between w-full mb-3 group/section">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-black text-[#d32f2f] uppercase tracking-wider">
+                    {t(typeName)}
+                  </h3>
+                  <button
+                    onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
+                    className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50 cursor-pointer"
+                    title={`Delete all ${typeName}s`}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+
+                {/* Right-aligned Category Total Count Badge for Active Floor */}
+                <div className="flex items-center gap-1.5 bg-white text-slate-800 border border-gray-200 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs">
+                  <span className="text-[10px] uppercase font-extrabold text-gray-500">
+                    {t("Total")} {t(typeName)}s:
+                  </span>
+                  <span className="bg-[#d32f2f] text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">
+                    {items.length}
+                  </span>
+                </div>
               </div>
 
               {/* Grid Layout: 2 cols mobile → more cols on larger screens for smaller cards */}

@@ -87,10 +87,9 @@ export const getBills = async (req, res) => {
     }
 
     // Run query and count concurrently in parallel for 2x faster execution
-    // Note: Exclude heavy arrays (items, restaurantDetails) from summary list to keep pagination ultra-light (<10KB)
     const [bills, total] = await Promise.all([
       Bill.find(query)
-        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone billedAt settledAt createdAt updatedAt')
+        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone items billedAt settledAt createdAt updatedAt')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -138,8 +137,13 @@ export const getBillById = async (req, res) => {
     // Freeze snapshot for legacy bills that were created before snapshotting (computed in-memory without blocking writes)
     if (!bill.restaurantDetails || !bill.restaurantDetails.restaurantName) {
       try {
-        const Setting = getTenantModel(req, 'Setting', SettingDefault);
-        const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+        const cacheKey = cache.getCacheKey('restaurantSettings', req.shopName || 'default');
+        let settingsDoc = cache.get(cacheKey);
+        if (!settingsDoc) {
+          const Setting = getTenantModel(req, 'Setting', SettingDefault);
+          settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+          if (settingsDoc) cache.set(cacheKey, settingsDoc, 60000);
+        }
         const settings = settingsDoc?.value ? (typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value) : {};
         if (settings && (settings.restaurantName || settings.address)) {
           bill.restaurantDetails = {
@@ -167,10 +171,10 @@ export const getBillById = async (req, res) => {
           };
           if (bill.status === 'Paid' || bill.status === 'Billed') {
             // Non-blocking background sync for legacy bills
-            Bill.findByIdAndUpdate(bill._id, { restaurantDetails: bill.restaurantDetails }).catch(() => {});
+            Bill.findByIdAndUpdate(bill._id, { restaurantDetails: bill.restaurantDetails }).catch(() => { });
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     res.json(bill);
@@ -218,10 +222,10 @@ export const deleteBill = async (req, res) => {
       const securityDoc = await Setting.findOne({ key: 'securitySettings' });
       const restoDoc = await Setting.findOne({ key: 'restaurantSettings' });
 
-      const configuredOwnerPin = securityDoc?.value?.ownerPin || 
-                                  securityDoc?.value?.masterPin || 
-                                  restoDoc?.value?.ownerPin || 
-                                  '1234';
+      const configuredOwnerPin = securityDoc?.value?.ownerPin ||
+        securityDoc?.value?.masterPin ||
+        restoDoc?.value?.ownerPin ||
+        '1234';
 
       if (String(password).trim() === String(configuredOwnerPin).trim()) {
         isValidPassword = true;
@@ -232,23 +236,23 @@ export const deleteBill = async (req, res) => {
       return res.status(400).json({ message: 'Incorrect Admin/User password or Owner PIN. Deletion not authorized.' });
     }
 
-    const deletedBill = await Bill.findByIdAndUpdate(id, { 
+    const deletedBill = await Bill.findByIdAndUpdate(id, {
       status: 'Deleted',
-      cancelReason: 'Manually deleted from History' 
+      cancelReason: 'Manually deleted from History'
     }, { new: true });
     if (!deletedBill) {
       return res.status(404).json({ message: 'Bill not found' });
     }
-    
+
     // Clear cache when bill is deleted
     cache.clear('dailyStats');
     cache.clear('openOrders');
-    
+
     // Free up the table in DB if it was a Dine-In
     if (deletedBill.billType === 'Dine-In') {
       await updateTableStatusHelper(req, deletedBill.tableNo, 'Available', null);
     }
-    
+
     res.json({ message: 'Bill deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -259,7 +263,7 @@ export const deleteBill = async (req, res) => {
 export const getEditedBills = async (req, res) => {
   try {
     const TenantBill = getTenantModel(req, 'Bill', BillDefault);
-    
+
     // Find all bills that have been edited, sorted by the most recently updated
     const editedBills = await TenantBill.find({
       $or: [
@@ -267,9 +271,9 @@ export const getEditedBills = async (req, res) => {
         { 'editHistory.0': { $exists: true } }
       ]
     })
-    .sort({ updatedAt: -1, createdAt: -1 })
-    .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited')
-    .lean();
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .select('billNumber tableNo status customerName customerPhone total items editHistory updatedAt createdAt isEdited')
+      .lean();
 
     // Filter out any false-positive historical entries where items and charges were identical before and after
     const genuinelyEdited = (editedBills || []).filter(b => {
@@ -282,7 +286,7 @@ export const getEditedBills = async (req, res) => {
         return prevItems !== newItems || totalChanged || chargesChanged;
       });
     });
-    
+
     res.json(genuinelyEdited);
   } catch (error) {
     console.error('Error fetching edited bills:', error);

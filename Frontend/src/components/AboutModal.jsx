@@ -18,7 +18,7 @@ const AboutModal = ({ isOpen, onClose, version }) => {
               <img src={logoImg} alt="MS Billings" className="h-10 sm:h-12 w-auto object-contain scale-110" />
             </div>
             <span className="bg-white/25 backdrop-blur-sm text-white text-xs sm:text-sm font-black px-3 py-1.5 rounded-full border border-white/30 shadow-xs">
-              v{version || '6.0.83'}
+              v{version || '6.0.84'}
             </span>
           </div>
 

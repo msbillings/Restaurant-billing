@@ -271,7 +271,8 @@ export const updateRestaurantInfo = async (req, res) => {
       }
       emitSocketEvent(req, 'settingsUpdated', socketPayload);
       try {
-        cache.clear('restaurantSettings');
+        const cacheKey = cache.getCacheKey('restaurantSettings', req.shopName || 'default');
+        cache.set(cacheKey, mergedSettings, 60000);
         clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
       } catch (e) { }
     }

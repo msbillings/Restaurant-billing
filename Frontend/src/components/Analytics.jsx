@@ -245,8 +245,14 @@ const Analytics = ({ onNavigate, onGoBack }) => {
     setToast({ message: t("Fetching WhatsApp connection..."), type: 'info' });
 
     try {
-      const statusRes = await getWhatsAppStatus();
+      let statusRes = await getWhatsAppStatus();
       if (!statusRes || statusRes.status !== 'CONNECTED' || !statusRes.connectedNumber) {
+        // Fast retry to allow 24/7 background supervisor to complete auto-reconnect
+        await new Promise(r => setTimeout(r, 600));
+        statusRes = await getWhatsAppStatus();
+      }
+
+      if (!statusRes || (statusRes.status !== 'CONNECTED' && statusRes.status !== 'CONNECTING')) {
         setToast({ message: t("WhatsApp is not connected. Please scan the QR code in WhatsApp settings first."), type: 'error' });
         setSendingWhatsApp(false);
         return;
@@ -305,9 +311,6 @@ const Analytics = ({ onNavigate, onGoBack }) => {
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `_Generated automatically via MS Billings POS_`;
 
-      let excelBase64 = null;
-      let fileSuffix = 'report';
-      // Direct server-side WhatsApp delivery (fast, zero client download/upload overhead)
       const payload = {
         phone: cleanPhone,
         restaurantName: restName,
@@ -329,19 +332,25 @@ const Analytics = ({ onNavigate, onGoBack }) => {
       }
 
       try {
-        const directRes = await api.post('/analytics/whatsapp', payload);
+        let directRes;
+        try {
+          directRes = await api.post('/analytics/whatsapp', payload);
+        } catch (firstErr) {
+          console.warn('Analytics WhatsApp post attempt 1 failed, retrying after auto-reconnect...', firstErr?.message);
+          await new Promise(r => setTimeout(r, 800));
+          directRes = await api.post('/analytics/whatsapp', payload);
+        }
+
         if (directRes.data && directRes.data.success) {
-          setToast({ message: `${t("Analytics report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+          setToast({ message: `${t("Analytics Excel report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
           return;
+        } else {
+          throw new Error(directRes.data?.error || t('Failed to send Analytics Excel sheet via WhatsApp'));
         }
       } catch (directErr) {
-        console.warn('Direct server-side analytics WhatsApp send failed, falling back to text send:', directErr);
-      }
-
-      // Fallback: send summary text directly
-      const res = await sendWhatsAppMessage(cleanPhone, caption);
-      if (res && res.success) {
-        setToast({ message: `${t("Analytics report sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+        console.error('Analytics WhatsApp send error:', directErr);
+        const errorMsg = directErr.response?.data?.error || directErr.message || t('Failed to send Analytics Excel sheet via WhatsApp');
+        setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
       }
     } catch (err) {
       console.error('WhatsApp analytics report error:', err);
@@ -569,16 +578,35 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               <button
                 onClick={() => handleShareWhatsAppReport()}
                 disabled={sendingWhatsApp}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] active:scale-95 rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer disabled:opacity-60"
+                className={`flex items-center justify-center gap-2 px-2.5 py-2 sm:px-3.5 sm:py-2 rounded-xl transition-all font-bold text-xs cursor-pointer relative overflow-hidden ${
+                  sendingWhatsApp
+                    ? 'bg-gradient-to-r from-[#25D366]/25 via-[#10B981]/40 to-[#25D366]/25 border border-[#25D366] text-[#25D366] animate-wa-pulse-ring shadow-[0_0_25px_rgba(37,211,102,0.5)] cursor-wait ring-2 ring-[#25D366]/60'
+                    : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-sm active:scale-95'
+                }`}
                 title={t("Send Analytics Report on WhatsApp")}>
                 {sendingWhatsApp ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-wa-shimmer pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 h-[3px] bg-gradient-to-r from-[#25D366] via-[#86efac] to-[#25D366] animate-wa-progress pointer-events-none rounded-full shadow-[0_0_8px_#25D366]" />
+                    <div className="relative flex items-center justify-center shrink-0 w-3.5 h-3.5 z-10">
+                      <Loader2 size={16} className="animate-spin text-[#25D366] absolute -inset-0.5" />
+                      <svg className="w-2 h-2 fill-[#25D366] animate-pulse z-10" viewBox="0 0 24 24">
+                        <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                      </svg>
+                    </div>
+                    <span className="relative z-10 font-extrabold tracking-wide text-[#25D366] drop-shadow-[0_0_8px_rgba(37,211,102,0.8)] flex items-center gap-0.5">
+                      <span>{t("Sending")}</span>
+                      <span className="animate-pulse font-mono font-black">...</span>
+                    </span>
+                  </>
                 ) : (
-                  <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-                  </svg>
+                  <>
+                    <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
+                      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                    </svg>
+                    <span>{t("WhatsApp")}</span>
+                  </>
                 )}
-                <span>{t("WhatsApp")}</span>
               </button>
               <button
                 onClick={fetchAnalytics}

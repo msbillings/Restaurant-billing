@@ -17,6 +17,57 @@ import TransferTableModal from './TransferTableModal';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 
+// Animated count-up component for Sales Badge
+const AnimatedSalesCount = ({ value, duration = 1500 }) => {
+  const targetValue = Number(value) || 0;
+  const [displayValue, setDisplayValue] = useState(0);
+  const prevValueRef = useRef(0);
+
+  useEffect(() => {
+    const startValue = prevValueRef.current;
+    const endValue = targetValue;
+
+    if (endValue === 0) {
+      setDisplayValue(0);
+      prevValueRef.current = 0;
+      return;
+    }
+
+    if (startValue === endValue && displayValue === endValue) {
+      return;
+    }
+
+    let animationFrameId;
+    const startTime = performance.now();
+
+    const updateCount = (currentTime) => {
+      const elapsedTime = currentTime - startTime;
+      const progress = Math.min(elapsedTime / duration, 1);
+      // Smooth ease-out cubic motion curve
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const currentNumber = Math.round(startValue + (endValue - startValue) * easeProgress);
+
+      setDisplayValue(currentNumber);
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(updateCount);
+      } else {
+        setDisplayValue(endValue);
+        prevValueRef.current = endValue;
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(updateCount);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [targetValue, duration]);
+
+  return (
+    <span className="text-xs font-black text-emerald-950 font-mono leading-tight">
+      ₹{displayValue.toLocaleString()}
+    </span>
+  );
+};
+
 // Helper to match tables bidirectionally (e.g. "Ground Floor - Table 8" vs "Table 8" vs "T8", "Ground Floor - H-1" vs "H-1")
 const isTableMatching = (tableA, tableB) => {
   if (!tableA || !tableB) return false;
@@ -360,7 +411,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const [searchTerm, setSearchTerm] = useState('');
   const [foodTypeFilter, setFoodTypeFilter] = useState('all'); // 'all' | 'veg' | 'non-veg'
-  const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
+  const [dailyStats, setDailyStats] = useState(() => {
+    try {
+      const cached = localStorage.getItem('ms_daily_stats_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (parsed && parsed.date === todayStr && parsed.stats && typeof parsed.stats.sales === 'number') {
+          return parsed.stats;
+        }
+      }
+    } catch (e) { }
+    return { sales: 0, orders: 0 };
+  });
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
 
@@ -764,67 +828,58 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    setCrmSaving(true);
-    try {
-      if (cleanPhone) {
-        await api.post('/customers', {
-          name: cleanName || 'Guest',
-          phone: cleanPhone,
-          orderType: billType
-        });
-      }
-      setCustomerPhone(cleanPhone);
-      setCustomerName(cleanName || 'Guest');
+    // 1. Instant Optimistic UI Update & Close Modal (0ms delay)
+    setCustomerPhone(cleanPhone);
+    setCustomerName(cleanName || 'Guest');
+    setShowCustomerModal(false);
+    showToast(t('Customer details linked to order'), 'success');
 
-      // Immediately sync customer details to the order in MongoDB!
-      const targetOrderId = orderId || openOrdersList.find(o => isTableMatching(o.tableNo, activeTable))?._id;
-      if (targetOrderId && !targetOrderId.startsWith('offline_')) {
-        try {
-          await api.patch(`/bills/${targetOrderId}/customer`, {
-            customerName: cleanName || 'Guest',
-            customerPhone: cleanPhone,
-            billType
-          });
-        } catch (apiErr) {
-          console.warn('Error patching customer to bill by ID:', apiErr);
-        }
-      } else if (activeTable) {
-        try {
-          await api.patch(`/bills/${encodeURIComponent(activeTable)}/customer`, {
-            customerName: cleanName || 'Guest',
-            customerPhone: cleanPhone,
-            billType
-          });
-        } catch (apiErr) {
-          console.warn('Error patching customer to bill by table:', apiErr);
-        }
-      }
+    setOpenOrdersList(prev => prev.map(o => isTableMatching(o.tableNo, activeTable) ? {
+      ...o,
+      customerPhone: cleanPhone,
+      customerName: cleanName || 'Guest'
+    } : o));
 
-      setOpenOrdersList(prev => prev.map(o => isTableMatching(o.tableNo, activeTable) ? {
-        ...o,
+    if (activeTable) {
+      upsertCachedOpenOrder({
+        tableNo: activeTable,
         customerPhone: cleanPhone,
         customerName: cleanName || 'Guest'
-      } : o));
-
-      if (activeTable) {
-        upsertCachedOpenOrder({
-          tableNo: activeTable,
-          customerPhone: cleanPhone,
-          customerName: cleanName || 'Guest'
-        }).catch(() => { });
-      }
-
-      showToast(t('Customer details linked to order'), 'success');
-      setShowCustomerModal(false);
-    } catch (err) {
-      console.error('Error saving customer CRM:', err);
-      setCustomerPhone(cleanPhone);
-      setCustomerName(cleanName || 'Guest');
-      setShowCustomerModal(false);
-      showToast(t('Customer linked to order'), 'info');
-    } finally {
-      setCrmSaving(false);
+      }).catch(() => { });
     }
+
+    // 2. Non-blocking Background Parallel API Sync
+    (async () => {
+      try {
+        const syncPromises = [];
+        if (cleanPhone) {
+          syncPromises.push(api.post('/customers', {
+            name: cleanName || 'Guest',
+            phone: cleanPhone,
+            orderType: billType
+          }));
+        }
+
+        const targetOrderId = orderId || openOrdersList.find(o => isTableMatching(o.tableNo, activeTable))?._id;
+        if (targetOrderId && !targetOrderId.startsWith('offline_')) {
+          syncPromises.push(api.patch(`/bills/${targetOrderId}/customer`, {
+            customerName: cleanName || 'Guest',
+            customerPhone: cleanPhone,
+            billType
+          }));
+        } else if (activeTable) {
+          syncPromises.push(api.patch(`/bills/${encodeURIComponent(activeTable)}/customer`, {
+            customerName: cleanName || 'Guest',
+            customerPhone: cleanPhone,
+            billType
+          }));
+        }
+
+        await Promise.all(syncPromises);
+      } catch (err) {
+        console.warn('Background customer CRM sync error:', err);
+      }
+    })();
   };
 
   const handleOrderSourceChange = async (newSource) => {
@@ -1218,12 +1273,20 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
 
   async function fetchDailyStats() {
+    setIsStatsLoading(true);
     try {
       const stats = await getDailyStats();
-      setDailyStats(stats);
+      if (stats && typeof stats.sales === 'number') {
+        setDailyStats(stats);
+        try {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          localStorage.setItem('ms_daily_stats_cache', JSON.stringify({ date: todayStr, stats }));
+        } catch (e) { }
+      }
     } catch (error) {
       console.error('Error fetching daily stats:', error);
-      setDailyStats({ sales: 0, orders: 0 });
+    } finally {
+      setIsStatsLoading(false);
     }
   };
 
@@ -1578,7 +1641,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           }
           return [savedOrder, ...list];
         });
-        upsertCachedOpenOrder(savedOrder).catch(() => {});
+        upsertCachedOpenOrder(savedOrder).catch(() => { });
       }
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
@@ -2204,15 +2267,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
         {/* Left Section: Select Table */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0 z-30">
-          <div className="relative flex items-center gap-1.5 sm:gap-2 bg-background border border-border rounded-xl px-2 sm:px-3 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer max-w-[130px] sm:max-w-[170px] lg:max-w-[200px]">
+          <div className="relative flex items-center gap-1.5 sm:gap-2 bg-background border border-border rounded-xl px-2.5 sm:px-3.5 py-1.5 hover:bg-surface/50 transition-colors focus-within:ring-2 focus-within:ring-primary/20 cursor-pointer w-auto max-w-[260px] sm:max-w-[340px] lg:max-w-[440px] shrink-0">
             <LayoutGrid size={15} className="text-text-muted shrink-0 pointer-events-none" />
-            <div className="flex items-center pointer-events-none min-w-0">
-              <span className="font-bold text-text-main text-xs sm:text-sm truncate">
+            <div className="flex items-center pointer-events-none min-w-0 flex-1">
+              <span className="font-bold text-text-main text-xs sm:text-sm whitespace-nowrap truncate">
                 {activeTable ?
                   activeTable === 'NEW_ORDER' ? t('newOrder') : activeTable :
                   t('selectTable', { defaultValue: 'Select Table' })}
               </span>
-              <ChevronDown size={13} className="text-text-muted ml-0.5 shrink-0" />
+              <ChevronDown size={13} className="text-text-muted ml-1 shrink-0" />
             </div>
 
             {billType === 'Delivery' || billType === 'Takeaway' ?
@@ -2356,17 +2419,22 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               </button>
             )}
 
-            {/* Removed redundant Customer CRM button */}
-
-            {/* Sales stat badge - visible on large screens */}
-            <div className="hidden lg:flex items-center gap-2 bg-background px-2.5 py-1 rounded-xl border border-border/50 shrink-0">
-              <div className="flex flex-col items-end">
-                <p className="text-[9px] text-text-muted font-bold uppercase tracking-wider flex items-center gap-1 leading-none">
-                  {t('sales')} <TrendingUp size={10} className="text-success" />
-                </p>
-                <p className="text-xs font-bold text-text-main font-mono leading-tight">₹{dailyStats.sales.toLocaleString()}</p>
+            {/* Sales stat badge - visible on sm, md, lg screens with smooth number counting animation */}
+            <button
+              type="button"
+              onClick={fetchDailyStats}
+              disabled={isStatsLoading}
+              className="hidden sm:flex items-center gap-2 bg-emerald-50/70 hover:bg-emerald-100/80 text-emerald-950 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 shadow-2xs shrink-0 cursor-pointer transition-all duration-200 group relative overflow-hidden active:scale-95 select-none"
+              title={t('Click to refresh live sales')}
+            >
+              <div className="flex flex-col items-end leading-none">
+                <div className="text-[9px] text-emerald-700 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                  <span>{t('sales')}</span>
+                  <TrendingUp size={10} className={`text-emerald-600 group-hover:translate-y-[-1px] group-hover:scale-110 transition-transform ${isStatsLoading ? 'animate-pulse' : ''}`} />
+                </div>
+                <AnimatedSalesCount value={dailyStats.sales} duration={1500} />
               </div>
-            </div>
+            </button>
 
             <button
               onClick={toggleLayoutLock}
@@ -2414,18 +2482,47 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           </button>
         </div>
 
-        {mobileTab === 'menu' &&
-          <div className="relative group w-full mt-0.5">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={16} />
-            <input
-              type="text"
-              placeholder={t('searchDishes')}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner" />
+        {mobileTab === 'menu' && (
+          <div className="flex items-center gap-2 w-full mt-0.5">
+            <div className="relative group flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={16} />
+              <input
+                type="text"
+                placeholder={t('searchDishes')}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 bg-gray-200 rounded-full p-1 transition-all cursor-pointer"
+                  title={t("Clear search")}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
 
+            {/* Mobile Sales stat badge - in same row as search bar */}
+            <button
+              type="button"
+              onClick={fetchDailyStats}
+              disabled={isStatsLoading}
+              className="flex sm:hidden items-center gap-1.5 bg-emerald-50/70 hover:bg-emerald-100/80 text-emerald-950 px-2.5 py-1.5 rounded-xl border border-emerald-200/80 shadow-2xs shrink-0 cursor-pointer transition-all duration-200 group relative overflow-hidden active:scale-95 select-none"
+              title={t('Click to refresh live sales')}
+            >
+              <div className="flex flex-col items-end leading-none">
+                <div className="text-[9px] text-emerald-700 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                  <span>{t('sales')}</span>
+                  <TrendingUp size={10} className={`text-emerald-600 group-hover:translate-y-[-1px] group-hover:scale-110 transition-transform ${isStatsLoading ? 'animate-pulse' : ''}`} />
+                </div>
+                <AnimatedSalesCount value={dailyStats.sales} duration={1500} />
+              </div>
+            </button>
           </div>
-        }
+        )}
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">

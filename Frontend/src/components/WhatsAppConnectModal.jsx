@@ -179,15 +179,26 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
     setSendingTest(true);
     setActionMessage(null);
     try {
-      await sendWhatsAppMessage(clean, '🎉 *MS Billings POS Test Message*\nYour automated WhatsApp service is connected and working perfectly!');
+      console.log('[WhatsApp Diagnostics - Client] Requesting test message send to:', clean);
+      let res;
+      try {
+        res = await sendWhatsAppMessage(clean, '🎉 *MS Billings POS Test Message*\nYour automated WhatsApp service is connected and working perfectly!');
+      } catch (firstErr) {
+        console.warn('[WhatsApp Diagnostics - Client] First test send attempt encountered error:', firstErr?.response?.data || firstErr?.message, '| Retrying in 1.2 seconds...');
+        await new Promise(r => setTimeout(r, 1200));
+        res = await sendWhatsAppMessage(clean, '🎉 *MS Billings POS Test Message*\nYour automated WhatsApp service is connected and working perfectly!');
+      }
+      console.log('[WhatsApp Diagnostics - Client] Test message response:', res);
       setActionMessage({ text: t('Test message delivered successfully! ✓'), type: 'success' });
     } catch (e) {
-      console.error('Test message send error:', e);
+      console.error('[WhatsApp Diagnostics - Client Error] Test message send failed:', {
+        status: e.response?.status,
+        errorPayload: e.response?.data,
+        message: e.message,
+        stack: e.stack
+      });
       let errDetail = e.response?.data?.error || e.message || t('Failed to send test message');
-      if (errDetail.includes('Connection Closed') || errDetail.includes('closed')) {
-        errDetail = t('WhatsApp connection was temporarily closed. Auto-reconnecting in background... Please click Test Send again in 2 seconds.');
-      }
-      setActionMessage({ text: errDetail, type: 'error' });
+      setActionMessage({ text: `WhatsApp: ${errDetail}`, type: 'error' });
     } finally {
       setSendingTest(false);
     }

@@ -19,7 +19,7 @@ const getAudioContext = () => {
     audioCtx = new AudioContextClass();
   }
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
+    audioCtx.resume().catch(() => { });
   }
   return audioCtx;
 };
@@ -33,7 +33,7 @@ if (typeof window !== 'undefined') {
         ['touchstart', 'touchend', 'click', 'keydown'].forEach(evt =>
           window.removeEventListener(evt, unlockAudio)
         );
-      }).catch(() => {});
+      }).catch(() => { });
     }
   };
   ['touchstart', 'touchend', 'click', 'keydown'].forEach(evt =>
@@ -86,8 +86,8 @@ export const playNotificationSound = () => {
   // Fallback to HTML5 audio if Web Audio is unavailable
   try {
     const fallbackAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    fallbackAudio.play().catch(() => {});
-  } catch (e) {}
+    fallbackAudio.play().catch(() => { });
+  } catch (e) { }
 };
 
 export const getNotificationSocket = () => {
@@ -130,7 +130,7 @@ export const initCapacitorNotifications = async (requestPermissionNow = false) =
       if (pushPermStatus.receive !== 'granted') {
         pushPermStatus = await PushNotifications.requestPermissions();
       }
-      
+
       if (pushPermStatus.receive === 'granted') {
         PushNotifications.register();
       }
@@ -157,7 +157,7 @@ export const initCapacitorNotifications = async (requestPermissionNow = false) =
       PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
         console.log('[useNotifications] Push action performed:', notification);
       });
-    } catch (e) {}
+    } catch (e) { }
 
     console.log('[useNotifications] Native High-Priority Notification Channel & FCM initialized');
   } catch (err) {
@@ -489,10 +489,10 @@ const useNotifications = (userRole = 'Admin') => {
         let clearedIds = new Set();
         try {
           readIds = new Set(JSON.parse(localStorage.getItem(readKey) || '[]'));
-        } catch (e) {}
+        } catch (e) { }
         try {
           clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
-        } catch (e) {}
+        } catch (e) { }
 
         const visibleItems = roleFiltered.filter(n => !clearedIds.has(String(n.id)));
 
@@ -558,7 +558,7 @@ const useNotifications = (userRole = 'Admin') => {
       initCapacitorNotifications(false);
       // Request Web Notification permissions for browser users ONLY after login
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+        Notification.requestPermission().catch(() => { });
       }
       // Initial fetch
       fetchActiveNotifications(false);
@@ -567,7 +567,7 @@ const useNotifications = (userRole = 'Admin') => {
     const handleLogin = () => {
       initCapacitorNotifications(true);
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+        Notification.requestPermission().catch(() => { });
       }
       fetchActiveNotifications(false);
     };
@@ -592,7 +592,7 @@ const useNotifications = (userRole = 'Admin') => {
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     // 6. Capacitor native app state listener
     let appStateListener;
     if (Capacitor.isNativePlatform()) {
@@ -638,7 +638,7 @@ const useNotifications = (userRole = 'Admin') => {
       let clearedIds = new Set();
       try {
         clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
-      } catch (e) {}
+      } catch (e) { }
       if (notification.id && clearedIds.has(String(notification.id))) return;
 
       const notifId = String(notification.id || '');
@@ -685,7 +685,7 @@ const useNotifications = (userRole = 'Admin') => {
         if (isDuplicate) return updatedList;
         return [notification, ...updatedList];
       });
-      
+
       if (!isDuplicate) {
         setUnreadCount((prev) => prev + 1);
         playNotificationSound();
@@ -701,7 +701,7 @@ const useNotifications = (userRole = 'Admin') => {
         const current = JSON.parse(localStorage.getItem(clearedKey) || '[]');
         const updated = Array.from(new Set([...current, ...removedIds.map(String)]));
         localStorage.setItem(clearedKey, JSON.stringify(updated.slice(-300)));
-      } catch (e) {}
+      } catch (e) { }
     };
 
     const handleDismissNotification = (criteria) => {
@@ -784,7 +784,7 @@ const useNotifications = (userRole = 'Admin') => {
         localStorage.setItem('realtime_unread_count', '0');
 
         // Delete permanently from backend
-        api.delete('/bills/notifications/all').catch(() => {});
+        api.delete('/bills/notifications/all').catch(() => { });
       } catch (e) {
         console.error('Error clearing notifications:', e);
       }
@@ -798,7 +798,7 @@ const useNotifications = (userRole = 'Admin') => {
         localStorage.setItem(clearedKey, JSON.stringify(Array.from(new Set(existingCleared))));
 
         // Delete permanently from backend
-        api.delete(`/bills/notifications/${encodeURIComponent(idStr)}`).catch(() => {});
+        api.delete(`/bills/notifications/${encodeURIComponent(idStr)}`).catch(() => { });
       } catch (e) {
         console.error('Error clearing notification:', e);
       }

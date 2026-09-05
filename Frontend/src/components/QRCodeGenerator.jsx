@@ -118,6 +118,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
   // Mobile Print & Share Export Modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareSearchTerm, setShareSearchTerm] = useState('');
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccessToast, setExportSuccessToast] = useState(null);
 
@@ -165,6 +167,22 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   );
   const [customIpInput, setCustomIpInput] = useState(storedIp || '');
   const [ipSavedToast, setIpSavedToast] = useState(false);
+
+  // Print Mode State (grid: A4 Grid | thermal80: 80mm Thermal Roll | thermal58: 58mm Thermal Roll)
+  const [printPaperMode, setPrintPaperMode] = useState('grid');
+  const [singlePrintTableKey, setSinglePrintTableKey] = useState(null);
+
+  const handlePrintSingleThermal = (fullTableIdentifier, paperMode = null) => {
+    const targetMode = paperMode || (printPaperMode === 'grid' ? 'thermal80' : printPaperMode);
+    setPrintPaperMode(targetMode);
+    setSinglePrintTableKey(fullTableIdentifier);
+    setTimeout(() => {
+      handleSystemPrint();
+      setTimeout(() => {
+        setSinglePrintTableKey(null);
+      }, 1000);
+    }, 150);
+  };
 
   /**
    * Returns [{ floorName: string, tables: string[] }]
@@ -477,7 +495,10 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  const handleSystemPrint = () => {
+  const handleSystemPrint = (paperMode = null) => {
+    if (paperMode && typeof paperMode === 'string') {
+      setPrintPaperMode(paperMode);
+    }
     setIsExportModalOpen(false);
     setTimeout(() => {
       if (window.electronAPI) {
@@ -654,11 +675,11 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
   return (
     <div className="h-full flex flex-col p-1.5 sm:p-2.5 md:p-3 overflow-hidden">
       {/* Top Navigation */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 sm:mb-2.5 gap-2.5 shrink-0">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between mb-2 sm:mb-2.5 gap-2.5 shrink-0">
         <div className="flex items-center gap-3">
           <BackButton onClick={onGoBack} />
           <div>
-            <h1 className="text-lg sm:text-2xl font-black text-text-main flex items-center gap-2">
+            <h1 className="text-base sm:text-2xl font-black text-text-main flex items-center gap-2">
               <QrCode className="text-primary" size={22} />
               <span>{t("QR MENU GENERATOR")}</span>
             </h1>
@@ -668,50 +689,93 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-          {/* Custom Table Filter Trigger Button */}
-          <button
-            type="button"
-            onClick={() => setIsTableModalOpen(true)}
-            disabled={isLoading}
-            className="flex-1 sm:w-64 min-w-0 bg-surface border border-border hover:border-primary/50 rounded-xl px-3 py-2 text-xs sm:text-sm text-text-main font-medium shadow-xs disabled:opacity-60 flex items-center justify-between gap-2 cursor-pointer transition-colors"
-          >
-            <div className="flex items-center gap-1.5 truncate">
-              <Layers size={14} className="text-primary shrink-0" />
-              <span className="truncate">
-                {isLoading
-                  ? t("Fetching tables...")
-                  : selectedTable === 'ALL'
-                    ? `${t("All Tables")} (${totalTablesCount})`
-                    : selectedTable}
-              </span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+          {/* Table Filter & Reload (Sync Status) Row for smaller screens */}
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-1">
+            {/* Custom Table Filter Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setIsTableModalOpen(true)}
+              disabled={isLoading}
+              className="flex-1 sm:w-56 min-w-0 bg-surface border border-border hover:border-primary/50 rounded-xl px-3 py-2 text-xs sm:text-sm text-text-main font-medium shadow-xs disabled:opacity-60 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <Layers size={14} className="text-primary shrink-0" />
+                <span className="truncate">
+                  {isLoading
+                    ? t("Fetching tables...")
+                    : selectedTable === 'ALL'
+                      ? `${t("All Tables")} (${totalTablesCount})`
+                      : selectedTable}
+                </span>
+              </div>
+              <ChevronDown size={14} className="text-text-muted shrink-0" />
+            </button>
+
+            {/* Refresh live statuses button */}
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              disabled={isLoading || isRefreshing}
+              className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-bold transition-all text-xs sm:text-sm shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              title={t("Refresh table occupancy & status")}
+            >
+              <RefreshCw size={15} className={`text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="inline">{t("Sync Status")}</span>
+            </button>
+          </div>
+
+          {/* Paper Format Switcher & Print Button Row */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between shrink-0">
+            {/* Paper Format Mode Switcher (A4 Grid / 80mm Thermal / 58mm Thermal) */}
+            <div className="flex items-center gap-0.5 bg-surface border border-border p-1 rounded-xl shrink-0 print:hidden flex-1 sm:flex-initial justify-around sm:justify-start">
+              <button
+                type="button"
+                onClick={() => setPrintPaperMode('grid')}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${printPaperMode === 'grid'
+                  ? 'bg-gray-900 text-white shadow-2xs'
+                  : 'text-text-muted hover:text-text-main'
+                  }`}
+                title={t("Standard A4 Grid Layout")}
+              >
+                📄 A4 Grid
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintPaperMode('thermal80')}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${printPaperMode === 'thermal80'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-text-muted hover:text-text-main'
+                  }`}
+                title={t("80mm Thermal Receipt Roll Mode (Standard POS)")}
+              >
+                🧾 80mm Roll
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintPaperMode('thermal58')}
+                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${printPaperMode === 'thermal58'
+                  ? 'bg-amber-600 text-white shadow-2xs'
+                  : 'text-text-muted hover:text-text-main'
+                  }`}
+                title={t("58mm Thermal Receipt Roll Mode")}
+              >
+                🧾 58mm Roll
+              </button>
             </div>
-            <ChevronDown size={14} className="text-text-muted shrink-0" />
-          </button>
 
-          {/* Refresh live statuses button */}
-          <button
-            type="button"
-            onClick={handleManualRefresh}
-            disabled={isLoading || isRefreshing}
-            className="p-2 sm:px-3 sm:py-2 bg-surface hover:bg-surface-hover border border-border text-text-main rounded-xl font-bold transition-all text-xs sm:text-sm shrink-0 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-            title={t("Refresh table occupancy & status")}
-          >
-            <RefreshCw size={16} className={`text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden md:inline">{t("Sync Status")}</span>
-          </button>
-
-          {/* Print / Export Button (works seamlessly on APK mobile and desktop) */}
-          <button
-            type="button"
-            onClick={handlePrintClick}
-            disabled={isLoading || isExporting}
-            className="p-2 sm:px-4 sm:py-2 bg-primary text-white rounded-xl font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-opacity text-xs sm:text-sm disabled:opacity-60 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
-            title={isCapacitor ? t("Print / Save QRs") : t("Print QRs")}
-          >
-            {isExporting ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} />}
-            <span className="hidden sm:inline">{isCapacitor ? t("Print / Save") : t("Print QRs")}</span>
-          </button>
+            {/* Print / Export Button */}
+            <button
+              type="button"
+              onClick={handlePrintClick}
+              disabled={isLoading || isExporting}
+              className="p-2 sm:px-3.5 sm:py-2 bg-primary text-white rounded-xl font-bold shadow-md shadow-primary/20 hover:opacity-90 transition-opacity text-xs sm:text-sm disabled:opacity-60 shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
+              title={isCapacitor ? t("Print / Save QRs") : t("Print QRs")}
+            >
+              {isExporting ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} />}
+              <span className="hidden md:inline">{isCapacitor ? t("Print / Save") : t("Print QRs")}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -992,7 +1056,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                         <div
                           id={cardElementId}
                           key={`${floor.floorName}-${table}-${tableIdx}`}
-                          className="bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 qr-print-card shadow-sm hover:shadow-md transition-all relative group"
+                          data-card-table-key={fullTableIdentifier}
+                          className={`bg-surface border-2 border-dashed border-border p-3 sm:p-5 rounded-2xl flex flex-col items-center justify-center text-center gap-2 sm:gap-3 qr-print-card shadow-sm hover:shadow-md transition-all relative group ${singlePrintTableKey && singlePrintTableKey !== fullTableIdentifier ? 'print:hidden' : ''}`}
                         >
                           <h2 className="font-black text-sm sm:text-xl text-text-main uppercase tracking-wider">{restaurantName}</h2>
 
@@ -1022,21 +1087,14 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                             })()}
                           </div>
 
-                          {/* QR Code SVG */}
+                          {/* Single Responsive QR Code SVG */}
                           <div className="bg-white p-1.5 sm:p-2 rounded-xl shadow-inner">
-                            <QRCodeSVG
-                              value={currentQrUrl}
-                              size={100}
-                              level="H"
-                              includeMargin={true}
-                              className="sm:hidden"
-                            />
                             <QRCodeSVG
                               value={currentQrUrl}
                               size={140}
                               level="H"
                               includeMargin={true}
-                              className="hidden sm:block"
+                              className="w-[100px] h-[100px] sm:w-[140px] sm:h-[140px] print:w-[110px] print:h-[110px] block mx-auto"
                             />
                           </div>
 
@@ -1045,7 +1103,7 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                             <h3 className="font-black text-lg sm:text-2xl text-primary">{table}</h3>
                             <div className="mt-1.5 flex items-center justify-between gap-1 text-[8px] sm:text-[10px] font-mono text-text-muted bg-background/80 px-2 py-1 rounded-lg border border-border/50 max-w-full print:hidden">
                               <span className="truncate flex-1 text-left">{currentQrUrl}</span>
-                              <div className="flex items-center gap-0.5 shrink-0">
+                              <div className="flex items-center gap-1 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => handleCopyMenuLink(currentQrUrl, table)}
@@ -1259,10 +1317,9 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
               <button
                 type="button"
                 onClick={() => {
-                  const firstTable = selectedTable !== 'ALL' ? selectedTable : (floors[0]?.tables[0] || 'All Tables');
-                  const firstFloor = floors[0]?.floorName || '';
-                  const cardId = selectedTable !== 'ALL' && firstFloor ? `qr-card-${firstFloor.replace(/[^a-zA-Z0-9_-]/g, '_')}-${firstTable.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
-                  shareSingleQRCard(firstTable, cardId);
+                  setIsExportModalOpen(false);
+                  setShareSearchTerm('');
+                  setIsShareModalOpen(true);
                 }}
                 disabled={isExporting}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer disabled:opacity-50"
@@ -1272,22 +1329,52 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                 </div>
                 <div>
                   <div className="text-xs sm:text-sm font-bold text-text-main">{t("Share via WhatsApp / Apps")}</div>
-                  <div className="text-[10px] text-text-muted">{t("Send QR cards directly to printer app or WhatsApp")}</div>
+                  <div className="text-[10px] text-text-muted">{t("Select table & send QR code with ordering link")}</div>
                 </div>
               </button>
 
-              {/* Option 2: System Print Dialog */}
+              {/* Option 2: A4 Grid Print */}
               <button
                 type="button"
-                onClick={handleSystemPrint}
+                onClick={() => handleSystemPrint('grid')}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface border border-border hover:border-primary/50 hover:bg-surface-hover text-left transition-all cursor-pointer"
               >
-                <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
+                <div className="p-2 rounded-xl bg-slate-500/10 text-slate-600 dark:text-slate-300 shrink-0">
                   <Printer size={18} />
                 </div>
                 <div>
-                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Print via System Dialog")}</div>
-                  <div className="text-[10px] text-text-muted">{t("Open standard print / PDF preview")}</div>
+                  <div className="text-xs sm:text-sm font-bold text-text-main">{t("Print A4 Grid Sheet")}</div>
+                  <div className="text-[10px] text-text-muted">{t("Standard multi-column A4 paper layout")}</div>
+                </div>
+              </button>
+
+              {/* Option 3: 80mm Thermal Receipt Print (Default POS Printer) */}
+              <button
+                type="button"
+                onClick={() => handleSystemPrint('thermal80')}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100/50 text-left transition-all cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-emerald-600 text-white shrink-0">
+                  <Printer size={18} />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-emerald-950 dark:text-emerald-300">{t("Print 80mm Thermal Roll (Standard POS)")}</div>
+                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400">{t("Formats individual QR tickets for 80mm thermal receipt paper")}</div>
+                </div>
+              </button>
+
+              {/* Option 4: 58mm Thermal Receipt Print */}
+              <button
+                type="button"
+                onClick={() => handleSystemPrint('thermal58')}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 hover:bg-amber-100/50 text-left transition-all cursor-pointer"
+              >
+                <div className="p-2 rounded-xl bg-amber-600 text-white shrink-0">
+                  <Printer size={18} />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-bold text-amber-950 dark:text-amber-300">{t("Print 58mm Thermal Roll")}</div>
+                  <div className="text-[10px] text-amber-700 dark:text-amber-400">{t("Formats individual QR tickets for 58mm mini thermal paper")}</div>
                 </div>
               </button>
             </div>
@@ -1297,6 +1384,152 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
                 type="button"
                 onClick={() => setIsExportModalOpen(false)}
                 className="w-full py-2 bg-surface hover:bg-surface-hover border border-border rounded-xl text-xs font-bold text-text-main transition-colors cursor-pointer"
+              >
+                {t("Cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SELECT TABLE TO SHARE MODAL */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="fixed inset-0" onClick={() => setIsShareModalOpen(false)} />
+          <div className="relative bg-surface border border-border rounded-3xl w-full max-w-md max-h-[85vh] shadow-2xl overflow-hidden flex flex-col z-10">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border flex items-center justify-between bg-surface shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                  <Share2 size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-text-main">{t("Select Table to Share")}</h3>
+                  <p className="text-[11px] text-text-muted">{t("Choose a table to send its QR code and order link")}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1.5 text-text-muted hover:text-text-main rounded-xl hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Search Bar */}
+            <div className="p-3 border-b border-border bg-surface shrink-0">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                <input
+                  type="text"
+                  placeholder={t("Search table or cabin...")}
+                  value={shareSearchTerm}
+                  onChange={(e) => setShareSearchTerm(e.target.value)}
+                  className="w-full bg-background border border-border rounded-xl pl-9 pr-8 py-2 text-xs text-text-main focus:outline-none focus:border-primary transition-colors"
+                />
+                {shareSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setShareSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-0.5 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Table Selection List */}
+            <div className="p-3 overflow-y-auto space-y-4 flex-1">
+              {/* Option for General Menu QR (All Tables) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsShareModalOpen(false);
+                  shareSingleQRCard('ALL', 'qr-cards-container');
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-2xl border border-dashed border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 text-left transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-emerald-600 text-white font-bold text-xs">
+                    <QrCode size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-black text-text-main">{t("General Menu (All Tables)")}</div>
+                    <div className="text-[10px] text-text-muted">{t("Share main digital menu QR code")}</div>
+                  </div>
+                </div>
+                <Share2 size={16} className="text-emerald-500 shrink-0" />
+              </button>
+
+              {/* Floor by Floor Table Cards */}
+              {floors.map((floor, floorIdx) => {
+                const filteredTables = floor.tables.filter(tbl => tbl.toLowerCase().includes(shareSearchTerm.toLowerCase()));
+                if (filteredTables.length === 0) return null;
+                const color = floorColors[floorIdx % floorColors.length];
+
+                return (
+                  <div key={`share-floor-${floorIdx}`} className="space-y-2">
+                    <div className="flex items-center gap-2 px-1">
+                      <span className={`text-[11px] font-black uppercase tracking-wider ${color.text}`}>
+                        {floor.floorName}
+                      </span>
+                      <span className="text-[10px] font-bold text-text-muted">({filteredTables.length})</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {filteredTables.map((table, tIdx) => {
+                        const fullTableIdentifier = floor.floorName ? `${floor.floorName} - ${table}` : table;
+                        const cardElementId = `qr-card-${floor.floorName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${table.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+                        const statusInfo = getTableStatusInfo(floor.floorName, table);
+
+                        return (
+                          <button
+                            key={`share-table-${table}-${tIdx}`}
+                            type="button"
+                            onClick={() => {
+                              setIsShareModalOpen(false);
+                              shareSingleQRCard(fullTableIdentifier, cardElementId);
+                            }}
+                            className="flex items-center justify-between p-2.5 rounded-xl border border-border bg-surface hover:bg-surface-hover hover:border-emerald-500/50 text-left transition-all cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 font-bold text-xs flex items-center justify-center shrink-0">
+                                {table.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-text-main truncate">{table}</div>
+                                <div className="text-[9px] text-text-muted truncate">{floor.floorName}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {statusInfo.isBusy ? (
+                                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                                  {t("Busy")}
+                                </span>
+                              ) : (
+                                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                  {t("Empty")}
+                                </span>
+                              )}
+                              <Share2 size={14} className="text-text-muted group-hover:text-emerald-500 transition-colors" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-border bg-surface shrink-0 text-right">
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-text-main hover:bg-surface-hover transition-colors cursor-pointer"
               >
                 {t("Cancel")}
               </button>
@@ -1319,8 +1552,8 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
 
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 8mm 6mm !important;
+            size: ${printPaperMode === 'grid' ? 'A4 portrait' : (printPaperMode === 'thermal58' ? '58mm auto' : '80mm auto')} !important;
+            margin: ${printPaperMode === 'grid' ? '8mm 6mm' : '1mm 0mm'} !important;
           }
 
           html, body {
@@ -1353,7 +1586,6 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             visibility: hidden !important;
           }
 
-          /* Multi-page QR Print Flow Container */
           .qr-print-container {
             display: block !important;
             visibility: visible !important;
@@ -1369,74 +1601,130 @@ const QRCodeGenerator = ({ onNavigate, onGoBack }) => {
             visibility: visible !important;
           }
 
-          .qr-floor-block {
-            display: block !important;
-            page-break-inside: auto !important;
-            break-inside: auto !important;
-            margin-bottom: 16px !important;
-          }
-
-          .qr-floor-header {
-            display: block !important;
-            text-align: center !important;
-            font-size: 13pt !important;
-            font-weight: 900 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 2px !important;
-            padding: 4px 0 !important;
-            margin-bottom: 12px !important;
-            border-bottom: 2px solid #000000 !important;
-            color: #000000 !important;
-            page-break-after: avoid !important;
-            break-after: avoid !important;
-          }
-
-          .qr-print-grid {
-            display: grid !important;
-            grid-template-columns: repeat(3, 1fr) !important;
-            gap: 12px !important;
-            width: 100% !important;
-            page-break-inside: auto !important;
-            break-inside: auto !important;
-          }
-
-          .qr-print-card {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            text-align: center !important;
-            border: 1.5px dashed #000000 !important;
-            border-radius: 12px !important;
-            padding: 10px 8px !important;
-            background: #ffffff !important;
-            box-shadow: none !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            margin-bottom: 6px !important;
-          }
-
-          .qr-print-card h2 {
-            font-size: 10.5pt !important;
-            font-weight: 900 !important;
-            color: #000000 !important;
-            margin-bottom: 4px !important;
-            text-transform: uppercase !important;
-          }
-
-          .qr-print-card h3 {
-            font-size: 14pt !important;
-            font-weight: 900 !important;
-            color: #000000 !important;
-            margin: 2px 0 !important;
-          }
-
-          .qr-print-card svg {
-            display: block !important;
-            margin: 0 auto !important;
-            width: 110px !important;
-            height: 110px !important;
-          }
+          ${printPaperMode === 'grid' ? `
+            .qr-floor-block {
+              display: block !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
+              margin-bottom: 16px !important;
+            }
+            .qr-floor-header {
+              display: block !important;
+              text-align: center !important;
+              font-size: 13pt !important;
+              font-weight: 900 !important;
+              text-transform: uppercase !important;
+              letter-spacing: 2px !important;
+              padding: 4px 0 !important;
+              margin-bottom: 12px !important;
+              border-bottom: 2px solid #000000 !important;
+              color: #000000 !important;
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+            .qr-print-grid {
+              display: grid !important;
+              grid-template-columns: repeat(3, 1fr) !important;
+              gap: 12px !important;
+              width: 100% !important;
+              page-break-inside: auto !important;
+              break-inside: auto !important;
+            }
+            .qr-print-card {
+              display: flex !important;
+              flex-direction: column !important;
+              align-items: center !important;
+              justify-content: center !important;
+              text-align: center !important;
+              border: 1.5px dashed #000000 !important;
+              border-radius: 12px !important;
+              padding: 10px 8px !important;
+              background: #ffffff !important;
+              box-shadow: none !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              margin-bottom: 6px !important;
+            }
+            .qr-print-card h2 {
+              font-size: 10.5pt !important;
+              font-weight: 900 !important;
+              color: #000000 !important;
+              margin-bottom: 4px !important;
+              text-transform: uppercase !important;
+            }
+            .qr-print-card h3 {
+              font-size: 14pt !important;
+              font-weight: 900 !important;
+              color: #000000 !important;
+              margin: 2px 0 !important;
+            }
+            .qr-print-card svg {
+              display: block !important;
+              margin: 0 auto !important;
+              width: 110px !important;
+              height: 110px !important;
+            }
+          ` : `
+            /* THERMAL RECEIPT ROLL CONTINUOUS PRINT MODE (80mm / 58mm) */
+            .qr-floor-header {
+              display: none !important;
+            }
+            .qr-print-grid {
+              display: block !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            .qr-print-card {
+              display: block !important;
+              width: 100% !important;
+              max-width: ${printPaperMode === 'thermal58' ? '54mm' : '76mm'} !important;
+              margin: 0 auto 12px auto !important;
+              padding: 10px 4px 14px 4px !important;
+              text-align: center !important;
+              background: #ffffff !important;
+              border: none !important;
+              border-bottom: 2px dashed #000000 !important;
+              box-sizing: border-box !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              page-break-after: auto !important;
+              break-after: auto !important;
+            }
+            .qr-print-card h2 {
+              font-size: ${printPaperMode === 'thermal58' ? '10.5pt' : '12pt'} !important;
+              font-weight: 900 !important;
+              color: #000000 !important;
+              text-transform: uppercase !important;
+              margin: 0 0 2px 0 !important;
+              text-align: center !important;
+              word-wrap: break-word !important;
+              line-height: 1.2 !important;
+            }
+            .qr-print-card h3 {
+              font-size: ${printPaperMode === 'thermal58' ? '14pt' : '16pt'} !important;
+              font-weight: 900 !important;
+              color: #000000 !important;
+              margin: 3px 0 !important;
+              text-align: center !important;
+              word-wrap: break-word !important;
+              line-height: 1.2 !important;
+            }
+            .qr-print-card p {
+              font-size: ${printPaperMode === 'thermal58' ? '8pt' : '9pt'} !important;
+              font-weight: 800 !important;
+              color: #000000 !important;
+              margin: 2px 0 !important;
+              text-align: center !important;
+              word-wrap: break-word !important;
+            }
+            .qr-print-card svg {
+              display: block !important;
+              margin: 8px auto !important;
+              width: ${printPaperMode === 'thermal58' ? '110px' : '145px'} !important;
+              height: ${printPaperMode === 'thermal58' ? '110px' : '145px'} !important;
+            }
+          `}
         }
       `}</style>
     </div>

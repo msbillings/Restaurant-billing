@@ -225,8 +225,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
     return `${header}\n${READ_MORE}\n` +
       (s.address ? `📍 ${s.address.split('\n')[0]}\n` : '') +
-      (s.gstin ? `📄 *GSTIN:* ${s.gstin}\n` : '') +
-      (s.fssai ? `🍽️ *FSSAI:* ${s.fssai}\n` : '') +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `*Bill No:* #${billNo}\n` +
       `*Date & Time:* ${dateStr}, ${timeStr}\n` +
@@ -270,10 +268,11 @@ const Invoice = ({ bill, onClose, onSave }) => {
     // Yield animation frame so React paints spinner immediately
     await new Promise(resolve => requestAnimationFrame(resolve));
 
-    // High-speed receipt capture with fast fallback
+    // High-resolution receipt image capture
     let imageBase64 = null;
     try {
       const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
+      console.log('[eBill] Receipt element found:', !!receiptElement, receiptElement);
       if (receiptElement) {
         const canvas = await Promise.race([
           html2canvas(receiptElement, {
@@ -282,7 +281,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             allowTaint: true,
             logging: false,
             backgroundColor: '#ffffff',
-            imageTimeout: 800,
+            imageTimeout: 2000,
             onclone: (clonedDoc) => {
               const el = clonedDoc.querySelector('.receipt-print');
               if (el) {
@@ -293,38 +292,57 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 el.style.backgroundColor = '#ffffff';
                 el.style.border = 'none';
                 el.style.borderRadius = '0px';
-                el.style.width = '320px';
-                el.style.maxWidth = '320px';
-                el.style.minWidth = '320px';
+                el.style.width = '340px';
+                el.style.maxWidth = '340px';
+                el.style.minWidth = '340px';
               }
             }
           }),
-          new Promise((resolve) => setTimeout(() => resolve(null), 1200)) // Non-blocking fast timeout
+          new Promise((resolve) => setTimeout(() => resolve(null), 8000)) // 8-second capture window
         ]);
 
         if (canvas) {
-          imageBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          console.log(`[eBill] Canvas captured: ${canvas.width}x${canvas.height}px`);
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.52);
+          const approxKB = Math.round(imageBase64.length * 0.75 / 1024);
+          console.log(`[eBill] Image base64 size: ~${approxKB} KB`);
+        } else {
+          console.warn('[eBill] html2canvas returned null/timed-out canvas');
         }
+      } else {
+        console.warn('[eBill] .receipt-print element NOT found in DOM — cannot capture image');
       }
     } catch (captureErr) {
-      console.warn('Receipt image capture skipped, sending formatted text e-bill:', captureErr);
+      console.error('[eBill] Receipt image capture FAILED:', captureErr);
+    }
+
+    if (!imageBase64) {
+      setToast({ message: t("Failed to generate bill receipt image. Please try sending again."), type: 'error' });
+      setSendingAutomated(false);
+      return;
     }
 
     try {
+      console.log(`[eBill] Calling sendWhatsAppBill API for phone=${cleanPhone}...`);
       const res = await Promise.race([
         sendWhatsAppBill(cleanPhone, msg, imageBase64, null, `Bill_${bill?.billNumber || 'Receipt'}.jpg`),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 15000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 45000))
       ]);
 
       if (res && res.success) {
+        console.log(`[eBill] ✅ Bill sent successfully to +${cleanPhone}`);
         setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setShowWhatsAppModal(false);
       } else {
         throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
       }
     } catch (err) {
-      console.error('WhatsApp send error:', err);
-      const errorMsg = err.response?.data?.error || err.message || t('Failed to send WhatsApp e-Bill');
+      // Log the full error with all details
+      console.error('[eBill] ❌ WhatsApp send FAILED:', err?.message);
+      console.error('[eBill] HTTP status:', err?.response?.status);
+      console.error('[eBill] Server error body:', err?.response?.data);
+      console.error('[eBill] Full error object:', err);
+      const errorMsg = err?.response?.data?.error || err?.message || t('Failed to send WhatsApp e-Bill');
       setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
     } finally {
       setSendingAutomated(false);

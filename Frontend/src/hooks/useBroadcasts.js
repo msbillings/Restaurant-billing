@@ -15,7 +15,7 @@ const triggerNativeBroadcastNotification = async (b) => {
   if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.showNotification === 'function') {
     try {
       window.electronAPI.showNotification({ title, body });
-    } catch (e) {}
+    } catch (e) { }
     return;
   }
 
@@ -65,7 +65,7 @@ const triggerNativeBroadcastNotification = async (b) => {
         icon: b.imageUrl || '/logo192.png',
         tag: `broadcast_${b._id}`
       });
-    } catch (e) {}
+    } catch (e) { }
   }
 };
 
@@ -80,7 +80,7 @@ const useBroadcasts = (userRole) => {
       const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
 
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
-      
+
       let response;
       try {
         // 1. Primary: Direct query through POS Backend API (with auth headers automatically included)

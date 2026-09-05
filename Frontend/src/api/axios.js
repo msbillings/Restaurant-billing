@@ -72,7 +72,13 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    const tenantDb = localStorage.getItem('resto_db_name');
+    let tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenantDb');
+    if (!tenantDb) {
+      try {
+        const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+        tenantDb = userObj.db || userObj.tenantDb;
+      } catch (e) {}
+    }
     if (tenantDb) {
       config.headers['X-Tenant-DB'] = tenantDb;
     }
@@ -84,7 +90,13 @@ api.interceptors.request.use(
 authApi.interceptors.request.use(
   (config) => {
     config.baseURL = getApiUrl();
-    const tenantDb = localStorage.getItem('resto_db_name');
+    let tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenantDb');
+    if (!tenantDb) {
+      try {
+        const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+        tenantDb = userObj.db || userObj.tenantDb;
+      } catch (e) {}
+    }
     if (tenantDb) {
       config.headers['X-Tenant-DB'] = tenantDb;
     }

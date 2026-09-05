@@ -1,4 +1,19 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu, shell, Notification } = require('electron');
+
+// Ensure single instance lock to prevent quota database locking & access denied errors on Windows
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.commandLine.appendSwitch('enable-speech-dispatcher');
 app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 
@@ -207,16 +222,14 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
+      partition: 'persist:msbillings',
       preload: path.join(__dirname, 'preload.js')
     },
     title: "MS Billings",
     show: false // Wait until ready to show
   });
 
-  // Clear cache on launch to prevent stale asset hash imports
-  const { session } = require('electron');
-  session.defaultSession.clearCache().catch(() => { });
-  session.defaultSession.clearCodeCaches({}).catch(() => { });
+  // Preserve session data and local storage across app restarts
 
   // Load the built static files
   mainWindow.loadFile(path.join(__dirname, 'frontend/index.html'));
@@ -672,18 +685,7 @@ function setupAutoUpdater() {
 app.on('ready', async () => {
   startBackend();
 
-  // ✅ Clear ALL caches on startup to prevent stale chunk references
   const { session } = require('electron');
-  try {
-    await session.defaultSession.clearCache();
-    await session.defaultSession.clearStorageData({
-      storages: ['serviceworkers', 'cachestorage']
-    });
-    await session.defaultSession.clearCodeCaches({});
-    console.log('[Cache] Cleared Electron cache, service workers, and code caches on startup');
-  } catch (err) {
-    console.error('[Cache] Error clearing cache:', err);
-  }
 
   session.defaultSession.setPermissionRequestHandler((_, permission, callback) => {
     console.log(`[Permissions] Auto-granting permission request for '${permission}'`);

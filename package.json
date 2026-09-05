@@ -1,9 +1,0 @@
-{
-  "name": "restaurant-billing",
-  "version": "6.0.83",
-  "private": true,
-  "scripts": {
-    "build": "cd Frontend && npm install && npm run build",
-    "vercel-build": "cd Frontend && npm install && npm run build"
-  }
-}

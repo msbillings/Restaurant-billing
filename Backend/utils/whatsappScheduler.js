@@ -160,26 +160,101 @@ const generateAutoDayBookWhatsAppMessage = async (databaseName) => {
   }
 };
 
+export const triggerAutoDayBookForTenant = async (dbName) => {
+  try {
+    const models = await getTenantModels(dbName);
+    const Setting = models.Setting;
+    
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    let settings = settingsDoc?.value;
+    if (typeof settings === 'string') {
+      try { settings = JSON.parse(settings); } catch (e) {}
+    }
+
+    const waManager = whatsappManager.getInstance(dbName);
+    await waManager.ensureConnection();
+    const waStatus = waManager.getStatus();
+
+    let targetPhone = waStatus.connectedNumber || settings?.whatsappNumber || settings?.phone;
+
+    if (!targetPhone) {
+      try {
+        const dbStatusDoc = await Setting.findOne({ key: 'whatsapp_status' }).lean();
+        if (dbStatusDoc?.value?.connectedNumber) {
+          targetPhone = dbStatusDoc.value.connectedNumber;
+        }
+      } catch (e) {}
+    }
+
+    if (!targetPhone) {
+      console.warn(`[WhatsApp Scheduler] No target phone number configured for tenant ${dbName}`);
+      return { success: false, error: 'No destination phone number found.' };
+    }
+
+    const result = await generateAutoDayBookWhatsAppMessage(dbName);
+    if (!result || !result.msg) {
+      return { success: false, error: 'Failed to generate DayBook report.' };
+    }
+
+    console.log(`[WhatsApp Scheduler] Executing auto-daybook for ${dbName} to ${targetPhone}...`);
+    
+    if (result.excelBase64) {
+      await waManager.sendBillMedia(targetPhone, {
+        documentBase64: result.excelBase64,
+        mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        caption: result.msg,
+        fileName: `DayBook-${result.dateStr.replace(/\//g, '-')}.xlsx`
+      });
+    } else {
+      await waManager.sendMessage(targetPhone, result.msg);
+    }
+
+    return { success: true, message: `Auto DayBook report delivered to +${targetPhone}` };
+  } catch (err) {
+    console.error(`[WhatsApp Scheduler] Error executing auto-daybook for tenant ${dbName}:`, err);
+    return { success: false, error: err.message };
+  }
+};
+
 export const startWhatsAppScheduler = () => {
   cron.schedule('* * * * *', async () => {
     try {
       if (mongoose.connection.readyState !== 1) return;
 
       const now = new Date();
-      // Format current time as HH:MM
-      const currentHours = String(now.getHours()).padStart(2, '0');
-      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
-      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+      
+      // Calculate 24-hour time strings for Server Local Time & IST (India Standard Time)
+      const hLocal = String(now.getHours()).padStart(2, '0');
+      const mLocal = String(now.getMinutes()).padStart(2, '0');
+      const timeLocal24 = `${hLocal}:${mLocal}`;
 
-      const isCloud = !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || process.env.NODE_ENV === 'production' || process.env.MONGO_URI?.includes('mongodb+srv'));
+      let timeIST24 = timeLocal24;
+      let todayDateStr = now.toISOString().split('T')[0];
+      try {
+        const istStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+        const parts = istStr.split(',');
+        if (parts[1]) {
+          const [h, m] = parts[1].trim().split(':');
+          timeIST24 = `${(h || '').padStart(2, '0')}:${(m || '').padStart(2, '0')}`;
+        }
+        const [mDate, dDate, yDate] = (parts[0] || '').trim().split('/');
+        if (yDate && mDate && dDate) {
+          todayDateStr = `${yDate}-${mDate.padStart(2, '0')}-${dDate.padStart(2, '0')}`;
+        }
+      } catch (e) {}
+
+      const validTimeStrings = [timeLocal24, timeIST24];
+
+      // Fetch all active tenant databases across cloud & local setups
       let tenantDatabases = [];
-
-      if (isCloud) {
-        const clients = await ClientDefault.find({ status: 'Active' }).select('databaseName').lean();
+      try {
+        const clients = await ClientDefault.find({ status: { $ne: 'Inactive' } }).select('databaseName').lean();
         tenantDatabases = clients.map(c => c.databaseName).filter(Boolean);
-      } else {
-        const primaryDb = mongoose.connection.db?.databaseName;
-        if (primaryDb) tenantDatabases = [primaryDb];
+      } catch (e) {}
+
+      const primaryDb = mongoose.connection.db?.databaseName;
+      if (primaryDb && primaryDb !== 'admin' && primaryDb !== 'local' && !tenantDatabases.includes(primaryDb)) {
+        tenantDatabases.push(primaryDb);
       }
 
       for (const dbName of tenantDatabases) {
@@ -195,26 +270,30 @@ export const startWhatsAppScheduler = () => {
             try { settings = JSON.parse(settings); } catch (e) {}
           }
 
-          if (settings && settings.autoSendDaybook && settings.autoSendTime === currentTimeStr) {
-            const waManager = whatsappManager.getInstance(dbName);
-            const waStatus = waManager.getStatus();
+          if (!settings) continue;
 
-            if (waStatus.status === 'CONNECTED' && waStatus.connectedNumber) {
-              const result = await generateAutoDayBookWhatsAppMessage(dbName);
-              if (result && result.msg) {
-                console.log(`[WhatsApp Scheduler] Triggering auto-daybook for ${dbName} to ${waStatus.connectedNumber} at ${currentTimeStr}`);
-                
-                if (result.excelBase64) {
-                  await waManager.sendBillMedia(waStatus.connectedNumber, {
-                    documentBase64: result.excelBase64,
-                    mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    caption: result.msg,
-                    fileName: `DayBook-${result.dateStr.replace(/\//g, '-')}.xlsx`
-                  });
-                } else {
-                  await waManager.sendMessage(waStatus.connectedNumber, result.msg);
-                }
-              }
+          const isEnabled = settings.autoSendDaybook === true || settings.autoSendDaybook === 'true' || settings.autoSendDaybook === 1 || settings.autoSendDaybook === '1';
+          const setTime = (settings.autoSendTime || '22:00').trim();
+
+          if (isEnabled && validTimeStrings.includes(setTime)) {
+            // Check if already sent today to prevent duplicates
+            if (settings.lastAutoDayBookSentDate === todayDateStr) {
+              continue;
+            }
+
+            console.log(`[WhatsApp Scheduler] Time match found (${setTime}) for tenant ${dbName}. Triggering DayBook report...`);
+            
+            const res = await triggerAutoDayBookForTenant(dbName);
+            if (res && res.success) {
+              // Update lastAutoDayBookSentDate in database
+              try {
+                settings.lastAutoDayBookSentDate = todayDateStr;
+                await Setting.findOneAndUpdate(
+                  { key: 'restaurantSettings' },
+                  { value: settings },
+                  { upsert: true }
+                );
+              } catch (saveErr) {}
             }
           }
         } catch (tenantErr) {

@@ -309,4 +309,35 @@ input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
   transition: background-color 5000s ease-in-out 0s;
-}
+}
+
+/* WhatsApp Dynamic Sending Button Animations */
+@keyframes wa-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes wa-pulse-ring {
+  0% { transform: scale(0.98); opacity: 0.9; box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7); }
+  50% { transform: scale(1.02); opacity: 1; box-shadow: 0 0 20px 6px rgba(37, 211, 102, 0.4); }
+  100% { transform: scale(0.98); opacity: 0.9; box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7); }
+}
+
+@keyframes wa-progress-strip {
+  0% { left: -100%; width: 50%; }
+  50% { left: 25%; width: 75%; }
+  100% { left: 100%; width: 50%; }
+}
+
+.animate-wa-shimmer {
+  animation: wa-shimmer 2s infinite linear;
+}
+
+.animate-wa-pulse-ring {
+  animation: wa-pulse-ring 1.5s infinite ease-in-out;
+}
+
+.animate-wa-progress {
+  animation: wa-progress-strip 1.6s infinite ease-in-out;
+}
+

@@ -10,8 +10,19 @@ import { getTenantModels } from '../utils/tenantManager.js';
 import { useMongoDBAuthState } from '../utils/useMongoDBAuthState.js';
 
 const isSocketOpen = (sock) => {
-  if (!sock || !sock.ws) return false;
-  return sock.ws.readyState === 1 || sock.ws.isOpen === true;
+  if (!sock) return false;
+  if (sock.ws) {
+    if (sock.ws.socket && typeof sock.ws.socket.readyState === 'number') {
+      return sock.ws.socket.readyState === 1;
+    }
+    if (typeof sock.ws.readyState === 'number') {
+      return sock.ws.readyState === 1;
+    }
+    if (sock.ws.isOpen === true) return true;
+  }
+  // Do NOT fall back to sock.user?.id alone — a stale socket keeps user.id
+  // but the WebSocket is already CLOSED, causing 'Cannot read attrs' errors.
+  return false;
 };
 
 class WhatsAppService {
@@ -24,7 +35,27 @@ class WhatsAppService {
     this.connectedNumber = null;
     this.connectionListeners = new Set();
     this.isInitializing = false;
+    this._initPromise = null; // Promise-based lock: prevents concurrent init() calls
     this.authState = null;
+    this.heartbeatInterval = null;
+    this._conflictCount = 0;
+    this.startBackgroundHeartbeat();
+  }
+
+  startBackgroundHeartbeat() {
+    if (this.heartbeatInterval) return;
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        // Skip heartbeat if init is already running — avoids race condition with reconnect
+        if (this._initPromise) return;
+        if (this.status === 'CONNECTED' && (!this.sock || !isSocketOpen(this.sock))) {
+          console.log(`[WhatsApp Service - ${this.tenantId}] 24/7 Heartbeat detected socket drop! Auto-reconnecting...`);
+          await this.ensureConnection(true);
+        }
+      } catch (e) {
+        console.warn(`[WhatsApp Service - ${this.tenantId}] Heartbeat check warning:`, e?.message);
+      }
+    }, 15000); // Increased from 10s to 15s to reduce heartbeat pressure
   }
 
   setRestaurantName(name) {
@@ -46,12 +77,25 @@ class WhatsAppService {
   }
 
   async init() {
-    if (this.isInitializing) return;
+    // Promise-based lock: if init is already running, WAIT for it instead of starting a second socket
+    if (this._initPromise) {
+      console.log(`[WhatsApp - ${this.tenantId}] init() called while already initializing — waiting for existing init...`);
+      return this._initPromise;
+    }
     if (this.status === 'CONNECTED' && this.sock?.user?.id && isSocketOpen(this.sock)) {
       return;
     }
     this.isInitializing = true;
+    this._initPromise = this._doInit();
+    try {
+      await this._initPromise;
+    } finally {
+      this._initPromise = null;
+      this.isInitializing = false;
+    }
+  }
 
+  async _doInit() {
     try {
       if (this.sock) {
         try {
@@ -68,10 +112,13 @@ class WhatsAppService {
       const { state, saveCreds } = this.authState;
       let version;
       try {
-        const vInfo = await fetchLatestBaileysVersion();
+        const vInfo = await Promise.race([
+          fetchLatestBaileysVersion(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('version fetch timeout')), 1500))
+        ]);
         version = vInfo.version;
       } catch (e) {
-        version = [2, 3000, 1017531287];
+        version = [2, 3000, 1043857760];
       }
 
       const platformInfo = this.getPlatformInfo();
@@ -83,8 +130,10 @@ class WhatsAppService {
         auth: state,
         browser: platformInfo.browserConfig,
         syncFullHistory: false,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
+        markOnlineOnConnect: false,         // Do NOT mark online — reduces conflict triggers
+        generateHighQualityLinkPreview: false, // Reduces server-side processing
+        connectTimeoutMs: 20000,
+        defaultQueryTimeoutMs: 20000,
         keepAliveIntervalMs: 30000
       });
 
@@ -118,6 +167,7 @@ class WhatsAppService {
               }
             });
             this.status = 'SCAN_QR';
+            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] QR code generated. Status set to SCAN_QR`);
             this.notifyListeners();
           } catch (qrErr) {
             console.error('[WhatsApp Service] QR Generation Error:', qrErr);
@@ -127,16 +177,23 @@ class WhatsAppService {
         if (connection === 'connecting') {
           this.status = 'CONNECTING';
           this.qrDataUrl = null;
+          console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Connecting to WhatsApp servers...`);
           this.notifyListeners();
         }
 
         if (connection === 'close') {
           const statusCode = (lastDisconnect?.error)?.output?.statusCode;
-          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401;
-          const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
+          const errorPayload = (lastDisconnect?.error)?.output?.payload;
+          const errorMessage = lastDisconnect?.error?.message;
+          console.warn(`[WhatsApp Diagnostics - ${this.tenantId}] Connection CLOSED! Code: ${statusCode}, Reason: "${errorMessage || errorPayload?.error || 'Unknown'}"`);
+
+          const isConflict = statusCode === 440;
+          const isExplicitLoggedOut = statusCode === DisconnectReason.loggedOut && 
+            (errorPayload?.error === 'Unauthorized' || String(errorMessage).toLowerCase().includes('logged out'));
+          const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired || statusCode === 401 || statusCode === 408;
           
-          if (isLoggedOut) {
-            console.log(`[WhatsApp Service - ${this.tenantId}] Logged out. Clearing credentials...`);
+          if (isExplicitLoggedOut) {
+            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Logged out explicitly. Clearing credentials...`);
             this.status = 'DISCONNECTED';
             this.connectedNumber = null;
             this.qrDataUrl = null;
@@ -155,16 +212,31 @@ class WhatsAppService {
             }).catch(() => {});
 
             setTimeout(() => {
+              this._initPromise = null;
               this.isInitializing = false;
               this.init();
             }, 2000);
+          } else if (isConflict) {
+            // Code 440: WhatsApp server kicked us out due to a session conflict.
+            // Wait before reconnecting so the old session expires on WhatsApp's end.
+            this._conflictCount = (this._conflictCount || 0) + 1;
+            const conflictDelay = Math.min(8000 + (this._conflictCount - 1) * 3000, 20000);
+            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Code 440 conflict #${this._conflictCount} — waiting ${conflictDelay}ms before reconnect...`);
+            this.status = 'CONNECTING';
+            this.notifyListeners();
+            setTimeout(() => {
+              this._initPromise = null;
+              this.isInitializing = false;
+              this.init();
+            }, conflictDelay);
           } else {
-            console.log(`[WhatsApp Service - ${this.tenantId}] Reconnecting (status: ${statusCode}, restartRequired: ${isRestartRequired})...`);
+            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Auto-reconnecting background socket (statusCode: ${statusCode})...`);
             this.status = isRestartRequired ? 'CONNECTING' : 'DISCONNECTED';
             this.notifyListeners();
 
-            const delay = isRestartRequired ? 600 : 2500;
+            const delay = isRestartRequired ? 600 : 2000;
             setTimeout(() => {
+              this._initPromise = null;
               this.isInitializing = false;
               this.init();
             }, delay);
@@ -175,15 +247,13 @@ class WhatsAppService {
           this.linkedAt = this.linkedAt || new Date().toISOString();
           const rawJid = this.sock?.user?.id || state?.creds?.me?.id || '';
           this.connectedNumber = rawJid.split(':')[0] || rawJid.split('@')[0] || null;
-          console.log(`[WhatsApp Service - ${this.tenantId}] Connected successfully as +${this.connectedNumber} (${platformInfo.deviceName})`);
+          // Reset conflict counter on successful connection
+          this._conflictCount = 0;
+          console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Connected successfully 24/7 as +${this.connectedNumber} (${platformInfo.deviceName})`);
           this.notifyListeners();
 
-          // Attempt to sync WhatsApp account profile name to restaurant name
-          if (this.restaurantName && this.sock?.updateProfileName) {
-            this.sock.updateProfileName(this.restaurantName)
-              .then(() => console.log(`[WhatsApp Service - ${this.tenantId}] Synced profile name to "${this.restaurantName}"`))
-              .catch(err => console.warn(`[WhatsApp Service - ${this.tenantId}] Note: Profile name update:`, err.message));
-          }
+          // NOTE: updateProfileName removed — it was triggering Code 440 stream conflicts
+          // on every reconnect by sending a server-side profile update that conflicted with the session.
 
           // Persist connected status in MongoDB for cross-platform visibility (.exe, .apk, Vercel)
           getTenantModels(this.tenantId).then(models => {
@@ -205,17 +275,12 @@ class WhatsAppService {
               ).catch(() => {});
             }
           }).catch(() => {});
-        } else if (connection === 'connecting') {
-          this.status = 'CONNECTING';
-          this.notifyListeners();
         }
       });
     } catch (err) {
-      console.error(`[WhatsApp Service - ${this.tenantId}] Init error:`, err);
+      console.error(`[WhatsApp Diagnostics - ${this.tenantId}] Init error:`, err);
       this.status = 'DISCONNECTED';
       this.notifyListeners();
-    } finally {
-      this.isInitializing = false;
     }
   }
 
@@ -235,41 +300,14 @@ class WhatsAppService {
         await this.sock.logout().catch(() => {});
         this.sock = null;
       }
-    } catch (e) {}
-    this.clearAuth();
-    this.status = 'DISCONNECTED';
-    this.connectedNumber = null;
-    this.linkedAt = null;
-    this.qrDataUrl = null;
-    this.isInitializing = false;
-    this.init();
-    return { success: true, message: 'Logged out successfully' };
-  }
-
-  async refreshQR() {
-    try {
-      if (this.status === 'CONNECTED') {
-        return { success: true, message: 'Already connected', status: this.getStatus() };
-      }
-      this.clearAuth();
-      if (this.sock) {
-        try {
-          this.sock.end(undefined);
-        } catch (e) {}
-        this.sock = null;
-      }
       this.qrDataUrl = null;
       this.status = 'DISCONNECTED';
-      this.isInitializing = false;
-      await this.init();
-      let count = 0;
-      while (count < 20 && !this.qrDataUrl && this.status !== 'CONNECTED') {
-        await new Promise(r => setTimeout(r, 200));
-        count++;
-      }
-      return { success: true, status: this.getStatus() };
+      this.connectedNumber = null;
+      this.clearAuth();
+      this.notifyListeners();
+      return { success: true, message: 'Logged out successfully' };
     } catch (err) {
-      console.error('[WhatsApp Service] Refresh QR error:', err);
+      console.error('[WhatsApp Service] Logout error:', err);
       throw err;
     }
   }
@@ -396,30 +434,32 @@ class WhatsAppService {
     return () => this.connectionListeners.delete(fn);
   }
 
-  async ensureConnection() {
-    // Zero-delay fast path: already connected and ready
-    if ((this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock)) {
+  async ensureConnection(forceReconnect = false) {
+    const wsState = this.sock?.ws?.socket?.readyState ?? this.sock?.ws?.readyState ?? 'none';
+    const isReady = (this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock);
+    
+    if (!forceReconnect && isReady) {
       return;
     }
 
-    console.log(`[WhatsApp Service - ${this.tenantId}] Ensuring socket connection is open and ready...`);
-    if (!this.sock || this.status === 'DISCONNECTED') {
+    console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Ensuring socket readiness... (forceReconnect: ${forceReconnect}, status: ${this.status}, ws readyState: ${wsState})`);
+    
+    if (forceReconnect || !this.sock || !isSocketOpen(this.sock) || this.status === 'DISCONNECTED') {
       this.isInitializing = false;
       await this.init();
     }
-    if (this.sock?.waitForSocketOpen && !isSocketOpen(this.sock)) {
-      try {
-        await Promise.race([
-          this.sock.waitForSocketOpen(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
-        ]);
-      } catch (e) {}
-    }
+    
+    // Wait up to 10 seconds for WebSocket handshake to reach OPEN state (readyState 1)
     let count = 0;
-    while (count < 5 && (this.status !== 'CONNECTED' || !this.sock?.user?.id || !isSocketOpen(this.sock))) {
-      await new Promise(r => setTimeout(r, 100));
+    while (count < 50) {
+      if ((this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock)) {
+        console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Socket is now OPEN & READY!`);
+        return;
+      }
+      await new Promise(r => setTimeout(r, 200));
       count++;
     }
+    console.warn(`[WhatsApp Diagnostics - ${this.tenantId}] Socket readiness wait completed after 10s. Current status: ${this.status}`);
   }
 
   async sendMessage(rawPhone, text) {
@@ -433,20 +473,53 @@ class WhatsAppService {
     await this.ensureConnection();
 
     if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
-      throw new Error('WhatsApp service is not connected.');
+      // Auto-attempt force reconnect once before erroring out
+      console.warn(`[WhatsApp Diagnostics - ${this.tenantId}] Socket not open before sendMessage. Triggering forceReconnect...`);
+      await this.ensureConnection(true);
+    }
+
+    if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
+      throw new Error('WhatsApp bot connection is opening. Please try sending again in 2 seconds.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      const result = await this.sock.sendMessage(jid, { text: String(text) });
+      const result = await Promise.race([
+        this.sock.sendMessage(jid, { text: String(text) }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Message send timed out on WhatsApp server')), 15000))
+      ]);
       return result;
     } catch (sendErr) {
-      console.warn('[WhatsApp Service] Send failed, retrying once after reconnect...', sendErr.message);
-      this.isInitializing = false;
-      await this.init();
-      if (this.sock && this.sock.user?.id) {
-        return await this.sock.sendMessage(jid, { text: String(text) });
+      console.warn('[WhatsApp Diagnostics] Send message warning:', sendErr?.message || sendErr);
+      const errStr = String(sendErr?.message || sendErr).toLowerCase();
+      const isAttrsError = errStr.includes('attrs') || errStr.includes('cannot read properties');
+      const needsReconnect = isAttrsError || errStr.includes('closed') || errStr.includes('disconnect') ||
+        errStr.includes('not connected') || errStr.includes('500') || errStr.includes('timed out');
+
+      if (needsReconnect) {
+        if (isAttrsError) {
+          console.log('[sendMessage] Detected Baileys stale-socket (attrs) error — doing FULL teardown + reinit...');
+          try {
+            if (this.sock) { this.sock.ev.removeAllListeners(); this.sock.end(undefined); }
+          } catch (e) {}
+          this.sock = null;
+          this.isInitializing = false;
+          this.status = 'DISCONNECTED';
+        }
+        try {
+          await this.ensureConnection(true);
+          await new Promise(r => setTimeout(r, 1500));
+          if (this.sock && isSocketOpen(this.sock)) {
+            return await Promise.race([
+              this.sock.sendMessage(jid, { text: String(text) }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Message send timed out on retry')), 20000))
+            ]);
+          }
+        } catch (retryErr) {
+          console.warn('[WhatsApp Diagnostics] Retry text send error:', retryErr?.message);
+          throw retryErr;
+        }
       }
       throw sendErr;
     }
@@ -460,59 +533,124 @@ class WhatsAppService {
       throw new Error('Invalid destination phone number.');
     }
 
+    console.log(`[sendBillMedia] ▶ Starting for phone=${cleanPhone} | hasImage=${!!imageBase64} | hasPdf=${!!pdfBase64} | hasDoc=${!!documentBase64}`);
+
     await this.ensureConnection();
 
+    const wsStateA = this.sock?.ws?.socket?.readyState ?? this.sock?.ws?.readyState ?? 'none';
+    console.log(`[sendBillMedia] After ensureConnection: status=${this.status} | ws.readyState=${wsStateA} | user=${this.sock?.user?.id || 'none'}`);
+
     if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
-      throw new Error('WhatsApp service is not connected.');
+      console.warn(`[sendBillMedia] Socket not open — triggering forceReconnect...`);
+      await this.ensureConnection(true);
+    }
+
+    const wsStateB = this.sock?.ws?.socket?.readyState ?? this.sock?.ws?.readyState ?? 'none';
+    console.log(`[sendBillMedia] After forceReconnect check: status=${this.status} | ws.readyState=${wsStateB} | user=${this.sock?.user?.id || 'none'}`);
+
+    if (!this.sock || !this.sock.user?.id || !isSocketOpen(this.sock)) {
+      throw new Error('WhatsApp bot connection is opening. Please try sending again in 2 seconds.');
     }
 
     let jid = `${cleanPhone}@s.whatsapp.net`;
+    console.log(`[sendBillMedia] Sending to JID: ${jid}`);
 
-    const sendAction = async () => {
-      let messagePayload = {};
-      if (pdfBase64 || (documentBase64 && (mimetype?.includes('pdf') || fileName?.endsWith('.pdf')))) {
-        const rawB64 = (pdfBase64 || documentBase64).replace(/^data:application\/pdf;base64,/, '').trim();
-        const buffer = Buffer.from(rawB64, 'base64');
-        messagePayload = {
-          document: buffer,
-          mimetype: mimetype || 'application/pdf',
-          fileName: fileName || 'eBill.pdf',
-          caption: caption || ''
-        };
-      } else if (imageBase64) {
-        const rawB64 = imageBase64.replace(/^data:image\/\w+;base64,/, '').trim();
-        const buffer = Buffer.from(rawB64, 'base64');
-        messagePayload = {
-          image: buffer,
-          mimetype: mimetype || 'image/jpeg',
-          caption: caption || ''
-        };
-      } else if (documentBase64) {
-        const rawB64 = documentBase64.replace(/^data:[^;]+;base64,/, '').trim();
-        const buffer = Buffer.from(rawB64, 'base64');
-        messagePayload = {
-          document: buffer,
-          mimetype: mimetype || 'application/octet-stream',
-          fileName: fileName || 'document',
-          caption: caption || ''
-        };
-      } else {
-        messagePayload = { text: caption || '🧾 *Your Digital e-Bill Receipt*' };
-      }
-
-      return await this.sock.sendMessage(jid, messagePayload);
-    };
+    let messagePayload = {};
+    const isImage = Boolean(imageBase64);
+    if (pdfBase64 || (documentBase64 && (mimetype?.includes('pdf') || fileName?.endsWith('.pdf')))) {
+      const rawB64 = (pdfBase64 || documentBase64).replace(/^data:application\/pdf;base64,/, '').trim();
+      const buffer = Buffer.from(rawB64, 'base64');
+      console.log(`[sendBillMedia] Payload type=PDF | bufferKB=${Math.round(buffer.length / 1024)}`);
+      messagePayload = {
+        document: buffer,
+        mimetype: mimetype || 'application/pdf',
+        fileName: fileName || 'eBill.pdf',
+        caption: caption || ''
+      };
+    } else if (imageBase64) {
+      const rawB64 = imageBase64.replace(/^data:image\/\w+;base64,/, '').trim();
+      const buffer = Buffer.from(rawB64, 'base64');
+      console.log(`[sendBillMedia] Payload type=IMAGE | bufferKB=${Math.round(buffer.length / 1024)}`);
+      messagePayload = {
+        image: buffer,
+        mimetype: mimetype || 'image/jpeg',
+        caption: caption || ''
+      };
+    } else if (documentBase64) {
+      const rawB64 = documentBase64.replace(/^data:[^;]+;base64,/, '').trim();
+      const buffer = Buffer.from(rawB64, 'base64');
+      console.log(`[sendBillMedia] Payload type=DOCUMENT | bufferKB=${Math.round(buffer.length / 1024)}`);
+      messagePayload = {
+        document: buffer,
+        mimetype: mimetype || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        fileName: fileName || 'SalesReport.xlsx',
+        caption: caption || ''
+      };
+    } else {
+      console.log(`[sendBillMedia] Payload type=TEXT (no media provided)`);
+      messagePayload = { text: caption || '🧾 *Your Digital e-Bill Receipt*' };
+    }
 
     try {
-      return await sendAction();
+      const timeoutMs = isImage ? 35000 : 40000;
+      console.log(`[sendBillMedia] Calling sock.sendMessage | timeoutMs=${timeoutMs}...`);
+      const result = await Promise.race([
+        this.sock.sendMessage(jid, messagePayload),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Media send timed out on WhatsApp server')), timeoutMs))
+      ]);
+      console.log(`[sendBillMedia] ✅ sock.sendMessage succeeded! messageID=${result?.key?.id || 'N/A'}`);
+      return result;
     } catch (sendErr) {
-      console.warn('[WhatsApp Service] Media upload attempt failed, retrying media send after reconnect...', sendErr?.message);
-      this.isInitializing = false;
-      await this.init();
-      await this.ensureConnection();
-      if (this.sock && isSocketOpen(this.sock)) {
-        return await sendAction();
+      // Normalize: Baileys sometimes rejects with non-Error (undefined, string, object)
+      const errMsg = sendErr?.message || (typeof sendErr === 'string' ? sendErr : '') || 'Connection Closed';
+      const normalizedErr = sendErr instanceof Error ? sendErr : new Error(errMsg);
+      console.error(`[sendBillMedia] ❌ sock.sendMessage FAILED: ${errMsg}`);
+      console.error(`[sendBillMedia] Error stack:`, normalizedErr?.stack);
+      const errStr = errMsg.toLowerCase();
+
+      // --- The 'attrs' error means Baileys internal state is broken (stale socket). ---
+      const isAttrsError = errStr.includes('attrs') || errStr.includes('cannot read properties');
+      const needsReconnect = isAttrsError || errStr.includes('closed') || errStr.includes('disconnect') ||
+        errStr.includes('not connected') || errStr.includes('500') || errStr.includes('timed out') ||
+        errStr.includes('terminated') || errStr === 'connection closed' || !sendErr?.message;
+
+      if (needsReconnect) {
+        if (isAttrsError) {
+          console.log('[sendBillMedia] Detected Baileys stale-socket (attrs) error — doing FULL teardown + reinit...');
+          try {
+            if (this.sock) { this.sock.ev.removeAllListeners(); this.sock.end(undefined); }
+          } catch (e) {}
+          this.sock = null;
+          this._initPromise = null;
+          this.isInitializing = false;
+          this.status = 'DISCONNECTED';
+        } else {
+          console.log(`[sendBillMedia] Socket error (${errMsg}) — auto-reconnecting & retrying...`);
+        }
+
+        try {
+          await this.ensureConnection(true);
+          // Wait a moment for socket to fully stabilize after reinit
+          await new Promise(r => setTimeout(r, 1500));
+          if (this.sock && isSocketOpen(this.sock)) {
+            const retryTimeoutMs = isImage ? 40000 : 50000;
+            console.log(`[sendBillMedia] Retry attempt | retryTimeoutMs=${retryTimeoutMs}...`);
+            const retryResult = await Promise.race([
+              this.sock.sendMessage(jid, messagePayload),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Media send timed out on retry')), retryTimeoutMs))
+            ]);
+            console.log(`[sendBillMedia] ✅ Retry succeeded! messageID=${retryResult?.key?.id || 'N/A'}`);
+            return retryResult;
+          } else {
+            throw new Error('WhatsApp socket not ready after reconnect. Please try again in a few seconds.');
+          }
+        } catch (retryErr) {
+          console.error(`[sendBillMedia] ❌ Retry FAILED: ${retryErr?.message}`);
+          console.error(`[sendBillMedia] Retry stack:`, retryErr?.stack);
+          throw retryErr;
+        }
       }
+
       throw sendErr;
     }
   }

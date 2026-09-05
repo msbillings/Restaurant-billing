@@ -147,7 +147,17 @@ function App() {
   }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState(null);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser && savedUser !== 'undefined' && savedUser !== 'null') {
+        return JSON.parse(savedUser);
+      }
+    } catch (err) {
+      console.error("Invalid user JSON in localStorage:", err);
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeOrdersCount, setActiveOrdersCount] = useState(0);
@@ -200,7 +210,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.83');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.84');
   const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
     try {
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';
@@ -259,7 +269,14 @@ function App() {
     }
     return ['floor'];
   });
-  const [hasLicense, setHasLicense] = useState(false);
+  const [hasLicense, setHasLicense] = useState(() => {
+    try {
+      const savedLicense = localStorage.getItem('resto_license');
+      return !!savedLicense;
+    } catch {
+      return false;
+    }
+  });
   const [unlockedFeatures, setUnlockedFeatures] = useState(() => {
     try {
       return JSON.parse(sessionStorage.getItem('unlockedFeatures') || '{}');
@@ -600,16 +617,10 @@ function App() {
     }
     const savedLicense = localStorage.getItem('resto_license');
     const savedDbName = localStorage.getItem('resto_db_name');
-    const isDesktopApp = !!window.electronAPI;
+    const isDesktopApp = isElectronApp();
 
-    // For cloud/mobile apps, we MUST have the database name for multi-tenancy isolation.
-    // If it's missing (e.g. old cached state), force them back to the license screen.
-    if (savedLicense && (savedDbName || isDesktopApp)) {
+    if (savedLicense) {
       setTimeout(() => setHasLicense(true), 0);
-    } else if (savedLicense && !savedDbName && !isDesktopApp) {
-      localStorage.removeItem('resto_license');
-      localStorage.removeItem('resto_license_expiry');
-      setTimeout(() => setHasLicense(false), 0);
     }
 
     setTimeout(() => setLoading(false), 0);
@@ -626,7 +637,13 @@ function App() {
     const fetchSuperAdminConfig = async () => {
       try {
         const licenseKey = localStorage.getItem('resto_license');
-        if (licenseKey) {
+        const isSyntheticKey = !licenseKey || 
+                               licenseKey === 'ACCOUNT-LOGIN' || 
+                               licenseKey.startsWith('ACCOUNT-') || 
+                               licenseKey.startsWith('MSBILL-DEMO') || 
+                               licenseKey.startsWith('LOCAL-');
+
+        if (licenseKey && !isSyntheticKey) {
           const SUPERADMIN_API_URL = getSuperadminApiUrl();
           const saRes = await fetch(`${SUPERADMIN_API_URL}/api/clients/license/${licenseKey}`);
           if (saRes.ok) {

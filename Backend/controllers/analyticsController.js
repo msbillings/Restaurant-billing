@@ -880,8 +880,9 @@ export const sendDayBookWhatsApp = async (req, res) => {
     }
 
     const { whatsappService } = await resolveTenantInfo(req);
+    await whatsappService.ensureConnection();
     const status = whatsappService.getStatus();
-    if (status.status !== 'CONNECTED') {
+    if (status.status !== 'CONNECTED' && !whatsappService.connectedNumber) {
       return res.status(400).json({ error: 'WhatsApp is not connected on server. Please link WhatsApp in Settings.' });
     }
 
@@ -911,8 +912,9 @@ export const sendAnalyticsWhatsApp = async (req, res) => {
     }
 
     const { whatsappService } = await resolveTenantInfo(req);
+    await whatsappService.ensureConnection();
     const status = whatsappService.getStatus();
-    if (status.status !== 'CONNECTED') {
+    if (status.status !== 'CONNECTED' && !whatsappService.connectedNumber) {
       return res.status(400).json({ error: 'WhatsApp is not connected on server. Please link WhatsApp in Settings.' });
     }
 

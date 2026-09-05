@@ -1,8 +1,13 @@
 import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 
+const globalAuthCache = new Map();
+
 export const useMongoDBAuthState = async (WhatsAppAuthModel) => {
-  // High-performance in-memory cache to eliminate 99% of WAN round-trips to MongoDB Atlas
-  const memoryCache = new Map();
+  const modelKey = WhatsAppAuthModel?.modelName || 'WhatsAppAuth';
+  if (!globalAuthCache.has(modelKey)) {
+    globalAuthCache.set(modelKey, new Map());
+  }
+  const memoryCache = globalAuthCache.get(modelKey);
 
   const writeData = async (data, id) => {
     try {
