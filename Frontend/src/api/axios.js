@@ -111,7 +111,15 @@ api.interceptors.response.use(
       // Don't logout if:
       // 1. The request was to the login endpoint (just pass the error to show message)
       // 2. The user is on the public /order page (QR customer menu — no auth needed)
-      if (!originalRequest.url?.includes('/auth/login') && !isPublicOrderPage) {
+      // 3. The error is an action/PIN/password verification error (e.g. deleting a bill or security checks)
+      const errorMsg = String(error.response?.data?.message || error.message || '').toLowerCase();
+      const isVerificationError = errorMsg.includes('password') || 
+                                   errorMsg.includes('pin') || 
+                                   errorMsg.includes('incorrect') || 
+                                   errorMsg.includes('authorized') ||
+                                   originalRequest.url?.includes('/bills/');
+
+      if (!originalRequest.url?.includes('/auth/login') && !isPublicOrderPage && !isVerificationError) {
         console.warn('401 Unauthorized - Logging out user');
         forceLogout();
       }

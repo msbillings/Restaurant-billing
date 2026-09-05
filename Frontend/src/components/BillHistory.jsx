@@ -203,9 +203,14 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     setDeleteModal((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       await deleteBill(deleteModal.billId, deleteModal.password);
-      setBills(bills.filter((bill) => bill._id !== deleteModal.billId));
+      setBills((prev) => prev.map((bill) => 
+        bill._id === deleteModal.billId 
+          ? { ...bill, status: 'Deleted', cancelReason: 'Manually deleted from History' } 
+          : bill
+      ));
       setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
       setToast({ message: 'Bill deleted successfully', type: 'success' });
+      fetchBills(true);
     } catch (error) {
       console.error('Error deleting bill:', error);
       setDeleteModal((prev) => ({ ...prev, loading: false, error: error.response?.data?.message || 'Incorrect password or failed to delete bill' }));
@@ -425,13 +430,16 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
           <div className="relative w-full sm:flex-1 sm:min-w-[160px] min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={13} />
             <input
+              id="search_bill_history_input"
               type="search"
               name="search_bill_history_no_autofill"
-              autoComplete="off"
+              autoComplete="new-password"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck="false"
               aria-autocomplete="none"
+              readOnly
+              onFocus={(e) => e.target.removeAttribute('readOnly')}
               placeholder={t("Search Bill #, Customer, Type, Status...")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

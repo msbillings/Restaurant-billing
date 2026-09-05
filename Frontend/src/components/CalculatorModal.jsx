@@ -1,6 +1,8 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect, Component } from 'react';
-import { X, Delete, Receipt, Coins, ArrowRight, SplitSquareHorizontal, Percent, Mic, Copy, Check } from 'lucide-react';
+import { useLanguage } from "../context/LanguageContext";
+import React, { useState, useEffect, Component } from 'react';
+import { X, Delete, Receipt, Coins, ArrowRight, SplitSquareHorizontal, Percent, Mic, MicOff, Copy, Check, History, Trash2, ShieldCheck, Clock, RefreshCcw } from 'lucide-react';
 import WhisperWorker from '../workers/whisperWorker.js?worker';
+import { getCalculationHistory, saveCalculationEntry, clearCalculationHistory, deleteSingleCalculationEntry } from '../api/calculator.js';
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -25,18 +27,17 @@ class ErrorBoundary extends Component {
             <button
               className="mt-4 px-4 py-2 bg-white text-red-900 font-bold rounded"
               onClick={() => this.props.onClose && this.props.onClose()}>Close
-
-
             </button>
           </div>
-        </div>);
-
+        </div>
+      );
     }
     return this.props.children;
   }
 }
 
-const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage();
+const CalculatorModalInner = ({ isOpen, onClose }) => {
+  const { t } = useLanguage();
   const [display, setDisplay] = useState('0');
   const [equation, setEquation] = useState('');
   const [aiInput, setAiInput] = useState('');
@@ -44,6 +45,11 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
   const [isListening, setIsListening] = useState(false);
   const [copied, setCopied] = useState(false);
   const [micLang, setMicLang] = useState('en-IN'); // Default to Indian English
+
+  // History state
+  const [historyList, setHistoryList] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
   // Local Whisper state
   const [worker, setWorker] = useState(null);
@@ -52,13 +58,51 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
   const mediaRecorderRef = React.useRef(null);
   const audioChunksRef = React.useRef([]);
   const audioContextRef = React.useRef(null);
+  const recognitionRef = React.useRef(null);
+
+  // Fetch history & reset listening when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      loadHistory();
+    } else {
+      cancelListening();
+    }
+  }, [isOpen]);
+
+  const loadHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await getCalculationHistory();
+      setHistoryList(data);
+    } catch (e) {
+      console.error("Error loading calculation history:", e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    await clearCalculationHistory();
+    setHistoryList([]);
+  };
+
+  const handleDeleteSingle = async (id) => {
+    if (!id) return;
+    try {
+      await deleteSingleCalculationEntry(id);
+      setHistoryList((prev) => prev.filter((item) => (item._id || item.id) !== id));
+    } catch (err) {
+      console.error("Error deleting single calculation entry:", err);
+    }
+  };
 
   const handleNumber = (num) => {
     setDisplay((prev) => prev === '0' ? num : prev + num);
   };
 
   const handleOperator = (op) => {
-    setEquation(display + ' ' + op + ' ');
+    const opSymbol = op === '*' ? 'x' : op;
+    setEquation(display + ' ' + opSymbol + ' ');
     setDisplay('0');
   };
 
@@ -67,12 +111,22 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     setDisplay(String(val / 100));
   };
 
-  const handleEqual = () => {
+  const handleEqual = async () => {
     try {
-      const result = new Function('return ' + equation + display)();
-      setDisplay(String(Number(result.toFixed(2))));
+      const fullExpr = `${equation}${display}`;
+      const evalExpr = fullExpr.replace(/x/g, '*').replace(/×/g, '*');
+      const resultVal = new Function('return ' + evalExpr)();
+      const formattedRes = String(Number(resultVal.toFixed(2)));
+      
+      setDisplay(formattedRes);
       setEquation('');
       setAiResult('');
+
+      if (fullExpr.trim()) {
+        const displayExpr = fullExpr.replace(/\*/g, ' x ');
+        const saved = await saveCalculationEntry(displayExpr, formattedRes);
+        setHistoryList((prev) => [saved, ...prev.filter(h => (h._id || h.id) !== (saved._id || saved.id))]);
+      }
     } catch (e) {
       setDisplay('Error');
       setEquation('');
@@ -95,12 +149,18 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     setDisplay(String(current + amount));
   };
 
-  const applyPercentage = (percent, isAdd) => {
+  const applyPercentage = async (percent, isAdd) => {
     const current = parseFloat(display) || 0;
     const modifier = current * (percent / 100);
-    const result = isAdd ? current + modifier : current - modifier;
-    setEquation(`${current} ${isAdd ? '+' : '-'} ${percent}% = `);
-    setDisplay(String(Number(result.toFixed(2))));
+    const resultVal = isAdd ? current + modifier : current - modifier;
+    const expr = `${current} ${isAdd ? '+' : '-'} ${percent}%`;
+    const formattedRes = String(Number(resultVal.toFixed(2)));
+
+    setEquation(`${expr} = `);
+    setDisplay(formattedRes);
+
+    const saved = await saveCalculationEntry(expr, formattedRes);
+    setHistoryList((prev) => [saved, ...prev.filter(h => (h._id || h.id) !== (saved._id || saved.id))]);
   };
 
   const handleCopy = () => {
@@ -117,79 +177,29 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     const inputToParse = customInput !== undefined ? customInput : aiInput;
     if (!inputToParse.trim()) return;
 
-    // Convert spoken numbers/words to math symbols to help the parser
-    // Includes English, Hindi, and Telugu common math words and numbers
     let str = inputToParse.toLowerCase()
-    // Convert Native Digits to ASCII (Devanagari, Telugu, Fullwidth)
-    .replace(/[०-९]/g, (d) => d.charCodeAt(0) - 0x0966).
-    replace(/[౦-౯]/g, (d) => d.charCodeAt(0) - 0x0C66).
-    replace(/[０-９]/g, (d) => d.charCodeAt(0) - 0xFF10)
-
-    // Hindi Numbers & Mishears
-    .replace(/स्वरूप/g, '100').
-    replace(/सौ/g, '100').
-    replace(/हजार/g, '1000').
-    replace(/लाख/g, '100000').
-    replace(/एक/g, '1').
-    replace(/दो/g, '2').
-    replace(/तीन/g, '3').
-    replace(/चार/g, '4').
-    replace(/पांच/g, '5').
-    replace(/छह/g, '6').
-    replace(/सात/g, '7').
-    replace(/आठ/g, '8').
-    replace(/नौ/g, '9').
-    replace(/दस/g, '10').
-    replace(/बीस/g, '20').
-    replace(/तीस/g, '30').
-    replace(/चालीस/g, '40').
-    replace(/पचास/g, '50').
-    replace(/साठ/g, '60').
-    replace(/सत्तर/g, '70').
-    replace(/अस्सी/g, '80').
-    replace(/नब्बे|नव्वे/g, '90')
-
-    // Telugu Numbers
-    .replace(/వంద/g, '100').
-    replace(/వెయ్యి/g, '1000').
-    replace(/లక్ష/g, '100000').
-    replace(/ఒకటి|ఒక/g, '1').
-    replace(/రెండు/g, '2').
-    replace(/మూడు/g, '3').
-    replace(/నాలుగు/g, '4').
-    replace(/ఐదు/g, '5').
-    replace(/ఆరు/g, '6').
-    replace(/ఏడు/g, '7').
-    replace(/ఎనిమిది/g, '8').
-    replace(/తొమ్మిది/g, '9').
-    replace(/పది/g, '10').
-    replace(/ఇరవై/g, '20').
-    replace(/ముప్పై/g, '30').
-    replace(/నలభై/g, '40').
-    replace(/యాభై/g, '50').
-    replace(/అరవై/g, '60').
-    replace(/డెబ్బై/g, '70').
-    replace(/ఎనభై/g, '80').
-    replace(/తొంభై/g, '90')
-
-    // English Math
-    .replace(/plus/g, '+').
-    replace(/minus/g, '-').
-    replace(/times|multiplied by/g, '*').
-    replace(/divided by/g, '/').
-    replace(/percent/g, '%')
-    // Hindi Math
-    .replace(/प्लस|और|जमा/g, '+').
-    replace(/माइनस|घटा/g, '-').
-    replace(/गुणा/g, '*').
-    replace(/भाग/g, '/').
-    replace(/प्रतिशत|परसेंट/g, '%')
-    // Telugu Math
-    .replace(/ప్లస్|మరియు/g, '+').
-    replace(/మైనస్|తీసివేయి/g, '-').
-    replace(/ఇంటు|గుణకారం/g, '*').
-    replace(/భాగహారం/g, '/').
-    replace(/శాతం|పర్సెంట్/g, '%');
+      .replace(/[०-९]/g, (d) => d.charCodeAt(0) - 0x0966)
+      .replace(/[౦-౯]/g, (d) => d.charCodeAt(0) - 0x0C66)
+      .replace(/[０-９]/g, (d) => d.charCodeAt(0) - 0xFF10)
+      .replace(/स्वरूप/g, '100').replace(/सौ/g, '100').replace(/हजार/g, '1000').replace(/लाख/g, '100000')
+      .replace(/एक/g, '1').replace(/दो/g, '2').replace(/तीन/g, '3').replace(/चार/g, '4').replace(/पांच/g, '5')
+      .replace(/छह/g, '6').replace(/सात/g, '7').replace(/आठ/g, '8').replace(/नौ/g, '9').replace(/दस/g, '10')
+      .replace(/बीस/g, '20').replace(/तीस/g, '30').replace(/चालीस/g, '40').replace(/पचास/g, '50').replace(/साठ/g, '60')
+      .replace(/सत्तर/g, '70').replace(/अस्सी/g, '80').replace(/नब्बे|नव्वे/g, '90')
+      .replace(/వంద/g, '100').replace(/వెయ్యి/g, '1000').replace(/లక్ష/g, '100000')
+      .replace(/ఒకటి|ఒక/g, '1').replace(/రెండు/g, '2').replace(/మూడు/g, '3').replace(/నాలుగు/g, '4').replace(/ఐదు/g, '5')
+      .replace(/ఆరు/g, '6').replace(/ఏడు/g, '7').replace(/ఎనిమిది/g, '8').replace(/తొమ్మిది/g, '9').replace(/పది/g, '10')
+      .replace(/ఇరవై/g, '20').replace(/ముప్పై/g, '30').replace(/నలభై/g, '40').replace(/యాభై/g, '50').replace(/అరవై/g, '60')
+      .replace(/డెబ్బై/g, '70').replace(/ఎనభై/g, '80').replace(/తొంభై/g, '90')
+      .replace(/(\d+)\s*[x×]\s*(\d+)/gi, '$1 * $2')
+      .replace(/(\d+)\s*[÷]\s*(\d+)/gi, '$1 / $2')
+      .replace(/\b(times|multiplied by|multiply by|into|in to)\b/gi, '*')
+      .replace(/\b(divided by|divide by)\b/gi, '/')
+      .replace(/\b(plus|add)\b/gi, '+')
+      .replace(/\b(minus|subtract)\b/gi, '-')
+      .replace(/\bpercent\b/gi, '%')
+      .replace(/प्लस|और|जमा/g, '+').replace(/माइनस|घटा/g, '-').replace(/गुणा/g, '*').replace(/भाग/g, '/').replace(/प्रतिशत|परसेंट/g, '%')
+      .replace(/ప్లస్|మరియు/g, '+').replace(/మైనస్|తీసివేయి/g, '-').replace(/ఇంటు|గుణకారం/g, '*').replace(/భాగహారం/g, '/').replace(/శాతం|పర్సెంట్/g, '%');
 
     let finalValue = null;
     let resultText = '';
@@ -212,8 +222,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       const total = amount + tipAmount;
       finalValue = total / people;
       resultText = `Split ₹${amount} ${tipAmount ? `+ ₹${tipAmount.toFixed(2)} tip ` : ''}among ${people} = ₹${finalValue.toFixed(2)}/person`;
-    } else
-    if (changeMatch || changeMatch2) {
+    } else if (changeMatch || changeMatch2) {
       let bill, paid;
       if (changeMatch) {
         bill = parseFloat(changeMatch[1]);
@@ -224,12 +233,14 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       }
       finalValue = paid - bill;
       resultText = `Bill: ₹${bill}, Paid: ₹${paid} ➔ Change: ₹${finalValue.toFixed(2)}`;
-    } else
-    {
+    } else {
       try {
-        let mathStr = str.replace(/[a-z]/gi, '').trim();
-        // Allow regional language characters to be ignored in the strict math eval
-        // by removing any non-math/non-digit character before eval
+        let mathStr = str
+          .replace(/(\d+)\s*x\s*(\d+)/gi, '$1 * $2')
+          .replace(/×/g, '*')
+          .replace(/÷/g, '/')
+          .replace(/[a-z]/gi, '')
+          .trim();
         const percMatch = mathStr.match(/(\d+(\.\d+)?)\s*([\+\-])\s*(\d+(\.\d+)?)%/);
         if (percMatch) {
           const base = parseFloat(percMatch[1]);
@@ -241,7 +252,7 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
         } else {
           const complexPercMatch = mathStr.match(/(.*)\s*([\+\-])\s*(\d+(\.\d+)?)%/);
           if (complexPercMatch) {
-            const baseExpr = complexPercMatch[1].replace(/[^0-9\+\-\*\/\.]/g, ''); // Clean base
+            const baseExpr = complexPercMatch[1].replace(/[^0-9\+\-\*\/\.]/g, '');
             const op = complexPercMatch[2];
             const perc = parseFloat(complexPercMatch[3]);
 
@@ -253,7 +264,8 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
             const cleanMath = mathStr.replace(/[^0-9\+\-\*\/\.]/g, '');
             if (cleanMath) {
               finalValue = new Function('return ' + cleanMath)();
-              resultText = `${cleanMath} = ${finalValue}`;
+              const displayMath = cleanMath.replace(/\*/g, ' x ');
+              resultText = `${displayMath} = ${finalValue}`;
             } else {
               resultText = "Try: 'Split 1500 between 3' or '500 + 1000 - 5%'";
             }
@@ -265,9 +277,15 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     }
 
     if (finalValue !== null) {
-      setDisplay(String(Number(finalValue.toFixed(2))));
+      const formattedRes = String(Number(finalValue.toFixed(2)));
+      setDisplay(formattedRes);
+      const saveExpr = inputToParse.replace(/\*/g, ' x ');
+      const formattedResultText = resultText.replace(/\*/g, ' x ');
+      saveCalculationEntry(saveExpr, formattedRes, formattedResultText).then(saved => {
+        setHistoryList((prev) => [saved, ...prev.filter(h => (h._id || h.id) !== (saved._id || saved.id))]);
+      }).catch(() => {});
     }
-    setAiResult(resultText);
+    setAiResult(resultText.replace(/\*/g, ' x '));
   };
 
   const initWorker = () => {
@@ -277,27 +295,27 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
         currentWorker = new WhisperWorker();
         currentWorker.onmessage = (e) => {
           const { status, data, output } = e.data;
-        if (status === 'progress') {
-          setModelProgress(data.status === 'downloading' ? `Downloading model... ${Math.round(data.progress || 0)}%` : `Loading model...`);
-        } else if (status === 'ready') {
-          setModelLoading(false);
-          setModelProgress('');
-        } else if (status === 'complete') {
-          setIsListening(false);
-          const transcript = output.text;
-          setAiInput(transcript);
-          transcriptRef.current = transcript;
-          setTimeout(() => {
-            handleAiCalculate(null, transcript);
-          }, 300);
-        } else if (status === 'error') {
-          setIsListening(false);
-          setAiResult("Local voice processing error: " + data);
-        }
-      };
-      setWorker(currentWorker);
-      setModelLoading(true);
-      currentWorker.postMessage({ type: 'load' });
+          if (status === 'progress') {
+            setModelProgress(data.status === 'downloading' ? `Downloading model... ${Math.round(data.progress || 0)}%` : `Loading model...`);
+          } else if (status === 'ready') {
+            setModelLoading(false);
+            setModelProgress('');
+          } else if (status === 'complete') {
+            setIsListening(false);
+            const transcript = output.text;
+            setAiInput(transcript);
+            transcriptRef.current = transcript;
+            setTimeout(() => {
+              handleAiCalculate(null, transcript);
+            }, 300);
+          } else if (status === 'error') {
+            setIsListening(false);
+            setAiResult("Local voice processing error: " + data);
+          }
+        };
+        setWorker(currentWorker);
+        setModelLoading(true);
+        currentWorker.postMessage({ type: 'load' });
       } catch (err) {
         console.error("Worker initialization failed:", err);
         setAiResult("Offline voice not supported on this device.");
@@ -322,16 +340,12 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       mediaRecorderRef.current.onstop = async () => {
         setIsListening(false);
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
-        // Convert to Float32Array PCM for Transformers.js
         const arrayBuffer = await blob.arrayBuffer();
         const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
         const pcmData = audioBuffer.getChannelData(0);
 
         setAiResult("Processing voice...");
         activeWorker.postMessage({ type: 'transcribe', audio: pcmData });
-        
-        // Cleanup stream
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -345,51 +359,84 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     }
   };
 
-  const toggleListening = () => {
-    if (isListening) {
-      // If using fallback offline recording, stop it
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
-      return;
+  const cancelListening = () => {
+    setIsListening(false);
+    setAiInput('');
+    transcriptRef.current = '';
+    setAiResult('');
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+      recognitionRef.current = null;
     }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+  };
 
+  const stopListening = () => {
+    setIsListening(false);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+  };
+
+  const startSpeechRecognition = (targetLang = micLang) => {
     setAiInput('');
     transcriptRef.current = '';
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    // Determine if we are in an environment that probably doesn't support the cloud API (e.g., .exe wrapper)
-    // One way is if SpeechRecognition doesn't exist, OR we can just try it, and if it fails immediately, we fallback.
     if (!SpeechRecognition) {
-      // Fallback natively missing
       const w = initWorker();
       if (w) startLocalRecording(w);
       return;
     }
 
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch (e) {}
+      recognitionRef.current = null;
+    }
+
     const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = micLang;
+    recognition.lang = targetLang;
+
+    const langLabel = targetLang === 'te-IN' ? 'Telugu' : targetLang === 'hi-IN' ? 'Hindi' : 'English';
 
     recognition.onstart = () => {
       setIsListening(true);
+      setAiResult(`Listening (${langLabel})... Speak now`);
     };
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results).
-      map((result) => result[0].transcript).
-      join('');
+      const transcript = Array.from(event.results)
+        .map((result) => result[0].transcript)
+        .join('');
       setAiInput(transcript);
       transcriptRef.current = transcript;
     };
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error", event.error);
-      // Fallback for network/not-allowed (common in Electron/WebView2 without API keys)
+      if (event.error === 'aborted') {
+        return;
+      }
       if (event.error === 'network' || event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        console.log("Native speech API failed, falling back to local offline model...");
         const w = initWorker();
         if (w) startLocalRecording(w);
       } else {
@@ -403,13 +450,12 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
     };
 
     recognition.onend = () => {
-      // Only handle end if we actually listened and didn't fall back
-      if (isListening && transcriptRef.current) {
+      if (transcriptRef.current) {
         setIsListening(false);
         setTimeout(() => {
           handleAiCalculate(null, transcriptRef.current);
         }, 300);
-      } else if (isListening && !transcriptRef.current && !mediaRecorderRef.current) {
+      } else {
         setIsListening(false);
       }
     };
@@ -418,9 +464,40 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
       recognition.start();
     } catch (err) {
       console.error("Failed to start speech recognition:", err);
-      // Fallback
       const w = initWorker();
       if (w) startLocalRecording(w);
+    }
+  };
+
+  const handleLanguageChange = (e) => {
+    const newLang = e.target.value;
+    setMicLang(newLang);
+
+    if (isListening) {
+      // Instantly stop current voice session and seamlessly restart in the new language!
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (err) {}
+        recognitionRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (err) {}
+      }
+
+      setTimeout(() => {
+        startSpeechRecognition(newLang);
+      }, 150);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startSpeechRecognition(micLang);
     }
   };
 
@@ -476,19 +553,45 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
         className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose} />
 
-      <div className="relative bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-md md:max-w-2xl overflow-hidden flex flex-col md:flex-row-reverse my-auto max-h-[85vh] sm:max-h-[92vh] border border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-md md:max-w-2xl overflow-hidden flex flex-col md:flex-row-reverse my-auto border border-slate-800 animate-in fade-in zoom-in-95 duration-200">
         {/* Top (Mobile) / Right Screen (Desktop): Header, Voice AI & Result Display */}
         <div className="w-full md:w-3/5 bg-slate-900 text-white flex flex-col relative overflow-hidden shadow-xl z-30 shrink-0 md:border-l md:border-white/10">
           <div className="absolute -top-32 -left-32 w-64 h-64 bg-primary/20 rounded-full blur-3xl opacity-50 pointer-events-none" />
           
           <div className="px-3 sm:px-6 py-2 sm:py-4 flex justify-between items-center relative z-10 border-b border-white/10 shrink-0">
-            <h3 className="font-black text-sm sm:text-xl flex items-center gap-1.5 sm:gap-2 text-white">
-              
+            <h3 className="font-black text-sm sm:text-lg flex items-center gap-1.5 sm:gap-2 text-white whitespace-nowrap">
               <span>{t("Smart Calculator")}</span>
             </h3>
-            <button onClick={onClose} className="p-1 sm:p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors touch-target flex items-center justify-center">
-              <X size={18} className="sm:w-5 sm:h-5" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              {/* Toggle Keypad / History */}
+              <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(false)}
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all ${!showHistory ? 'bg-primary text-white shadow-xs' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {t("Keypad")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHistory(true)}
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all flex items-center gap-1 ${showHistory ? 'bg-primary text-white shadow-xs' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <History size={12} />
+                  <span>{t("History")}</span>
+                  {historyList.length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-white/20 text-white text-[9px] font-extrabold flex items-center justify-center">
+                      {historyList.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <button onClick={onClose} className="p-1 sm:p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors touch-target flex items-center justify-center">
+                <X size={18} className="sm:w-5 sm:h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="px-3 sm:px-6 py-2 sm:py-3 relative z-10 border-b border-white/10 bg-white/5 shrink-0">
@@ -499,26 +602,44 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
                   value={aiInput}
                   onChange={(e) => setAiInput(e.target.value)}
                   placeholder={t("e.g. 500 + 1000 - 5% discount")}
-                  className="w-full bg-black/40 border border-white/15 rounded-lg sm:rounded-xl py-1.5 sm:py-2.5 px-3 sm:px-3.5 pr-20 sm:pr-24 text-[11px] sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-white placeholder-slate-400 transition-all font-medium" />
+                  className={`w-full bg-black/40 border border-white/15 rounded-lg sm:rounded-xl py-1.5 sm:py-2.5 px-3 sm:px-3.5 text-[11px] sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-white placeholder-slate-400 transition-all font-medium ${
+                    isListening ? 'pr-28 sm:pr-36' : 'pr-20 sm:pr-24'
+                  }`} />
                 
                 {!isElectron && (
                   <>
                     {/* Language Selector */}
                     <select
                       value={micLang}
-                      onChange={(e) => setMicLang(e.target.value)}
-                      className="absolute right-[3.8rem] sm:right-[4.25rem] top-1/2 -translate-y-1/2 p-0.5 sm:p-1 bg-transparent text-slate-400 hover:text-white text-[9px] sm:text-xs font-bold focus:outline-none cursor-pointer transition-colors z-10"
+                      onChange={handleLanguageChange}
+                      className={`absolute top-1/2 -translate-y-1/2 p-0.5 sm:p-1 bg-slate-900/90 text-slate-300 hover:text-white text-[9px] sm:text-xs font-bold focus:outline-none cursor-pointer transition-colors z-10 rounded border border-white/10 ${
+                        isListening ? 'right-[5.2rem] sm:right-[6.4rem]' : 'right-[3.8rem] sm:right-[4.25rem]'
+                      }`}
                       title={t("Select Voice Language")}>
                       <option value="en-IN" className="bg-slate-900 text-white">{t("EN")}</option>
                       <option value="te-IN" className="bg-slate-900 text-white">{t("TE")}</option>
                       <option value="hi-IN" className="bg-slate-900 text-white">{t("HI")}</option>
                     </select>
 
+                    {/* Cancel Mic Button (Visible when mic is active) */}
+                    {isListening && (
+                      <button
+                        type="button"
+                        onClick={cancelListening}
+                        className="absolute right-13 sm:right-16 top-1/2 -translate-y-1/2 p-1 sm:p-1.5 rounded-lg bg-red-500/30 text-red-300 hover:bg-red-500 hover:text-white transition-colors flex items-center justify-center z-10"
+                        title={t("Cancel Mic / Voice Input")}>
+                        <MicOff size={13} className="sm:w-[15px] sm:h-[15px]" />
+                      </button>
+                    )}
+
+                    {/* Mic Toggle Button */}
                     <button
                       type="button"
                       onClick={toggleListening}
-                      className={`absolute right-7 sm:right-9 top-1/2 -translate-y-1/2 p-1 sm:p-1.5 rounded-lg transition-colors flex items-center justify-center ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/10'}`}
-                      title={t("Voice Input")}>
+                      className={`absolute right-7 sm:right-9 top-1/2 -translate-y-1/2 p-1 sm:p-1.5 rounded-lg transition-colors flex items-center justify-center z-10 ${
+                        isListening ? 'bg-emerald-500/30 text-emerald-300 hover:bg-emerald-500 hover:text-white animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/10'
+                      }`}
+                      title={isListening ? t("Stop & Process Voice") : t("Voice Input")}>
                       <Mic size={13} className="sm:w-[15px] sm:h-[15px]" />
                     </button>
                   </>
@@ -530,7 +651,23 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
               </div>
             </form>
 
-            {aiResult && !modelLoading &&
+            {isListening && (
+              <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-[11px] font-medium text-amber-300 bg-amber-500/15 p-1.5 sm:p-2 rounded-lg border border-amber-500/30 flex items-center justify-between gap-1.5">
+                <span className="leading-tight flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping inline-block shrink-0" />
+                  {aiResult || `Listening (${micLang === 'te-IN' ? 'Telugu' : micLang === 'hi-IN' ? 'Hindi' : 'English'})...`}
+                </span>
+                <button
+                  type="button"
+                  onClick={cancelListening}
+                  className="px-2 py-0.5 bg-red-500/30 text-red-200 hover:bg-red-600 hover:text-white rounded text-[9px] font-bold transition-colors whitespace-nowrap cursor-pointer shrink-0"
+                >
+                  {t("Cancel Mic")}
+                </button>
+              </div>
+            )}
+
+            {!isListening && aiResult && !modelLoading &&
               <div className="mt-1.5 sm:mt-2 text-[10px] sm:text-[11px] font-medium text-emerald-400 bg-emerald-500/10 p-1.5 sm:p-2 rounded-lg border border-emerald-500/20 flex items-start gap-1.5">
                 <span className="leading-tight">{aiResult}</span>
               </div>
@@ -542,6 +679,13 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
             }
           </div>
 
+          {/* Retention Notice Banner */}
+          <div className="mx-3 sm:mx-6 my-1.5 sm:my-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-[10px] sm:text-xs font-medium flex items-center gap-1.5 shrink-0">
+            <ShieldCheck size={14} className="text-amber-400 shrink-0" />
+            <span className="leading-tight">{t("🔒 Calculation history is auto-deleted after 2 days.")}</span>
+          </div>
+
+          {/* Calculator Screen / Display */}
           <div className="p-3 sm:p-6 flex-1 flex flex-col items-end justify-end relative z-10 min-h-[55px] sm:min-h-[120px]">
             <div className="text-slate-400 text-[11px] sm:text-base font-mono h-4 sm:h-6">{equation}</div>
             <div className="text-2xl sm:text-5xl font-black font-mono tracking-tight overflow-x-auto w-full text-right hide-scrollbar text-white">
@@ -561,65 +705,143 @@ const CalculatorModalInner = ({ isOpen, onClose }) => {const { t } = useLanguage
           </div>
         </div>
 
-        {/* Keypad & Quick Modifiers Section */}
-        <div className="w-full md:w-2/5 bg-slate-50 flex flex-col relative z-20 overflow-y-auto custom-scrollbar">
-          {/* Quick Cash/Discount Preset Strip */}
-          <div className="p-1.5 sm:p-3 bg-white border-b border-slate-200/80 grid grid-cols-4 gap-1 sm:gap-1.5 shrink-0">
-            <button onClick={() => addCash(500)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-lg sm:rounded-xl hover:bg-emerald-100 transition-colors touch-target">
-              <span className="text-[8px] sm:text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
-              <span className="font-bold text-[11px] sm:text-sm">₹500</span>
-            </button>
-            <button onClick={() => addCash(200)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-lg sm:rounded-xl hover:bg-emerald-100 transition-colors touch-target">
-              <span className="text-[8px] sm:text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
-              <span className="font-bold text-[11px] sm:text-sm">₹200</span>
-            </button>
-            <button onClick={() => applyPercentage(10, false)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-rose-50 text-rose-700 border border-rose-200/60 rounded-lg sm:rounded-xl hover:bg-rose-100 transition-colors touch-target">
-              <span className="text-[8px] sm:text-[9px] uppercase font-bold text-rose-600/80 mb-0.5">{t("Disc")}</span>
-              <span className="font-bold text-[11px] sm:text-sm">-10%</span>
-            </button>
-            <button onClick={() => applyPercentage(5, true)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-blue-50 text-blue-700 border border-blue-200/60 rounded-lg sm:rounded-xl hover:bg-blue-100 transition-colors touch-target">
-              <span className="text-[8px] sm:text-[9px] uppercase font-bold text-blue-600/80 mb-0.5">{t("GST")}</span>
-              <span className="font-bold text-[11px] sm:text-sm">+5%</span>
-            </button>
-          </div>
+        {/* Keypad OR History List View */}
+        <div className="w-full md:w-2/5 bg-slate-50 flex flex-col relative z-20">
+          {showHistory ? (
+            /* Calculation History Panel */
+            <div className="flex flex-col h-full bg-slate-100 p-3 max-h-[380px] sm:max-h-[420px]">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-2 gap-1 whitespace-nowrap shrink-0">
+                <div className="flex items-center gap-1 text-[11px] sm:text-xs font-bold text-slate-800 shrink-0">
+                  <Clock size={13} className="text-primary shrink-0" />
+                  <span className="whitespace-nowrap">{t("History")}</span>
+                  <span className="text-[9px] sm:text-[10px] text-slate-500 font-normal whitespace-nowrap">({t("2 Days")})</span>
+                </div>
 
-          {/* Numeric Key Grid */}
-          <div className="p-2 sm:p-4 grid grid-cols-4 gap-1 sm:gap-2 bg-slate-50 flex-1">
-            <button onClick={handleClear} className="p-2 sm:p-3 bg-red-100 text-red-700 font-black rounded-lg sm:rounded-xl hover:bg-red-200 transition-colors text-[11px] sm:text-sm touch-target">{t("AC")}</button>
-            <button onClick={handleDelete} className="p-2 sm:p-3 bg-slate-200 text-slate-700 font-bold rounded-lg sm:rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Delete size={15} className="sm:w-[18px] sm:h-[18px]" /></button>
-            <button onClick={handlePercent} className="p-2 sm:p-3 bg-slate-200 text-slate-700 font-bold rounded-lg sm:rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Percent size={15} className="sm:w-[18px] sm:h-[18px]" /></button>
-            <button onClick={() => handleOperator('/')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">÷</button>
+                {historyList.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearHistory}
+                    className="flex items-center gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg text-[9px] sm:text-[10px] font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    title={t("Clear All Calculations")}
+                  >
+                    <Trash2 size={11} />
+                    <span>{t("Clear")}</span>
+                  </button>
+                )}
+              </div>
 
-            <button onClick={() => handleNumber('7')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">7</button>
-            <button onClick={() => handleNumber('8')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">8</button>
-            <button onClick={() => handleNumber('9')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">9</button>
-            <button onClick={() => handleOperator('*')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">×</button>
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar min-h-[180px] max-h-[320px]">
+                {loadingHistory ? (
+                  <div className="flex items-center justify-center p-6 text-slate-500 text-xs font-medium">
+                    <RefreshCcw size={14} className="animate-spin text-primary mr-2" />
+                    {t("Loading history...")}
+                  </div>
+                ) : historyList.length === 0 ? (
+                  <div className="text-center p-8 text-slate-400 text-xs font-medium">
+                    {t("No calculation history found.")}
+                  </div>
+                ) : (
+                  historyList.map((item, idx) => (
+                    <div
+                      key={item._id || item.id || idx}
+                      className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-primary/50 transition-all shadow-2xs group relative"
+                    >
+                      <div
+                        className="flex justify-between items-start text-xs cursor-pointer"
+                        onClick={() => {
+                          setDisplay(String(item.result));
+                          setEquation(item.expression ? `${item.expression.replace(/\*/g, ' x ')} = ` : '');
+                          setShowHistory(false);
+                        }}
+                      >
+                        <span className="font-mono text-slate-600 font-semibold group-hover:text-primary transition-colors">{item.expression ? item.expression.replace(/\*/g, ' x ') : ''}</span>
+                        <span className="font-mono font-black text-slate-900 text-sm">= {item.result}</span>
+                      </div>
+                      {item.details && (
+                        <div className="text-[10px] text-slate-500 mt-1 italic">{item.details.replace(/\*/g, ' x ')}</div>
+                      )}
+                      <div className="flex items-center justify-between mt-1 text-[9px] text-slate-400 font-mono">
+                        <span>
+                          {item.createdAt ? new Date(item.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Recent'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSingle(item._id || item.id);
+                          }}
+                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title={t("Delete entry")}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Numeric Key Grid & Modifiers */
+            <>
+              {/* Quick Cash/Discount Preset Strip */}
+              <div className="p-1.5 sm:p-3 bg-white border-b border-slate-200/80 grid grid-cols-4 gap-1 sm:gap-1.5 shrink-0">
+                <button onClick={() => addCash(500)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-lg sm:rounded-xl hover:bg-emerald-100 transition-colors touch-target">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
+                  <span className="font-bold text-[11px] sm:text-sm">₹500</span>
+                </button>
+                <button onClick={() => addCash(200)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-lg sm:rounded-xl hover:bg-emerald-100 transition-colors touch-target">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-emerald-600/80 mb-0.5">{t("Note")}</span>
+                  <span className="font-bold text-[11px] sm:text-sm">₹200</span>
+                </button>
+                <button onClick={() => applyPercentage(10, false)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-rose-50 text-rose-700 border border-rose-200/60 rounded-lg sm:rounded-xl hover:bg-rose-100 transition-colors touch-target">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-rose-600/80 mb-0.5">{t("Disc")}</span>
+                  <span className="font-bold text-[11px] sm:text-sm">-10%</span>
+                </button>
+                <button onClick={() => applyPercentage(5, true)} className="py-1 sm:py-2 px-0.5 sm:px-1 flex flex-col items-center justify-center bg-blue-50 text-blue-700 border border-blue-200/60 rounded-lg sm:rounded-xl hover:bg-blue-100 transition-colors touch-target">
+                  <span className="text-[8px] sm:text-[9px] uppercase font-bold text-blue-600/80 mb-0.5">{t("GST")}</span>
+                  <span className="font-bold text-[11px] sm:text-sm">+5%</span>
+                </button>
+              </div>
 
-            <button onClick={() => handleNumber('4')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">4</button>
-            <button onClick={() => handleNumber('5')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">5</button>
-            <button onClick={() => handleNumber('6')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">6</button>
-            <button onClick={() => handleOperator('-')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">−</button>
+              {/* Numeric Key Grid */}
+              <div className="p-2 sm:p-4 grid grid-cols-4 gap-1 sm:gap-2 bg-slate-50 flex-1">
+                <button onClick={handleClear} className="p-2 sm:p-3 bg-red-100 text-red-700 font-black rounded-lg sm:rounded-xl hover:bg-red-200 transition-colors text-[11px] sm:text-sm touch-target">{t("AC")}</button>
+                <button onClick={handleDelete} className="p-2 sm:p-3 bg-slate-200 text-slate-700 font-bold rounded-lg sm:rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Delete size={15} className="sm:w-[18px] sm:h-[18px]" /></button>
+                <button onClick={handlePercent} className="p-2 sm:p-3 bg-slate-200 text-slate-700 font-bold rounded-lg sm:rounded-xl hover:bg-slate-300 transition-colors flex justify-center items-center touch-target"><Percent size={15} className="sm:w-[18px] sm:h-[18px]" /></button>
+                <button onClick={() => handleOperator('/')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">÷</button>
 
-            <button onClick={() => handleNumber('1')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">1</button>
-            <button onClick={() => handleNumber('2')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">2</button>
-            <button onClick={() => handleNumber('3')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">3</button>
-            <button onClick={() => handleOperator('+')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">+</button>
+                <button onClick={() => handleNumber('7')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">7</button>
+                <button onClick={() => handleNumber('8')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">8</button>
+                <button onClick={() => handleNumber('9')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">9</button>
+                <button onClick={() => handleOperator('*')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">×</button>
 
-            <button onClick={() => handleNumber('0')} className="col-span-2 p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">0</button>
-            <button onClick={() => handleNumber('.')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">.</button>
-            <button onClick={handleEqual} className="p-2 sm:p-3 bg-primary text-white font-black rounded-lg sm:rounded-xl hover:bg-primary-hover transition-colors text-base sm:text-2xl shadow-md touch-target">=</button>
-          </div>
+                <button onClick={() => handleNumber('4')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">4</button>
+                <button onClick={() => handleNumber('5')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">5</button>
+                <button onClick={() => handleNumber('6')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">6</button>
+                <button onClick={() => handleOperator('-')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">−</button>
+
+                <button onClick={() => handleNumber('1')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">1</button>
+                <button onClick={() => handleNumber('2')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">2</button>
+                <button onClick={() => handleNumber('3')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">3</button>
+                <button onClick={() => handleOperator('+')} className="p-2 sm:p-3 bg-indigo-100 text-indigo-700 font-black rounded-lg sm:rounded-xl hover:bg-indigo-200 transition-colors text-sm sm:text-lg touch-target">+</button>
+
+                <button onClick={() => handleNumber('0')} className="col-span-2 p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">0</button>
+                <button onClick={() => handleNumber('.')} className="p-2 sm:p-3 bg-white border border-slate-200 text-slate-800 font-black rounded-lg sm:rounded-xl hover:bg-slate-100 transition-colors text-sm sm:text-xl shadow-xs touch-target">.</button>
+                <button onClick={handleEqual} className="p-2 sm:p-3 bg-primary text-white font-black rounded-lg sm:rounded-xl hover:bg-primary-hover transition-colors text-base sm:text-2xl shadow-md touch-target">=</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
-
 };
 
-const CalculatorModal = (props) =>
-<ErrorBoundary onClose={props.onClose}>
+const CalculatorModal = (props) => (
+  <ErrorBoundary onClose={props.onClose}>
     <CalculatorModalInner {...props} />
-  </ErrorBoundary>;
-
+  </ErrorBoundary>
+);
 
 export default CalculatorModal;

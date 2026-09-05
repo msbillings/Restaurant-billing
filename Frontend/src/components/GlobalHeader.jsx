@@ -75,11 +75,13 @@ const GlobalHeader = ({
               <input
                 type="search" 
                 name="search_top_bill_no_no_autofill"
-                autoComplete="off"
+                autoComplete="new-password"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck="false"
                 aria-autocomplete="none"
+                readOnly
+                onFocus={(e) => e.target.removeAttribute('readOnly')}
                 placeholder={t("Bill No")}
                 value={searchBillNo}
                 onChange={(e) => setSearchBillNo(e.target.value)}

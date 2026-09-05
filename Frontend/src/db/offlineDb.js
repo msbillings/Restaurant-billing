@@ -38,6 +38,9 @@ export const getDb = () => {
     kdsActiveKots: '_id, kotId, tableNo, status, createdAt',
     meta: 'key'
   });
+  newDb.version(2).stores({
+    calculatorHistory: '_id, expression, result, createdAt'
+  });
 
   tenantDbs.set(cleanName, newDb);
   return newDb;
@@ -571,4 +574,5 @@ export const getCachedEditedBills = async () => {
   }
 };
 
+export { db };
 export default db;

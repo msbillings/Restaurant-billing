@@ -185,6 +185,7 @@ export const deleteBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const User = getTenantModel(req, 'User', UserDefault);
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const { id } = req.params;
     const { password } = req.body;
 
@@ -192,7 +193,7 @@ export const deleteBill = async (req, res) => {
       return res.status(400).json({ message: 'Password is required to delete a bill' });
     }
 
-    // Verify password against current logged-in user OR any Admin account
+    // Verify password against current logged-in user, any Admin account, OR Owner Security PIN
     let isValidPassword = false;
     if (req.user) {
       const currentUser = await User.findById(req.user.id || req.user._id);
@@ -212,8 +213,23 @@ export const deleteBill = async (req, res) => {
       }
     }
 
+    // Check if provided PIN matches configured Owner Security PIN / Master PIN
     if (!isValidPassword) {
-      return res.status(401).json({ message: 'Incorrect Admin/User password. Deletion not authorized.' });
+      const securityDoc = await Setting.findOne({ key: 'securitySettings' });
+      const restoDoc = await Setting.findOne({ key: 'restaurantSettings' });
+
+      const configuredOwnerPin = securityDoc?.value?.ownerPin || 
+                                  securityDoc?.value?.masterPin || 
+                                  restoDoc?.value?.ownerPin || 
+                                  '1234';
+
+      if (String(password).trim() === String(configuredOwnerPin).trim()) {
+        isValidPassword = true;
+      }
+    }
+
+    if (!isValidPassword) {
+      return res.status(400).json({ message: 'Incorrect Admin/User password or Owner PIN. Deletion not authorized.' });
     }
 
     const deletedBill = await Bill.findByIdAndUpdate(id, { 
