@@ -200,7 +200,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.82');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.83');
   const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
     try {
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';

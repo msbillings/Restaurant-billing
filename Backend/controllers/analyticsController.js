@@ -75,7 +75,7 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            updatedAt: { $gte: todayStart, $lte: todayEnd },
+            createdAt: { $gte: todayStart, $lte: todayEnd },
             status: 'Paid'
           }
         },
@@ -98,20 +98,20 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            updatedAt: { $gte: startDate, $lte: endDate },
+            createdAt: { $gte: startDate, $lte: endDate },
             status: 'Paid'
           }
         },
         {
           $project: {
             total: { $ifNull: ['$total', 0] },
-            updatedAt: 1
+            createdAt: 1
           }
         },
         {
           $group: {
             _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' }
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
             },
             revenue: { $sum: '$total' },
             bills: { $sum: 1 },
@@ -126,7 +126,7 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            updatedAt: { $gte: startDate, $lte: endDate },
+            createdAt: { $gte: startDate, $lte: endDate },
             status: 'Paid'
           }
         },
@@ -153,7 +153,7 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            updatedAt: { $gte: startDate, $lte: endDate },
+            createdAt: { $gte: startDate, $lte: endDate },
             status: 'Paid',
             paymentMode: { $exists: true, $ne: null }
           }
@@ -174,13 +174,13 @@ export const getAnalytics = async (req, res) => {
       ]),
       // 7. Delivery orders count for the period
       Bill.countDocuments({
-        updatedAt: { $gte: startDate, $lte: endDate },
+        createdAt: { $gte: startDate, $lte: endDate },
         status: 'Paid',
         billType: 'Delivery'
       }),
       // 8. Takeaway orders count for the period
       Bill.countDocuments({
-        updatedAt: { $gte: startDate, $lte: endDate },
+        createdAt: { $gte: startDate, $lte: endDate },
         status: 'Paid',
         billType: 'Takeaway'
       })

@@ -17,10 +17,10 @@ import './Footer.css';
 
 /* ─── GitHub Release URLs ─────────────────────────────────────────── */
 const GITHUB_RELEASES = 'https://github.com/msbillings/Restaurant-billing/releases/latest';
-const WINDOWS_EXE_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-Setup-6.0.82.exe';
+const WINDOWS_EXE_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-Setup-6.0.83.exe';
 const ANDROID_APK_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/app-release.apk';
 const IOS_IPA_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings.ipa';
-const MACOS_DMG_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-6.0.82.dmg';
+const MACOS_DMG_URL = 'https://github.com/msbillings/Restaurant-billing/releases/latest/download/MS-Billings-6.0.83.dmg';
 // Play Store URL — update once published
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.msbillings.restopos';
 
@@ -151,35 +151,35 @@ const Footer = () => {
             <DownloadBtn
               icon={Monitor}
               title="Windows"
-              subtitle=".exe · v6.0.82 · 225 MB"
+              subtitle=".exe · v6.0.83 · 225 MB"
               url={WINDOWS_EXE_URL}
             />
             {/* macOS — DMG release */}
             <DownloadBtn
               icon={Apple}
               title="macOS"
-              subtitle=".dmg · v6.0.82 · Universal"
+              subtitle=".dmg · v6.0.83 · Universal"
               url={MACOS_DMG_URL}
             />
             {/* iPhone / iOS IPA direct */}
             <DownloadBtn
               icon={Apple}
               title="iPhone / iOS"
-              subtitle=".ipa · v6.0.82 · Direct"
+              subtitle=".ipa · v6.0.83 · Direct"
               url={IOS_IPA_URL}
             />
             {/* Android APK direct */}
             <DownloadBtn
               icon={Smartphone}
               title="Android APK"
-              subtitle=".apk · v6.0.82 · 58.5 MB"
+              subtitle=".apk · v6.0.83 · 58.5 MB"
               url={ANDROID_APK_URL}
             />
             {/* Google Play Store — in review */}
             <DownloadBtn
               icon={Smartphone}
               title="Google Play"
-              subtitle="Android · v6.0.82"
+              subtitle="Android · v6.0.83"
               url={PLAY_STORE_URL}
               badge="Review"
             />

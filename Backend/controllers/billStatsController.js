@@ -51,7 +51,7 @@ export const getDailyStats = async (req, res) => {
     ] = await Promise.allSettled([
       // 1. Paid Stats
       Bill.aggregate([
-        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+        { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
         {
           $project: {
             total: { $ifNull: ['$total', 0] },
@@ -74,22 +74,22 @@ export const getDailyStats = async (req, res) => {
       ]),
       // 2. Payment Stats
       Bill.aggregate([
-        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', paymentMode: { $exists: true, $ne: null } } },
+        { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid', paymentMode: { $exists: true, $ne: null } } },
         { $project: { paymentMode: 1, total: { $ifNull: ['$total', 0] } } },
         { $group: { _id: '$paymentMode', count: { $sum: 1 }, revenue: { $sum: '$total' } } }
       ]),
       // 3. Top Items
       Bill.aggregate([
-        { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+        { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
         { $unwind: "$items" },
         { $group: { _id: "$items.name", quantity: { $sum: "$items.quantity" }, revenue: { $sum: "$items.total" } } },
         { $sort: { quantity: -1 } },
         { $limit: 10 }
       ]),
       // 4. Recent Bills
-      Bill.find({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' })
+      Bill.find({ createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' })
         .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt')
-        .sort({ updatedAt: -1, createdAt: -1 })
+        .sort({ createdAt: -1 })
         .limit(6)
         .lean(),
       // 5. Open KOTs / Active Orders
@@ -98,39 +98,39 @@ export const getDailyStats = async (req, res) => {
         .sort({ updatedAt: -1 })
         .lean(),
       // 6. Delivery Count
-      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Delivery' }),
+      Bill.countDocuments({ createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Delivery' }),
       // 7. Dine-In Count
-      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Dine-In' }),
+      Bill.countDocuments({ createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Dine-In' }),
       // 8. Takeaway Count
-      Bill.countDocuments({ updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Takeaway' }),
+      Bill.countDocuments({ createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid', billType: 'Takeaway' }),
       // 9. Cancelled Orders
       Bill.find({
-        updatedAt: { $gte: today, $lt: tomorrow },
+        createdAt: { $gte: today, $lt: tomorrow },
         $or: [
           { status: { $in: ['Cancelled', 'Deleted'] } },
           { 'kots.kotNumber': { $regex: '^CANCEL' } }
         ]
       })
       .select('tableNo billType cancelReason status updatedAt createdAt')
-      .sort({ updatedAt: -1 })
+      .sort({ createdAt: -1 })
       .lean(),
       // 10. Edited Orders
-      Bill.find({ updatedAt: { $gte: today, $lt: tomorrow }, isEdited: true })
+      Bill.find({ createdAt: { $gte: today, $lt: tomorrow }, isEdited: true })
         .select('tableNo billNumber billType editHistory status updatedAt createdAt')
-        .sort({ updatedAt: -1 })
+        .sort({ createdAt: -1 })
         .lean(),
       // 11. Timeline breakdown
       isSingleDay
         ? Bill.aggregate([
-            { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
-            { $group: { _id: { $hour: '$updatedAt' }, sales: { $sum: '$total' }, orders: { $sum: 1 } } },
+            { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+            { $group: { _id: { $hour: '$createdAt' }, sales: { $sum: '$total' }, orders: { $sum: 1 } } },
             { $sort: { _id: 1 } }
           ])
         : Bill.aggregate([
-            { $match: { updatedAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+            { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
             {
               $group: {
-                _id: { $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' } },
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
                 sales: { $sum: '$total' },
                 orders: { $sum: 1 }
               }
