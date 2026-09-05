@@ -73,7 +73,13 @@ const GlobalHeader = ({
             <div className="relative w-full max-w-md hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
               <input
-                type="text" 
+                type="search" 
+                name="search_top_bill_no_no_autofill"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+                aria-autocomplete="none"
                 placeholder={t("Bill No")}
                 value={searchBillNo}
                 onChange={(e) => setSearchBillNo(e.target.value)}

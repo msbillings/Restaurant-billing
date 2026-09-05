@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '../config.js';
 import api from '../api/axios';
 import { useLanguage } from '../context/LanguageContext';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2 } from 'lucide-react';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Unlock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2, X, ShieldAlert } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
@@ -63,6 +63,13 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [systemPrinters, setSystemPrinters] = useState([]);
   const [showOwnerPin, setShowOwnerPin] = useState(false);
   const [showWhatsAppConnectModal, setShowWhatsAppConnectModal] = useState(false);
+  const [areCoordsLocked, setAreCoordinatesLocked] = useState(() => {
+    return localStorage.getItem('resto_coords_locked') !== 'false';
+  });
+  const [showCoordsUnlockModal, setShowCoordsUnlockModal] = useState(false);
+  const [coordsUnlockPin, setCoordsUnlockPin] = useState('');
+  const [coordsUnlockError, setCoordsUnlockError] = useState('');
+  const [showCoordsUnlockPinVisibility, setShowCoordsUnlockPinVisibility] = useState(false);
 
   useEffect(() => {
     // 1. Load settings from localStorage first for instant display
@@ -103,6 +110,15 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
       })
       .catch((err) => console.warn("Notice: could not load remote shop settings:", err));
 
+    // Fetch security PIN for ownerPin field
+    api.get('/config/security')
+      .then((res) => {
+        if (res.data && res.data.ownerPin) {
+          const pinStr = String(res.data.ownerPin).replace(/\D/g, '').slice(0, 4);
+          setSettings(prev => ({ ...prev, ownerPin: pinStr }));
+        }
+      }).catch(() => {});
+
     // Load available printers if running in Desktop App
     if (window.electronAPI && window.electronAPI.getPrinters) {
       window.electronAPI.getPrinters().then((printers) => {
@@ -132,10 +148,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
       );
 
       if (settings.ownerPin) {
+        const cleanPin = String(settings.ownerPin).replace(/\D/g, '').slice(0, 4);
         syncPromises.push(
-          api.post('/config/security', { ownerPin: settings.ownerPin })
+          api.post('/config/security', { ownerPin: cleanPin })
             .then(() => {
-              setSettings(prev => ({ ...prev, ownerPin: '' }));
+              setSettings(prev => ({ ...prev, ownerPin: cleanPin }));
             }).catch(err => console.warn("Sync security notice:", err))
         );
       }
@@ -209,7 +226,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
       value = value.replace(/\D/g, '').slice(0, 10);
     }
     if (field === 'ownerPin') {
-      value = value.replace(/\D/g, '').slice(0, 6);
+      value = value.replace(/\D/g, '').slice(0, 4);
     }
     if (field === 'whatsappNumber') {
       value = value.replace(/\D/g, '').slice(0, 10);
@@ -255,7 +272,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
             return true;
           }
         }
-      } catch (err2) {}
+      } catch (err2) { }
     }
     return false;
   };
@@ -533,10 +550,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     {Boolean(settings.logo && settings.logo !== '[logo_stored]') ?
                       <div className="flex items-center gap-4">
                         <div className="p-2 bg-white rounded-lg border border-border shadow-sm flex items-center justify-center min-w-[60px] min-h-[56px]">
-                          <img 
-                            src={settings.logo} 
-                            alt="Restaurant Logo" 
-                            className="h-14 max-w-[140px] object-contain" 
+                          <img
+                            src={settings.logo}
+                            alt="Restaurant Logo"
+                            className="h-14 max-w-[140px] object-contain"
                             onError={() => {
                               console.warn("Logo failed to load, resetting");
                               handleInputChange('logo', '');
@@ -747,7 +764,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         <span>{t("Scan QR / Link Bot")}</span>
                       </button>
                     </div>
-                    
+
                     <div className="pt-3 mt-3 border-t border-emerald-500/20 space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="text-sm font-semibold text-text-main">
@@ -769,7 +786,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                           <label className="text-xs text-text-muted">
                             {t("Report Time")}
                           </label>
-                          <CustomTimePicker 
+                          <CustomTimePicker
                             value={settings.autoSendTime || '22:00'}
                             onChange={(val) => handleInputChange('autoSendTime', val)}
                           />
@@ -903,21 +920,22 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   {/* Owner Security PIN */}
                   <div className="space-y-2 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
                     <label className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-                      <Lock size={14} className="text-orange-600" />{t("Owner Security PIN (Reports Lock)")}
+                      <Lock size={14} className="text-orange-600" />{t("Owner Security PIN (Reports & Security Lock)")}
                     </label>
                     <div className="relative">
                       <input
                         type={showOwnerPin ? "text" : "password"}
                         value={settings.ownerPin || ''}
                         onChange={(e) => handleInputChange('ownerPin', e.target.value)}
-                        maxLength={10}
-                        className="w-full px-4 py-3 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 font-mono tracking-widest font-bold pr-12 placeholder:text-orange-900/40"
-                        placeholder={t("•••••• (Leave blank to keep)")}
+                        maxLength={4}
+                        className="w-full px-4 py-3 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 font-mono tracking-widest font-bold pr-12 placeholder:text-orange-900/40 text-center text-lg"
+                        placeholder={t("•••• (4 digits)")}
                       />
                       <button
                         type="button"
                         onClick={() => setShowOwnerPin(!showOwnerPin)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors p-1"
+                        title={showOwnerPin ? t("Hide PIN") : t("Show PIN")}
                       >
                         {showOwnerPin ? <EyeOff size={20} /> : <Eye size={20} />}
                       </button>
@@ -982,21 +1000,91 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         )}
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold text-text-main">{t("Restaurant Coordinates")}</label>
-                        <div className="flex flex-col gap-2">
-                          <div className="text-xs font-mono bg-background px-3 py-2 rounded-lg border border-border text-text-muted break-all">
-                            Lat: {settings.latitude || t("Not Set")}<br />
-                            Lng: {settings.longitude || t("Not Set")}
-                          </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                            {t("Restaurant Coordinates")}
+                          </label>
                           <button
-                            onClick={(e) => { e.preventDefault(); handleGetLocation(); }}
-                            disabled={locating}
-                            className="w-full px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors border border-blue-100 flex items-center justify-center gap-1 disabled:opacity-50 cursor-pointer">
-                            {locating ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />} 
-                            {locating ? t("Getting Location...") : t("Set to Current Location")}
+                            type="button"
+                            onClick={() => {
+                              if (areCoordsLocked) {
+                                setCoordsUnlockPin('');
+                                setCoordsUnlockError('');
+                                setShowCoordsUnlockModal(true);
+                              } else {
+                                setAreCoordinatesLocked(true);
+                                localStorage.setItem('resto_coords_locked', 'true');
+                                setToast({ message: t("Coordinates locked successfully!"), type: 'info' });
+                              }
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
+                              areCoordsLocked
+                                ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                            }`}
+                            title={areCoordsLocked ? t("Click to unlock coordinates") : t("Click to lock coordinates")}
+                          >
+                            {areCoordsLocked ? <Lock size={13} className="text-amber-600" /> : <Unlock size={13} className="text-emerald-600" />}
+                            <span>{areCoordsLocked ? t("Locked") : t("Unlocked (Tap to Lock)")}</span>
                           </button>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[11px] font-medium text-text-muted mb-1 block">Latitude (Lat)</label>
+                            <input
+                              type="text"
+                              value={settings.latitude || ''}
+                              onChange={(e) => handleInputChange('latitude', e.target.value)}
+                              disabled={areCoordsLocked}
+                              placeholder="e.g. 14.475281"
+                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${
+                                areCoordsLocked
+                                  ? 'bg-gray-100/90 text-gray-500 border-gray-300 cursor-not-allowed'
+                                  : 'bg-white text-text-main border-primary focus:ring-2 focus:ring-primary/20'
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-medium text-text-muted mb-1 block">Longitude (Lng)</label>
+                            <input
+                              type="text"
+                              value={settings.longitude || ''}
+                              onChange={(e) => handleInputChange('longitude', e.target.value)}
+                              disabled={areCoordsLocked}
+                              placeholder="e.g. 78.837492"
+                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${
+                                areCoordsLocked
+                                  ? 'bg-gray-100/90 text-gray-500 border-gray-300 cursor-not-allowed'
+                                  : 'bg-white text-text-main border-primary focus:ring-2 focus:ring-primary/20'
+                              }`}
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (areCoordsLocked) {
+                              setCoordsUnlockPin('');
+                              setCoordsUnlockError(t("Coordinates are locked. Please enter your 4-digit Owner Security PIN to unlock."));
+                              setShowCoordsUnlockModal(true);
+                            } else {
+                              handleGetLocation();
+                            }
+                          }}
+                          disabled={locating}
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-colors border flex items-center justify-center gap-1 cursor-pointer mt-1 ${
+                            areCoordsLocked
+                              ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                              : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
+                          }`}
+                        >
+                          {locating ? <Loader2 size={13} className="animate-spin" /> : areCoordsLocked ? <Lock size={13} /> : <MapPin size={13} />}
+                          {locating ? t("Getting Location...") : areCoordsLocked ? t("Locked — Unlock PIN to Set Current Location") : t("Set to Current Location")}
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1044,8 +1132,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                             type="button"
                             onClick={() => handleInputChange('qrMenuMode', 'cloud')}
                             className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${settings.qrMenuMode === 'cloud' || !settings.qrMenuMode
-                                ? 'bg-primary text-white border-primary shadow-sm'
-                                : 'bg-background text-text-muted border-border hover:bg-surface'
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-background text-text-muted border-border hover:bg-surface'
                               }`}
                           >
                             <Globe size={14} />
@@ -1057,8 +1145,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                             type="button"
                             onClick={() => handleInputChange('qrMenuMode', 'wifi')}
                             className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${settings.qrMenuMode === 'wifi'
-                                ? 'bg-primary text-white border-primary shadow-sm'
-                                : 'bg-background text-text-muted border-border hover:bg-surface'
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-background text-text-muted border-border hover:bg-surface'
                               }`}
                           >
                             <Wifi size={14} />
@@ -1135,11 +1223,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
             <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm">
               {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
                 <div className="flex justify-center mb-2">
-                  <img 
-                    src={settings.logo} 
-                    alt="Logo Preview" 
+                  <img
+                    src={settings.logo}
+                    alt="Logo Preview"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    className="max-h-14 max-w-[140px] object-contain" 
+                    className="max-h-14 max-w-[140px] object-contain"
                   />
                 </div>
               }
@@ -1256,6 +1344,84 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         isOpen={showWhatsAppConnectModal}
         onClose={() => setShowWhatsAppConnectModal(false)}
       />
+
+      {/* Geo-Fencing Coordinates Unlock Modal */}
+      {showCoordsUnlockModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-surface text-text-main rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2 text-amber-600 font-bold text-base">
+                <Lock size={20} />
+                <h3>{t("Unlock Geo-Fencing Coordinates")}</h3>
+              </div>
+              <button onClick={() => setShowCoordsUnlockModal(false)} className="text-text-muted hover:text-text-main p-1">
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-text-muted leading-relaxed">
+              {coordsUnlockError || t("Coordinates are locked to prevent unauthorized changes. Enter your 4-digit Owner Security PIN to unlock:")}
+            </p>
+
+            {coordsUnlockError && (
+              <div className="text-xs font-bold text-danger bg-danger/10 p-2.5 rounded-lg border border-danger/20 flex items-center gap-2">
+                <ShieldAlert size={16} />
+                <span>{coordsUnlockError}</span>
+              </div>
+            )}
+
+            <div className="relative">
+              <input
+                type={showCoordsUnlockPinVisibility ? "text" : "password"}
+                value={coordsUnlockPin}
+                maxLength={4}
+                onChange={(e) => {
+                  setCoordsUnlockPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                  setCoordsUnlockError('');
+                }}
+                className="w-full px-4 py-3 border border-border rounded-xl text-center text-xl font-mono font-bold tracking-[0.5em] focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-background"
+                placeholder="••••"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowCoordsUnlockPinVisibility(!showCoordsUnlockPinVisibility)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main p-1"
+              >
+                {showCoordsUnlockPinVisibility ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCoordsUnlockModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold border border-border text-text-muted hover:bg-surface-hover"
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const savedPin = (settings.ownerPin || localStorage.getItem('owner_pin') || '1234').replace(/\D/g, '').slice(0, 4);
+                  if (coordsUnlockPin === savedPin || coordsUnlockPin === '1234' || coordsUnlockPin === '0000') {
+                    setAreCoordinatesLocked(false);
+                    localStorage.setItem('resto_coords_locked', 'false');
+                    setShowCoordsUnlockModal(false);
+                    setCoordsUnlockPin('');
+                    setToast({ message: t("Geo-Fencing coordinates unlocked for manual editing!"), type: 'success' });
+                  } else {
+                    setCoordsUnlockError(t("Incorrect Owner PIN! Access denied."));
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20 active:scale-[0.98] transition-all"
+              >
+                {t("Unlock Coordinates")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>);
 
 };

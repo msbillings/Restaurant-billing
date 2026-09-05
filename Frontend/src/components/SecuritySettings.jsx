@@ -182,8 +182,8 @@ const SecuritySettings = ({ onGoBack }) => {
                   <input
                     type={showMasterPin ? "text" : "password"}
                     value={ownerPin}
-                    onChange={(e) => setOwnerPin(e.target.value)}
-                    maxLength={10}
+                    maxLength={4}
+                    onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     className="w-full pl-11 pr-12 py-3 bg-orange-50/50 border border-orange-200 rounded-xl font-mono text-lg tracking-widest font-bold text-orange-900 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all"
                     placeholder="1234"
                   />
@@ -251,10 +251,10 @@ const SecuritySettings = ({ onGoBack }) => {
                         <input
                           type={isRevealed ? "text" : "password"}
                           value={lock.pin !== undefined ? lock.pin : ''}
-                          onChange={(e) => updateLock(featureId, 'pin', e.target.value)}
-                          maxLength={10}
+                          maxLength={4}
+                          onChange={(e) => updateLock(featureId, 'pin', e.target.value.replace(/\D/g, '').slice(0, 4))}
                           className="w-full pl-10 pr-10 py-2.5 bg-gray-50/70 border border-gray-200 rounded-lg font-mono tracking-widest text-gray-800 font-semibold focus:outline-none focus:bg-white focus:border-primary transition-all text-sm"
-                          placeholder={t("Custom PIN (leave blank to use Master PIN)")}
+                          placeholder={t("Custom 4-digit PIN (leave blank to use Master PIN)")}
                         />
                         <button
                           type="button"

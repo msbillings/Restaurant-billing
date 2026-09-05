@@ -1,7 +1,7 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2, ChevronDown } from 'lucide-react';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2, ChevronDown, Receipt, Info } from 'lucide-react';
 import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
 import { getCachedBillHistory, cacheBillHistory } from '../db/offlineDb';
 import useDebounce from '../hooks/useDebounce';
@@ -18,7 +18,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [loadingBillId, setLoadingBillId] = useState(null);
   const [billCache, setBillCache] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('All');
+  const [typeFilter, setTypeFilter] = useState('All');
+  const [paymentFilter, setPaymentFilter] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
@@ -27,6 +28,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
   const [expandedRows, setExpandedRows] = useState({});
+  const [mixedModalBill, setMixedModalBill] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
   const itemsPerPage = 20; // Server-side pagination - Show 20 bills per page (latest first)
 
   const handleViewBill = async (billId) => {
@@ -47,15 +50,62 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  const toggleRow = (id) => {
-    setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleRow = async (id) => {
+    const isExpanding = !expandedRows[id];
+    setExpandedRows(prev => ({ ...prev, [id]: isExpanding }));
+
+    if (isExpanding) {
+      const targetBill = bills.find(b => b._id === id);
+      if (targetBill && (!targetBill.items || targetBill.items.length === 0)) {
+        if (billCache[id] && billCache[id].items && billCache[id].items.length > 0) {
+          setBills(prev => prev.map(b => b._id === id ? { ...b, items: billCache[id].items } : b));
+        } else {
+          try {
+            const fullBill = await getBillById(id);
+            if (fullBill && fullBill.items) {
+              setBillCache(prev => ({ ...prev, [id]: fullBill }));
+              setBills(prev => prev.map(b => b._id === id ? { ...b, ...fullBill } : b));
+            }
+          } catch (err) {
+            console.error('Error fetching items for bill:', err);
+          }
+        }
+      }
+    }
+  };
+
+  const renderPaymentCell = (bill) => {
+    const mode = bill.paymentMode || bill.paymentMethod || '-';
+    if (mode === 'Mixed' || mode === 'Split') {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMixedModalBill(bill);
+          }}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-all font-bold text-xs cursor-pointer shadow-2xs group shrink-0"
+          title={t("Click to view Mixed payment breakdown")}
+        >
+          <CreditCard size={13} className="text-orange-600 shrink-0" />
+          <span>{t("Mixed")}</span>
+          <Info size={12} className="text-orange-500 group-hover:scale-110 transition-transform ml-0.5 shrink-0" />
+        </button>
+      );
+    }
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-text-main font-medium">
+        <CreditCard size={14} className="text-text-muted shrink-0" />
+        <span>{t(mode)}</span>
+      </div>
+    );
   };
 
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     fetchBills();
-  }, [currentPage, debouncedSearchTerm, filterType]);
+  }, [currentPage, debouncedSearchTerm, typeFilter, paymentFilter]);
 
   // Refresh bills when component mounts to show latest bills first
   useEffect(() => {
@@ -65,11 +115,10 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
         setBills(cached);
         setLoading(false);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
-    // Reset to page 1 and fetch latest bills when component mounts
+    // Reset to page 1 when component mounts (effect on [currentPage] will handle fetching)
     setCurrentPage(1);
-    fetchBills();
 
     // Listen for real-time settlement and refund events
     const handleBillSettled = (data) => {
@@ -106,7 +155,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
         limit: itemsPerPage,
         search: searchForBackend,
         excludeBillType: 'Delivery',
-        paymentMode: filterType !== 'All' ? filterType : undefined,
+        billType: typeFilter !== 'All' ? typeFilter : undefined,
+        paymentMode: paymentFilter !== 'All' ? paymentFilter : undefined,
         startDate: startDate ? new Date(startDate).toISOString() : undefined,
         endDate: endDate ? new Date(endDate).toISOString() : undefined
       });
@@ -129,7 +179,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
       }
 
       setBills(billsData);
-      cacheBillHistory(billsData).catch(() => {});
+      cacheBillHistory(billsData).catch(() => { });
     } catch (error) {
       console.error('Error fetching bills:', error);
       setToast({ message: 'Failed to load bills', type: 'error' });
@@ -187,12 +237,11 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
   // Client-side filtering for bill type, payment mode and date range
   const filteredBills = bills.filter((bill) => {
-    if (filterType !== 'All') {
-      if (filterType === 'Dine-In' || filterType === 'Takeaway') {
-        if (bill.billType !== filterType) return false;
-      } else if (filterType === 'Cash' || filterType === 'UPI' || filterType === 'Card') {
-        if (bill.paymentMode !== filterType) return false;
-      }
+    if (typeFilter !== 'All') {
+      if (bill.billType !== typeFilter) return false;
+    }
+    if (paymentFilter !== 'All') {
+      if (bill.paymentMode !== paymentFilter) return false;
     }
 
     const dateStr = bill.createdAt || bill.updatedAt;
@@ -200,12 +249,12 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
       const bDate = new Date(dateStr);
       if (startDate) {
         const sDate = new Date(startDate);
-        sDate.setHours(0,0,0,0);
+        sDate.setHours(0, 0, 0, 0);
         if (bDate < sDate) return false;
       }
       if (endDate) {
         const eDate = new Date(endDate);
-        eDate.setHours(23,59,59,999);
+        eDate.setHours(23, 59, 59, 999);
         if (bDate > eDate) return false;
       }
     }
@@ -216,7 +265,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   // Reset to first page when filter/search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, filterType, startDate, endDate]);
+  }, [debouncedSearchTerm, typeFilter, paymentFilter, startDate, endDate]);
 
   // Listen for global searches from the Top Nav Bar
   useEffect(() => {
@@ -237,115 +286,195 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     return () => window.removeEventListener('executeBillSearch', handleBillSearch);
   }, []);
 
+  const activeFilterCount = [
+    startDate ? 1 : 0,
+    endDate ? 1 : 0,
+    typeFilter !== 'All' ? 1 : 0,
+    paymentFilter !== 'All' ? 1 : 0
+  ].reduce((a, b) => a + b, 0);
 
   return (
     <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-hidden w-full">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      
+
       <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between mb-2 sm:mb-2.5 gap-2 shrink-0 bg-surface p-2 sm:p-2.5 border border-border rounded-2xl shadow-xs">
-        {/* Row 1 on Smaller Screens / Left on Large Screens: Back + Title + Date Range + Filter */}
-        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-1.5 sm:gap-2 w-full xl:w-auto shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            <BackButton onClick={onGoBack} className="shrink-0" />
-            <div>
-              <h1 className="text-sm sm:text-lg font-black text-text-main leading-tight whitespace-nowrap">{t("Bill History")}</h1>
-              <p className="text-[10px] sm:text-xs text-text-muted font-medium leading-tight hidden xs:block">{t("View and manage past transactions")}</p>
+        {/* Header + Filters Container */}
+        <div className="flex flex-col sm:flex-row flex-wrap xl:flex-nowrap items-stretch sm:items-center justify-between gap-2 w-full xl:w-auto shrink-0">
+          {/* Row 1 on Mobile: Back + Title + Filter Toggle */}
+          <div className="flex items-center justify-between gap-1.5 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+              <BackButton onClick={onGoBack} className="shrink-0" />
+              <div>
+                <h1 className="text-sm sm:text-lg font-black text-text-main leading-tight whitespace-nowrap">{t("Bill History")}</h1>
+                <p className="text-[10px] sm:text-xs text-text-muted font-medium leading-tight hidden xs:block">{t("View and manage past transactions")}</p>
+              </div>
             </div>
-          </div>
 
-          {/* Date Range Picker + Filter */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Ultra-compact Date Range Picker */}
-            <div className="flex items-center gap-0.5 sm:gap-1 bg-background px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xl border border-border text-xs shadow-2xs shrink-0">
-              <input
-                type="date"
-                max={endDate || undefined}
-                value={startDate}
-                onChange={(e) => handleStartDateChange(e.target.value)}
-                className="bg-transparent text-[9px] xs:text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer w-[60px] xs:w-[68px] sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.65] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
-                style={{ colorScheme: 'light' }}
-                title={t("Start Date")}
-              />
-              <span className="text-text-muted font-bold text-[9px] sm:text-xs">-</span>
-              <input
-                type="date"
-                min={startDate || undefined}
-                value={endDate}
-                onChange={(e) => handleEndDateChange(e.target.value)}
-                className="bg-transparent text-[9px] xs:text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer w-[60px] xs:w-[68px] sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.65] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
-                style={{ colorScheme: 'light' }}
-                title={t("End Date")}
-              />
-              {(startDate || endDate) && (
-                <button
-                  onClick={() => { setStartDate(''); setEndDate(''); }}
-                  className="text-[8px] sm:text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1 py-0.5 rounded transition-colors ml-0.5"
-                  title={t("Reset Dates")}
-                >
-                  ✕
-                </button>
+            {/* Filter On/Off Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0 ml-1 ${showFilters || activeFilterCount > 0
+                ? 'bg-primary/10 border-primary text-primary shadow-xs'
+                : 'bg-background border-border text-text-muted hover:text-text-main hover:bg-surface-hover'
+                }`}
+              title={t("Toggle Filters")}
+            >
+              <Filter size={13} />
+              <span className="text-xs font-semibold">{showFilters ? t("Hide Filters") : t("Filters")}</span>
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-primary text-white text-[10px] font-extrabold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
               )}
-            </div>
-
-            {/* Compact Filter Dropdown */}
-            <div className="relative shrink-0">
-              <Filter className="absolute left-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={10} />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="pl-4 pr-3 py-0.5 sm:py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-[10px] sm:text-xs text-text-main appearance-none cursor-pointer font-medium">
-                <option value="All">{t("All")}</option>
-                <option value="Dine-In">{t("Dine-In")}</option>
-                <option value="Takeaway">{t("Takeaway")}</option>
-                <option value="Cash">{t("Cash")}</option>
-                <option value="UPI">{t("UPI")}</option>
-                <option value="Card">{t("Card")}</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2 on Smaller Screens: Search Bar (taking remaining width) + Pagination on SAME ROW */}
-        <div className="flex items-center gap-1.5 sm:gap-2 w-full xl:w-auto flex-1 xl:flex-initial min-w-0">
-          {/* Search Input: Takes remaining width */}
-          <div className="relative flex-1 min-w-0 xl:w-44">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={13} />
-            <input
-              type="text" 
-              placeholder={t("Search Bill #...")}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-7 pr-3 py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main w-full font-medium" />
+            </button>
           </div>
 
-          {/* Top Pagination Controls on same row */}
-          {pagination.totalPages > 1 && (
-            <div className="flex items-center gap-0.5 bg-background border border-border rounded-xl px-1.5 py-0.5 shrink-0 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || loading}
-                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                title={t("Previous Page")}
-              >
-                <ChevronLeft size={13} />
-              </button>
+          {/* Collapsible Date Range Picker + Remaining Filters */}
+          {(showFilters || activeFilterCount > 0) && (
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-1.5 shrink-0 animate-in fade-in duration-200 w-full sm:w-auto">
+              {/* Row 1 of Filters on Mobile / Inline on Desktop: Date Range Picker (ONE ROW) */}
+              <div className="flex items-center justify-between sm:justify-start gap-1 bg-background px-2 py-0.5 sm:py-1 rounded-xl border border-border text-xs shadow-2xs shrink-0 w-full sm:w-auto">
+                <input
+                  type="date"
+                  max={endDate || undefined}
+                  value={startDate}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  className="bg-transparent text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer flex-1 sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.7] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
+                  style={{ colorScheme: 'light' }}
+                  title={t("Start Date")}
+                />
+                <span className="text-text-muted font-bold text-[10px] sm:text-xs px-0.5">-</span>
+                <input
+                  type="date"
+                  min={startDate || undefined}
+                  value={endDate}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
+                  className="bg-transparent text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer flex-1 sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.7] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
+                  style={{ colorScheme: 'light' }}
+                  title={t("End Date")}
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    className="text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1 py-0.5 rounded transition-colors ml-0.5 shrink-0"
+                    title={t("Reset Dates")}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
-              <span className="text-[10px] sm:text-[11px] font-bold text-text-main px-1 select-none whitespace-nowrap">
-                {currentPage} / {pagination.totalPages}
-              </span>
+              {/* Row 2 of Filters on Mobile / Inline on Desktop: Remaining Filters (ONE ROW ONLY) */}
+              <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
+                {/* Order Type Filter (Dine-In / Takeaway) */}
+                <div className="relative flex-1 sm:flex-initial min-w-0">
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="w-full pl-2.5 pr-5 py-0.5 sm:py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-[10px] sm:text-xs text-text-main appearance-none cursor-pointer font-semibold shadow-2xs truncate"
+                  >
+                    <option value="All">{t("All Types")}</option>
+                    <option value="Dine-In">{t("Dine-In")}</option>
+                    <option value="Takeaway">{t("Takeaway")}</option>
+                  </select>
+                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={12} />
+                </div>
 
-              <button
-                type="button"
-                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
-                disabled={currentPage >= pagination.totalPages || loading}
-                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-                title={t("Next Page")}
-              >
-                <ChevronRight size={13} />
-              </button>
+                {/* Payment Method Filter (Cash / UPI / Card / Mixed) */}
+                <div className="relative flex-1 sm:flex-initial min-w-0">
+                  <CreditCard className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none hidden xs:block" size={12} />
+                  <select
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    className="w-full pl-2.5 xs:pl-6 pr-5 py-0.5 sm:py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-[10px] sm:text-xs text-text-main appearance-none cursor-pointer font-semibold shadow-2xs truncate"
+                  >
+                    <option value="All">{t("All Payments")}</option>
+                    <option value="Cash">{t("Cash")}</option>
+                    <option value="UPI">{t("UPI")}</option>
+                    <option value="Card">{t("Card")}</option>
+                    <option value="Mixed">{t("Mixed")}</option>
+                  </select>
+                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={12} />
+                </div>
+
+                {/* Reset All Filters button */}
+                {activeFilterCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStartDate('');
+                      setEndDate('');
+                      setTypeFilter('All');
+                      setPaymentFilter('All');
+                    }}
+                    className="px-2 py-0.5 sm:py-1 bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 rounded-xl text-[10px] sm:text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    title={t("Reset All Filters")}
+                  >
+                    {t("Reset")} ✕
+                  </button>
+                )}
+              </div>
             </div>
           )}
+        </div>
+
+        {/* Search Bar + Total Bills Badge + Top Pagination */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 w-full xl:w-auto flex-1 min-w-0">
+          {/* Search Input: Dynamic width taking all available remaining space on desktop, full width on mobile */}
+          <div className="relative w-full sm:flex-1 sm:min-w-[160px] min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={13} />
+            <input
+              type="search"
+              name="search_bill_history_no_autofill"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
+              aria-autocomplete="none"
+              placeholder={t("Search Bill #, Customer, Type, Status...")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-7 pr-3 py-1 sm:py-1.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 text-xs text-text-main w-full font-medium shadow-2xs" />
+          </div>
+
+          {/* Badge & Pagination Row on Mobile / Inline on Desktop */}
+          <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 w-full sm:w-auto">
+            {/* Total Bills Badge */}
+            <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl bg-orange-50 text-orange-800 border border-orange-200 text-xs font-bold shrink-0 shadow-2xs">
+              <Receipt size={13} className="text-orange-600" />
+              <span>{pagination.totalBills || 0} {t("Total Bills")}</span>
+            </div>
+
+            {/* Top Pagination Controls */}
+            {pagination.totalPages >= 1 && (
+              <div className="flex items-center gap-0.5 bg-background border border-border rounded-xl px-1.5 py-0.5 shrink-0 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || loading}
+                  className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  title={t("Previous Page")}
+                >
+                  <ChevronLeft size={13} />
+                </button>
+
+                <span className="text-[10px] sm:text-[11px] font-bold text-text-main px-1 select-none whitespace-nowrap">
+                  {currentPage} / {pagination.totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                  disabled={currentPage >= pagination.totalPages || loading}
+                  className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  title={t("Next Page")}
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -418,88 +547,83 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${
-                        bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {t(bill.billType)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${
-                        bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
-                      }`}>
-                        {t(bill.status || 'Paid')}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 text-xs text-text-main font-medium">
-                        <CreditCard size={14} className="text-text-muted shrink-0" />
-                        <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 font-black text-text-main text-right text-xs sm:text-sm whitespace-nowrap">
-                      <span className={bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}>
-                        ₹{(bill.total || 0).toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                      <div className="flex justify-center items-center gap-1">
-                        <button
-                          onClick={() => handleViewBill(bill._id)}
-                          disabled={loadingBillId === bill._id}
-                          className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center justify-center gap-1 touch-target disabled:opacity-75 cursor-pointer" 
-                          title={t("View Invoice")}>
-                          {loadingBillId === bill._id ? (
-                            <Loader2 size={18} className="animate-spin text-orange-600" />
-                          ) : (
-                            <Eye size={18} />
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                          {t(bill.billType)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap ${bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                          }`}>
+                          {t(bill.status || 'Paid')}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {renderPaymentCell(bill)}
+                      </td>
+                      <td className="px-3 py-2.5 font-black text-text-main text-right text-xs sm:text-sm whitespace-nowrap">
+                        <span className={bill.status === 'Cancelled' ? 'line-through text-text-muted' : ''}>
+                          ₹{(bill.total || 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                        <div className="flex justify-center items-center gap-1">
+                          <button
+                            onClick={() => handleViewBill(bill._id)}
+                            disabled={loadingBillId === bill._id}
+                            className="p-2 hover:bg-background rounded-lg text-primary transition-colors inline-flex items-center justify-center gap-1 touch-target disabled:opacity-75 cursor-pointer"
+                            title={t("View Invoice")}>
+                            {loadingBillId === bill._id ? (
+                              <Loader2 size={18} className="animate-spin text-orange-600" />
+                            ) : (
+                              <Eye size={18} />
+                            )}
+                          </button>
+                          {bill.status === 'Paid' && (
+                            <button
+                              onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
+                              className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center justify-center gap-1 touch-target cursor-pointer"
+                              title={t("Refund Bill")}>
+                              <RefreshCcw size={18} />
+                            </button>
                           )}
-                        </button>
-                        {bill.status === 'Paid' && (
-                          <button
-                            onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                            className="p-2 hover:bg-background rounded-lg text-amber-500 transition-colors inline-flex items-center gap-1 touch-target cursor-pointer" 
-                            title={t("Refund Bill")}>
-                            <RefreshCcw size={18} />
-                          </button>
-                        )}
-                        {bill.status !== 'Deleted' && (
-                          <button
-                            onClick={() => handleDeleteClick(bill._id)}
-                            className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center gap-1 touch-target cursor-pointer" 
-                            title={t("Delete Bill (Requires Password)")}>
-                            <Trash2 size={18} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedRows[bill._id] && (
-                    <tr className="bg-surface/50 border-b border-border">
-                      <td colSpan="8" className="p-0">
-                        <div className="p-4 border-l-4 border-primary ml-10 my-1 bg-white rounded-r-lg shadow-sm">
-                          <div className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">{t("Order Items")}</div>
-                          {bill.items && bill.items.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-4xl">
-                              {bill.items.map((item, idx) => {
-                                if (item.isCancelled && item.quantity === item.cancelledQuantity) return null;
-                                const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
-                                return (
-                                  <div key={idx} className="flex justify-between items-center text-sm border-b border-border/40 pb-1 last:border-0">
-                                    <span className="text-text-main font-medium truncate pr-2">{item.name} <span className="text-text-muted text-xs ml-1">x{qty}</span></span>
-                                    <span className="font-mono text-text-muted shrink-0">₹{((item.price || 0) * qty).toFixed(2)}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-text-muted italic">{t("No items data available")}</div>
+                          {bill.status !== 'Deleted' && (
+                            <button
+                              onClick={() => handleDeleteClick(bill._id)}
+                              className="p-2 hover:bg-background rounded-lg text-danger transition-colors inline-flex items-center justify-center gap-1 touch-target cursor-pointer"
+                              title={t("Delete Bill (Requires Password)")}>
+                              <Trash2 size={18} />
+                            </button>
                           )}
                         </div>
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
+                    {expandedRows[bill._id] && (
+                      <tr className="bg-surface/50 border-b border-border">
+                        <td colSpan="8" className="p-0">
+                          <div className="p-4 border-l-4 border-primary ml-10 my-1 bg-white rounded-r-lg shadow-sm">
+                            <div className="text-xs font-bold text-text-muted mb-2 uppercase tracking-wider">{t("Order Items")}</div>
+                            {bill.items && bill.items.length > 0 ? (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 max-w-4xl">
+                                {bill.items.map((item, idx) => {
+                                  if (item.isCancelled && item.quantity === item.cancelledQuantity) return null;
+                                  const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                                  return (
+                                    <div key={idx} className="flex justify-between items-center text-sm border-b border-border/40 pb-1 last:border-0">
+                                      <span className="text-text-main font-medium truncate pr-2">{item.name} <span className="text-text-muted text-xs ml-1">x{qty}</span></span>
+                                      <span className="font-mono text-text-muted shrink-0">₹{((item.price || 0) * qty).toFixed(2)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-text-muted italic">{t("No items data available")}</div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
@@ -524,19 +648,17 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-bold font-mono text-sm text-text-main">#{bill.billNumber || 'CANCELLED'}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${bill.billType === 'Dine-In' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
                       {t(bill.billType)}
                     </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                    bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'
+                    }`}>
                     {t(bill.status || 'Paid')}
                   </span>
                 </div>
-                
+
                 {/* Mobile Customer Info */}
                 {(bill.customerName || bill.customerPhone) && (
                   <div className="flex flex-col text-xs bg-surface-hover/50 p-2 rounded-lg border border-border/50">
@@ -550,9 +672,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                   <span className="font-mono">
                     {new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()} {new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <div className="flex items-center gap-1 font-medium text-text-main">
-                    <CreditCard size={13} className="text-text-muted" />
-                    <span>{bill.paymentMode ? t(bill.paymentMode) : '-'}</span>
+                  <div>
+                    {renderPaymentCell(bill)}
                   </div>
                 </div>
 
@@ -576,7 +697,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     {bill.status === 'Paid' && (
                       <button
                         onClick={() => setRefundModal({ isOpen: true, billId: bill._id, reason: '' })}
-                        className="p-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target cursor-pointer"
+                        className="w-8 h-8 flex items-center justify-center bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target cursor-pointer shrink-0"
                         title={t("Refund Bill")}>
                         <RefreshCcw size={15} />
                       </button>
@@ -584,7 +705,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     {bill.status !== 'Deleted' && (
                       <button
                         onClick={() => handleDeleteClick(bill._id)}
-                        className="p-2 bg-red-50 text-danger border border-red-200 rounded-lg text-xs font-bold touch-target cursor-pointer"
+                        className="w-8 h-8 flex items-center justify-center bg-red-50 text-danger border border-red-200 rounded-lg text-xs font-bold touch-target cursor-pointer shrink-0"
                         title={t("Delete Bill")}>
                         <Trash2 size={15} />
                       </button>
@@ -595,62 +716,73 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
             ))
           )}
         </div>
-        
-        {/* Pagination Controls - Visible on desktop, mobile uses compact top toolbar pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="hidden md:flex p-3 sm:p-4 border-t border-border flex-col sm:flex-row gap-2 items-center justify-between bg-background shrink-0 text-xs sm:text-sm">
-            <div className="text-text-muted font-medium">
-              {t("Showing")} {(currentPage - 1) * itemsPerPage + 1} {t("to")} {Math.min(currentPage * itemsPerPage, pagination.totalBills)} {t("of")} {pagination.totalBills} {t("bills")}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                disabled={currentPage === 1 || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors touch-target">
-                <ChevronLeft size={16} />
-              </button>
-              <div className="flex items-center gap-1">
-                {[...Array(pagination.totalPages)].map((_, i) => {
-                  const page = i + 1;
-                  if (
-                    page === 1 ||
-                    page === pagination.totalPages ||
-                    (page >= currentPage - 1 && page <= currentPage + 1)
-                  ) {
-                    return (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page)}
-                        disabled={loading}
-                        className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
-                          currentPage === page
-                            ? 'bg-primary text-white shadow-xs'
-                            : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-main border border-border'
-                        }`}>
-                        {page}
-                      </button>
-                    );
-                  } else if (page === currentPage - 2 || page === currentPage + 2) {
-                    return <span key={page} className="px-1 text-text-muted">...</span>;
-                  }
-                  return null;
-                })}
-              </div>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
-                disabled={currentPage === pagination.totalPages || loading}
-                className="p-2 rounded-lg border border-border bg-surface text-text-main disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-hover transition-colors touch-target">
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {selectedBill && (
         <Invoice
           bill={selectedBill}
-          onClose={() => setSelectedBill(null)} />
+          onClose={() => setSelectedBill(null)}
+        />
+      )}
+
+      {mixedModalBill && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[65] animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl p-5 sm:p-6 max-w-sm w-full shadow-2xl border border-border animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="text-primary" size={20} />
+                <h3 className="text-sm sm:text-base font-bold text-text-main">
+                  {t("Mixed Payment Breakdown")}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMixedModalBill(null)}
+                className="text-text-muted hover:text-text-main p-1 rounded-lg hover:bg-surface-hover text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+              {t("Bill")} #{mixedModalBill.billNumber || 'DETAILS'}
+            </div>
+
+            <div className="space-y-2 bg-background p-3 rounded-xl border border-border">
+              {(() => {
+                const pb = mixedModalBill.paymentBreakdown || mixedModalBill.splitPayments || {};
+                const parts = [];
+                if (pb.cash > 0) parts.push({ mode: 'Cash', amount: pb.cash });
+                if (pb.upi > 0) parts.push({ mode: 'UPI', amount: pb.upi });
+                if (pb.card > 0) parts.push({ mode: 'Card', amount: pb.card });
+
+                if (parts.length === 0) {
+                  return <div className="text-xs text-text-muted italic">{t("No payment breakdown available")}</div>;
+                }
+
+                return parts.map((part, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-xs font-bold text-text-main border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-primary inline-block"></span>
+                      {t(part.mode)}
+                    </span>
+                    <span className="font-mono text-xs sm:text-sm text-primary">₹{Number(part.amount).toFixed(2)}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setMixedModalBill(null)}
+                className="w-full py-2.5 bg-primary text-white font-bold rounded-xl text-xs sm:text-sm shadow-xs hover:bg-primary-hover transition-colors cursor-pointer"
+              >
+                {t("Close")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {refundModal.isOpen && (
@@ -661,19 +793,22 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
             <input
               type="text"
               value={refundModal.reason}
-              onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })} 
+              onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })}
               placeholder={t("e.g. Customer unhappy, wrong item")}
-              className="w-full bg-background border border-border rounded-xl px-4 py-2.5 mb-5 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium" />
-          
+              className="w-full bg-background border border-border rounded-xl px-4 py-2.5 mb-5 text-xs sm:text-sm focus:outline-none focus:border-primary text-text-main font-medium"
+            />
+
             <div className="flex gap-3">
               <button
                 onClick={() => setRefundModal({ isOpen: false, billId: null, reason: '' })}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors touch-target text-xs sm:text-sm">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-main hover:bg-surface-hover transition-colors touch-target text-xs sm:text-sm"
+              >
                 {t("Cancel")}
               </button>
               <button
                 onClick={confirmRefund}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors touch-target text-xs sm:text-sm shadow-xs">
+                className="flex-1 py-2.5 rounded-xl font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors touch-target text-xs sm:text-sm shadow-xs"
+              >
                 {t("Confirm Refund")}
               </button>
             </div>
@@ -703,22 +838,25 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
             )}
 
             <div className="mb-6">
-              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">{t("Password")}</label>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">{t("OWNER / ADMIN PIN")}</label>
               <div className="relative">
                 <input
                   type={deleteModal.showPassword ? "text" : "password"}
                   value={deleteModal.password}
-                  onChange={(e) => setDeleteModal((prev) => ({ ...prev, password: e.target.value, error: '' }))}
-                  onKeyDown={(e) => e.key === 'Enter' && confirmDelete()} 
-                  placeholder={t("Enter password...")}
+                  maxLength={4}
+                  onChange={(e) => setDeleteModal((prev) => ({ ...prev, password: e.target.value.replace(/\D/g, '').slice(0, 4), error: '' }))}
+                  onKeyDown={(e) => e.key === 'Enter' && confirmDelete()}
+                  placeholder={t("Enter 4-digit PIN")}
                   autoFocus
-                  className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-xs sm:text-sm focus:outline-none focus:border-danger text-text-main font-medium" />
-              
+                  className="w-full bg-background border border-border rounded-xl pl-4 pr-11 py-2.5 text-center text-sm font-mono tracking-widest font-bold focus:outline-none focus:border-danger text-text-main"
+                />
+
                 <button
                   type="button"
                   onClick={() => setDeleteModal((prev) => ({ ...prev, showPassword: !prev.showPassword }))}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-main transition-colors p-1"
-                  title={deleteModal.showPassword ? "Hide password" : "Show password"}>
+                  title={deleteModal.showPassword ? "Hide password" : "Show password"}
+                >
                   {deleteModal.showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
@@ -728,13 +866,15 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               <button
                 onClick={() => setDeleteModal({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false })}
                 disabled={deleteModal.loading}
-                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50 touch-target text-xs sm:text-sm">
+                className="flex-1 py-2.5 rounded-xl font-bold border border-border text-text-muted hover:bg-surface-hover hover:text-text-main transition-colors disabled:opacity-50 touch-target text-xs sm:text-sm"
+              >
                 {t("Cancel")}
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={deleteModal.loading}
-                className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-md shadow-danger/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 touch-target text-xs sm:text-sm">
+                className="flex-1 py-2.5 rounded-xl font-bold bg-danger text-white hover:bg-red-600 shadow-md shadow-danger/20 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 touch-target text-xs sm:text-sm"
+              >
                 {deleteModal.loading ? (
                   <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                 ) : (
@@ -746,16 +886,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
           </div>
         </div>
       )}
-
-      {toast &&
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        onClose={() => setToast(null)} />
-
-      }
-    </div>);
-
+    </div>
+  );
 };
 
 export default BillHistory;

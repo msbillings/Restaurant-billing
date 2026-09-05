@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, HelpCircle, ExternalLink, ArrowRight } from 'lucide-react';
+import { Camera, MapPin, Mic, Bell, ShieldCheck, Loader2, CheckCircle2, XCircle, ExternalLink, ArrowRight } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { 
   requestCameraPermissions, 
@@ -14,9 +14,9 @@ import {
 const isNative = Capacitor.isNativePlatform();
 
 const StatusIcon = ({ status }) => {
-  if (status === 'granted') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20"><CheckCircle2 size={14} /> Granted</span>;
-  if (status === 'denied') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20"><XCircle size={14} /> Denied</span>;
-  return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">Ready</span>;
+  if (status === 'granted') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300/80"><CheckCircle2 size={14} /> Granted</span>;
+  if (status === 'denied') return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-red-700 bg-red-100/90 px-2.5 py-0.5 rounded-full border border-red-300/80"><XCircle size={14} /> Denied</span>;
+  return <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-orange-700 bg-orange-100/90 px-2.5 py-0.5 rounded-full border border-orange-300/80">Ready</span>;
 };
 
 const SystemPermissionsModal = ({ onComplete }) => {
@@ -152,50 +152,50 @@ const SystemPermissionsModal = ({ onComplete }) => {
     {
       key: 'notifications',
       icon: Bell,
-      iconColor: 'text-amber-500',
-      iconBg: 'bg-amber-500/15',
+      iconColor: 'text-orange-600',
+      iconBg: 'bg-orange-100 border-orange-200',
       label: t("Push & Local Notifications"),
       desc: t("Instant popups & sounds for digital orders & KOTs.")
     },
     {
       key: 'camera',
       icon: Camera,
-      iconColor: 'text-blue-500',
-      iconBg: 'bg-blue-500/15',
+      iconColor: 'text-blue-600',
+      iconBg: 'bg-blue-100 border-blue-200',
       label: t("Camera Access"),
       desc: t("Required for AI Face Attendance & QR Scanning.")
     },
     {
       key: 'location',
       icon: MapPin,
-      iconColor: 'text-emerald-500',
-      iconBg: 'bg-emerald-500/15',
+      iconColor: 'text-emerald-600',
+      iconBg: 'bg-emerald-100 border-emerald-200',
       label: t("Location Services"),
       desc: t("Required for delivery & store geo-verification.")
     },
     {
       key: 'mic',
       icon: Mic,
-      iconColor: 'text-purple-500',
-      iconBg: 'bg-purple-500/15',
+      iconColor: 'text-purple-600',
+      iconBg: 'bg-purple-100 border-purple-200',
       label: t("Microphone"),
       desc: t("Required for AI voice command billing.")
     }
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[9999] p-2.5 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200">
-      <div className="bg-slate-900 text-white rounded-2xl sm:rounded-3xl border border-white/15 shadow-2xl max-w-md w-full my-auto overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[9999] p-2.5 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200">
+      <div className="bg-white text-gray-900 rounded-2xl sm:rounded-3xl border border-gray-200 shadow-2xl max-w-md w-full my-auto overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh]">
         
         {/* Header */}
-        <div className="p-4 sm:p-6 pb-3 sm:pb-4 bg-linear-to-b from-primary/20 via-primary/5 to-transparent flex flex-col items-center border-b border-white/10 text-center shrink-0">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/25 text-primary border border-primary/30 flex items-center justify-center shadow-lg shadow-primary/20 mb-2 sm:mb-3">
+        <div className="p-4 sm:p-6 pb-3 sm:pb-4 bg-gradient-to-b from-orange-100/60 via-orange-50/30 to-white flex flex-col items-center border-b border-gray-100 text-center shrink-0">
+          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-orange-500 text-white border border-orange-400 flex items-center justify-center shadow-lg shadow-orange-500/25 mb-2 sm:mb-3">
             <ShieldCheck size={28} className="sm:w-8 sm:h-8" />
           </div>
-          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+          <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight">
             {t("App Permissions Setup")}
           </h2>
-          <p className="text-[12px] sm:text-xs text-gray-300 font-medium mt-1 max-w-xs">
+          <p className="text-[12px] sm:text-xs text-gray-600 font-medium mt-1 max-w-xs">
             {checkingStatus
               ? t("Checking system permission status...")
               : t("Allow the required permissions below for smooth billing, instant order alerts, and AI features.")}
@@ -206,8 +206,8 @@ const SystemPermissionsModal = ({ onComplete }) => {
         <div className="p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 overflow-y-auto flex-1 overscroll-contain">
           {checkingStatus ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3">
-              <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-xs text-gray-400 font-medium">{t("Scanning hardware permissions...")}</p>
+              <Loader2 size={32} className="animate-spin text-orange-500" />
+              <p className="text-xs text-gray-500 font-medium">{t("Scanning hardware permissions...")}</p>
             </div>
           ) : (
             permItems.map(({ key, icon: Icon, iconColor, iconBg, label, desc }) => {
@@ -221,19 +221,19 @@ const SystemPermissionsModal = ({ onComplete }) => {
                   onClick={() => toggle(key)}
                   className={`flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all ${
                     isGranted 
-                      ? 'bg-emerald-500/10 border-emerald-500/30 cursor-default' 
+                      ? 'bg-emerald-50/80 border-emerald-200 cursor-default' 
                       : isDenied 
-                      ? 'bg-red-500/10 border-red-500/30 cursor-pointer' 
-                      : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/40 cursor-pointer active:scale-[0.99]'
+                      ? 'bg-red-50/80 border-red-200 cursor-pointer' 
+                      : 'bg-gray-50 border-gray-200 hover:bg-orange-50/60 hover:border-orange-300 cursor-pointer active:scale-[0.99]'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
-                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0 border border-white/10`}>
-                      <Icon size={18} className="sm:w-5 sm:h-5" />
+                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0 border`}>
+                      <Icon size={18} className={`sm:w-5 sm:h-5 ${iconColor}`} />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-bold text-white text-xs sm:text-sm truncate">{label}</p>
-                      <p className={`text-[11px] sm:text-xs truncate ${isDenied ? 'text-red-400 font-semibold' : 'text-gray-400'}`}>
+                      <p className="font-bold text-gray-900 text-xs sm:text-sm truncate">{label}</p>
+                      <p className={`text-[11px] sm:text-xs truncate ${isDenied ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
                         {isDenied && isNative ? t("Denied — tap to grant or fix in Settings") : desc}
                       </p>
                     </div>
@@ -250,7 +250,7 @@ const SystemPermissionsModal = ({ onComplete }) => {
           {isNative && hasDenied && !checkingStatus && (
             <button
               onClick={openAppSettings}
-              className="w-full py-2.5 px-3 border border-white/15 bg-white/5 text-amber-300 rounded-xl font-semibold text-[11px] sm:text-xs flex items-center justify-center gap-2 hover:bg-white/10 transition-colors"
+              className="w-full py-2.5 px-3 border border-orange-300 bg-orange-50 text-orange-800 rounded-xl font-semibold text-[11px] sm:text-xs flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
             >
               <ExternalLink size={14} />
               {t("Open Device Settings to unlock denied permissions")}
@@ -259,14 +259,14 @@ const SystemPermissionsModal = ({ onComplete }) => {
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3.5 sm:p-5 pt-2 sm:pt-3 border-t border-white/10 bg-slate-900/90 shrink-0 space-y-2">
+        <div className="p-3.5 sm:p-5 pt-2 sm:pt-3 border-t border-gray-100 bg-gray-50/80 shrink-0 space-y-2">
           <button
             onClick={allGranted ? onComplete : requestAllPermissions}
             disabled={loading || checkingStatus}
             className={`w-full py-3 sm:py-3.5 font-black text-sm sm:text-base rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-[0.98] ${
               allGranted
-                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40'
-                : 'bg-primary hover:bg-primary-hover text-white shadow-primary/30'
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                : 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/25'
             }`}
           >
             {loading ? (
@@ -281,7 +281,6 @@ const SystemPermissionsModal = ({ onComplete }) => {
               </>
             ) : (
               <>
-                
                 <span>{t("Allow All Permissions")}</span>
                 <ArrowRight size={16} />
               </>
@@ -291,7 +290,7 @@ const SystemPermissionsModal = ({ onComplete }) => {
           {!allGranted && !loading && (
             <button
               onClick={onComplete}
-              className="w-full py-1.5 text-center text-xs text-gray-400 hover:text-gray-200 transition-colors cursor-pointer"
+              className="w-full py-1.5 text-center text-xs text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
             >
               {t("Skip for now (some features may be restricted)")}
             </button>

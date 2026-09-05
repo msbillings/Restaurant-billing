@@ -1179,31 +1179,7 @@ export const getOpenOrders = async (req, res) => {
       .limit(100)
       .lean();
 
-    // Auto-clean ONLY bills that are completely empty (no items at all, or all items have qty=0 AND printedQty=0 AND are not KOT-printed).
-    // IMPORTANT: Do NOT use cross-array conditions — they incorrectly match orders with a mix of cancelled + active items.
-    Bill.find({ status: { $in: ['Open', 'Billed'] } })
-      .select('_id items kots')
-      .lean()
-      .then(async (openBills) => {
-        const emptyBillIds = openBills
-          .filter(b => {
-            if (!b.items || b.items.length === 0) return true;
-            // Only cancel if ALL items are zero AND no KOTs were ever fired
-            const hasKots = b.kots && b.kots.length > 0;
-            if (hasKots) return false; // Has KOT history — never auto-cancel
-            const hasAnyActiveItem = b.items.some(i =>
-              Number(i.quantity || 0) > 0 || (i.printedQuantity || 0) > 0
-            );
-            return !hasAnyActiveItem;
-          })
-          .map(b => b._id);
-        if (emptyBillIds.length > 0) {
-          await Bill.updateMany(
-            { _id: { $in: emptyBillIds } },
-            { $set: { status: 'Cancelled', cancelReason: 'Auto-cleaned empty zero-item bill' } }
-          );
-        }
-      }).catch(() => { });
+    // Zero-item bills are filtered out below in formattedOrders and cleaned up during save/cancel operations
 
 
     const dynamicTaxRate = await getDynamicTaxRate(req);

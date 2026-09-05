@@ -8,61 +8,67 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 // Helper to get indexed clean match for table/space variations (e.g. "Ground Floor - Cabin 1" vs "Ground Floor - Table 1" vs "Table 1")
 const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
-  const trimmed = tblStr.trim();
-  // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - H-1")
+  const trimmed = String(tblStr).trim();
+  const variants = new Set([trimmed]);
+
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
     const tablePart = parts.slice(1).join(' - ').trim();
-    const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patterns = [];
-    // 1. Exact match with floor: "Ground Floor - H-1"
-    patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
-    // 2. Bare match without floor: "H-1"
-    patterns.push(`^${escapedTable}$`);
-    // 3. If standard space type (e.g. "Table 1", "Cabin 2", "Sofa 3", "Room 4", "Bar 5")
+    variants.add(tablePart);
+
     const standardMatch = tablePart.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
     if (standardMatch) {
       const type = standardMatch[1];
       const num = parseInt(standardMatch[2], 10);
       const firstLetter = type.charAt(0).toUpperCase();
-      patterns.push(`^${escapedFloor}\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
-      patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
+      const capType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+      variants.add(`${floorPart} - ${capType} ${num}`);
+      variants.add(`${floorPart} - ${capType}${num}`);
+      variants.add(`${floorPart} - ${firstLetter}-${num}`);
+      variants.add(`${floorPart} - ${firstLetter}${num}`);
+      variants.add(`${capType} ${num}`);
+      variants.add(`${capType}${num}`);
+      variants.add(`${firstLetter}-${num}`);
+      variants.add(`${firstLetter}${num}`);
     } else {
-      // If tablePart is a custom letter/prefix and number (e.g. "H-1", "H1", "M-2")
       const letterNumMatch = tablePart.match(/^([A-Za-z]+)-?0*(\d+)$/);
       if (letterNumMatch) {
         const letter = letterNumMatch[1];
         const num = parseInt(letterNumMatch[2], 10);
-        patterns.push(`^${escapedFloor}\\s*-\\s*${letter}-?0*${num}$`);
-        patterns.push(`^${letter}-?0*${num}$`);
+        variants.add(`${floorPart} - ${letter}-${num}`);
+        variants.add(`${floorPart} - ${letter}${num}`);
+        variants.add(`${letter}-${num}`);
+        variants.add(`${letter}${num}`);
       }
     }
-    return new RegExp(`(?:${patterns.join('|')})`, 'i');
-  }
-  // If no floor prefix (e.g. "Table 8", "Cabin 1", "Sofa 3", "H-1"):
-  const escapedTrimmed = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const patterns = [];
-  patterns.push(`^${escapedTrimmed}$`);
-  patterns.push(`^.*?\\s*-\\s*${escapedTrimmed}$`);
-  const standardMatch = trimmed.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
-  if (standardMatch) {
-    const type = standardMatch[1];
-    const num = parseInt(standardMatch[2], 10);
-    const firstLetter = type.charAt(0).toUpperCase();
-    patterns.push(`^(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
-    patterns.push(`^.*?\\s*-\\s*(?:${type}\\s*0*|${firstLetter}-?0*)${num}$`);
   } else {
-    const letterNumMatch = trimmed.match(/^([A-Za-z]+)-?0*(\d+)$/);
-    if (letterNumMatch) {
-      const letter = letterNumMatch[1];
-      const num = parseInt(letterNumMatch[2], 10);
-      patterns.push(`^${letter}-?0*${num}$`);
-      patterns.push(`^.*?\\s*-\\s*${letter}-?0*${num}$`);
+    const standardMatch = trimmed.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
+    if (standardMatch) {
+      const type = standardMatch[1];
+      const num = parseInt(standardMatch[2], 10);
+      const firstLetter = type.charAt(0).toUpperCase();
+      const capType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+      variants.add(`${capType} ${num}`);
+      variants.add(`${capType}${num}`);
+      variants.add(`${firstLetter}-${num}`);
+      variants.add(`${firstLetter}${num}`);
+    } else {
+      const letterNumMatch = trimmed.match(/^([A-Za-z]+)-?0*(\d+)$/);
+      if (letterNumMatch) {
+        const letter = letterNumMatch[1];
+        const num = parseInt(letterNumMatch[2], 10);
+        variants.add(`${letter}-${num}`);
+        variants.add(`${letter}${num}`);
+      }
     }
   }
-  return new RegExp(`(?:${patterns.join('|')})`, 'i');
+
+  const arr = Array.from(variants);
+  if (arr.length === 1) {
+    return arr[0];
+  }
+  return { $in: arr };
 };
 // In-memory cache for dynamic tax rate per tenant DB with 60s TTL
 const taxRateCache = new Map();

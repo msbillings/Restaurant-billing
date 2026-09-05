@@ -1041,11 +1041,6 @@ const Invoice = ({ bill, onClose, onSave }) => {
 
             const isMixed = bill.paymentMode === 'Mixed';
             const upiSplit = Number(bill.splitPayments?.upi || 0);
-            
-            // If already fully paid by pure Cash or Card with 0 UPI, do not show UPI QR
-            if (bill.status === 'Paid' && !isMixed && (bill.paymentMode === 'Cash' || bill.paymentMode === 'Card')) {
-              return null;
-            }
 
             const am = (isMixed && upiSplit > 0)
               ? upiSplit.toFixed(2)

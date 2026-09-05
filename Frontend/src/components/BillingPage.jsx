@@ -1565,8 +1565,21 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       // Extend edit lock after save so the 5s poll cannot fire immediately and
       // trigger a fetchActiveOrder that shows the loading skeleton.
       lastLocalEditTime.current = Date.now();
-      // Order is now saved to DB — clear pending local changes flag
       hasPendingLocalChanges.current = false;
+      // Instantly update openOrdersList in memory with authoritative savedOrder
+      if (savedOrder && savedOrder._id) {
+        setOpenOrdersList(prev => {
+          const list = Array.isArray(prev) ? prev : [];
+          const idx = list.findIndex(o => (savedOrder._id && o._id === savedOrder._id) || isTableMatching(o.tableNo, savedOrder.tableNo));
+          if (idx !== -1) {
+            const updated = [...list];
+            updated[idx] = { ...updated[idx], ...savedOrder };
+            return updated;
+          }
+          return [savedOrder, ...list];
+        });
+        upsertCachedOpenOrder(savedOrder).catch(() => {});
+      }
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error saving order:', error);

@@ -65,9 +65,10 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, validPins = [], requireP
                 <input
                   type={showPassword ? "text" : "password"}
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-danger/20 focus:border-danger bg-background text-text-main font-mono tracking-widest transition-all pr-12"
-                  placeholder={t("Enter PIN to authorize")}
+                  maxLength={4}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-danger/20 focus:border-danger bg-background text-text-main font-mono tracking-widest transition-all pr-12 text-center text-lg font-bold"
+                  placeholder={t("Enter 4-digit PIN")}
                   autoFocus
                 />
                 <button

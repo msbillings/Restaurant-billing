@@ -875,7 +875,13 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={13} />
           <input
-            type="text"
+            type="search"
+            name="search_menu_items_no_autofill"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            aria-autocomplete="none"
             placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

@@ -200,7 +200,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.80');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.81');
   const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
     try {
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';
@@ -923,7 +923,8 @@ function App() {
     const handleForceLogout = () => {
       console.warn('[App] forceLogout event received — resetting user state');
       setUser(null);
-      setView('landing');
+      const isNative = isCapacitorApp() || isElectronApp();
+      setView(isNative ? 'floor' : 'landing');
       window.history.replaceState(null, '', '/');
       // Re-check license status from localStorage in case license was cleared
       // (e.g. via "Reset License" button). If resto_license is gone, show LicenseScreen.
@@ -1073,7 +1074,8 @@ function App() {
     localStorage.removeItem('restaurantSettings');
     localStorage.removeItem('msbillings_spaces');
     sessionStorage.removeItem('unlockedFeatures');
-    setView('landing');
+    const isNative = isCapacitorApp() || isElectronApp();
+    setView(isNative ? 'floor' : 'landing');
     window.history.replaceState(null, '', '/');
   };
 
@@ -1152,8 +1154,9 @@ function App() {
 
   }
 
-  // 1. Web visitors / Google Search Crawlers: Show Landing Page first
-  if (view === 'landing') {
+  // 1. Web visitors / Google Search Crawlers (Vercel, localhost, LAN IP URL in web browsers): Show Landing Page first
+  const isNative = isCapacitorApp() || isElectronApp();
+  if (!isNative && view === 'landing') {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white font-medium">{t("Loading MS Billings...")}</div>}>
         <LandingPage 
@@ -2326,11 +2329,11 @@ function App() {
                       <div className="relative">
                         <input
                           type={showPin ? "text" : "password"}
-                          maxLength="10"
+                          maxLength={4}
                           placeholder="• • • •"
                           value={pinInput}
                           onChange={(e) => {
-                            setPinInput(e.target.value);
+                            setPinInput(e.target.value.replace(/\D/g, '').slice(0, 4));
                             setPinError(false);
                           }}
                           className={`w-full text-center tracking-[0.5em] text-2xl font-bold py-4 bg-background border-2 rounded-2xl focus:outline-none transition-all ${pinError ? 'border-danger bg-danger/5 text-danger' : 'border-border focus:border-primary focus:ring-4 focus:ring-primary/10'}`
