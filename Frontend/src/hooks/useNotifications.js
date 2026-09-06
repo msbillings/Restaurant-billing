@@ -249,8 +249,13 @@ export const isNotificationForRole = (notification, role = 'Admin') => {
       title.includes('settle') ||
       title.includes('due') ||
       title.includes('cancel') ||
+      title.includes('order') ||
+      title.includes('kot') ||
+      title.includes('hold') ||
       msg.includes('pay the bill') ||
       notifType.includes('bill') ||
+      notifType.includes('order') ||
+      notifType.includes('kot') ||
       notifType.includes('cancel')
     ) {
       return true;
@@ -299,11 +304,45 @@ const isTargetCancelNotification = (n, criteria) => {
   return false;
 };
 
+// ── 3.5 SEMANTIC FINGERPRINT GENERATOR ──────────────────────────────────────
+// Prevents duplicate popups/toasts for identical operations across WebSockets and Polling
+export const getNotificationFingerprint = (n) => {
+  if (!n) return '';
+  const data = n.data || {};
+  const notifType = (data.type || n.type || '').toLowerCase();
+  const title = (n.title || '').toLowerCase().trim();
+  const message = (n.message || '').toLowerCase().trim();
+  const billNo = (data.billNumber || n.billNumber || '').toString().toLowerCase().trim();
+  const orderId = (data.orderId || n.orderId || '').toString().toLowerCase().trim();
+  const tableNo = (data.tableNo || n.tableNo || '').toString().toLowerCase().trim();
+
+  let actionKey = 'generic';
+  if (title.includes('settle') || notifType.includes('settle') || message.includes('settle')) {
+    actionKey = 'settle';
+  } else if (title.includes('print') || notifType.includes('print') || title.includes('saved & printed')) {
+    actionKey = 'print';
+  } else if (title.includes('kot') || notifType.includes('kot')) {
+    actionKey = 'kot';
+  } else if (title.includes('cancel') || notifType.includes('cancel')) {
+    actionKey = `cancel_${data.itemId || ''}`;
+  } else if (title.includes('order') || notifType.includes('order')) {
+    actionKey = 'order';
+  } else if (title.includes('water') || title.includes('waiter') || notifType.includes('service')) {
+    actionKey = 'service';
+  }
+
+  if (billNo) return `${actionKey}::bill_${billNo}`;
+  if (orderId && orderId !== 'undefined') return `${actionKey}::order_${orderId}`;
+  if (tableNo) return `${actionKey}::table_${tableNo}`;
+  return `${actionKey}::${title}::${message}`;
+};
+
 // ── 4. MAIN USE_NOTIFICATIONS HOOK ──────────────────────────────────────────
 const useNotifications = (userRole = 'Admin') => {
   const getTenantKey = () => localStorage.getItem('resto_db_name') || 'default';
   const roleKey = (userRole || 'Admin').toLowerCase();
   const knownNotifIdsRef = useRef(new Set());
+  const recentFingerprintsRef = useRef(new Map()); // fp -> timestamp
   const isInitialLoadDoneRef = useRef(false);
 
   const [notifications, setNotifications] = useState(() => {
@@ -457,14 +496,24 @@ const useNotifications = (userRole = 'Admin') => {
         if (isBackgroundPoll && isInitialLoadDoneRef.current) {
           roleFiltered.forEach(n => {
             const notifId = String(n.id || n._id || '');
-            if (notifId && !knownNotifIdsRef.current.has(notifId)) {
-              knownNotifIdsRef.current.add(notifId);
+            const fp = getNotificationFingerprint(n);
+            const isSeenId = notifId && knownNotifIdsRef.current.has(notifId);
+            const isSeenFp = fp && recentFingerprintsRef.current.has(fp);
+
+            if (!isSeenId && !isSeenFp) {
+              if (notifId) knownNotifIdsRef.current.add(notifId);
+              if (fp) recentFingerprintsRef.current.set(fp, now);
               const notifTime = new Date(n.time || n.timestamp || n.createdAt || now).getTime();
               // If notification was created recently, trigger chime & native push
               if (now - notifTime <= freshWindow) {
                 hasNewIncoming = true;
                 triggerNativeNotification(n);
               }
+            } else {
+              // Ensure known tracking sets hold both forms
+              if (notifId) knownNotifIdsRef.current.add(notifId);
+              if (n._id) knownNotifIdsRef.current.add(String(n._id));
+              if (fp) recentFingerprintsRef.current.set(fp, now);
             }
           });
 
@@ -474,9 +523,12 @@ const useNotifications = (userRole = 'Admin') => {
             window.dispatchEvent(new CustomEvent('refreshFloorOrders'));
           }
         } else {
-          // Initial population of known IDs
+          // Initial population of known IDs and fingerprints
           roleFiltered.forEach(n => {
-            if (n.id) knownNotifIdsRef.current.add(String(n.id));
+            const notifId = String(n.id || n._id || '');
+            if (notifId) knownNotifIdsRef.current.add(notifId);
+            const fp = getNotificationFingerprint(n);
+            if (fp) recentFingerprintsRef.current.set(fp, now);
           });
           isInitialLoadDoneRef.current = true;
         }
@@ -494,40 +546,27 @@ const useNotifications = (userRole = 'Admin') => {
           clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
         } catch (e) { }
 
-        const visibleItems = roleFiltered.filter(n => !clearedIds.has(String(n.id)));
+        const visibleItems = roleFiltered.filter(n => !clearedIds.has(String(n.id || n._id)));
 
         setNotifications(prev => {
-          const newMap = new Set();
-          const seenSemantic = new Set();
-          const seenCancelReqs = new Set();
-
-          const getKey = (n) => {
-            const id = String(n.id || '');
-            const titleMsg = `${n.title || ''}::${n.message || ''}`;
-            const timeBucket = Math.floor(new Date(n.time || n.timestamp || 0).getTime() / 5000);
-            return { id, semantic: `${titleMsg}::${timeBucket}` };
-          };
-
+          const seenIds = new Set();
+          const seenFps = new Set();
           const allItems = [...visibleItems, ...prev];
           const deduplicated = [];
 
           allItems.forEach(n => {
             if (!isNotificationForRole(n, userRole)) return;
-            if (clearedIds.has(String(n.id))) return;
-            const { id, semantic } = getKey(n);
-            if (id && newMap.has(id)) return;
-            if (seenSemantic.has(semantic)) return;
+            const notifId = String(n.id || n._id || '');
+            if (clearedIds.has(notifId)) return;
+            if (notifId && seenIds.has(notifId)) return;
 
-            // Extra deduplication for cancel requests: never show duplicate cancel requests for the same item
-            const isCancel = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
-            if (isCancel) {
-              const cancelKey = `cancel_${n.data?.orderId || ''}_${n.data?.itemId || ''}_${(n.message || '').toLowerCase().trim()}`;
-              if (seenCancelReqs.has(cancelKey)) return;
-              seenCancelReqs.add(cancelKey);
-            }
+            const fp = getNotificationFingerprint(n);
+            const timeBucket = Math.floor(new Date(n.time || n.timestamp || 0).getTime() / 10000);
+            const timeBoundFp = `${fp}::${timeBucket}`;
+            if (seenFps.has(timeBoundFp)) return;
 
-            if (id) newMap.add(id);
-            seenSemantic.add(semantic);
+            if (notifId) seenIds.add(notifId);
+            seenFps.add(timeBoundFp);
             deduplicated.push(n);
           });
 
@@ -538,7 +577,7 @@ const useNotifications = (userRole = 'Admin') => {
           });
 
           // Calculate role-accurate unread count from all role notifications
-          const unreadItems = merged.filter(n => !readIds.has(String(n.id)));
+          const unreadItems = merged.filter(n => !readIds.has(String(n.id || n._id)));
           setUnreadCount(unreadItems.length);
 
           return merged;
@@ -573,15 +612,16 @@ const useNotifications = (userRole = 'Admin') => {
     };
     window.addEventListener('loginSuccess', handleLogin);
 
-    // 4. Universal Real-Time Polling Engine (Every 4 seconds)
-    // Ensures digital menu cloud orders immediately trigger chimes, table refreshes,
-    // and Windows OS toasts on .exe, .apk, and Web without relying solely on local sockets.
+    // 4. Universal Real-Time Polling Engine (Every 30 seconds — reduced from 4s)
+    // Socket.io handles real-time events instantly (new_notification, orderUpdated, etc.)
+    // This poll is a safety net only — do NOT run it so frequently that it saturates
+    // the browser's 6-connection HTTP pool and delays actual user actions like Save/KOT/Settle.
     const pollInterval = setInterval(() => {
       const currentToken = localStorage.getItem('accessToken') || localStorage.getItem('user');
       if (currentToken) {
         fetchActiveNotifications(true);
       }
-    }, 4000);
+    }, 30000);  // ⚡ 30s — was 4s (socket handles real-time, poll is backup only)
 
     // 5. Visibility / Window Focus listener
     const handleVisibilityChange = () => {
@@ -632,6 +672,32 @@ const useNotifications = (userRole = 'Admin') => {
         return;
       }
 
+      const notifId = String(notification.id || notification._id || '');
+      if (notifId && knownNotifIdsRef.current.has(notifId)) {
+        return;
+      }
+
+      // 3. Semantic Fingerprint Deduplication (10-second sliding window)
+      const now = Date.now();
+      const fp = getNotificationFingerprint(notification);
+      if (fp && recentFingerprintsRef.current.has(fp)) {
+        const lastSeen = recentFingerprintsRef.current.get(fp);
+        if (now - lastSeen < 10000) {
+          console.log(`[useNotifications] 🛡️ Suppressed duplicate notification within 10s: [${fp}] "${notification.title}"`);
+          if (notifId) knownNotifIdsRef.current.add(notifId);
+          return;
+        }
+      }
+
+      // Record this notification immediately
+      if (fp) recentFingerprintsRef.current.set(fp, now);
+      if (notifId) knownNotifIdsRef.current.add(notifId);
+
+      // Clean up stale fingerprints (> 60s)
+      for (const [k, v] of recentFingerprintsRef.current.entries()) {
+        if (now - v > 60000) recentFingerprintsRef.current.delete(k);
+      }
+
       // Check if already cleared
       const tenantKey = getTenantKey();
       const clearedKey = `realtime_cleared_ids_${tenantKey}_${roleKey}`;
@@ -639,17 +705,13 @@ const useNotifications = (userRole = 'Admin') => {
       try {
         clearedIds = new Set(JSON.parse(localStorage.getItem(clearedKey) || '[]'));
       } catch (e) { }
-      if (notification.id && clearedIds.has(String(notification.id))) return;
+      if (notifId && clearedIds.has(notifId)) return;
 
-      const notifId = String(notification.id || '');
-      if (notifId) knownNotifIdsRef.current.add(notifId);
-
-      let isDuplicate = false;
-
+      // Update notifications state
       setNotifications((prev) => {
         let updatedList = prev;
 
-        // If this new notification is a withdrawal notification, immediately remove previous cancel request notifications!
+        // If withdrawal notice, remove target cancel request
         const isWithdrawnNotice = notification.data?.type === 'cancel_item_withdrawn' || (notification.title && notification.title.includes('Cancel Withdrawn'));
         if (isWithdrawnNotice) {
           const criteria = {
@@ -661,36 +723,18 @@ const useNotifications = (userRole = 'Admin') => {
           updatedList = updatedList.filter(n => !isTargetCancelNotification(n, criteria));
         }
 
-        // Deduplicate: Don't add if we already have this notification ID or same message within 5 seconds
-        isDuplicate = updatedList.some(n => {
-          if (String(n.id) === String(notification.id)) return true;
-          if (n.title === notification.title && n.message === notification.message) {
-            const timeDiff = Math.abs(new Date(n.time || n.timestamp || 0) - new Date(notification.time || notification.timestamp || 0));
-            if (timeDiff < 5000) return true;
-          }
-          // If cancel request for the same item/order already exists, ignore duplicate
-          const isThisCancel = notification.data?.type === 'cancel_item_request' || (notification.title && notification.title.includes('Cancel Req'));
-          const isExistingCancel = n.data?.type === 'cancel_item_request' || (n.title && n.title.includes('Cancel Req'));
-          if (isThisCancel && isExistingCancel) {
-            if (
-              (notification.data?.itemId && n.data?.itemId && String(notification.data.itemId) === String(n.data.itemId)) ||
-              (notification.message && n.message && notification.message.trim().toLowerCase() === n.message.trim().toLowerCase())
-            ) {
-              return true;
-            }
-          }
-          return false;
-        });
+        // Avoid duplicate in list
+        if (updatedList.some(n => String(n.id || n._id) === notifId)) {
+          return updatedList;
+        }
 
-        if (isDuplicate) return updatedList;
         return [notification, ...updatedList];
       });
 
-      if (!isDuplicate) {
-        setUnreadCount((prev) => prev + 1);
-        playNotificationSound();
-        triggerNativeNotification(notification);
-      }
+      // Synchronously and deterministically trigger sound, native push, and badge
+      setUnreadCount((prev) => prev + 1);
+      playNotificationSound();
+      triggerNativeNotification(notification);
     };
 
     const recordDismissedIds = (removedIds = []) => {

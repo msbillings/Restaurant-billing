@@ -108,21 +108,43 @@ export const apiTransferTable = async (id, newTableNo) => {
   return response.data;
 };
 
-export const getOpenOrders = async () => {
-  try {
-    const response = await api.get('/bills/open');
-    if (response.data && Array.isArray(response.data)) {
-      cacheOpenOrders(response.data).catch(() => {});
-    }
-    return response.data;
-  } catch (err) {
-    if (isTrulyOffline()) {
-      console.log('[Billing API] Offline - retrieving cached open orders');
-      const cached = await getCachedOpenOrders();
-      return cached || [];
-    }
-    throw err;
+let openOrdersInFlight = null;
+let lastOpenOrdersTime = 0;
+let cachedOpenOrdersData = null;
+
+export const getOpenOrders = async (force = false) => {
+  const now = Date.now();
+  // Return cached result if called within 1200ms (absorbs duplicate bursts from multiple components)
+  if (!force && cachedOpenOrdersData && (now - lastOpenOrdersTime < 1200)) {
+    return cachedOpenOrdersData;
   }
+  // If an identical request is already traveling across the network, share the same Promise!
+  if (openOrdersInFlight) {
+    return openOrdersInFlight;
+  }
+
+  openOrdersInFlight = (async () => {
+    try {
+      const response = await api.get('/bills/open');
+      cachedOpenOrdersData = response.data;
+      lastOpenOrdersTime = Date.now();
+      if (response.data && Array.isArray(response.data)) {
+        cacheOpenOrders(response.data).catch(() => {});
+      }
+      return response.data;
+    } catch (err) {
+      if (isTrulyOffline()) {
+        console.log('[Billing API] Offline - retrieving cached open orders');
+        const cached = await getCachedOpenOrders();
+        return cached || [];
+      }
+      throw err;
+    } finally {
+      openOrdersInFlight = null;
+    }
+  })();
+
+  return openOrdersInFlight;
 };
 
 export const getBills = async (pageOrOptions = 1, limit = 50, search = '', billType = '', excludeBillType = '', orderSource = '') => {
@@ -204,12 +226,37 @@ export const deleteBill = async (id, password) => {
   return response.data;
 };
 
-export const getDailyStats = async (startDate, endDate) => {
-  const params = {};
-  if (startDate) params.startDate = startDate;
-  if (endDate) params.endDate = endDate;
-  const response = await api.get('/bills/stats', { params });
-  return response.data;
+let dailyStatsInFlight = null;
+let lastDailyStatsKey = '';
+let lastDailyStatsData = null;
+let lastDailyStatsTime = 0;
+
+export const getDailyStats = async (startDate, endDate, force = false) => {
+  const key = `${startDate || ''}_${endDate || ''}`;
+  const now = Date.now();
+  if (!force && lastDailyStatsKey === key && lastDailyStatsData && (now - lastDailyStatsTime < 2000)) {
+    return lastDailyStatsData;
+  }
+  if (dailyStatsInFlight && lastDailyStatsKey === key) {
+    return dailyStatsInFlight;
+  }
+
+  lastDailyStatsKey = key;
+  dailyStatsInFlight = (async () => {
+    try {
+      const params = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const response = await api.get('/bills/stats', { params });
+      lastDailyStatsData = response.data;
+      lastDailyStatsTime = Date.now();
+      return response.data;
+    } finally {
+      dailyStatsInFlight = null;
+    }
+  })();
+
+  return dailyStatsInFlight;
 };
 
 export const apiGenerateKOT = async (id, cartItems, tableNo) => {

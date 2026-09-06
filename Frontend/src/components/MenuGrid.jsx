@@ -393,10 +393,12 @@ const MenuGrid = ({
       const remaining = urls.slice(30);
 
       const preload = (url) => {
+        if (!url || typeof url !== 'string' || loadedImageCache.has(url)) return;
         const img = new Image();
         img.decoding = 'async';
         img.src = url;
         img.onload = () => loadedImageCache.add(url);
+        img.onerror = () => loadedImageCache.add(url); // Cache failures so broken URLs do not lock TCP sockets
       };
 
       aboveFoldBatch.forEach(preload);

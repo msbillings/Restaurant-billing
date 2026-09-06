@@ -69,98 +69,117 @@ const triggerNativeBroadcastNotification = async (b) => {
   }
 };
 
+// Module-level shared singleton cache across all component instances (App, GlobalHeader, NotificationCenter)
+let sharedBroadcastsCache = null;
+let sharedBroadcastsCacheTime = 0;
+let inFlightBroadcastsPromise = null;
+const broadcastListeners = new Set();
+
 const useBroadcasts = (userRole) => {
-  const [broadcasts, setBroadcasts] = useState([]);
+  const [broadcasts, setBroadcasts] = useState(() => sharedBroadcastsCache || []);
   const [unreadCount, setUnreadCount] = useState(0);
   const isInitialLoadDoneRef = useRef(false);
 
-  const fetchBroadcasts = async (isBackgroundSync = false) => {
-    try {
-      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
+  useEffect(() => {
+    const handleUpdate = (data) => {
+      if (Array.isArray(data)) {
+        const clearedIds = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
+        const visible = data.filter(b => !clearedIds.includes(b._id));
+        setBroadcasts(visible);
 
-      const SUPERADMIN_API_URL = getSuperadminApiUrl();
-
-      let response;
-      try {
-        // 1. Primary: Direct query through POS Backend API (with auth headers automatically included)
-        response = await api.get('/broadcasts', {
-          params: { role: userRole || 'Admin', tenant: tenantDb }
-        });
-      } catch (err) {
+        let readBroadcasts = [];
         try {
-          // 2. Fallback: SuperAdmin API public endpoint
-          response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb || 'default'}`, {
-            params: { role: userRole || 'Admin' }
+          readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
+        } catch (e) {
+          readBroadcasts = [];
+        }
+        setUnreadCount(visible.filter(b => Array.isArray(readBroadcasts) && !readBroadcasts.includes(b._id)).length);
+      }
+    };
+
+    broadcastListeners.add(handleUpdate);
+    if (sharedBroadcastsCache) {
+      handleUpdate(sharedBroadcastsCache);
+    }
+
+    return () => {
+      broadcastListeners.delete(handleUpdate);
+    };
+  }, []);
+
+  const fetchBroadcasts = async (isBackgroundSync = false) => {
+    const now = Date.now();
+    // Use fresh cached data if available within 60s
+    if (!isBackgroundSync && sharedBroadcastsCache && (now - sharedBroadcastsCacheTime < 60000)) {
+      return sharedBroadcastsCache;
+    }
+
+    // Reuse in-flight promise if a request is already running
+    if (inFlightBroadcastsPromise) {
+      return inFlightBroadcastsPromise;
+    }
+
+    inFlightBroadcastsPromise = (async () => {
+      try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
+        const SUPERADMIN_API_URL = getSuperadminApiUrl();
+
+        let response;
+        try {
+          response = await api.get('/broadcasts', {
+            params: { role: userRole || 'Admin', tenant: tenantDb }
           });
-        } catch (err2) {
+        } catch (err) {
           try {
-            response = await axios.get(`${SUPERADMIN_API_URL}/api/broadcasts/client/${tenantDb || 'default'}`, {
+            response = await axios.get(`${SUPERADMIN_API_URL}/api/clients/broadcasts/${tenantDb || 'default'}`, {
               params: { role: userRole || 'Admin' }
             });
-          } catch (err3) {
-            console.warn('[useBroadcasts] Could not fetch broadcasts from any endpoint');
-            return;
+          } catch (err2) {
+            return [];
           }
         }
-      }
 
-      const fetchedBroadcasts = Array.isArray(response.data) ? response.data : [];
-      const clearedIds = JSON.parse(localStorage.getItem('cleared_broadcasts') || '[]');
-      const visibleBroadcasts = fetchedBroadcasts.filter(b => !clearedIds.includes(b._id));
-      setBroadcasts(visibleBroadcasts);
+        const fetchedBroadcasts = Array.isArray(response?.data) ? response.data : [];
+        sharedBroadcastsCache = fetchedBroadcasts;
+        sharedBroadcastsCacheTime = Date.now();
 
-      const now = Date.now();
-      const freshWindow = 2 * 60 * 60 * 1000; // 2 hours window for fresh announcements
+        // Notify all mounted components simultaneously
+        broadcastListeners.forEach(fn => fn(fetchedBroadcasts));
 
-      // If this is the initial load (or user is not yet logged in), mark all existing historical broadcasts as seen WITHOUT firing push notifications
-      if (!isInitialLoadDoneRef.current || !token) {
-        visibleBroadcasts.forEach(b => {
-          const bId = String(b._id || b.id || '');
-          if (!bId) return;
-          const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
-          const legacyNotifiedKey = `notified_native_broadcast_${bId}`;
-          localStorage.setItem(notifiedKey, 'true');
-          localStorage.setItem(legacyNotifiedKey, 'true');
-        });
-        if (token) {
-          isInitialLoadDoneRef.current = true;
-        }
-      } else if (isBackgroundSync) {
-        // On background sync when user is actively logged in, notify ONLY genuinely new incoming broadcasts
-        visibleBroadcasts.forEach(b => {
-          const bId = String(b._id || b.id || '');
-          if (!bId) return;
-          const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
-          const legacyNotifiedKey = `notified_native_broadcast_${bId}`;
-          const hasBeenNotified = localStorage.getItem(notifiedKey) || localStorage.getItem(legacyNotifiedKey);
-
-          if (!hasBeenNotified) {
-            localStorage.setItem(notifiedKey, 'true');
-            localStorage.setItem(legacyNotifiedKey, 'true');
-
-            // Only trigger push notification if broadcast is recently created
-            const createdAtTime = new Date(b.createdAt || b.date || b.timestamp || now).getTime();
-            if (now - createdAtTime <= freshWindow) {
-              triggerNativeBroadcastNotification(b);
+        const freshWindow = 2 * 60 * 60 * 1000;
+        if (!isInitialLoadDoneRef.current || !token) {
+          fetchedBroadcasts.forEach(b => {
+            const bId = String(b._id || b.id || '');
+            if (!bId) return;
+            localStorage.setItem(`notified_native_broadcast_${bId}_${tenantDb}`, 'true');
+          });
+          if (token) isInitialLoadDoneRef.current = true;
+        } else if (isBackgroundSync) {
+          fetchedBroadcasts.forEach(b => {
+            const bId = String(b._id || b.id || '');
+            if (!bId) return;
+            const notifiedKey = `notified_native_broadcast_${bId}_${tenantDb}`;
+            if (!localStorage.getItem(notifiedKey)) {
+              localStorage.setItem(notifiedKey, 'true');
+              const createdAtTime = new Date(b.createdAt || b.date || b.timestamp || now).getTime();
+              if (now - createdAtTime <= freshWindow) {
+                triggerNativeBroadcastNotification(b);
+              }
             }
-          }
-        });
-      }
+          });
+        }
 
-      // Calculate unread count using localStorage to track read IDs
-      let readBroadcasts = [];
-      try {
-        readBroadcasts = JSON.parse(localStorage.getItem('read_broadcasts') || '[]');
-      } catch (e) {
-        readBroadcasts = [];
+        return fetchedBroadcasts;
+      } catch (error) {
+        console.error('Error fetching broadcasts:', error);
+        return [];
+      } finally {
+        inFlightBroadcastsPromise = null;
       }
-      const unread = visibleBroadcasts.filter(b => Array.isArray(readBroadcasts) && !readBroadcasts.includes(b._id)).length;
-      setUnreadCount(unread);
+    })();
 
-    } catch (error) {
-      console.error('Error fetching broadcasts:', error);
-    }
+    return inFlightBroadcastsPromise;
   };
 
   const markAsRead = (broadcastId) => {
@@ -173,7 +192,6 @@ const useBroadcasts = (userRole) => {
     if (Array.isArray(readBroadcasts) && !readBroadcasts.includes(broadcastId)) {
       readBroadcasts.push(broadcastId);
       localStorage.setItem('read_broadcasts', JSON.stringify(readBroadcasts));
-      // Update local state without re-fetching
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
   };
@@ -204,27 +222,16 @@ const useBroadcasts = (userRole) => {
   };
 
   useEffect(() => {
-    // 1. Initial immediate fetch (do not fire push notifications for old historical broadcasts)
+    // Initial fetch (reuses shared cache if another component already fetched)
     fetchBroadcasts(false);
 
-    // 2. High-speed 10-second background sync for near-instant broadcast delivery
+    // Polite background sync (60s)
     const interval = setInterval(() => {
       fetchBroadcasts(true);
-    }, 10000);
-
-    // 3. Instant refresh on tab visibility / window focus
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchBroadcasts(true);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', () => fetchBroadcasts(true));
+    }, 60000);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', () => fetchBroadcasts(true));
     };
   }, [userRole]);
 

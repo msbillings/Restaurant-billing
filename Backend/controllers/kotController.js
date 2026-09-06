@@ -353,7 +353,11 @@ export const generateKOT = async (req, res) => {
       });
       
       const notifTitle = isUpdate ? (reducedItems.length > 0 ? 'Item Quantity Reduced' : 'KOT Quantity Updated') : 'New KOT Fired';
-      emitNotification(req, notifTitle, dynamicMessage, isUpdate ? 'warning' : 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+      emitNotification(req, notifTitle, dynamicMessage, isUpdate ? 'warning' : 'info', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], {
+        tableNo: bill.tableNo,
+        orderId: bill._id,
+        type: 'kot_fired'
+      });
 
       // Trigger physical network thermal printing to configured IP printers
       printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems, queueNumber).catch(err => {
@@ -367,7 +371,11 @@ export const generateKOT = async (req, res) => {
         changes: itemChanges,
         message: dynamicMessage 
       });
-      emitNotification(req, hadQuantityReductions ? 'Item Quantity Reduced' : 'KOT Note Updated', dynamicMessage, 'warning', ['Chef', 'Manager', 'Admin', 'Captain']);
+      emitNotification(req, hadQuantityReductions ? 'Item Quantity Reduced' : 'KOT Note Updated', dynamicMessage, 'warning', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], {
+        tableNo: bill.tableNo,
+        orderId: bill._id,
+        type: 'kot_updated'
+      });
       
       if (kotItems.length > 0) {
         // There were note updates to print, but no new KOT saved to DB

@@ -57,7 +57,7 @@ class RealtimeService {
 
     // 1. Connection & Tenant Joining
     const joinTenant = () => {
-      const tenantDb = localStorage.getItem('resto_db_name');
+      const tenantDb = this.getTenantDb();
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       if (tenantDb && this.socket) {
         console.log(`[RealtimeService] Joining tenant room: ${tenantDb}`);
@@ -170,12 +170,23 @@ class RealtimeService {
    * Re-join tenant room (e.g. after login or tenant switch)
    */
   rejoinTenant() {
-    const tenantDb = localStorage.getItem('resto_db_name');
+    const tenantDb = this.getTenantDb();
     const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     if (this.socket && this.socket.connected && tenantDb) {
       console.log(`[RealtimeService] Rejoining tenant room: ${tenantDb}`);
       this.socket.emit('joinTenant', { tenantDb, token });
     }
+  }
+
+  getTenantDb() {
+    let t = localStorage.getItem('resto_db_name') || localStorage.getItem('tenantDb');
+    if (!t) {
+      try {
+        const userObj = JSON.parse(localStorage.getItem('user') || '{}');
+        t = userObj.db || userObj.tenantDb;
+      } catch (e) {}
+    }
+    return t || 'default';
   }
 
   /**
@@ -228,6 +239,33 @@ class RealtimeService {
   broadcastLocal(event, data) {
     this.dispatchInternal(event, data);
     window.dispatchEvent(new CustomEvent(`realtime:${event}`, { detail: data }));
+  }
+
+  /**
+   * ⚡ INSTANT NOTIFICATION (0ms local + <10ms WebSocket broadcast)
+   * Dispatches immediately on local terminal for zero delay, and transmits
+   * over persistent WebSocket to all other tablets / KDS / screens.
+   */
+  broadcastNotification(notification) {
+    if (!notification) return;
+    const tenantDb = this.getTenantDb();
+    const notifPayload = {
+      id: notification.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      title: notification.title || 'Notification',
+      message: notification.message || '',
+      time: notification.time || new Date().toISOString(),
+      timestamp: notification.timestamp || new Date(),
+      type: notification.type || 'info',
+      targetRoles: notification.targetRoles || ['Admin', 'Manager', 'Cashier', 'Captain', 'Chef'],
+      tenantDb: notification.tenantDb || tenantDb,
+      data: notification.data || {}
+    };
+
+    // 1. Instant local display on this device (0ms)
+    this.broadcastLocal('new_notification', notifPayload);
+
+    // 2. Real-time broadcast to all other connected devices (<10ms)
+    this.emit('clientNotification', notifPayload);
   }
 
   /**

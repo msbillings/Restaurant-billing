@@ -10,6 +10,7 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { clearPublicMenuCache } from '../routes/publicRoutes.js';
 import cache from '../utils/cache.js';
+import { invalidateSnapshotCache } from './orderController.js';
 
 export let isSettingUpDB = false;
 
@@ -274,6 +275,8 @@ export const updateRestaurantInfo = async (req, res) => {
         const cacheKey = cache.getCacheKey('restaurantSettings', req.shopName || 'default');
         cache.set(cacheKey, mergedSettings, 60000);
         clearPublicMenuCache(req.tenantDb || req.headers?.['x-tenant-db']);
+        // ⚡ Evict the full-snapshot module cache so the next save/KOT/settle picks up the new settings immediately
+        invalidateSnapshotCache(req.tenantDb || req.headers?.['x-tenant-db'] || req.user?.db);
       } catch (e) { }
     }
 

@@ -17,6 +17,21 @@ import { syncOrderKotsWithItems } from './kotController.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
 
+// ⚡ Module-level snapshot cache: stores the fully-constructed restaurant details object
+// per tenant for 5 minutes. Eliminates repeated DB queries AND repeated object construction
+// on every save / KOT / generateBill / settle call.
+const SNAPSHOT_FULL_CACHE = new Map(); // tenantDb → { snapshot, expiry }
+const SNAPSHOT_FULL_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Call this whenever restaurant settings are updated so stale snapshots are evicted immediately.
+export const invalidateSnapshotCache = (tenantDb) => {
+  if (tenantDb) {
+    SNAPSHOT_FULL_CACHE.delete(tenantDb);
+  } else {
+    SNAPSHOT_FULL_CACHE.clear();
+  }
+};
+
 const toValidObjectId = (val) => {
   if (!val) return undefined;
   const s = String(val).trim();
@@ -27,36 +42,65 @@ const toValidObjectId = (val) => {
 };
 
 export const generateUniqueBillNumber = async (BillModel) => {
-  const recentBills = await BillModel.find(
-    { billNumber: /^MS\d+$/ },
-    { billNumber: 1 }
-  )
-    .sort({ billNumber: -1, createdAt: -1 })
-    .limit(50)
-    .lean();
+  try {
+    const [latestCreated, latestLexical] = await Promise.all([
+      BillModel.find(
+        { billNumber: { $exists: true, $ne: null } },
+        { billNumber: 1 }
+      )
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean()
+        .catch(() => []),
+      BillModel.find(
+        { billNumber: /^ms\d+$/i },
+        { billNumber: 1 }
+      )
+        .sort({ billNumber: -1 })
+        .limit(50)
+        .lean()
+        .catch(() => [])
+    ]);
 
-  let maxNum = 0;
-  if (recentBills && recentBills.length > 0) {
-    for (const b of recentBills) {
-      if (b.billNumber) {
-        const num = parseInt(b.billNumber.replace(/\D/g, ''), 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
+    const candidateBills = [...(latestCreated || []), ...(latestLexical || [])];
+    let maxNum = 0;
+    for (const b of candidateBills) {
+      if (b && b.billNumber) {
+        const digits = String(b.billNumber).replace(/\D/g, '');
+        if (digits) {
+          const num = parseInt(digits, 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
         }
       }
     }
-  }
 
-  return `MS${(maxNum + 1).toString().padStart(4, '0')}`;
+    return `MS${(maxNum + 1).toString().padStart(4, '0')}`;
+  } catch (err) {
+    console.error('Error in generateUniqueBillNumber:', err);
+    return `MS${Date.now().toString().slice(-4)}`;
+  }
 };
 
 export const getRestaurantSnapshot = async (req, clientDetails) => {
   try {
-    let settings = null;
     const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || req?.user?.db || 'default';
-    const cacheKey = cache.getCacheKey('restaurantSettings', tenantDb);
 
-    // 0ms Cache Fast Path: Try reading from Node memory first
+    // ⚡ FAST PATH: If the caller did NOT pass overriding clientDetails, return cached full snapshot
+    // clientDetails overrides (from the request body) must bypass the cache because they carry
+    // per-bill customisations (logo, UPI, etc.) that differ from stored settings.
+    const hasClientOverrides = clientDetails && typeof clientDetails === 'object' && Object.keys(clientDetails).length > 0;
+    if (!hasClientOverrides) {
+      const cached = SNAPSHOT_FULL_CACHE.get(tenantDb);
+      if (cached && Date.now() < cached.expiry) {
+        return cached.snapshot; // ← 0ms memory lookup, skips ALL DB access
+      }
+    }
+
+    // CACHE MISS: Fetch raw settings from DB (uses existing 30s cache.get layer first)
+    let settings = null;
+    const cacheKey = cache.getCacheKey('restaurantSettings', tenantDb);
     settings = cache.get(cacheKey);
 
     if (!settings) {
@@ -65,7 +109,7 @@ export const getRestaurantSnapshot = async (req, clientDetails) => {
         const doc = await Setting.findOne({ key: 'restaurantSettings' }).maxTimeMS(300).lean().catch(() => null);
         if (doc && doc.value) {
           settings = typeof doc.value === 'string' ? JSON.parse(doc.value) : doc.value;
-          cache.set(cacheKey, settings, 5 * 60 * 1000); // Cache for 5 minutes
+          cache.set(cacheKey, settings, 5 * 60 * 1000); // Cache raw settings for 5 minutes
         }
       }
     }
@@ -96,7 +140,7 @@ export const getRestaurantSnapshot = async (req, clientDetails) => {
       gstRate: c.gstRate !== undefined ? Number(c.gstRate) : (s.gstRate !== undefined ? Number(s.gstRate) : 5)
     };
 
-    return {
+    const snapshot = {
       restaurantName: name,
       restaurantType: type,
       address: addr,
@@ -104,7 +148,7 @@ export const getRestaurantSnapshot = async (req, clientDetails) => {
       email: em,
       gstin: gst,
       fssai: fss,
-      logo: logo,
+      logo: (logo && logo.length > 500) ? '[logo_stored]' : logo,
       upiId: upi,
       enableQrPayment: enableQr,
       footerMessage: footer,
@@ -112,6 +156,14 @@ export const getRestaurantSnapshot = async (req, clientDetails) => {
       printFormat: printFmt,
       taxSettings: taxSet
     };
+
+    // Store the fully-constructed snapshot in the module-level cache (5 min TTL)
+    // Only cache when there are no per-request client overrides (those are bill-specific)
+    if (!hasClientOverrides) {
+      SNAPSHOT_FULL_CACHE.set(tenantDb, { snapshot, expiry: Date.now() + SNAPSHOT_FULL_TTL });
+    }
+
+    return snapshot;
   } catch (err) {
     console.error('[getRestaurantSnapshot] Error capturing snapshot:', err);
     return clientDetails || {};
@@ -714,9 +766,9 @@ export const saveOrder = async (req, res) => {
 
     if (!req.body.skipNotification) {
       if (id) {
-        emitNotification(req, 'Order Updated', `Order for Table ${tableNo} was updated`, 'info', ['Chef', 'Manager', 'Admin', 'Captain']);
+        emitNotification(req, 'Order Updated', `Order for Table ${tableNo} was updated`, 'info', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type: 'order_updated' });
       } else {
-        emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+        emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type: 'new_order' });
       }
     }
 
@@ -743,7 +795,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails } = req.body;
+    const { items, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, billType } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -756,8 +808,28 @@ export const generateBill = async (req, res) => {
         status: { $in: ['Open', 'Billed'] }
       });
     }
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    // Single-shot flow: If order doesn't exist yet in DB, create it directly in generateBill!
+    if (!order) {
+      const targetTable = req.body.tableNo || req.query.tableNo;
+      if (!targetTable) return res.status(404).json({ message: 'Order not found' });
+      const restSnapshot = await getRestaurantSnapshot(req, restaurantDetails);
+      order = new Bill({
+        tableNo: targetTable,
+        items: items || [],
+        billType: billType || 'Dine-In',
+        restaurantDetails: restSnapshot,
+        status: 'Open'
+      });
+    }
+
     if (order.status === 'Paid') return res.status(400).json({ message: 'Audit Security: Cannot modify an already paid and settled bill' });
+
+    // Update items directly if sent in request (avoids redundant saveOrder round-trip!)
+    if (items && Array.isArray(items) && items.length > 0) {
+      order.items = items;
+      order.markModified('items');
+    }
 
     if (!order.billedAt) {
       order.billedAt = new Date();
@@ -908,7 +980,7 @@ export const generateBill = async (req, res) => {
 
     emitSocketEvent(req, 'orderUpdated', { tableNo: order.tableNo, status: 'Billed', order });
     if (!isExistingBilled) {
-      emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain']);
+      emitNotification(req, 'Bill Saved & Printed', `Bill #${billNumber} saved and printed for Table ${order.tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, billNumber, tableNo: order.tableNo, type: 'bill_printed' });
     }
 
     // Update Floor/Table status in DB in background
@@ -1128,7 +1200,7 @@ export const settleBill = async (req, res) => {
       notifTitle,
       notifMessage,
       'success',
-      ['Admin', 'Manager', 'Cashier', 'Captain'],
+      ['Admin', 'Manager', 'Cashier', 'Captain', 'Chef'],
       {
         orderId: order._id,
         billNumber: order.billNumber,
@@ -1164,12 +1236,12 @@ export const settleBill = async (req, res) => {
 export const getOpenOrders = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    // Cache checking disabled for real-time floor updates
-    // const cacheKey = cache.getCacheKey('openOrders');
-    // const cached = cache.get(cacheKey);
-    // if (cached) {
-    //   return res.json(cached);
-    // }
+    const tenantDb = req.tenantDb || req.headers?.['x-tenant-db'] || 'default';
+    const cacheKey = `openOrders_${tenantDb}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
 
     const orders = await Bill.find({
       status: { $in: ['Open', 'Billed'] }
@@ -1209,6 +1281,7 @@ export const getOpenOrders = async (req, res) => {
         };
       });
 
+    cache.set(`openOrders_${req.tenantDb || req.headers?.['x-tenant-db'] || 'default'}`, formattedOrders, 3); // 3s short TTL to absorb burst calls
     res.json(formattedOrders);
   } catch (error) {
     console.error('Error fetching open orders:', error);
@@ -1266,7 +1339,18 @@ export const cancelOrder = async (req, res) => {
     }
     await bill.save();
 
-    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Cancelled' });
+    cache.clear('dailyStats');
+    cache.clear('openOrders');
+
+    emitSocketEvent(req, 'orderUpdated', { tableNo: bill.tableNo, status: 'Cancelled', order: bill });
+    emitNotification(
+      req,
+      'Order Cancelled',
+      `Order for Table ${bill.tableNo} was cancelled${cancelReason ? `: ${cancelReason}` : ''}`,
+      'error',
+      ['Admin', 'Manager', 'Cashier', 'Captain', 'Chef'],
+      { orderId: bill._id, tableNo: bill.tableNo, type: 'order_cancelled', cancelReason }
+    );
 
     // Free up the table in DB in background
     if (bill.billType === 'Dine-In') {

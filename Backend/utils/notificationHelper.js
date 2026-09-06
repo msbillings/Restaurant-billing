@@ -37,7 +37,8 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
     const tenantDb = getTenantDbFromReq(req);
 
     if (tenantDb && tenantDb !== 'undefined' && tenantDb !== 'null') {
-      const notifId = data.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const notifId = (data && data.id) ? data.id : `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const enrichedData = { ...(data || {}), id: notifId };
       const immediateNotification = {
         id: notifId,
         title,
@@ -46,7 +47,7 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
         type,
         targetRoles,
         tenantDb,
-        data
+        data: enrichedData
       };
 
       // ⚡ FAST-PATH: Broadcast immediately with 0ms delay to all connected sockets
@@ -68,9 +69,9 @@ export const emitNotification = (req, title, message, type = 'info', targetRoles
           title,
           message,
           targetRoles,
-          data
+          data: enrichedData
         }).then(savedDoc => {
-          sendFcmPushNotification(req, tenantDb, title, message, targetRoles, data);
+          sendFcmPushNotification(req, tenantDb, title, message, targetRoles, enrichedData);
         }).catch(err => {
           console.error('[Notification] Background DB save error:', err.message);
         });

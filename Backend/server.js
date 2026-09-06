@@ -58,6 +58,7 @@ const allowedOrigins = [
 const corsOptions = {
   origin: true, // Allow all origins explicitly
   credentials: true,
+  maxAge: 86400, // Cache preflight OPTIONS responses for 24h to kill latency
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-DB', 'X-License-Key', 'x-tenant-db', 'x-license-key', 'Cache-Control', 'Pragma'],
   exposedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-DB', 'X-License-Key', 'x-tenant-db', 'x-license-key']
@@ -158,6 +159,19 @@ io.on('connection', (socket) => {
       socket.join(tenantDb);
       socket.tenantDb = tenantDb;
       console.log(`[Socket] Socket ${socket.id} securely joined tenant room: ${tenantDb}`);
+    }
+  });
+
+  // ⚡ INSTANT FAST-PATH: Relay client-generated optimistic notifications to all other connected devices with 0ms delay
+  socket.on('clientNotification', (notif) => {
+    if (!notif) return;
+    const room = socket.tenantDb || notif.tenantDb;
+    if (room && room !== 'undefined' && room !== 'null') {
+      socket.to(room).emit('new_notification', notif);
+      console.log(`[Socket] ⚡ Relayed instant notification (${notif.title}) to tenant room: ${room}`);
+    } else {
+      socket.broadcast.emit('new_notification', notif);
+      console.log(`[Socket] ⚡ Relayed instant notification (${notif.title}) globally`);
     }
   });
 });

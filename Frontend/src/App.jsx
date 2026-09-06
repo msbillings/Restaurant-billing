@@ -1,5 +1,5 @@
 import { getApiUrl, getSuperadminApiUrl, isCapacitorApp, isElectronApp } from "./config.js";
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import axios from 'axios';
 import api from './api/axios';
 import { useLanguage } from './context/LanguageContext';
@@ -210,7 +210,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.84');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.85');
   const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
     try {
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';
@@ -551,17 +551,30 @@ function App() {
   }, [isChef, view]);
 
   // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
-  const syncConfigFromBackend = async () => {
+  const lastSyncConfigTimeRef = useRef(0);
+  const syncConfigFromBackend = async (force = false) => {
+    const now = Date.now();
+    // Cache for 10 minutes unless forced
+    if (!force && now - lastSyncConfigTimeRef.current < 10 * 60 * 1000 && localStorage.getItem('restaurantSettings')) {
+      return;
+    }
+    lastSyncConfigTimeRef.current = now;
+
     try {
       const API_BASE_URL = getApiUrl();
-      const res = await fetch(`${API_BASE_URL}/config/info`, {
-        headers: {
-          'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
+      const headers = {
+        'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
+      };
+
+      // ⚡ FAST-PATH: Fetch /config/info and /config/security in parallel (reduces wait from 8s to 150ms)
+      const [infoRes, secRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/config/info`, { headers }).catch(() => null),
+        fetch(`${API_BASE_URL}/config/security`, { headers }).catch(() => null)
+      ]);
+
+      if (infoRes && infoRes.ok) {
+        const data = await infoRes.json();
         if (data.licenseExpiry) {
           localStorage.setItem('resto_license_expiry', data.licenseExpiry);
           const expiryDate = new Date(data.licenseExpiry);
@@ -570,19 +583,13 @@ function App() {
           }
         }
         if (data.restaurantSettings) {
-          try {
-            const secRes = await fetch(`${API_BASE_URL}/config/security`, {
-              headers: {
-                'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
-                'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
-              }
-            });
-            if (secRes.ok) {
+          if (secRes && secRes.ok) {
+            try {
               const secData = await secRes.json();
               data.restaurantSettings.requireMasterPin = secData.requireMasterPin;
               data.restaurantSettings.customLocks = secData.customLocks;
-            }
-          } catch (e) { console.error('Security fetch failed', e); }
+            } catch (e) { }
+          }
 
           localStorage.setItem('restaurantSettings', JSON.stringify(data.restaurantSettings));
           setRestaurantName(data.restaurantSettings.restaurantName || 'msbillings');
@@ -1257,31 +1264,38 @@ function App() {
     if (type === 'broadcast' || title.includes('broadcast')) {
       return { border: 'border-l-purple-600 shadow-purple-500/10', bgIcon: 'bg-purple-100 text-purple-600', Icon: Radio, badge: 'Broadcast', badgeBg: 'bg-purple-100 text-purple-700' };
     }
-    // 2. Cancellation Request
+    // 2. Cancellation Request / Cancelled
     if (type === 'error' || type.includes('cancel') || title.includes('cancel')) {
-      return { border: 'border-l-red-500 shadow-red-500/10', bgIcon: 'bg-red-100 text-red-600', Icon: AlertTriangle, badge: 'Cancellation Req', badgeBg: 'bg-red-100 text-red-700' };
+      return { border: 'border-l-red-500 shadow-red-500/10', bgIcon: 'bg-red-100 text-red-600', Icon: AlertTriangle, badge: 'Cancelled', badgeBg: 'bg-red-100 text-red-700' };
     }
-    // 3. Food Ready / Dish Ready
-    if (title.includes('food ready') || title.includes('dish ready') || title.includes('ready for table') || type === 'success') {
-      return { border: 'border-l-emerald-500 shadow-emerald-500/10', bgIcon: 'bg-emerald-100 text-emerald-600', Icon: CheckCircle, badge: 'Food Ready', badgeBg: 'bg-emerald-100 text-emerald-700' };
+    // 3. Bill Settled / Payment Settle
+    if (title.includes('settle') || title.includes('paid') || type === 'bill_settled') {
+      return { border: 'border-l-emerald-600 shadow-emerald-500/10', bgIcon: 'bg-emerald-100 text-emerald-600', Icon: CheckCircle, badge: 'Bill Settled', badgeBg: 'bg-emerald-100 text-emerald-700' };
     }
-    // 4. Bill Saved & Printed / Invoice / Settle Bill
-    if (title.includes('bill saved') || title.includes('print') || title.includes('paid') || title.includes('settle')) {
+    // 4. Bill Saved & Printed / Invoice
+    if (title.includes('bill saved') || title.includes('print') || type === 'bill_printed') {
       return { border: 'border-l-cyan-600 shadow-cyan-500/10', bgIcon: 'bg-cyan-100 text-cyan-600', Icon: Receipt, badge: 'Bill Printed', badgeBg: 'bg-cyan-100 text-cyan-700' };
     }
-    // 5. Table Service / Waiter Call / Water Request / Bill Request
+    // 5. Food Ready / Dish Ready
+    if (title.includes('food ready') || title.includes('dish ready') || title.includes('ready for table')) {
+      return { border: 'border-l-emerald-500 shadow-emerald-500/10', bgIcon: 'bg-emerald-100 text-emerald-600', Icon: CheckCircle, badge: 'Food Ready', badgeBg: 'bg-emerald-100 text-emerald-700' };
+    }
+    // 6. Table Service / Waiter Call / Water Request / Bill Request
     if (type.includes('service') || title.includes('service') || msg.includes('water') || msg.includes('waiter') || msg.includes('pay the bill')) {
       return { border: 'border-l-amber-500 shadow-amber-500/10', bgIcon: 'bg-amber-100 text-amber-600', Icon: UserCheck, badge: 'Table Service', badgeBg: 'bg-amber-100 text-amber-700' };
     }
-    // 6. Kitchen / KOT Updates / Order Placed / New Items
-    if (title.includes('kot') || title.includes('order placed') || title.includes('order updated') || title.includes('item quantity')) {
+    // 7. Kitchen / KOT Updates / Order Placed / New Items
+    if (title.includes('kot') || title.includes('order placed') || title.includes('order updated') || title.includes('order saved') || title.includes('order held') || title.includes('item quantity')) {
       return { border: 'border-l-orange-500 shadow-orange-500/10', bgIcon: 'bg-orange-100 text-orange-600', Icon: ChefHat, badge: 'Kitchen / KOT', badgeBg: 'bg-orange-100 text-orange-700' };
     }
-    // 7. Low Stock / Inventory Reorder Alert
+    // 8. Low Stock / Inventory Reorder Alert
     if (title.includes('stock') || type.includes('inventory')) {
       return { border: 'border-l-rose-500 shadow-rose-500/10', bgIcon: 'bg-rose-100 text-rose-600', Icon: Package, badge: 'Stock Alert', badgeBg: 'bg-rose-100 text-rose-700' };
     }
-    // Default system alert
+    // Default success or info
+    if (type === 'success') {
+      return { border: 'border-l-emerald-500 shadow-emerald-500/10', bgIcon: 'bg-emerald-100 text-emerald-600', Icon: CheckCircle, badge: 'Success', badgeBg: 'bg-emerald-100 text-emerald-700' };
+    }
     return { border: 'border-l-blue-500 shadow-blue-500/10', bgIcon: 'bg-blue-100 text-blue-600', Icon: Bell, badge: 'System Alert', badgeBg: 'bg-blue-100 text-blue-700' };
   };
 
