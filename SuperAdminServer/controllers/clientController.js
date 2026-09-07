@@ -2,6 +2,98 @@ import Client from '../models/Client.js';
 import License from '../models/License.js';
 import Broadcast from '../models/Broadcast.js';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
+
+// Utility to provision/sync the admin user & staff directly into the tenant's MongoDB database
+export const provisionTenantUsers = async (client, plainPassword) => {
+  try {
+    if (!client.databaseName) {
+      const sanitizedName = (client.restaurantName || 'resto').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
+      client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
+      await client.save();
+    }
+
+    const passwordToUse = plainPassword || client.plainTextPassword;
+    if (!passwordToUse) return;
+
+    const hashedPassword = await bcrypt.hash(passwordToUse, 10);
+    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const usersCol = tenantDb.collection('users');
+
+    // 1. Provision Admin by Email (e.g. cakepanda@gmail.com)
+    if (client.email) {
+      await usersCol.updateOne(
+        { username: client.email.trim() },
+        {
+          $set: {
+            username: client.email.trim(),
+            password: hashedPassword,
+            role: 'Admin',
+            updatedAt: new Date()
+          },
+          $setOnInsert: {
+            activeSessions: [],
+            fcmTokens: [],
+            createdAt: new Date()
+          }
+        },
+        { upsert: true }
+      );
+    }
+
+    // 2. Also provision Admin by Restaurant Name (e.g. Cake Panda) so BOTH email and name work for login!
+    if (client.restaurantName && client.restaurantName.trim().toLowerCase() !== client.email.trim().toLowerCase()) {
+      await usersCol.updateOne(
+        { username: client.restaurantName.trim() },
+        {
+          $set: {
+            username: client.restaurantName.trim(),
+            password: hashedPassword,
+            role: 'Admin',
+            updatedAt: new Date()
+          },
+          $setOnInsert: {
+            activeSessions: [],
+            fcmTokens: [],
+            createdAt: new Date()
+          }
+        },
+        { upsert: true }
+      );
+    }
+
+    // 3. Provision any additional staff accounts
+    if (client.staffAccounts && Array.isArray(client.staffAccounts)) {
+      for (const staff of client.staffAccounts) {
+        if (!staff.username) continue;
+        const staffPass = staff.plainTextPassword || passwordToUse;
+        const staffHashed = await bcrypt.hash(staffPass, 10);
+        await usersCol.updateOne(
+          { username: staff.username.trim() },
+          {
+            $set: {
+              username: staff.username.trim(),
+              password: staffHashed,
+              role: staff.role || 'Cashier',
+              updatedAt: new Date()
+            },
+            $setOnInsert: {
+              activeSessions: [],
+              fcmTokens: [],
+              createdAt: new Date()
+            }
+          },
+          { upsert: true }
+        );
+      }
+    }
+
+    console.log(`[SuperAdmin] Successfully provisioned tenant users for ${client.email} in ${client.databaseName}`);
+  } catch (err) {
+    console.error(`[SuperAdmin Provision Error] Failed to provision tenant users for ${client.email}:`, err.message);
+  }
+};
 
 // Get all clients (For Super Admin dashboard)
 export const getAllClients = async (req, res) => {
@@ -154,14 +246,32 @@ export const createClient = async (req, res) => {
     const generateKeySegment = () => crypto.randomBytes(2).toString('hex').toUpperCase();
     const licenseKey = `MSBILL-${generateKeySegment()}-${generateKeySegment()}-${generateKeySegment()}`;
 
+    // Ensure staffAccounts includes Admin account
+    let staff = Array.isArray(staffAccounts) ? [...staffAccounts] : [];
+    const hasAdminStaff = staff.some(s => s.role === 'Admin');
+    if (!hasAdminStaff) {
+      staff.unshift({
+        role: 'Admin',
+        username: email,
+        plainTextPassword: password
+      });
+    }
+
+    // Pre-generate client ID and databaseName right away
+    const tempId = new mongoose.Types.ObjectId();
+    const sanitizedName = (restaurantName || 'resto').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
+    const databaseName = `client_${sanitizedName}_${tempId.toString().substring(0, 6)}`;
+
     // Create client (storing plainTextPassword as requested by Super Admin)
     const newClient = new Client({
+      _id: tempId,
       restaurantName,
       ownerName,
       email,
       plainTextPassword: password, // For admin visibility/support
+      databaseName,
       licenseKey,
-      staffAccounts: staffAccounts || []
+      staffAccounts: staff
     });
 
     const savedClient = await newClient.save();
@@ -185,6 +295,9 @@ export const createClient = async (req, res) => {
 
     await newLicense.save();
 
+    // CRITICAL: Provision the Admin and staff accounts directly into the tenant's MongoDB database!
+    await provisionTenantUsers(savedClient, password);
+
     res.status(201).json({
       message: 'Client and License generated successfully',
       client: savedClient
@@ -205,7 +318,17 @@ export const updateClientPassword = async (req, res) => {
     if (!client) return res.status(404).json({ message: 'Client not found' });
 
     client.plainTextPassword = newPassword;
+    if (client.staffAccounts && Array.isArray(client.staffAccounts)) {
+      client.staffAccounts.forEach(s => {
+        if (s.role === 'Admin' || s.username === client.email) {
+          s.plainTextPassword = newPassword;
+        }
+      });
+    }
     await client.save();
+
+    // Also update password in the tenant's database!
+    await provisionTenantUsers(client, newPassword);
 
     res.status(200).json({ message: 'Password updated successfully', client });
   } catch (error) {
@@ -287,6 +410,9 @@ export const validateLicense = async (req, res) => {
 
     await client.save();
 
+    // Ensure tenant admin & staff users are provisioned in MongoDB
+    await provisionTenantUsers(client, client.plainTextPassword);
+
     // Fetch active broadcasts
     const activeBroadcasts = await Broadcast.find({ active: true }).sort({ createdAt: -1 });
 
@@ -294,6 +420,8 @@ export const validateLicense = async (req, res) => {
       valid: true,
       message: 'License Verified',
       restaurantName: client.restaurantName,
+      email: client.email,
+      username: client.email,
       validUntil: license.validUntil,
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
@@ -375,10 +503,15 @@ export const loginClient = async (req, res) => {
 
     await client.save();
 
+    // Ensure tenant admin & staff users are provisioned in MongoDB
+    await provisionTenantUsers(client, client.plainTextPassword);
+
     res.status(200).json({
       valid: true,
       message: 'Login Successful',
       restaurantName: client.restaurantName,
+      email: client.email,
+      username: client.email,
       validUntil: license.validUntil,
       databaseName: client.databaseName,
       plainTextPassword: client.plainTextPassword,
@@ -424,11 +557,24 @@ export const getLicenseInfo = async (req, res) => {
       return res.status(404).json({ valid: false, message: 'No active subscription found' });
     }
 
+    // Ensure databaseName is set
+    if (!client.databaseName) {
+      const sanitizedName = (client.restaurantName || 'resto').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
+      client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
+      await client.save();
+    }
+
+    // Ensure tenant admin & staff users are provisioned in MongoDB
+    await provisionTenantUsers(client, client.plainTextPassword);
+
     const activeBroadcasts = await Broadcast.find({ active: true }).sort({ createdAt: -1 });
 
     res.status(200).json({
       valid: true,
       restaurantName: client.restaurantName,
+      email: client.email,
+      username: client.email,
+      databaseName: client.databaseName,
       validUntil: license.validUntil,
       status: client.status,
       features: client.features,
@@ -480,5 +626,211 @@ export const deleteClient = async (req, res) => {
     res.status(200).json({ message: 'Client and associated license deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting client', error: error.message });
+  }
+};
+
+// Add a staff account to client and sync to tenant database
+export const addStaffAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, role, plainTextPassword } = req.body;
+
+    if (!username || !plainTextPassword) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    if (!client.databaseName) {
+      const sanitizedName = (client.restaurantName || 'resto').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
+      client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
+    }
+
+    // Check if username already exists in staffAccounts
+    const cleanUsername = username.trim();
+    if (client.staffAccounts.some(s => s.username && s.username.toLowerCase() === cleanUsername.toLowerCase())) {
+      return res.status(400).json({ message: `A staff account with username "${cleanUsername}" already exists.` });
+    }
+
+    const newStaffItem = {
+      username: cleanUsername,
+      role: role || 'Cashier',
+      plainTextPassword: plainTextPassword.trim()
+    };
+
+    client.staffAccounts.push(newStaffItem);
+
+    // If adding an Admin and client plainTextPassword wasn't set, sync it
+    if (newStaffItem.role === 'Admin' && !client.plainTextPassword) {
+      client.plainTextPassword = newStaffItem.plainTextPassword;
+    }
+
+    await client.save();
+
+    // Sync to tenant MongoDB database
+    const hashedPassword = await bcrypt.hash(newStaffItem.plainTextPassword, 10);
+    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const usersCol = tenantDb.collection('users');
+
+    await usersCol.updateOne(
+      { username: cleanUsername },
+      {
+        $set: {
+          username: cleanUsername,
+          password: hashedPassword,
+          role: newStaffItem.role,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          activeSessions: [],
+          fcmTokens: [],
+          createdAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    res.status(201).json({
+      message: 'Staff account added and synchronized successfully',
+      staffAccounts: client.staffAccounts
+    });
+  } catch (error) {
+    console.error('Error adding staff account:', error);
+    res.status(500).json({ message: 'Error adding staff account', error: error.message });
+  }
+};
+
+// Update a staff account and sync to tenant database
+export const updateStaffAccount = async (req, res) => {
+  try {
+    const { id, staffId } = req.params;
+    const { username, role, plainTextPassword, oldUsername } = req.body;
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    if (!client.databaseName) {
+      const sanitizedName = (client.restaurantName || 'resto').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 20);
+      client.databaseName = `client_${sanitizedName}_${client._id.toString().substring(0, 6)}`;
+    }
+
+    // Find staff member by _id or index or oldUsername
+    let staffMember = client.staffAccounts.id ? client.staffAccounts.id(staffId) : null;
+    if (!staffMember) {
+      const idx = parseInt(staffId, 10);
+      if (!isNaN(idx) && client.staffAccounts[idx]) {
+        staffMember = client.staffAccounts[idx];
+      } else if (oldUsername) {
+        staffMember = client.staffAccounts.find(s => s.username === oldUsername);
+      }
+    }
+
+    if (!staffMember) {
+      return res.status(404).json({ message: 'Staff account not found' });
+    }
+
+    const prevUsername = staffMember.username;
+    const newUsername = (username || staffMember.username).trim();
+    const newRole = role || staffMember.role || 'Cashier';
+    const newPassword = (plainTextPassword || staffMember.plainTextPassword).trim();
+
+    staffMember.username = newUsername;
+    staffMember.role = newRole;
+    staffMember.plainTextPassword = newPassword;
+
+    // If role is Admin, also sync client's primary password if applicable
+    if (newRole === 'Admin' && (client.email === newUsername || client.staffAccounts.length === 1)) {
+      client.plainTextPassword = newPassword;
+    }
+
+    await client.save();
+
+    // Sync to tenant MongoDB database
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const usersCol = tenantDb.collection('users');
+
+    // If username changed, delete the old username entry from tenant DB
+    if (prevUsername && prevUsername.toLowerCase() !== newUsername.toLowerCase()) {
+      await usersCol.deleteOne({ username: prevUsername });
+    }
+
+    await usersCol.updateOne(
+      { username: newUsername },
+      {
+        $set: {
+          username: newUsername,
+          password: hashedPassword,
+          role: newRole,
+          updatedAt: new Date()
+        },
+        $setOnInsert: {
+          activeSessions: [],
+          fcmTokens: [],
+          createdAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    res.status(200).json({
+      message: 'Staff account updated and synchronized successfully',
+      staffAccounts: client.staffAccounts
+    });
+  } catch (error) {
+    console.error('Error updating staff account:', error);
+    res.status(500).json({ message: 'Error updating staff account', error: error.message });
+  }
+};
+
+// Delete a staff account from client and remove from tenant database
+export const deleteStaffAccount = async (req, res) => {
+  try {
+    const { id, staffId } = req.params;
+
+    const client = await Client.findById(id);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
+
+    let targetUsername = null;
+    let staffMember = client.staffAccounts.id ? client.staffAccounts.id(staffId) : null;
+
+    if (staffMember) {
+      targetUsername = staffMember.username;
+      staffMember.deleteOne();
+    } else {
+      const idx = parseInt(staffId, 10);
+      if (!isNaN(idx) && client.staffAccounts[idx]) {
+        targetUsername = client.staffAccounts[idx].username;
+        client.staffAccounts.splice(idx, 1);
+      } else {
+        const foundIdx = client.staffAccounts.findIndex(s => s.username === staffId || s._id?.toString() === staffId);
+        if (foundIdx !== -1) {
+          targetUsername = client.staffAccounts[foundIdx].username;
+          client.staffAccounts.splice(foundIdx, 1);
+        }
+      }
+    }
+
+    if (!targetUsername) {
+      return res.status(404).json({ message: 'Staff account not found' });
+    }
+
+    await client.save();
+
+    // Delete from tenant MongoDB database if databaseName exists
+    if (client.databaseName) {
+      const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+      const usersCol = tenantDb.collection('users');
+      await usersCol.deleteOne({ username: targetUsername });
+    }
+
+    res.status(200).json({
+      message: `Staff account "${targetUsername}" deleted and removed from database`,
+      staffAccounts: client.staffAccounts
+    });
+  } catch (error) {
+    console.error('Error deleting staff account:', error);
+    res.status(500).json({ message: 'Error deleting staff account', error: error.message });
   }
 };

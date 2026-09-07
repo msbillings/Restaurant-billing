@@ -1,5 +1,19 @@
 import express from 'express';
-import { getAllClients, createClient, updateClientPassword, validateLicense, updateLicense, loginClient, updateFeatures, getLicenseInfo, updateClientStatus, deleteClient } from '../controllers/clientController.js';
+import { 
+  getAllClients, 
+  createClient, 
+  updateClientPassword, 
+  validateLicense, 
+  updateLicense, 
+  loginClient, 
+  updateFeatures, 
+  getLicenseInfo, 
+  updateClientStatus, 
+  deleteClient,
+  addStaffAccount,
+  updateStaffAccount,
+  deleteStaffAccount
+} from '../controllers/clientController.js';
 import { getClientBroadcasts } from '../controllers/broadcastController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
@@ -14,6 +28,11 @@ router.put('/:id/license', protect, updateLicense);
 router.put('/:id/features', protect, updateFeatures);
 router.put('/:id/status', protect, updateClientStatus);
 router.delete('/:id', protect, deleteClient);
+
+// Staff Accounts Management (Syncs directly to tenant database)
+router.post('/:id/staff', protect, addStaffAccount);
+router.put('/:id/staff/:staffId', protect, updateStaffAccount);
+router.delete('/:id/staff/:staffId', protect, deleteStaffAccount);
 
 // PUBLIC ROUTES (For POS Client Software)
 router.post('/validate', validateLicense);

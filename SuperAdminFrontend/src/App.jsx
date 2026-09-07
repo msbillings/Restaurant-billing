@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, Clock, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Image, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import { startRegistration } from '@simplewebauthn/browser';
@@ -79,7 +79,10 @@ function App() {
   const [licenseModal, setLicenseModal] = useState({ isOpen: false, clientId: null, licenseKey: '', validUntil: '', resetHardware: false, mapsUrl: '' });
   const [createClientModal, setCreateClientModal] = useState({ isOpen: false, restaurantName: '', ownerName: '', email: '', password: '', plan: 'Yearly', customDays: '', staffAccounts: [] });
   const [featuresModal, setFeaturesModal] = useState({ isOpen: false, clientId: null, features: {} });
-  const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, staffAccounts: [], restaurantName: '' });
+  const [viewStaffModal, setViewStaffModal] = useState({ isOpen: false, clientId: null, staffAccounts: [], restaurantName: '' });
+  const [staffFormModal, setStaffFormModal] = useState({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' });
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [staffLoading, setStaffLoading] = useState(false);
   const [mapModal, setMapModal] = useState({ isOpen: false, locationName: '', clients: [] });
 
   // Broadcast State
@@ -293,6 +296,90 @@ function App() {
     } catch (error) {
       alert('Failed to update features.');
       console.error(error);
+    }
+  };
+
+  const handleOpenAddStaff = () => {
+    setStaffFormModal({
+      isOpen: true,
+      isEdit: false,
+      staffId: null,
+      oldUsername: '',
+      username: '',
+      password: '',
+      role: 'Cashier'
+    });
+    setShowStaffPassword(false);
+  };
+
+  const handleOpenEditStaff = (staff, index) => {
+    setStaffFormModal({
+      isOpen: true,
+      isEdit: true,
+      staffId: staff._id || index,
+      oldUsername: staff.username,
+      username: staff.username,
+      password: staff.plainTextPassword || '',
+      role: staff.role || 'Cashier'
+    });
+    setShowStaffPassword(false);
+  };
+
+  const handleSaveStaffAccount = async (e) => {
+    e.preventDefault();
+    if (!staffFormModal.username.trim() || !staffFormModal.password.trim()) {
+      alert('Please enter both username and password.');
+      return;
+    }
+
+    setStaffLoading(true);
+    try {
+      if (staffFormModal.isEdit) {
+        const res = await axios.put(`${API_BASE_URL}/clients/${viewStaffModal.clientId}/staff/${staffFormModal.staffId}`, {
+          username: staffFormModal.username.trim(),
+          role: staffFormModal.role,
+          plainTextPassword: staffFormModal.password.trim(),
+          oldUsername: staffFormModal.oldUsername
+        });
+        const updatedStaff = res.data.staffAccounts || [];
+        setViewStaffModal(prev => ({ ...prev, staffAccounts: updatedStaff }));
+        alert('Staff account updated and synced to database!');
+      } else {
+        const res = await axios.post(`${API_BASE_URL}/clients/${viewStaffModal.clientId}/staff`, {
+          username: staffFormModal.username.trim(),
+          role: staffFormModal.role,
+          plainTextPassword: staffFormModal.password.trim()
+        });
+        const updatedStaff = res.data.staffAccounts || [];
+        setViewStaffModal(prev => ({ ...prev, staffAccounts: updatedStaff }));
+        alert('Staff account created and synced to database!');
+      }
+      setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' });
+      fetchClients();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to save staff account.');
+      console.error(error);
+    } finally {
+      setStaffLoading(false);
+    }
+  };
+
+  const handleDeleteStaffAccount = async (staff, index) => {
+    if (!confirm(`Are you sure you want to delete staff account "${staff.username}"? This will also remove their login access.`)) return;
+
+    setStaffLoading(true);
+    try {
+      const staffId = staff._id || index;
+      const res = await axios.delete(`${API_BASE_URL}/clients/${viewStaffModal.clientId}/staff/${staffId}`);
+      const updatedStaff = res.data.staffAccounts || [];
+      setViewStaffModal(prev => ({ ...prev, staffAccounts: updatedStaff }));
+      alert(`Staff account "${staff.username}" deleted successfully!`);
+      fetchClients();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to delete staff account.');
+      console.error(error);
+    } finally {
+      setStaffLoading(false);
     }
   };
 
@@ -1001,7 +1088,10 @@ function App() {
                           Features
                         </button>
                         <button 
-                          onClick={() => setViewStaffModal({ isOpen: true, staffAccounts: client.staffAccounts || [], restaurantName: client.restaurantName })}
+                          onClick={() => {
+                            setViewStaffModal({ isOpen: true, clientId: client._id, staffAccounts: client.staffAccounts || [], restaurantName: client.restaurantName });
+                            setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' });
+                          }}
                           className="flex items-center gap-1 text-xs font-bold bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-3 py-1.5 rounded transition-colors"
                         >
                           <Users className="w-3 h-3" /> Staff
@@ -1795,35 +1885,203 @@ function App() {
           </div>
         </div>
       )}
-      {/* View Staff Modal */}
+      {/* View & Manage Staff Modal */}
       {viewStaffModal.isOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-surface border border-border p-6 rounded-2xl shadow-2xl max-w-md w-full m-4">
-            <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-primary w-5 h-5"/> Staff Accounts</h3>
-            <p className="text-sm text-gray-400 mb-4">Accounts for {viewStaffModal.restaurantName}</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border p-6 rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]">
             
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-              {viewStaffModal.staffAccounts.length === 0 ? (
-                <p className="text-gray-500 italic text-center py-4">No pre-configured staff accounts found.</p>
-              ) : (
-                viewStaffModal.staffAccounts.map((staff, idx) => (
-                  <div key={idx} className="bg-background border border-border p-3 rounded-lg flex flex-col gap-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm text-white">{staff.username}</span>
-                      <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded uppercase tracking-wider">{staff.role}</span>
-                    </div>
-                    <div className="text-xs font-mono text-gray-400 flex items-center gap-2">
-                      Password: <span className="text-white">{staff.plainTextPassword}</span>
+            {/* Modal Header */}
+            <div className="flex justify-between items-start mb-4 border-b border-border pb-4">
+              <div>
+                <h3 className="text-xl font-bold flex items-center gap-2 text-white">
+                  <Users className="text-primary w-5 h-5"/> Staff & User Accounts
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  Manage accounts for <span className="text-primary font-semibold">{viewStaffModal.restaurantName}</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {!staffFormModal.isOpen && (
+                  <button
+                    onClick={handleOpenAddStaff}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-primary/20"
+                  >
+                    <Plus size={15} /> Create New User
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setViewStaffModal({ isOpen: false, clientId: null, staffAccounts: [], restaurantName: '' });
+                    setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' });
+                  }}
+                  className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Create / Edit User Inline Form */}
+            {staffFormModal.isOpen && (
+              <div className="mb-5 bg-background border border-primary/30 p-4 rounded-xl shadow-lg animate-fade-in">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    {staffFormModal.isEdit ? (
+                      <><Edit3 size={15} className="text-primary" /> Edit User Account ({staffFormModal.oldUsername})</>
+                    ) : (
+                      <><Plus size={15} className="text-primary" /> Create New User</>
+                    )}
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' })}
+                    className="text-gray-400 hover:text-white text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveStaffAccount} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-1">Username</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. cashier1, chef_ramesh or email"
+                      value={staffFormModal.username}
+                      onChange={e => setStaffFormModal({ ...staffFormModal, username: e.target.value })}
+                      className="w-full bg-surface border border-border rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-1">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showStaffPassword ? "text" : "password"}
+                        required
+                        placeholder="Enter password"
+                        value={staffFormModal.password}
+                        onChange={e => setStaffFormModal({ ...staffFormModal, password: e.target.value })}
+                        className="w-full bg-surface border border-border rounded-lg p-2.5 pr-10 text-white text-sm focus:outline-none focus:border-primary font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStaffPassword(!showStaffPassword)}
+                        className="absolute right-3 inset-y-0 flex items-center text-gray-400 hover:text-white"
+                      >
+                        {showStaffPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
                     </div>
                   </div>
-                ))
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 mb-1">Role</label>
+                    <select
+                      value={staffFormModal.role}
+                      onChange={e => setStaffFormModal({ ...staffFormModal, role: e.target.value })}
+                      className="w-full bg-surface border border-border rounded-lg p-2.5 text-white text-sm focus:outline-none focus:border-primary"
+                    >
+                      <option value="Cashier">Cashier (Can bill & print)</option>
+                      <option value="Captain">Captain (Can take orders via tablet)</option>
+                      <option value="Chef">Chef (Kitchen Display System Access Only)</option>
+                      <option value="Manager">Manager (Operations, Floor, Analytics)</option>
+                      <option value="Admin">Admin (Full Control)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      disabled={staffLoading}
+                      onClick={() => setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' })}
+                      className="px-3 py-1.5 bg-surface hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-bold transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={staffLoading}
+                      className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-bold transition-colors shadow-md shadow-primary/20 flex items-center gap-1.5"
+                    >
+                      {staffLoading && <Loader2 size={13} className="animate-spin" />}
+                      {staffFormModal.isEdit ? 'Save Changes' : 'Create User'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Staff List */}
+            <div className="space-y-2.5 overflow-y-auto flex-1 pr-1 max-h-[50vh]">
+              {viewStaffModal.staffAccounts.length === 0 ? (
+                <div className="text-center py-8 bg-background/50 rounded-xl border border-dashed border-border p-6">
+                  <Users className="w-10 h-10 text-gray-500 mx-auto mb-2 opacity-50" />
+                  <p className="text-gray-400 font-medium text-sm">No staff accounts configured yet.</p>
+                  <p className="text-xs text-gray-500 mt-1">Click "Create New User" above to add cashier, captain, chef or admin accounts.</p>
+                </div>
+              ) : (
+                viewStaffModal.staffAccounts.map((staff, idx) => {
+                  const roleColors = {
+                    Admin: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+                    Manager: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+                    Cashier: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+                    Captain: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+                    Chef: 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                  };
+                  const badgeClass = roleColors[staff.role] || 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+
+                  return (
+                    <div key={idx} className="bg-background border border-border hover:border-gray-600 transition-colors p-3.5 rounded-xl flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-white truncate">{staff.username}</span>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeClass}`}>
+                            {staff.role || 'Staff'}
+                          </span>
+                        </div>
+                        <div className="text-xs font-mono text-gray-400 flex items-center gap-1.5">
+                          <Key size={12} className="text-gray-500" />
+                          <span>Password:</span>
+                          <span className="text-gray-200 font-bold bg-surface px-1.5 py-0.5 rounded border border-border/50 select-all">
+                            {staff.plainTextPassword || '******'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => handleOpenEditStaff(staff, idx)}
+                          className="p-1.5 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors"
+                          title="Edit User"
+                        >
+                          <Edit3 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteStaffAccount(staff, idx)}
+                          className="p-1.5 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                          title="Delete User"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center mt-5 pt-3 border-t border-border">
+              <span className="text-xs text-gray-400">
+                Total: <strong className="text-white">{viewStaffModal.staffAccounts.length}</strong> user accounts
+              </span>
               <button 
-                onClick={() => setViewStaffModal({ isOpen: false, staffAccounts: [], restaurantName: '' })}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover rounded-lg transition-colors text-white text-sm font-bold shadow-lg shadow-primary/20"
+                onClick={() => {
+                  setViewStaffModal({ isOpen: false, clientId: null, staffAccounts: [], restaurantName: '' });
+                  setStaffFormModal({ isOpen: false, isEdit: false, staffId: null, oldUsername: '', username: '', password: '', role: 'Cashier' });
+                }}
+                className="px-4 py-2 bg-surface hover:bg-gray-700 rounded-lg transition-colors text-white text-xs font-bold border border-border"
               >
                 Close
               </button>
