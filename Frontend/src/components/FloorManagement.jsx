@@ -100,6 +100,25 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [reservations, setReservations] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
+  const [activeKdsTableCount, setActiveKdsTableCount] = useState(0);
+
+  const fetchActiveKdsCount = async () => {
+    try {
+      const response = await api.get('/bills/kots/active');
+      const kots = response.data || [];
+      const tableGroups = {};
+      kots.forEach(kot => {
+        if (!tableGroups[kot.tableNo]) tableGroups[kot.tableNo] = { items: [] };
+        tableGroups[kot.tableNo].items.push(...(kot.items || []));
+      });
+      const activeTables = Object.values(tableGroups).filter(g => 
+         g.items.some(item => !item.isCancelled && (item.status === 'Pending' || item.status === 'Preparing'))
+      ).length;
+      setActiveKdsTableCount(activeTables);
+    } catch (e) {
+      console.error('Error fetching active kots for count:', e);
+    }
+  };
 
   const fetchDailyStatsData = async () => {
     try {
@@ -112,8 +131,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   useEffect(() => {
     fetchDailyStatsData();
+    fetchActiveKdsCount();
     const unsubBillSettled = realtimeService.subscribe('billSettled', () => {
       fetchDailyStatsData();
+      fetchActiveKdsCount();
     });
     return () => {
       if (unsubBillSettled) unsubBillSettled();
@@ -334,6 +355,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         return hasActive;
       });
       setOrders(validOrders);
+      fetchActiveKdsCount();
     } catch (error) {
       console.error('Error fetching open orders:', error);
     } finally {
@@ -999,10 +1021,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 <span className="bg-gray-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{settledBillsToday}</span>
               </div>
 
-              {/* 5) Reserved KOT (amber dot) */}
+              {/* 5) Reserved Table (amber dot) */}
               <div className="flex items-center gap-1.5 whitespace-nowrap bg-amber-50/70 px-2.5 py-1 rounded-full border border-amber-200 text-amber-950 font-bold shadow-2xs">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
-                <span>{t("Reserved KOT")}</span>
+                <span>{t("Reserved Table")}</span>
                 <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{reservedCount}</span>
               </div>
 
@@ -1026,6 +1048,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 <div className="flex items-center gap-1.5 whitespace-nowrap bg-teal-50 text-teal-900 px-3 py-1 rounded-full border border-teal-200 shadow-2xs shrink-0 font-bold">
                   <span className="text-[11px] uppercase tracking-wider text-teal-600 font-extrabold">{t("Takeaway Today")}:</span>
                   <span className="bg-teal-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{takeawayOrdersToday}</span>
+                </div>
+                
+                {/* 9) Active KOTs */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50 text-orange-900 px-3 py-1 rounded-full border border-orange-200 shadow-2xs shrink-0 font-bold">
+                  <span className="text-[11px] uppercase tracking-wider text-orange-600 font-extrabold">{t("Active KOT")}:</span>
+                  <span className="bg-orange-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{activeKdsTableCount}</span>
                 </div>
               </div>
             </>

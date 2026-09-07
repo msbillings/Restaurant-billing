@@ -10,6 +10,13 @@ import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
 import CustomTimePicker from './common/CustomTimePicker';
 
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+};
+
 const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const { t } = useLanguage();
 
@@ -347,16 +354,42 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setToast({ message: t('Image size should be less than 5MB'), type: 'error' });
+    // 1. Strict File Type & Extension Validation
+    const allowedExtensions = ['png', 'jpg', 'jpeg'];
+    const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
+
+    if (!allowedExtensions.includes(fileExtension) || !allowedMimeTypes.includes(file.type)) {
+      setToast({ 
+        message: t('Invalid image format. Only PNG and JPG/JPEG files are allowed.'), 
+        type: 'error' 
+      });
       e.target.value = '';
       return;
     }
 
+    // 2. Strict 2MB File Size Validation (Blocks files above 2MB)
+    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
+    if (file.size > MAX_SIZE) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      setToast({ 
+        message: t(`File size is too large (${sizeMB} MB). Maximum allowed size is 2MB.`), 
+        type: 'error' 
+      });
+      e.target.value = '';
+      return;
+    }
+
+    // 3. Image Integrity & Canvas Optimization
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
+        if (!img.width || !img.height) {
+          setToast({ message: t('The selected file is corrupted or not a valid image.'), type: 'error' });
+          return;
+        }
+
         // Automatically optimize and resize logo for instant rendering & printing
         const canvas = document.createElement('canvas');
         const MAX_WIDTH = 500;
@@ -381,18 +414,56 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        const optimizedDataUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.9);
-        handleInputChange('logo', optimizedDataUrl);
+        const outputMime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const optimizedDataUrl = canvas.toDataURL(outputMime, 0.9);
+
+        const logoInfo = {
+          name: file.name,
+          size: file.size,
+          extension: fileExtension.toUpperCase(),
+          dimensions: `${img.width}×${img.height} px`
+        };
+
+        setSettings((prev) => ({
+          ...prev,
+          logo: optimizedDataUrl,
+          logoInfo: logoInfo
+        }));
+        setToast({ message: t('Logo uploaded successfully!'), type: 'success' });
       };
       img.onerror = () => {
-        // If image loading fails, fallback to direct data URL
-        handleInputChange('logo', event.target.result);
+        setToast({ message: t('Failed to load image. Please select a valid PNG or JPG file.'), type: 'error' });
       };
       img.src = event.target.result;
+    };
+    reader.onerror = () => {
+      setToast({ message: t('Error reading file.'), type: 'error' });
     };
     reader.readAsDataURL(file);
     e.target.value = '';
   };
+
+  const getLogoDetails = () => {
+    if (!settings.logo || settings.logo === '[logo_stored]') return null;
+    if (settings.logoInfo && typeof settings.logoInfo === 'object') {
+      return {
+        name: settings.logoInfo.name || 'restaurant-logo',
+        sizeStr: settings.logoInfo.size ? formatFileSize(settings.logoInfo.size) : '',
+        extension: settings.logoInfo.extension || (settings.logo.startsWith('data:image/png') ? 'PNG' : 'JPG'),
+        dimensions: settings.logoInfo.dimensions || ''
+      };
+    }
+    const isPng = settings.logo.startsWith('data:image/png');
+    const approxBytes = Math.round((settings.logo.length * 3) / 4);
+    return {
+      name: 'restaurant-logo.' + (isPng ? 'png' : 'jpg'),
+      sizeStr: formatFileSize(approxBytes),
+      extension: isPng ? 'PNG' : 'JPG',
+      dimensions: ''
+    };
+  };
+
+  const logoDetails = getLogoDetails();
 
   return (
     <div className="h-full overflow-y-auto p-1.5 sm:p-2.5 md:p-3">
@@ -546,42 +617,84 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     <ImageIcon size={14} />{t("Printed Bill Logo")}
 
                   </label>
-                  <div className="flex flex-wrap items-center gap-4 bg-background p-3 rounded-xl border border-border">
-                    {Boolean(settings.logo && settings.logo !== '[logo_stored]') ?
-                      <div className="flex items-center gap-4">
-                        <div className="p-2 bg-white rounded-lg border border-border shadow-sm flex items-center justify-center min-w-[60px] min-h-[56px]">
-                          <img
-                            src={settings.logo}
-                            alt="Restaurant Logo"
-                            className="h-14 max-w-[140px] object-contain"
-                            onError={() => {
-                              console.warn("Logo failed to load, resetting");
-                              handleInputChange('logo', '');
-                            }}
-                          />
+                  <div className="bg-background p-3.5 rounded-xl border border-border">
+                    {Boolean(settings.logo && settings.logo !== '[logo_stored]' && logoDetails) ? (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          {/* Logo Preview Box */}
+                          <div className="p-2 bg-white rounded-xl border border-border shadow-xs flex items-center justify-center min-w-[70px] min-h-[60px] max-h-[70px] shrink-0">
+                            <img
+                              src={settings.logo}
+                              alt="Restaurant Logo"
+                              className="h-14 max-w-[130px] object-contain"
+                              onError={() => {
+                                console.warn("Logo failed to load, resetting");
+                                setSettings(prev => ({ ...prev, logo: '', logoInfo: null }));
+                              }}
+                            />
+                          </div>
+                          {/* Logo File Information (Name, Extension, File Size) */}
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-xs sm:text-sm font-bold text-text-main truncate max-w-[200px] sm:max-w-[280px]" title={logoDetails.name}>
+                              {logoDetails.name}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/20">
+                                {logoDetails.extension}
+                              </span>
+                              {logoDetails.sizeStr && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium bg-surface-hover text-text-muted border border-border">
+                                  {logoDetails.sizeStr}
+                                </span>
+                              )}
+                              {logoDetails.dimensions && (
+                                <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono text-text-muted bg-surface-hover border border-border">
+                                  {logoDetails.dimensions}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleInputChange('logo', '')}
-                          className="flex items-center gap-2 px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-sm font-bold transition-all">
 
-                          <Trash2 size={16} />{t("Remove Logo")}
-
-                        </button>
-                      </div> :
-
-                      <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-bold cursor-pointer transition-all">
-                        <Upload size={16} />{t("Upload Logo (PNG/JPG)")}
-
-                        <input
-                          type="file"
-                          accept="image/png, image/jpeg, image/jpg"
-                          onChange={handleLogoUpload}
-                          className="hidden" />
-
-                      </label>
-                    }
-                    <span className="text-xs text-text-muted">{t("Displayed at top of printed bills (max 2MB)")}</span>
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                          <label className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 bg-surface-hover hover:bg-surface border border-border text-text-main rounded-lg text-xs font-bold cursor-pointer transition-all">
+                            <Upload size={14} />{t("Change")}
+                            <input
+                              type="file"
+                              accept=".png, .jpg, .jpeg, image/png, image/jpeg"
+                              onChange={handleLogoUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setSettings(prev => ({ ...prev, logo: '', logoInfo: null }))}
+                            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-xs font-bold transition-all cursor-pointer"
+                          >
+                            <Trash2 size={14} />{t("Remove")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-bold cursor-pointer transition-all shadow-xs">
+                          <Upload size={16} />{t("Upload Logo (PNG/JPG)")}
+                          <input
+                            type="file"
+                            accept=".png, .jpg, .jpeg, image/png, image/jpeg"
+                            onChange={handleLogoUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        <div className="text-xs text-text-muted flex items-center gap-1.5">
+                          <span>{t("Displayed at top of printed bills")}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-surface-hover border border-border text-[11px] font-mono font-bold text-text-main">
+                            max 2MB • PNG/JPG
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

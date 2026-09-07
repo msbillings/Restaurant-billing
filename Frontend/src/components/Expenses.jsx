@@ -287,8 +287,13 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                 <input
                 type="date"
                 required
+                max={new Date().toLocaleDateString('en-CA')}
                 value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                onChange={(e) => {
+                  const todayStr = new Date().toLocaleDateString('en-CA');
+                  const val = e.target.value;
+                  setFormData({ ...formData, date: val > todayStr ? todayStr : val });
+                }}
                 className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-red-500 transition-all font-medium text-xs sm:text-sm" />
               </div>
 

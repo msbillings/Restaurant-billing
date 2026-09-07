@@ -73,7 +73,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [days, setDays] = useState(null); // For 7 or 30 days view
   const [viewMode, setViewMode] = useState('month'); // 'month', 'days', or 'day'
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [toast, setToast] = useState(null);
@@ -94,11 +94,22 @@ const Analytics = ({ onNavigate, onGoBack }) => {
     setAnimateBars(false);
     try {
       let data;
+      const todayStr = new Date().toLocaleDateString('en-CA');
       if (viewMode === 'custom' && customStart && customEnd) {
+        if (customStart > todayStr || customEnd > todayStr) {
+          setToast({ message: t("Future dates are not allowed"), type: 'error' });
+          setLoading(false);
+          return;
+        }
         data = await getAnalytics(null, null, null, null, customStart, customEnd);
       } else if (viewMode === 'month') {
         data = await getAnalytics(selectedMonth, selectedYear, null);
       } else if (viewMode === 'day') {
+        if (selectedDate > todayStr) {
+          setToast({ message: t("Future dates are not allowed"), type: 'error' });
+          setLoading(false);
+          return;
+        }
         data = await getAnalytics(null, null, null, selectedDate);
       } else {
         data = await getAnalytics(null, null, days);
@@ -535,10 +546,17 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                     <input
                       type="date"
                       value={customStart}
+                      max={customEnd && customEnd < new Date().toLocaleDateString('en-CA') ? customEnd : new Date().toLocaleDateString('en-CA')}
                       onChange={(e) => {
-                        setCustomStart(e.target.value);
-                        if (customEnd && e.target.value > customEnd) {
-                          setCustomEnd(e.target.value);
+                        let val = e.target.value;
+                        const todayStr = new Date().toLocaleDateString('en-CA');
+                        if (val > todayStr) {
+                          setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                          val = todayStr;
+                        }
+                        setCustomStart(val);
+                        if (customEnd && val > customEnd) {
+                          setCustomEnd(val);
                         }
                       }}
                       className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
@@ -546,8 +564,17 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                     <input
                       type="date"
                       value={customEnd}
-                      min={customStart}
-                      onChange={(e) => setCustomEnd(e.target.value)}
+                      min={customStart || undefined}
+                      max={new Date().toLocaleDateString('en-CA')}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        const todayStr = new Date().toLocaleDateString('en-CA');
+                        if (val > todayStr) {
+                          setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                          val = todayStr;
+                        }
+                        setCustomEnd(val);
+                      }}
                       className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
                   </div>
                 </div>
@@ -558,8 +585,16 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                     <input
                       type="date"
                       value={selectedDate}
-                      max={new Date().toISOString().split('T')[0]}
-                      onChange={(e) => setSelectedDate(e.target.value)}
+                      max={new Date().toLocaleDateString('en-CA')}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        const todayStr = new Date().toLocaleDateString('en-CA');
+                        if (val > todayStr) {
+                          setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                          val = todayStr;
+                        }
+                        setSelectedDate(val);
+                      }}
                       className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
                   </div>
                 </div>
@@ -1001,7 +1036,9 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                         <div className="bg-yellow-500/10 rounded-xl p-2.5 border border-yellow-500/20 shadow-sm">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Least Used")}</p>
                           <p className="text-xs font-bold text-white">{leastUsed._id}</p>
-                          <p className="text-[10px] text-gray-500 mt-0.5">{t("Consider promoting this method")}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            {leastUsed._id === 'Mixed' ? t("Split payment transactions") : t("Consider promoting this method")}
+                          </p>
                         </div>
                       </div>
                     );
@@ -1070,7 +1107,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               <div className="flex justify-between items-center py-2">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Net Revenue")}</span>
                 <span className="font-bold text-[#22c55e] text-base">
-                  <AnimatedNumber value={summary.period.revenue} isCurrency={true} />
+                  <AnimatedNumber value={summary.period.netRevenue !== undefined ? summary.period.netRevenue : Math.max(0, (summary.period.revenue || 0) - (summary.period.tax || 0))} isCurrency={true} />
                 </span>
               </div>
             </div>

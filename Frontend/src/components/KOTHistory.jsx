@@ -8,6 +8,7 @@ import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
 import BackButton from './common/BackButton';
 import realtimeService from '../services/realtimeService';
+import { formatTime12 } from '../utils/timeFormat';
 
 const KOTHistory = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -64,8 +65,8 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       }
     }).catch(() => {});
 
-    // 2. Fetch fresh
-    fetchKOTs(selectedDate, debouncedSearchTerm, false);
+    // 2. Fetch fresh with background refresh so cache is displayed immediately and dynamic top loader shows
+    fetchKOTs(selectedDate, debouncedSearchTerm, true);
   }, []);
 
   // When debounced search term changes
@@ -79,14 +80,20 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
   }, [debouncedSearchTerm]);
 
   const handleDateChange = (newDate) => {
-    setSelectedDate(newDate);
+    const todayStr = getTodayDateStr();
+    let finalDate = newDate;
+    if (newDate && newDate > todayStr) {
+      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+      finalDate = todayStr;
+    }
+    setSelectedDate(finalDate);
     // Instant cache peek if available
-    getCachedKotHistory(newDate).then((cached) => {
+    getCachedKotHistory(finalDate).then((cached) => {
       if (cached && Array.isArray(cached) && cached.length > 0) {
         setKots(cached);
       }
     }).catch(() => {});
-    fetchKOTs(newDate, debouncedSearchTerm, false);
+    fetchKOTs(finalDate, debouncedSearchTerm, false);
   };
 
   const handleResetToToday = () => {
@@ -189,15 +196,24 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
           quantity: 0,
           isCancelled: false,
           unitStatuses: [],
-          status: i.status || 'Pending'
+          status: 'Pending',
+          reducedQuantity: 0,
+          cancelledQuantity: 0
         };
       }
       
-      if (isCancelled) {
+      if (isCancelled && qty === 0) {
+        // Fully cancelled item
         itemMap[key].isCancelled = true;
-        const cancelQty = Math.max(1, parseInt(i.cancelledQuantity || i.reducedQuantity || (qty === 0 ? 1 : qty), 10));
+        const cancelQty = Math.max(1, parseInt(i.cancelledQuantity || i.reducedQuantity || 1, 10));
         itemMap[key].cancelledQuantity = Math.max(itemMap[key].cancelledQuantity || 0, cancelQty);
+      } else if (isCancelled && qty > 0) {
+        // Cancellation slip entry with quantity
+        const cancelQty = Math.max(1, parseInt(i.cancelledQuantity || qty, 10));
+        itemMap[key].cancelledQuantity = Math.max(itemMap[key].cancelledQuantity || 0, cancelQty);
+        itemMap[key].reducedQuantity = Math.max(itemMap[key].reducedQuantity || 0, cancelQty);
       } else {
+        // Active item
         itemMap[key].quantity += qty;
         const itemReduced = Math.max(0, parseInt(i.reducedQuantity || i.cancelledQuantity || 0, 10));
         if (itemReduced > 0) {
@@ -207,7 +223,13 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
           ? i.unitStatuses
           : Array.from({ length: qty }, () => i.status || 'Pending');
         itemMap[key].unitStatuses.push(...units);
-        if (i.status === 'Preparing') itemMap[key].status = 'Preparing';
+      }
+    });
+
+    // If an item has active quantity > 0, it is actively being prepared (not cancelled)
+    Object.values(itemMap).forEach(item => {
+      if (item.quantity > 0) {
+        item.isCancelled = false;
       }
     });
 
@@ -216,13 +238,16 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
     if (activeItems.length === 0) return 'No active items';
 
     const summary = activeItems.map((i) => {
-      if (i.isCancelled && i.quantity === 0) {
+      // Fully cancelled item
+      if (i.quantity === 0 || (i.isCancelled && i.quantity === 0)) {
         const cQty = i.cancelledQuantity || 1;
-        return `${cQty}x ${t(i.name)} (${t("Cancelled")})`;
+        return `[CANCELLED] ${cQty}x ${t(i.name)}`;
       }
+
+      // Active item with quantity > 0
       const qty = i.quantity;
-      const reducedSuffix = i.reducedQuantity > 0 ? ` (-${i.reducedQuantity}x ${t("Reduced")})` : '';
-      const units = i.unitStatuses;
+      const reducedSuffix = i.reducedQuantity > 0 ? ` [-${i.reducedQuantity}x ${t("Cancelled")}]` : '';
+      const units = i.unitStatuses || [];
       const prep = units.filter(s => s === 'Ready' || s === 'Prepared').length;
       const cook = units.filter(s => s === 'Preparing').length;
       const pend = units.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
@@ -234,20 +259,31 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         if (pend > 0) parts.push(`${pend} Pending`);
         return `${qty}x ${t(i.name)}${reducedSuffix} (${parts.join(', ')})`;
       }
-      return `${qty}x ${t(i.name)}${reducedSuffix} [${t(i.status || 'Pending')}]`;
+
+      // Active item status — Cannot be Cancelled when qty > 0
+      let itemStatus = 'Pending';
+      if (prep === qty && qty > 0) {
+        itemStatus = 'Prepared';
+      } else if (cook > 0 || prep > 0) {
+        itemStatus = 'Preparing';
+      } else if (i.status && i.status !== 'Cancelled') {
+        itemStatus = i.status;
+      }
+      return `${qty}x ${t(i.name)}${reducedSuffix} [${t(itemStatus)}]`;
     }).join(', ');
 
     return summary.length > 90 ? summary.substring(0, 87) + '...' : summary;
   };
 
-  const getKOTStatus = (items) => {
+  const getKOTStatus = (items, billStatus) => {
+    if (billStatus === 'Paid' || billStatus === 'Settled') return 'Prepared';
     if (!items || items.length === 0) return 'Pending';
     const validItems = items.filter(i => (i.quantity || 0) > 0 || i.isCancelled);
     if (validItems.length === 0) return 'Pending';
-    const allCancelled = validItems.every(i => i.status === 'Cancelled' || i.isCancelled);
-    if (allCancelled) return 'Cancelled';
-    const allReady = validItems.every(i => i.status === 'Ready' || i.status === 'Cancelled' || i.isCancelled);
-    const anyPreparing = validItems.some(i => i.status === 'Preparing');
+    const activeItems = validItems.filter(i => (i.quantity || 0) > 0 && !i.isCancelled && i.status !== 'Cancelled');
+    if (activeItems.length === 0) return 'Cancelled';
+    const allReady = activeItems.every(i => i.status === 'Ready' || i.status === 'Prepared');
+    const anyPreparing = activeItems.some(i => i.status === 'Preparing');
     if (allReady) return 'Prepared';
     if (anyPreparing) return 'Preparing';
     return 'Ordered';
@@ -261,6 +297,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         groups[groupId] = {
           id: groupId,
           tableNo: kot.tableNo,
+          billStatus: kot.billStatus,
           createdAt: kot.createdAt,
           items: [],
           kots: []
@@ -270,7 +307,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         groups[groupId].createdAt = kot.createdAt;
       }
       groups[groupId].kots.push(kot);
-      groups[groupId].items.push(...(kot.items || []).filter(i => (i.quantity || 0) > 0 || i.isCancelled));
+      groups[groupId].items.push(...(kot.items || []).filter(i => ((i.quantity || 0) > 0 || i.isCancelled) && !i.isCancellationSlip && !kot.kotNumber?.startsWith('CANCEL')));
     });
     return Object.values(groups).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [kots]);
@@ -319,6 +356,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
             <input
               type="date"
               value={selectedDate}
+              max={getTodayDateStr()}
               onChange={(e) => handleDateChange(e.target.value)}
               className="bg-transparent text-[11px] sm:text-xs font-bold text-text-main outline-none cursor-pointer w-[105px] sm:w-[115px] border-none"
               style={{ colorScheme: 'light' }}
@@ -330,13 +368,13 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
 
       {/* Main Content Container */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {loading ? (
+        {loading && kots.length === 0 ? (
           <div className="bg-surface border border-border rounded-2xl p-4 flex-1 flex flex-col gap-3 shadow-xs">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="h-16 bg-text-muted/10 rounded-xl animate-pulse w-full"></div>
             ))}
           </div>
-        ) : kots.length === 0 ? (
+        ) : kots.length === 0 && !refreshing ? (
           <div className="bg-surface border border-border rounded-2xl flex-1 flex flex-col items-center justify-center text-text-muted shadow-xs p-6 text-center">
             <FileText size={48} className="opacity-20 mb-3" />
             <p className="font-mono text-base sm:text-lg text-text-main font-bold">{t("No KOTs found.")}</p>
@@ -369,6 +407,28 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
+                  {/* Dynamic Top UI Loading Section for Latest KOTs */}
+                  {refreshing && (
+                    <tr className="bg-gradient-to-r from-orange-50/80 via-amber-50/60 to-orange-50/80 dark:from-orange-950/30 dark:via-amber-950/20 dark:to-orange-950/30 border-b-2 border-orange-300/70 dark:border-orange-700/40 animate-pulse">
+                      <td colSpan={6} className="px-4 py-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-600"></span>
+                            </span>
+                            <span className="text-xs font-bold text-orange-800 dark:text-orange-300 font-mono tracking-tight flex items-center gap-1.5">
+                              {t("Checking for latest KOTs...")}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="h-3 w-16 bg-orange-200/70 dark:bg-orange-800/40 rounded-full animate-pulse"></div>
+                            <div className="h-3 w-32 bg-orange-200/70 dark:bg-orange-800/40 rounded-full animate-pulse"></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {groupedKOTs.map((group) => (
                     <React.Fragment key={group.id}>
                       <tr 
@@ -384,7 +444,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span className="font-mono font-medium text-text-main text-xs sm:text-sm">
-                            {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime12(group.createdAt)}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
@@ -397,12 +457,12 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap">
                           <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
-                            getKOTStatus(group.items) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                            getKOTStatus(group.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
-                            getKOTStatus(group.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                            getKOTStatus(group.items, group.billStatus) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
+                            getKOTStatus(group.items, group.billStatus) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
+                            getKOTStatus(group.items, group.billStatus) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                             'bg-blue-50 text-blue-700 border-blue-200'
                           }`}>
-                            {t(getKOTStatus(group.items))}
+                            {t(getKOTStatus(group.items, group.billStatus))}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap text-right">
@@ -417,7 +477,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                         <tr key={`${kot.billId}-${kot.kotNumber}`} className="bg-surface/30">
                           <td className="px-3 py-2.5 whitespace-nowrap pl-8">
                             <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
-                              kot.kotNumber.startsWith('CANCEL') || getKOTStatus(kot.items) === 'Cancelled' ?
+                              kot.kotNumber.startsWith('CANCEL') || getKOTStatus(kot.items, kot.billStatus) === 'Cancelled' ?
                               'bg-red-50 text-red-700 border-red-200' :
                               'bg-orange-50 text-orange-700 border-orange-200'}`}>
                               {kot.kotNumber}
@@ -425,7 +485,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <span className="font-mono font-medium text-text-muted text-xs">
-                              {new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {formatTime12(kot.createdAt)}
                             </span>
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap"></td>
@@ -436,12 +496,12 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <span className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg font-mono border whitespace-nowrap ${
-                              getKOTStatus(kot.items) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                              getKOTStatus(kot.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
-                              getKOTStatus(kot.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                              getKOTStatus(kot.items, kot.billStatus) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
+                              getKOTStatus(kot.items, kot.billStatus) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
+                              getKOTStatus(kot.items, kot.billStatus) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                               'bg-blue-50 text-blue-700 border-blue-200'
                             }`}>
-                              {t(getKOTStatus(kot.items))}
+                              {t(getKOTStatus(kot.items, kot.billStatus))}
                             </span>
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap text-right">
@@ -461,6 +521,21 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
 
             {/* Mobile Responsive Stacked Card List (Visible on screens < 768px) */}
             <div className="md:hidden overflow-y-auto flex-1 p-3 space-y-3">
+              {/* Dynamic Top UI Loader for Latest KOTs Syncing */}
+              {refreshing && (
+                <div className="bg-gradient-to-r from-orange-50/80 via-amber-50/60 to-orange-50/80 dark:from-orange-950/30 dark:via-amber-950/20 dark:to-orange-950/30 border-2 border-dashed border-orange-400/50 dark:border-orange-500/30 rounded-xl p-2.5 flex items-center justify-between animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-600"></span>
+                    </span>
+                    <span className="text-xs font-bold text-orange-800 dark:text-orange-300 font-mono">
+                      {t("Checking for latest KOTs...")}
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-20 bg-orange-200/70 dark:bg-orange-800/40 rounded-full animate-pulse"></div>
+                </div>
+              )}
               {groupedKOTs.map((group) => (
                 <div key={group.id} className="bg-background rounded-xl p-3.5 border border-border space-y-2.5">
                   <div className="flex items-center justify-between">
@@ -471,12 +546,12 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                       </span>
                     </div>
                     <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md font-mono border ${
-                      getKOTStatus(group.items) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                      getKOTStatus(group.items) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
-                      getKOTStatus(group.items) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                      getKOTStatus(group.items, group.billStatus) === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
+                      getKOTStatus(group.items, group.billStatus) === 'Prepared' ? 'bg-green-50 text-green-700 border-green-200' :
+                      getKOTStatus(group.items, group.billStatus) === 'Preparing' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                       'bg-blue-50 text-blue-700 border-blue-200'
                     }`}>
-                      {t(getKOTStatus(group.items))}
+                      {t(getKOTStatus(group.items, group.billStatus))}
                     </span>
                   </div>
 
@@ -486,7 +561,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
 
                   <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
                     <span className="font-mono text-text-muted">
-                      {new Date(group.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTime12(group.createdAt)}
                     </span>
                     <button
                       onClick={() => setExpandedRow(expandedRow === group.id ? null : group.id)}
@@ -504,7 +579,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                           <div>
                             <span className="font-bold font-mono text-orange-600 block">{kot.kotNumber}</span>
                             <span className="text-[10px] text-text-muted">
-                              {new Date(kot.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {formatTime12(kot.createdAt)}
                             </span>
                           </div>
                           <button

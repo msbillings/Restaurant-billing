@@ -1,6 +1,6 @@
 {
   "name": "ms-billings-desktop",
-  "version": "6.0.85",
+  "version": "6.0.86",
   "description": "Premium Restaurant Management System, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -48,9 +48,9 @@
       "artifactName": "MS-Billings-Setup-${version}.${ext}"
     },
     "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,

@@ -631,27 +631,16 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    console.log('[AutoUpdater] Update downloaded:', info ? info.version : 'ready');
+    console.log('[AutoUpdater] Update downloaded silently:', info ? info.version : 'ready');
     isManualUpdateCheck = false;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-ready', info);
-    } else {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Ready',
-        message: `MS Billings v${info?.version || ''} is downloaded and ready to install. Click Restart Now to apply updates.`,
-        buttons: ['Restart Now', 'Later']
-      }).then((result) => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall(false, true);
-        }
-      });
     }
   });
 
   ipcMain.on('install-update', () => {
     console.log('[AutoUpdater] User requested install update.');
-    autoUpdater.quitAndInstall(false, true);
+    autoUpdater.quitAndInstall(true, true);
   });
 
   ipcMain.on('check-for-updates', () => {

@@ -129,6 +129,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [isViewMode, setIsViewMode] = useState(false);
   const [isCategoryViewMode, setIsCategoryViewMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [descFilter, setDescFilter] = useState('all'); // 'all' | 'hasDesc' | 'disabled'
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, itemId: null, categoryId: null });
   const [toast, setToast] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
@@ -138,8 +139,10 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [sortBy, setSortBy] = useState('latest');
   const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [showMobileActions, setShowMobileActions] = useState(false);
+  const [activeDescTooltip, setActiveDescTooltip] = useState(null);
   // Per-recipe-row dropdown open state & search query
   const [ingredientDropdown, setIngredientDropdown] = useState({}); // { [rowIndex]: { open: bool, query: string } }
+  const [uploadFileInfo, setUploadFileInfo] = useState(null);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -241,6 +244,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     }
     setShowCustomCategoryInput(false);
     setCustomCategoryName('');
+    setUploadFileInfo(null);
     setIsModalOpen(true);
   };
 
@@ -641,10 +645,16 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
     setDeleteModal({ isOpen: true, itemId: null, categoryId: id });
   };
 
-  const filteredItems = items.filter((item) =>
-  item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  (item.category?.name || item.category || '').toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => {
+  const filteredItems = items.filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.category?.name || item.category || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDesc =
+      descFilter === 'all' ||
+      (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') ||
+      (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
+    return matchesSearch && matchesDesc;
+  }).sort((a, b) => {
     switch (sortBy) {
       case 'latest':
         return new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0);
@@ -737,7 +747,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
           <div className="flex bg-background p-0.5 rounded-xl border border-border shrink-0">
             <button
               onClick={() => setActiveTab('items')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'items'
                   ? 'bg-primary text-white shadow-xs'
                   : 'text-text-muted hover:text-text-main hover:bg-surface'
@@ -747,7 +757,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             </button>
             <button
               onClick={() => setActiveTab('categories')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'categories'
                   ? 'bg-primary text-white shadow-xs'
                   : 'text-text-muted hover:text-text-main hover:bg-surface'
@@ -770,26 +780,26 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <>
                 <button
                   onClick={() => setIsBulkImportModalOpen(true)}
-                  className="flex items-center gap-1 bg-background text-text-muted px-2 py-1 rounded-xl hover:bg-surface-hover hover:text-text-main transition-colors border border-border text-xs font-semibold shadow-2xs"
+                  className="flex items-center gap-1 bg-background text-text-muted px-2 py-1 md:px-3 md:py-1.5 rounded-xl hover:bg-surface-hover hover:text-text-main transition-colors border border-border text-xs md:text-sm font-semibold shadow-2xs"
                   title={t("Bulk Import (.xlsx, .csv)")}
                 >
-                  <Download size={13} />
+                  <Download size={15} className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="hidden xs:inline">{t("Import")}</span>
                 </button>
                 <button
                   onClick={handleExportExcel}
-                  className="flex items-center gap-1 bg-background text-text-muted px-2 py-1 rounded-xl hover:bg-surface-hover hover:text-text-main transition-colors border border-border text-xs font-semibold shadow-2xs"
+                  className="flex items-center gap-1 bg-background text-text-muted px-2 py-1 md:px-3 md:py-1.5 rounded-xl hover:bg-surface-hover hover:text-text-main transition-colors border border-border text-xs md:text-sm font-semibold shadow-2xs"
                   title={t("Export Excel / CSV")}
                 >
-                  <Upload size={13} />
+                  <Upload size={15} className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="hidden xs:inline">{t("Export")}</span>
                 </button>
                 <button
                   onClick={() => setDeleteModal({ isOpen: true, itemId: null, categoryId: null, deleteAll: true })}
-                  className="flex items-center gap-1 bg-danger/10 text-danger px-2 py-1 rounded-xl hover:bg-danger/20 transition-colors border border-danger/20 text-xs font-semibold"
+                  className="flex items-center gap-1 bg-danger/10 text-danger px-2 py-1 md:px-3 md:py-1.5 rounded-xl hover:bg-danger/20 transition-colors border border-danger/20 text-xs md:text-sm font-semibold"
                   title={t("Delete All Items")}
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={15} className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="hidden sm:inline">{t("Delete All")}</span>
                 </button>
               </>
@@ -798,9 +808,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             {user?.role === 'Admin' && activeTab === 'items' && (
               <button
                 onClick={() => handleOpenModal()}
-                className="flex items-center gap-1 bg-primary text-white px-2.5 sm:px-3 py-1 rounded-xl hover:bg-primary-hover transition-colors shadow-xs text-xs font-bold whitespace-nowrap"
+                className="flex items-center gap-1 bg-primary text-white px-2.5 sm:px-3 py-1 md:px-4 md:py-1.5 rounded-xl hover:bg-primary-hover transition-colors shadow-xs text-xs md:text-sm font-bold whitespace-nowrap"
               >
-                <Plus size={14} />
+                <Plus size={16} className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 <span>{t("Add Item")}</span>
               </button>
             )}
@@ -808,9 +818,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             {user?.role === 'Admin' && activeTab === 'categories' && (
               <button
                 onClick={() => handleOpenCategoryModal()}
-                className="flex items-center gap-1 bg-secondary text-white px-2.5 sm:px-3 py-1 rounded-xl hover:bg-accent transition-colors shadow-xs text-xs font-bold whitespace-nowrap"
+                className="flex items-center gap-1 bg-secondary text-white px-2.5 sm:px-3 py-1 md:px-4 md:py-1.5 rounded-xl hover:bg-accent transition-colors shadow-xs text-xs md:text-sm font-bold whitespace-nowrap"
               >
-                <FolderPlus size={14} />
+                <FolderPlus size={16} className="w-3.5 h-3.5 md:w-4 md:h-4" />
                 <span>{t("Add Category")}</span>
               </button>
             )}
@@ -870,10 +880,12 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
       </div>
 
       {/* Search, Sort & Top Pagination */}
-      <div className="mb-2 sm:mb-2.5 flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div className="mb-2 sm:mb-2.5 flex flex-col gap-1.5 shrink-0">
+        {/* Row 1: Search + Sort + Pagination */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
         {/* Search Input */}
         <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={13} />
+          <Search className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 text-text-muted w-3.5 h-3.5 md:w-4 md:h-4" />
           <input
             type="search"
             name="search_menu_items_no_autofill"
@@ -885,7 +897,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             placeholder={`Search ${activeTab === 'items' ? 'items' : 'categories'}...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-xs text-text-main shadow-2xs font-medium" />
+            className="w-full pl-8 md:pl-10 pr-3 md:pr-4 py-1.5 md:py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary transition-colors text-xs md:text-sm text-text-main shadow-2xs font-medium" />
         </div>
 
         {/* Sort Filter */}
@@ -893,7 +905,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
           <select 
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="w-28 sm:w-36 md:w-44 px-2.5 py-1.5 border border-border rounded-xl bg-surface text-text-main text-xs focus:outline-none focus:border-primary transition-colors shadow-2xs cursor-pointer shrink-0 font-medium"
+            className="w-28 sm:w-36 md:w-48 px-2.5 py-1.5 md:px-3 md:py-2 border border-border rounded-xl bg-surface text-text-main text-xs md:text-sm focus:outline-none focus:border-primary transition-colors shadow-2xs cursor-pointer shrink-0 font-medium"
           >
             <option value="latest">{t("Added: Latest")}</option>
             <option value="oldest">{t("Added: Oldest")}</option>
@@ -928,6 +940,51 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             </button>
           </div>
         )}
+        </div>{/* end Row 1 */}
+
+        {/* Row 2: Filter Pills — only for items tab, shown on all screen sizes */}
+        {activeTab === 'items' && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] md:text-xs font-bold text-text-muted uppercase tracking-wider shrink-0">{t("Filter")}:</span>
+            <button
+              onClick={() => { setDescFilter('all'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border ${
+                descFilter === 'all'
+                  ? 'bg-primary text-white border-primary shadow-xs'
+                  : 'bg-surface border-border text-text-muted hover:border-primary hover:text-primary'
+              }`}
+            >
+              {t("All")}
+            </button>
+            <button
+              onClick={() => { setDescFilter('hasDesc'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 ${
+                descFilter === 'hasDesc'
+                  ? 'bg-blue-500 text-white border-blue-500 shadow-xs'
+                  : 'bg-surface border-border text-text-muted hover:border-blue-400 hover:text-blue-600'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+              {t("Has Description")}
+            </button>
+            <button
+              onClick={() => { setDescFilter('noDesc'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 ${
+                descFilter === 'noDesc'
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
+                  : 'bg-surface border-border text-text-muted hover:border-orange-400 hover:text-orange-600'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
+              {t("No Description")}
+            </button>
+            {descFilter !== 'all' && (
+              <span className="text-[10px] md:text-xs text-text-muted font-medium ml-1">
+                ({filteredItems.length} {t("items")})
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Table Container */}
@@ -938,11 +995,12 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <table className="w-full text-left border-collapse">
                 <thead className="bg-background sticky top-0 z-10">
                   <tr>
-                    <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Name")}</th>
-                    <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Category")}</th>
-                    <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Type")}</th>
-                    <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Price")}</th>
-                    <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border text-right">{t("Actions")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Name")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Date Added")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Category")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Type")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border">{t("Price")}</th>
+                    <th className="px-3 md:px-4 py-2 md:py-3 text-[11px] md:text-[13px] font-bold text-text-muted uppercase tracking-wider border-b border-border text-right">{t("Actions")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border text-xs">
@@ -956,6 +1014,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                           </div>
                         </td>
                         <td className="px-3 py-2.5"><div className="w-16 h-3.5 bg-surface-hover rounded"></div></td>
+                        <td className="px-3 py-2.5"><div className="w-16 h-3.5 bg-surface-hover rounded"></div></td>
                         <td className="px-3 py-2.5"><div className="w-12 h-3.5 bg-surface-hover rounded-full"></div></td>
                         <td className="px-3 py-2.5"><div className="w-10 h-3.5 bg-surface-hover rounded"></div></td>
                         <td className="px-3 py-2.5 text-right"><div className="w-16 h-3.5 bg-surface-hover rounded ml-auto"></div></td>
@@ -963,7 +1022,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                     ))
                   ) : paginatedItems.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="p-10 text-center text-text-muted">
+                      <td colSpan="6" className="p-10 text-center text-text-muted">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <Loader2 size={24} className={loading ? "animate-spin text-primary" : "hidden"} />
                           <span className="font-medium text-xs">
@@ -983,8 +1042,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                   ) : (
                     paginatedItems.map((item) => (
                       <tr key={item._id} className="hover:bg-surface-hover transition-colors group">
-                        <td className="px-3 py-2 font-medium text-text-main whitespace-nowrap">
-                          <div className="flex items-center gap-2.5">
+                        <td className="px-3 md:px-4 py-2 md:py-3 font-medium text-text-main">
+                          <div className="flex items-center gap-2.5 min-w-0">
                             {formatImageUrl(item.image) ? (
                               <div className="w-8 h-8 rounded-lg overflow-hidden bg-background border border-border shrink-0 shadow-2xs relative">
                                 <div className="absolute inset-0 bg-gradient-to-r from-surface via-surface-hover to-surface animate-pulse rounded-lg" />
@@ -1004,21 +1063,80 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                                 {item.name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className="font-semibold">{item.name}</span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-semibold sm:text-sm md:text-base truncate">{item.name}</span>
+                              {item.description && (
+                                <div className="relative flex items-center shrink-0">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveDescTooltip(activeDescTooltip === item._id ? null : item._id);
+                                    }}
+                                    className={`p-0.5 rounded-full transition-colors shrink-0 ${
+                                      activeDescTooltip === item._id
+                                        ? 'text-primary bg-primary/10'
+                                        : 'text-text-muted hover:text-primary hover:bg-primary/10'
+                                    }`}
+                                    title={t("View Description")}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                                  </button>
+                                    {activeDescTooltip === item._id && (
+                                      <>
+                                        {/* Backdrop to close tooltip on mobile tap */}
+                                        <div
+                                          className="fixed inset-0 z-[59] md:hidden"
+                                          onClick={(e) => { e.stopPropagation(); setActiveDescTooltip(null); }}
+                                        />
+                                        <div
+                                          className="fixed left-1/2 -translate-x-1/2 top-1/3 -translate-y-1/2 md:absolute md:left-0 md:top-full md:translate-x-0 md:translate-y-0 md:mt-2 z-[60] bg-surface border border-border shadow-2xl rounded-xl p-3 w-[85vw] md:w-[320px] max-w-[340px] whitespace-normal animate-in fade-in zoom-in-95"
+                                          onClick={(e) => { e.stopPropagation(); }}
+                                        >
+                                        <div className="flex justify-between items-center mb-2 border-b border-border pb-2">
+                                          <span className="font-bold text-xs uppercase text-text-muted tracking-wider">{t("Description")}</span>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setActiveDescTooltip(null); }}
+                                            className="text-text-muted hover:text-text-main bg-background hover:bg-surface-hover rounded-lg p-1 transition-colors"
+                                          >
+                                            <X size={13} />
+                                          </button>
+                                        </div>
+                                        <p className="text-sm text-text-main leading-relaxed overflow-y-auto max-h-[60vh] md:max-h-[300px] custom-scrollbar pr-1">{item.description}</p>
+                                      </div>
+                                      </>
+                                    )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-text-muted whitespace-nowrap">
-                          <span className="px-2 py-0.5 bg-background rounded-md border border-border text-[11px]">
+                        {/* Date Added column */}
+                        <td className="px-3 md:px-4 py-2 md:py-3 whitespace-nowrap">
+                          {item.createdAt ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[11px] md:text-xs font-medium text-text-main">
+                                {new Date(item.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                              <span className="text-[10px] text-text-muted hidden md:block">
+                                {new Date(item.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-text-muted">-</span>
+                          )}
+                        </td>
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-text-muted whitespace-nowrap">
+                          <span className="px-2 py-0.5 md:px-2.5 md:py-1 bg-background rounded-md border border-border text-[11px] md:text-xs">
                             {item.category?.name || item.category}
                           </span>
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                        <td className="px-3 md:px-4 py-2 md:py-3 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 md:px-2.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold ${item.type === 'veg' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                             {item.type === 'veg' ? 'Veg' : 'Non-Veg'}
                           </span>
                         </td>
-                        <td className="px-3 py-2 font-bold text-text-main whitespace-nowrap">₹{item.price}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <td className="px-3 md:px-4 py-2 md:py-3 font-bold text-text-main whitespace-nowrap md:text-sm">₹{item.price}</td>
+                        <td className="px-3 md:px-4 py-2 md:py-3 text-right whitespace-nowrap">
                           <div className="flex justify-end gap-1.5 items-center">
                             <button
                               onClick={() => handleToggleAvailability(item)}
@@ -1258,7 +1376,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               </div>
 
               {/* Information Grid: Compact Stat Pills */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 {/* Category */}
                 <div className="bg-background p-2 rounded-xl border border-border flex flex-col justify-center shadow-2xs">
                   <span className="text-[10px] text-text-muted font-medium flex items-center gap-1">
@@ -1268,44 +1386,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                     {formData.category || currentItem?.category?.name || currentItem?.category || '-'}
                   </span>
                 </div>
-
-                {/* GST / Tax */}
-                <div className="bg-background p-2 rounded-xl border border-border flex flex-col justify-center shadow-2xs">
-                  <span className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                    <Percent size={10} className="text-primary shrink-0" /> {t("GST Rate")}
-                  </span>
-                  <span className="text-xs font-bold text-text-main mt-0.5">
-                    {formData.taxRate || currentItem?.taxRate || 0}%
-                  </span>
-                </div>
-
-                {/* HSN Code */}
-                <div className="bg-background p-2 rounded-xl border border-border flex flex-col justify-center shadow-2xs">
-                  <span className="text-[10px] text-text-muted font-medium flex items-center gap-1">
-                    <Hash size={10} className="text-primary shrink-0" /> {t("HSN Code")}
-                  </span>
-                  <span className="text-xs font-bold text-text-main font-mono mt-0.5 truncate">
-                    {formData.hsnCode || currentItem?.hsnCode || '-'}
-                  </span>
-                </div>
               </div>
-
-              {/* Variants Section (if available) */}
-              {((formData.variants && formData.variants.length > 0) || (currentItem?.variants && currentItem.variants.length > 0)) && (
-                <div className="bg-background p-2 rounded-xl border border-border">
-                  <span className="text-[10px] text-text-muted font-semibold block mb-1">
-                    {t("Variants & Pricing")}
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(formData.variants?.length ? formData.variants : currentItem?.variants || []).map((v, idx) => (
-                      <span key={idx} className="inline-flex items-center gap-1 bg-surface px-2 py-0.5 rounded-lg border border-border text-[11px] font-bold text-text-main shadow-2xs">
-                        <span>{v.name}:</span>
-                        <span className="text-primary font-black">₹{parseFloat(v.price).toFixed(2)}</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Description (if available) */}
               {(formData.description || currentItem?.description) && (
@@ -1536,91 +1617,6 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs sm:text-sm font-medium text-text-muted">{t("HSN Code")}</label>
-                  <input
-                    type="text"
-                    value={formData.hsnCode}
-                    onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-xs sm:text-sm text-text-main focus:outline-none focus:border-primary"
-                    placeholder={t("e.g. 2106")}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs sm:text-sm font-medium text-text-muted">{t("GST Rate (%)")}</label>
-                  <select
-                    value={formData.taxRate}
-                    onChange={(e) => setFormData({ ...formData, taxRate: Number(e.target.value) })}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-xs sm:text-sm text-text-main focus:outline-none focus:border-primary"
-                  >
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Variants Section */}
-              <div className="space-y-2 p-3 bg-background rounded-xl border border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-xs sm:text-sm font-bold text-text-main">{t("Item Variants (Sizes/Types)")}</label>
-                    <p className="text-[10px] sm:text-xs text-text-muted">{t("E.g., Mini, Half, Full. Overrides base price.")}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, variants: [...(formData.variants || []), { name: '', price: '' }] })}
-                    className="flex items-center gap-1 text-[11px] bg-primary/10 text-primary px-2.5 py-1 rounded-lg hover:bg-primary/20 transition-colors font-bold cursor-pointer"
-                  >
-                    <Plus size={13} /> {t("Add Variant")}
-                  </button>
-                </div>
-                {formData.variants && formData.variants.length > 0 && (
-                  <div className="space-y-2 mt-2">
-                    {formData.variants.map((variant, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <input
-                          type="text"
-                          placeholder={t("Variant Name (e.g. Half)")}
-                          value={variant.name}
-                          onChange={(e) => {
-                            const newVariants = [...formData.variants];
-                            newVariants[index].name = e.target.value;
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="flex-1 bg-surface border border-border rounded-xl px-3 py-1.5 text-xs text-text-main focus:border-primary focus:outline-none"
-                        />
-                        <input
-                          type="number"
-                          placeholder={t("Price (₹)")}
-                          value={variant.price}
-                          min="0"
-                          step="0.01"
-                          onChange={(e) => {
-                            const newVariants = [...formData.variants];
-                            newVariants[index].price = e.target.value;
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="w-24 bg-surface border border-border rounded-xl px-3 py-1.5 text-xs text-text-main focus:border-primary focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newVariants = formData.variants.filter((_, i) => i !== index);
-                            setFormData({ ...formData, variants: newVariants });
-                          }}
-                          className="p-1.5 text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
               <div className="space-y-1">
                 <label className="text-xs sm:text-sm font-medium text-text-muted">{t("Type")}</label>
@@ -1651,72 +1647,170 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs sm:text-sm font-medium text-text-muted">{t("Item Image (Optional)")}</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.image}
-                    onChange={(e) => setFormData({ ...formData, image: formatImageUrl(e.target.value) })}
-                    className="flex-1 bg-background border border-border rounded-xl px-3 py-1.5 text-xs text-text-main focus:outline-none focus:border-primary"
-                    placeholder={t("Paste image URL or upload file...")}
-                  />
-                  <label className="bg-surface hover:bg-surface-hover text-text-main px-3 py-1.5 rounded-xl cursor-pointer flex items-center gap-1 text-xs border border-border shrink-0 transition-colors shadow-2xs font-medium">
-                    <span>{t("Upload")}</span>
+                <label className="text-xs sm:text-sm font-medium text-text-muted">{t("Item Image (Optional)")} - {t("Max 5MB")}</label>
+                
+                {!uploadFileInfo ? (
+                  <div className="flex gap-2">
                     <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = (event) => {
-                            const img = new Image();
-                            img.onload = () => {
-                              const canvas = document.createElement('canvas');
-                              const MAX_WIDTH = 400;
-                              const MAX_HEIGHT = 400;
-                              let width = img.width;
-                              let height = img.height;
-
-                              if (width > height) {
-                                if (width > MAX_WIDTH) {
-                                  height = Math.round(height * MAX_WIDTH / width);
-                                  width = MAX_WIDTH;
-                                }
-                              } else {
-                                if (height > MAX_HEIGHT) {
-                                  width = Math.round(width * MAX_HEIGHT / height);
-                                  height = MAX_HEIGHT;
-                                }
-                              }
-
-                              canvas.width = width;
-                              canvas.height = height;
-                              const ctx = canvas.getContext('2d');
-                              ctx.drawImage(img, 0, 0, width, height);
-                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
-                              setFormData({ ...formData, image: compressedDataUrl });
-                            };
-                            img.src = event.target.result;
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
+                      type="text"
+                      value={formData.image}
+                      onChange={(e) => setFormData({ ...formData, image: formatImageUrl(e.target.value) })}
+                      className="flex-1 bg-background border border-border rounded-xl px-3 py-1.5 text-xs text-text-main focus:outline-none focus:border-primary"
+                      placeholder={t("Paste image URL or upload file...")}
                     />
-                  </label>
-                </div>
+                    <label className="bg-surface hover:bg-surface-hover text-text-main px-3 py-1.5 rounded-xl cursor-pointer flex items-center gap-1 text-xs border border-border shrink-0 transition-colors shadow-2xs font-medium">
+                      <span>{t("Upload")}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) {
+                            if (file.size > 5 * 1024 * 1024) {
+                              setToast({ message: t("Image size should be less than or equal to 5MB"), type: 'error' });
+                              e.target.value = '';
+                              return;
+                            }
+                            const extension = file.name.split('.').pop();
+                            const sizeInMb = (file.size / (1024 * 1024)).toFixed(2);
+                            setUploadFileInfo({
+                              name: file.name,
+                              extension: extension,
+                              size: `${sizeInMb} MB`
+                            });
+
+                            const reader = new FileReader();
+                            reader.onloadend = (event) => {
+                              const img = new Image();
+                              img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                const MAX_WIDTH = 400;
+                                const MAX_HEIGHT = 400;
+                                let width = img.width;
+                                let height = img.height;
+
+                                if (width > height) {
+                                  if (width > MAX_WIDTH) {
+                                    height = Math.round(height * MAX_WIDTH / width);
+                                    width = MAX_WIDTH;
+                                  }
+                                } else {
+                                  if (height > MAX_HEIGHT) {
+                                    width = Math.round(width * MAX_HEIGHT / height);
+                                    height = MAX_HEIGHT;
+                                  }
+                                }
+
+                                canvas.width = width;
+                                canvas.height = height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0, width, height);
+                                const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                                setFormData({ ...formData, image: compressedDataUrl });
+                              };
+                              img.src = event.target.result;
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 p-3 bg-surface border border-border rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-text-main truncate max-w-[200px]">{uploadFileInfo.name}</span>
+                        <span className="text-[10px] text-text-muted">Ext: .{uploadFileInfo.extension} • Size: {uploadFileInfo.size}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <label className="bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-xl cursor-pointer flex items-center gap-1 text-[11px] transition-colors font-bold">
+                          <span>{t("Change Pic")}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  setToast({ message: t("Image size should be less than or equal to 5MB"), type: 'error' });
+                                  e.target.value = '';
+                                  return;
+                                }
+                                const extension = file.name.split('.').pop();
+                                const sizeInMb = (file.size / (1024 * 1024)).toFixed(2);
+                                setUploadFileInfo({
+                                  name: file.name,
+                                  extension: extension,
+                                  size: `${sizeInMb} MB`
+                                });
+
+                                const reader = new FileReader();
+                                reader.onloadend = (event) => {
+                                  const img = new Image();
+                                  img.onload = () => {
+                                    const canvas = document.createElement('canvas');
+                                    const MAX_WIDTH = 400;
+                                    const MAX_HEIGHT = 400;
+                                    let width = img.width;
+                                    let height = img.height;
+
+                                    if (width > height) {
+                                      if (width > MAX_WIDTH) {
+                                        height = Math.round(height * MAX_WIDTH / width);
+                                        width = MAX_WIDTH;
+                                      }
+                                    } else {
+                                      if (height > MAX_HEIGHT) {
+                                        width = Math.round(width * MAX_HEIGHT / height);
+                                        height = MAX_HEIGHT;
+                                      }
+                                    }
+
+                                    canvas.width = width;
+                                    canvas.height = height;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0, width, height);
+                                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                                    setFormData({ ...formData, image: compressedDataUrl });
+                                  };
+                                  img.src = event.target.result;
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUploadFileInfo(null);
+                            setFormData({ ...formData, image: '' });
+                          }}
+                          className="bg-danger/10 hover:bg-danger/20 text-danger px-3 py-1.5 rounded-xl cursor-pointer flex items-center text-[11px] transition-colors font-bold"
+                        >
+                          {t("Cancel")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {formatImageUrl(formData.image) && (
                   <div className="relative mt-2 w-full h-28 rounded-xl overflow-hidden bg-background border border-border flex items-center justify-center">
                     <img src={formatImageUrl(formData.image)} alt="Preview" className="w-full h-full object-contain" />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, image: '' })}
-                      className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-black/80 transition-colors text-xs cursor-pointer"
-                      title={t("Remove image")}
-                    >
-                      <X size={12} />
-                    </button>
+                    {!uploadFileInfo && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image: '' })}
+                        className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-black/80 transition-colors text-xs cursor-pointer"
+                        title={t("Remove image")}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

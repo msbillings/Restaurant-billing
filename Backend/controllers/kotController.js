@@ -167,13 +167,17 @@ export const generateKOT = async (req, res) => {
         item.lastPrintedNote = currentNote;
         item.reducedQuantity = (item.reducedQuantity || 0) + reducedCount;
         item.cancelledQuantity = (item.cancelledQuantity || 0) + reducedCount;
+        // Restore quantity to the historical total (printedQty before reduction)
+        // so that BillSummary's formula (quantity - cancelledQuantity = activeQty) stays correct.
+        item.quantity = printedQty;
 
         // Add to kotItems to print cancellation slip
         kotItems.push({
           name: item.name,
           quantity: reducedCount,
           specialNote: `[CANCELLED] ${currentQty === 0 ? 'Full Cancellation' : `Reduced to ${currentQty}`}`,
-          isNoteUpdateOnly: true, // Don't save as new KOT to DB
+          isNoteUpdateOnly: false, // Save cancellation slip to DB so it appears in KOT History
+          isCancellationSlip: true, // Flag to prevent double-counting in aggregations
           status: 'Cancelled',
           isCancelled: true
         });
@@ -234,29 +238,49 @@ export const generateKOT = async (req, res) => {
 
     const itemsToSave = kotItems.filter(k => !k.isNoteUpdateOnly);
 
-    // Calculate active queue number for this bill (order of active open/billed tables by creation time)
+    // Calculate active kitchen queue number for this bill (matching active orders in KDS)
     let queueNumber = 1;
     try {
-      const activeOpenBills = await Bill.find({
-        status: { $in: ['Open', 'Billed'] }
+      const activeKitchenBills = await Bill.find({
+        status: { $in: ['Open', 'Billed'] },
+        'kots.0': { $exists: true }
       })
-      .select('_id tableNo createdAt')
+      .select('_id tableNo createdAt items kots')
       .sort({ createdAt: 1 })
       .lean();
 
-      const activeIdx = activeOpenBills.findIndex(b => b._id.toString() === bill._id.toString());
+      // Only count bills with active pending or preparing items in kitchen (or this current bill)
+      const validKitchenQueue = activeKitchenBills.filter(b => {
+        if (b._id.toString() === bill._id.toString()) return true;
+        return (b.items || []).some(i => 
+          !i.isCancelled && 
+          i.status !== 'Cancelled' && 
+          (i.status === 'Pending' || i.status === 'Preparing' || (i.pendingQuantity || 0) > 0 || (i.preparingQuantity || 0) > 0)
+        );
+      });
+
+      const activeIdx = validKitchenQueue.findIndex(b => b._id.toString() === bill._id.toString());
       if (activeIdx !== -1) {
         queueNumber = activeIdx + 1;
+      } else {
+        queueNumber = validKitchenQueue.length + 1;
       }
     } catch (e) {
       console.warn('Error calculating queueNumber:', e.message);
     }
 
+    bill.queueNumber = queueNumber;
+    bill.tokenNo = queueNumber;
+
     if (itemsToSave.length > 0) {
-      // Generate KOT number (e.g., "KOT-1" relative to this bill)
-      const kotNumber = `KOT-${(bill.kots ? bill.kots.length : 0) + 1}`;
+      // Generate KOT number
+      const isCancellationOnly = itemsToSave.every(i => i.isCancelled || i.status === 'Cancelled');
+      const prefix = isCancellationOnly ? 'CANCEL-' : 'KOT-';
+      const kotNumber = `${prefix}${(bill.kots ? bill.kots.length : 0) + 1}`;
       const newKOT = {
         kotNumber,
+        queueNumber,
+        tokenNo: queueNumber,
         items: itemsToSave,
         createdAt: new Date()
       };
@@ -458,26 +482,34 @@ export const getTodayKOTs = async (req, res) => {
       queryEnd = new Date(Date.UTC(y, now.getMonth(), now.getDate(), 23, 59, 59, 999) + 24 * 3600 * 1000);
     }
 
-    // Find bills that have KOTs
+    // Find bills that have KOTs for the target date or are currently active
     const bills = await Bill.find({
       $or: [
-        { 'kots.0': { $exists: true } },
-        { createdAt: { $gte: queryStart, $lte: queryEnd } },
-        { updatedAt: { $gte: queryStart, $lte: queryEnd } }
+        { status: { $in: ['Open', 'Billed'] }, 'kots.0': { $exists: true } },
+        { createdAt: { $gte: queryStart, $lte: queryEnd }, 'kots.0': { $exists: true } },
+        { updatedAt: { $gte: queryStart, $lte: queryEnd }, 'kots.0': { $exists: true } },
+        { 'kots.createdAt': { $gte: queryStart, $lte: queryEnd } }
       ]
     })
     .select('tableNo billType orderSource queueNumber tokenNo kots status items createdAt updatedAt')
     .sort({ updatedAt: -1, createdAt: -1 })
-    .limit(500)
+    .limit(200)
     .lean();
 
-    // Build active KDS queue number map for all open/billed orders currently in system
-    const activeOpenBills = (bills || [])
-      .filter(b => b.status === 'Open' || b.status === 'Billed')
+    // Build active KDS queue number map matching orders actively in KDS
+    const activeKitchenBills = (bills || [])
+      .filter(b => (b.status === 'Open' || b.status === 'Billed') && b.kots && b.kots.length > 0)
+      .filter(b => {
+        return (b.items || []).some(i => 
+          !i.isCancelled && 
+          i.status !== 'Cancelled' && 
+          (i.status === 'Pending' || i.status === 'Preparing' || (i.pendingQuantity || 0) > 0 || (i.preparingQuantity || 0) > 0)
+        );
+      })
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
     const activeQueueMap = {};
-    activeOpenBills.forEach((b, idx) => {
+    activeKitchenBills.forEach((b, idx) => {
       activeQueueMap[b._id.toString()] = idx + 1;
       if (b.tableNo) activeQueueMap[b.tableNo] = idx + 1;
     });
@@ -537,10 +569,15 @@ export const getTodayKOTs = async (req, res) => {
               const preparingQty = unitStatuses.filter(s => s === 'Preparing').length;
               const pendingQty = unitStatuses.filter(s => s === 'Pending' || (!s && s !== 'Cancelled')).length;
 
+              const isCancellation = Boolean(kot.kotNumber?.startsWith('CANCEL') || kItem.isCancellationSlip);
+              const reducedQty = Math.max(0, parseInt(orderItem?.reducedQuantity || kItem.reducedQuantity || 0, 10));
+
               return {
                 ...kItem,
                 quantity: qty,
+                reducedQuantity: reducedQty,
                 specialNote: kItem.specialNote || orderItem?.specialNote || '',
+                isCancellationSlip: isCancellation,
                 isCancelled: isCancelled,
                 status: isCancelled ? 'Cancelled' : (kItem.status || 'Pending'),
                 cancelledQuantity: isCancelled ? (itemStatus?.cancelledQuantity || kItem.quantity) : (kItem.cancelledQuantity || 0),
@@ -554,8 +591,8 @@ export const getTodayKOTs = async (req, res) => {
             .filter(item => !item.isNoteUpdateOnly && (item.quantity > 0 || item.isCancelled));
 
 
-          const qNo = activeQueueMap[bill._id.toString()] || activeQueueMap[bill.tableNo] || billQueueMap[bill._id.toString()] || bill.queueNumber || bill.tokenNo || 1;
-          if (bill._id && (!bill.queueNumber || !bill.tokenNo)) {
+          const qNo = activeQueueMap[bill._id.toString()] || activeQueueMap[bill.tableNo] || kot.queueNumber || kot.tokenNo || billQueueMap[bill._id.toString()] || bill.queueNumber || bill.tokenNo || 1;
+          if (bill._id && (activeQueueMap[bill._id.toString()] || !bill.queueNumber || !bill.tokenNo) && (bill.queueNumber !== qNo || bill.tokenNo !== qNo)) {
             Bill.updateOne({ _id: bill._id }, { $set: { queueNumber: qNo, tokenNo: qNo } }).catch(() => {});
           }
 
@@ -661,6 +698,7 @@ export const getActiveKOTs = async (req, res) => {
                 cancelledQuantity: cancelQty,
                 reducedQuantity: 0,
                 specialNote: info?.specialNote || kItem.specialNote || '',
+                isCancellationSlip: true,
                 isCancelled: true,
                 status: 'Cancelled',
                 unitStatuses: [],

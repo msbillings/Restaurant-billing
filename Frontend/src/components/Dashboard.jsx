@@ -12,6 +12,7 @@ import {
 import Toast from './Toast';
 import Invoice from './Invoice';
 import EditHistoryModal from './EditHistoryModal';
+import { formatTime12, formatHourSlot12 } from '../utils/timeFormat';
 
 // Some delicious placeholder images for top items
 const FOOD_IMAGES = [
@@ -161,31 +162,47 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  // Real Sales Overview Data from backend (hourly breakdown)
+  // Real Sales Overview Data from backend (hourly breakdown for Today, date labels for multi-day)
+  const isHourly = dateFilter === 'Today';
   const salesOverviewData = (stats.hourlySales && stats.hourlySales.length > 0)
-    ? stats.hourlySales
-    : Array.from({ length: 24 }, (_, i) => ({ time: `${i.toString().padStart(2, '0')}:00`, sales: 0, orders: 0 }));
+    ? stats.hourlySales.map(item => ({
+        ...item,
+        time: isHourly ? formatTime12(item.time) : item.time
+      }))
+    : Array.from({ length: 24 }, (_, i) => ({ 
+        time: formatHourSlot12(i), 
+        sales: 0, 
+        orders: 0 
+      }));
 
   // Order Status Chart Data
-  const completedOrders = stats.recentBills.length;
-  const runningOrders = stats.activeOrders;
+  const completedOrders = stats.completedOrders !== undefined ? stats.completedOrders : stats.orders;
+  const runningOrders = stats.activeOrders || 0;
+  const billedOrders = stats.billedOrders || 0;
   const canceledOrders = stats.cancelledOrders ? stats.cancelledOrders.length : 0;
-  const pendingOrders = stats.openKOTs ? stats.openKOTs.length : 0;
-  const totalOrderStatus = completedOrders + runningOrders + canceledOrders + pendingOrders || 1;
+  const totalOrderStatus = completedOrders + runningOrders + billedOrders + canceledOrders || 1;
 
   const orderStatusData = [
     { name: 'Completed', value: completedOrders, color: '#3b82f6' },
     { name: 'Running', value: runningOrders, color: '#22c55e' },
+    { name: 'Billed', value: billedOrders, color: '#f59e0b' },
     { name: 'Canceled', value: canceledOrders, color: '#ef4444' },
-    { name: 'Pending', value: pendingOrders, color: '#f97316' },
   ].filter(d => d.value > 0);
+
+  const getPaymentColor = (name, i) => {
+    const n = (name || '').toLowerCase();
+    if (n.includes('card')) return '#10b981';
+    if (n.includes('upi')) return '#3b82f6';
+    if (n.includes('cash')) return '#f59e0b';
+    return PIE_COLORS[i % PIE_COLORS.length];
+  };
 
   // Payment Methods Data
   const paymentData = stats.paymentMethods.length > 0 
     ? stats.paymentMethods.map((m, i) => ({
         name: m._id,
         value: m.revenue,
-        color: PIE_COLORS[i % PIE_COLORS.length]
+        color: getPaymentColor(m._id, i)
       }))
     : [{ name: 'No Data', value: 1, color: '#4b5563' }];
 
@@ -193,7 +210,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-[#1e1e1e] border border-gray-800 p-3 rounded-lg shadow-xl">
-          <p className="text-gray-300 text-xs mb-2">{label}</p>
+          <p className="text-gray-300 text-xs mb-2 font-medium">{isHourly ? formatTime12(label) : label}</p>
           {payload.map((entry, index) => (
             <p key={index} className="text-sm font-bold" style={{ color: entry.color }}>
               {entry.name}: {entry.name === 'sales' || entry.name === 'value' ? formatCurrency(entry.value) : entry.value}
@@ -259,7 +276,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
 
           <div className="flex items-center gap-1.5 text-xs sm:text-sm">
             <Clock size={14} className="text-gray-500" />
-            <span>{currentDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span>{formatTime12(currentDate)}</span>
           </div>
         </div>
 
@@ -277,7 +294,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
         </div>
         <div className="glass-card p-3 sm:p-5 border-l-2 border-l-orange-500">
           <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Customers")}</p>
-          <p className="text-lg sm:text-2xl font-bold text-white">{stats.recentBills.length}</p>
+          <p className="text-lg sm:text-2xl font-bold text-white">{stats.totalCustomers || stats.orders || stats.recentBills.length}</p>
         </div>
         <div className="glass-card p-3 sm:p-5 border-l-2 border-l-purple-500">
           <p className="text-gray-400 text-xs sm:text-sm mb-1">{t("Avg. Order Value")}</p>
@@ -294,16 +311,20 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
             {stats.topItems && stats.topItems.length > 0 ? (
               stats.topItems.slice(0, 5).map((item, idx) => (
                 <div key={idx} className="flex flex-col items-center min-w-[100px] sm:min-w-[120px]">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-orange-500/50 p-1 mb-2 sm:mb-3 bg-black/40">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-orange-500/50 p-1 mb-2 sm:mb-3 bg-black/40 overflow-hidden">
                     <img 
                       src={getFoodImage(item._id)} 
                       alt={item._id} 
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = FOOD_IMAGES[0];
+                      }}
                       className="w-full h-full object-cover rounded-full"
                     />
                   </div>
                   <p className="font-bold text-xs sm:text-sm text-center mb-1 line-clamp-1 w-full">{t(item._id)}</p>
                   <p className="text-orange-400 font-bold text-xs sm:text-sm">{formatCurrency(item.revenue)}</p>
-                  <p className="text-[10px] sm:text-xs text-gray-500">{item.quantity} {t("Orders")}</p>
+                  <p className="text-[10px] sm:text-xs text-gray-500">{item.quantity} {t("Sold")}</p>
                 </div>
               ))
             ) : (
@@ -322,14 +343,15 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
           </div>
           <div className="flex-1 w-full min-h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={salesOverviewData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <ComposedChart data={salesOverviewData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} />
+                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 11 }} interval="preserveStartEnd" />
                 <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#71717a', fontSize: 12 }} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val} />
+                <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#3b82f6', fontSize: 12 }} allowDecimals={false} />
                 <RechartsTooltip content={<CustomTooltip />} />
                 <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#a1a1aa' }} />
                 <Bar yAxisId="left" dataKey="sales" name={t("Sales (₹)")} fill="#f97316" barSize={28} radius={[6, 6, 0, 0]} />
-                <Line yAxisId="left" type="monotone" dataKey="orders" name={t("Orders")} stroke="#3b82f6" strokeWidth={3} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="orders" name={t("Orders")} stroke="#3b82f6" strokeWidth={3} dot={{ r: 3, fill: '#3b82f6' }} activeDot={{ r: 5 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -441,7 +463,7 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
             ) : (
               <div className="space-y-3">
                 {stats.recentBills.slice(0, 8).map((bill) => {
-                  const billTime = new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                  const billTime = formatTime12(bill.updatedAt || bill.createdAt);
                   return (
                     <div key={bill._id} className="flex items-center justify-between text-sm py-2 border-b border-white/5 last:border-0 cursor-pointer hover:bg-white/5 rounded px-2" onClick={() => handleViewBill(bill._id)}>
                       <div className="flex items-center gap-4">
@@ -472,10 +494,15 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
                 <label className="block text-sm text-gray-400 mb-1">{t("Start Date")}</label>
                 <input 
                   type="date" 
-                  max={customDateRange.end || undefined}
+                  max={customDateRange.end && customDateRange.end < new Date().toLocaleDateString('en-CA') ? customDateRange.end : new Date().toLocaleDateString('en-CA')}
                   value={customDateRange.start}
                   onChange={(e) => {
-                    const startVal = e.target.value;
+                    let startVal = e.target.value;
+                    const todayStr = new Date().toLocaleDateString('en-CA');
+                    if (startVal > todayStr) {
+                      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                      startVal = todayStr;
+                    }
                     let endVal = customDateRange.end;
                     if (endVal && startVal && startVal > endVal) {
                       endVal = startVal;
@@ -490,9 +517,15 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
                 <input 
                   type="date" 
                   min={customDateRange.start || undefined}
+                  max={new Date().toLocaleDateString('en-CA')}
                   value={customDateRange.end}
                   onChange={(e) => {
                     let endVal = e.target.value;
+                    const todayStr = new Date().toLocaleDateString('en-CA');
+                    if (endVal > todayStr) {
+                      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                      endVal = todayStr;
+                    }
                     if (customDateRange.start && endVal && endVal < customDateRange.start) {
                       endVal = customDateRange.start;
                     }
@@ -511,8 +544,13 @@ const Dashboard = ({ onNavigate, onGoBack }) => {
               </button>
               <button 
                 onClick={() => {
+                  const todayStr = new Date().toLocaleDateString('en-CA');
                   if (!customDateRange.start || !customDateRange.end) {
                     setToast({ message: t("Please select both start and end dates"), type: 'error' });
+                    return;
+                  }
+                  if (customDateRange.start > todayStr || customDateRange.end > todayStr) {
+                    setToast({ message: t("Future dates are not allowed"), type: 'error' });
                     return;
                   }
                   if (customDateRange.start > customDateRange.end) {

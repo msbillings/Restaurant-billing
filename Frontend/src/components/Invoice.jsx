@@ -7,6 +7,7 @@ import Toast from './Toast';
 import { sendWhatsAppBill } from '../api/whatsapp';
 import html2canvas from 'html2canvas';
 import api from '../api/axios';
+import { formatTime12 } from '../utils/timeFormat';
 
 const Invoice = ({ bill, onClose, onSave }) => {
   const { t } = useLanguage();
@@ -23,15 +24,37 @@ const Invoice = ({ bill, onClose, onSave }) => {
     }
   } catch (e) {}
 
-  const [settings, setSettings] = useState({
-    restaurantName: 'msbillings',
-    restaurantType: 'Restaurant',
-    address: '123 Foodie Street, Gourmet City',
-    phone: '+91 98765 43210',
-    email: 'feedback@msbillings.com',
-    gstin: '29ABCDE1234F1Z5',
-    upiId: 'maheshsiva864@oksbi',
-    footerMessage: '*** Thank You! Visit Again ***'
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('restaurantSettings') : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.logo === '[logo_stored]') parsed.logo = '';
+        return {
+          restaurantName: 'msbillings',
+          restaurantType: 'Restaurant',
+          address: '123 Foodie Street, Gourmet City',
+          phone: '+91 98765 43210',
+          email: 'feedback@msbillings.com',
+          gstin: '29ABCDE1234F1Z5',
+          upiId: 'maheshsiva864@oksbi',
+          footerMessage: '*** Thank You! Visit Again ***',
+          logo: '',
+          ...parsed
+        };
+      }
+    } catch (e) {}
+    return {
+      restaurantName: 'msbillings',
+      restaurantType: 'Restaurant',
+      address: '123 Foodie Street, Gourmet City',
+      phone: '+91 98765 43210',
+      email: 'feedback@msbillings.com',
+      gstin: '29ABCDE1234F1Z5',
+      upiId: 'maheshsiva864@oksbi',
+      footerMessage: '*** Thank You! Visit Again ***',
+      logo: ''
+    };
   });
 
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -65,24 +88,47 @@ const Invoice = ({ bill, onClose, onSave }) => {
   }, [whatsappPhone]);
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem('restaurantSettings');
-    if (savedSettings) {
+    const updateLocalSettings = () => {
       try {
-        const parsed = JSON.parse(savedSettings);
-        if (parsed.logo === '[logo_stored]') parsed.logo = '';
-        setSettings((prev) => ({ ...prev, ...parsed }));
+        const savedSettings = localStorage.getItem('restaurantSettings');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          if (parsed.logo === '[logo_stored]') parsed.logo = '';
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        }
       } catch (e) {}
-    }
+    };
+
+    updateLocalSettings();
+    window.addEventListener('settingsUpdated', updateLocalSettings);
+    return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
   }, []);
+
+  // Get stored logo from local settings if available
+  const storedLogo = (settings?.logo && settings.logo !== '[logo_stored]')
+    ? settings.logo
+    : (() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          return (s.logo && s.logo !== '[logo_stored]') ? s.logo : '';
+        } catch (e) {
+          return '';
+        }
+      })();
+
+  const billRest = bill?.restaurantDetails || {};
+  // If the bill has its own real image logo (data URI / URL), use it.
+  // Otherwise, if bill has '[logo_stored]' or no logo (e.g. at settlement time), fall back to stored logo!
+  const effectiveLogo = (billRest.logo && billRest.logo !== '[logo_stored]')
+    ? billRest.logo
+    : (bill?.logo && bill.logo !== '[logo_stored]' ? bill.logo : storedLogo);
 
   // STRICT AUDIT SECURITY: Prioritize frozen bill restaurantDetails snapshot
   const activeSettings = {
     ...settings,
-    ...(bill?.restaurantDetails || {})
+    ...billRest,
+    logo: effectiveLogo
   };
-  if (activeSettings.logo === '[logo_stored]') {
-    activeSettings.logo = '';
-  }
   const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
     enableCgst: activeSettings.enableCgst !== false,
     enableSgst: activeSettings.enableSgst !== false,
@@ -115,7 +161,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
     const restName = (s.restaurantName || 'MS Billings Restaurant').trim();
     const billNo = bill?.billNumber || 'PREVIEW';
     const dateStr = new Date(billDateTime).toLocaleDateString('en-GB');
-    const timeStr = new Date(billDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeStr = formatTime12(billDateTime);
     const bType = bill?.billType || (bill?.tableNo?.startsWith('DEL') ? 'Delivery' : (bill?.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
     const tableInfo = bType === 'Dine-In' ? `Table: ${bill?.tableNo || 'N/A'}` : `${bType} ${bill?.tableNo ? `(${bill?.tableNo})` : ''}`;
     const customerName = overrideName || whatsappCustomerName || bill?.customerName || '';

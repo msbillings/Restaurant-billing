@@ -61,8 +61,10 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  // Date Change Handlers with Strict Validation (End Date must be >= Start Date)
+  // Date Change Handlers with Strict Validation (End Date must be >= Start Date and not in future)
   const handleStartDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) val = todayStr;
     setStartDate(val);
     if (endDate && val && val > endDate) {
       setEndDate(val); // Auto-adjust end date if start date is set ahead of end date
@@ -70,6 +72,8 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
   };
 
   const handleEndDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) val = todayStr;
     if (startDate && val && val < startDate) {
       setEndDate(startDate); // Auto-adjust to start date if user picks earlier end date
     } else {
@@ -172,7 +176,7 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
             <div className="flex items-center gap-0.5 sm:gap-1 bg-white px-1.5 sm:px-2 py-1 rounded-xl border border-slate-200 text-xs shadow-2xs shrink-0">
               <input
                 type="date"
-                max={endDate || undefined}
+                max={endDate && endDate < new Date().toLocaleDateString('en-CA') ? endDate : new Date().toLocaleDateString('en-CA')}
                 value={startDate}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 className="bg-transparent text-[10px] sm:text-xs font-bold text-slate-700 outline-none cursor-pointer w-[95px] sm:w-[115px] px-0 border-none min-w-0"
@@ -183,6 +187,7 @@ const EditedBills = ({ onNavigate, onGoBack }) => {
               <input
                 type="date"
                 min={startDate || undefined}
+                max={new Date().toLocaleDateString('en-CA')}
                 value={endDate}
                 onChange={(e) => handleEndDateChange(e.target.value)}
                 className="bg-transparent text-[10px] sm:text-xs font-bold text-slate-700 outline-none cursor-pointer w-[95px] sm:w-[115px] px-0 border-none min-w-0"

@@ -39,6 +39,7 @@ const billSchema = new mongoose.Schema({
     cancellationRequestedQty: { type: Number, default: 0 },
     isCancelled: { type: Boolean, default: false },
     cancelledQuantity: { type: Number, default: 0 },
+    reducedQuantity: { type: Number, default: 0 },
     prepTimeMinutes: { type: Number, default: 0 },
     prepStartTime: { type: Date },
     orderedAt: { type: Date, default: Date.now }
@@ -166,6 +167,8 @@ const billSchema = new mongoose.Schema({
   kitchenNotes: String,
   kots: [{
     kotNumber: String,
+    queueNumber: Number,
+    tokenNo: Number,
     items: [{
       name: String,
       quantity: Number,
@@ -180,6 +183,8 @@ const billSchema = new mongoose.Schema({
       unitStatuses: [{ type: String, default: 'Pending' }],
       isCancelled: { type: Boolean, default: false },
       cancelledQuantity: { type: Number, default: 0 },
+      reducedQuantity: { type: Number, default: 0 },
+      isCancellationSlip: { type: Boolean, default: false },
       prepTimeMinutes: { type: Number, default: 0 },
       prepStartTime: { type: Date }
     }],

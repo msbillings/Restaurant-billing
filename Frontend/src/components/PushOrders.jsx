@@ -3,6 +3,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, ExternalLink, Clock, Package, CheckCircle, Truck, PlayCircle } from 'lucide-react';
+import { formatTime12 } from '../utils/timeFormat';
 
 const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
@@ -142,7 +143,7 @@ const PushOrders = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0">
                       <h3 className="font-bold text-text-main text-xs sm:text-sm truncate">{order.customerDetails?.name || 'Customer'}</h3>
-                      <p className="text-[11px] text-text-muted mt-0.5">{t("Ordered at:")} {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      <p className="text-[11px] text-text-muted mt-0.5">{t("Ordered at:")} {formatTime12(order.createdAt)}</p>
                     </div>
                     <div className="shrink-0">
                       {getStatusBadge(order.status)}

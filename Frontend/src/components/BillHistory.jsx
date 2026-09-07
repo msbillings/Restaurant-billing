@@ -9,6 +9,7 @@ import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 import realtimeService from '../services/realtimeService';
+import { formatTime12 } from '../utils/timeFormat';
 
 const BillHistory = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -18,7 +19,6 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [loadingBillId, setLoadingBillId] = useState(null);
   const [billCache, setBillCache] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('All');
   const [paymentFilter, setPaymentFilter] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -111,7 +111,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
   useEffect(() => {
     fetchBills();
-  }, [currentPage, debouncedSearchTerm, typeFilter, paymentFilter]);
+  }, [currentPage, debouncedSearchTerm, paymentFilter, startDate, endDate]);
 
   // Refresh bills when component mounts to show latest bills first
   useEffect(() => {
@@ -160,11 +160,10 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
         page: currentPage,
         limit: itemsPerPage,
         search: searchForBackend,
-        excludeBillType: 'Delivery',
-        billType: typeFilter !== 'All' ? typeFilter : undefined,
+        billType: 'Dine-In',
         paymentMode: paymentFilter !== 'All' ? paymentFilter : undefined,
-        startDate: startDate ? new Date(startDate).toISOString() : undefined,
-        endDate: endDate ? new Date(endDate).toISOString() : undefined
+        startDate: startDate || undefined,
+        endDate: endDate || undefined
       });
 
       let billsData = [];
@@ -237,46 +236,35 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   };
 
   const handleStartDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) {
+      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+      val = todayStr;
+    }
     setStartDate(val);
+    setCurrentPage(1);
     if (endDate && val && val > endDate) setEndDate(val);
   };
 
   const handleEndDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) {
+      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+      val = todayStr;
+    }
     if (startDate && val && val < startDate) setEndDate(startDate);
     else setEndDate(val);
+    setCurrentPage(1);
   };
 
-  // Client-side filtering for bill type, payment mode and date range
-  const filteredBills = bills.filter((bill) => {
-    if (typeFilter !== 'All') {
-      if (bill.billType !== typeFilter) return false;
-    }
-    if (paymentFilter !== 'All') {
-      if (bill.paymentMode !== paymentFilter) return false;
-    }
+  // Bills are already strictly filtered and paginated by the backend API
+  const filteredBills = bills;
 
-    const dateStr = bill.createdAt || bill.updatedAt;
-    if (dateStr) {
-      const bDate = new Date(dateStr);
-      if (startDate) {
-        const sDate = new Date(startDate);
-        sDate.setHours(0, 0, 0, 0);
-        if (bDate < sDate) return false;
-      }
-      if (endDate) {
-        const eDate = new Date(endDate);
-        eDate.setHours(23, 59, 59, 999);
-        if (bDate > eDate) return false;
-      }
-    }
-
-    return true;
-  });
-
-  // Reset to first page when filter/search changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearchTerm, typeFilter, paymentFilter, startDate, endDate]);
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [debouncedSearchTerm, paymentFilter, startDate, endDate]);
 
   // Listen for global searches from the Top Nav Bar
   useEffect(() => {
@@ -300,7 +288,6 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const activeFilterCount = [
     startDate ? 1 : 0,
     endDate ? 1 : 0,
-    typeFilter !== 'All' ? 1 : 0,
     paymentFilter !== 'All' ? 1 : 0
   ].reduce((a, b) => a + b, 0);
 
@@ -348,7 +335,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
               <div className="flex items-center justify-between sm:justify-start gap-1 bg-background px-2 py-0.5 sm:py-1 rounded-xl border border-border text-xs shadow-2xs shrink-0 w-full sm:w-auto">
                 <input
                   type="date"
-                  max={endDate || undefined}
+                  max={endDate && endDate < new Date().toLocaleDateString('en-CA') ? endDate : new Date().toLocaleDateString('en-CA')}
                   value={startDate}
                   onChange={(e) => handleStartDateChange(e.target.value)}
                   className="bg-transparent text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer flex-1 sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.7] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
@@ -359,6 +346,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                 <input
                   type="date"
                   min={startDate || undefined}
+                  max={new Date().toLocaleDateString('en-CA')}
                   value={endDate}
                   onChange={(e) => handleEndDateChange(e.target.value)}
                   className="bg-transparent text-[10px] sm:text-xs font-semibold text-text-main outline-none cursor-pointer flex-1 sm:w-[85px] md:w-[100px] px-0 border-none min-w-0 [&::-webkit-calendar-picker-indicator]:scale-[0.7] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:p-0"
@@ -367,7 +355,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                 />
                 {(startDate || endDate) && (
                   <button
-                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                    onClick={() => { setStartDate(''); setEndDate(''); setCurrentPage(1); }}
                     className="text-[9px] font-bold bg-surface-hover text-text-muted hover:text-text-main px-1 py-0.5 rounded transition-colors ml-0.5 shrink-0"
                     title={t("Reset Dates")}
                   >
@@ -378,19 +366,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
               {/* Row 2 of Filters on Mobile / Inline on Desktop: Remaining Filters (ONE ROW ONLY) */}
               <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
-                {/* Order Type Filter (Dine-In / Takeaway) */}
-                <div className="relative flex-1 sm:flex-initial min-w-0">
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="w-full pl-2.5 pr-5 py-0.5 sm:py-1 bg-background border border-border rounded-xl focus:outline-none focus:border-primary text-[10px] sm:text-xs text-text-main appearance-none cursor-pointer font-semibold shadow-2xs truncate"
-                  >
-                    <option value="All">{t("All Types")}</option>
-                    <option value="Dine-In">{t("Dine-In")}</option>
-                    <option value="Takeaway">{t("Takeaway")}</option>
-                  </select>
-                  <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={12} />
-                </div>
+
 
                 {/* Payment Method Filter (Cash / UPI / Card / Mixed) */}
                 <div className="relative flex-1 sm:flex-initial min-w-0">
@@ -416,7 +392,6 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     onClick={() => {
                       setStartDate('');
                       setEndDate('');
-                      setTypeFilter('All');
                       setPaymentFilter('All');
                     }}
                     className="px-2 py-0.5 sm:py-1 bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 rounded-xl text-[10px] sm:text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
@@ -551,7 +526,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                       <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
                         <div className="flex flex-col text-xs">
                           <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
-                          <span className="font-mono text-text-muted text-[11px]">{new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                          <span className="font-mono text-text-muted text-[11px]">{formatTime12(bill.updatedAt || bill.createdAt)}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
@@ -704,7 +679,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
                 <div className="flex items-center justify-between text-xs text-text-muted">
                   <span className="font-mono">
-                    {new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()} {new Date(bill.updatedAt || bill.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()} {formatTime12(bill.updatedAt || bill.createdAt)}
                   </span>
                   <div>
                     {renderPaymentCell(bill)}

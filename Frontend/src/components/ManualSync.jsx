@@ -3,6 +3,7 @@ import { useLanguage } from "../context/LanguageContext";import React, { useStat
 import BackButton from './common/BackButton';
 import axios from 'axios';
 import { ArrowLeft, RefreshCw, CheckCircle, Clock, Database, Cloud, AlertCircle, Server } from 'lucide-react';
+import { formatTime12 } from '../utils/timeFormat';
 
 const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [syncStatus, setSyncStatus] = useState(null);
@@ -136,7 +137,7 @@ const ManualSync = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                 </div>
                 <h3 className="text-[9px] sm:text-xs font-bold text-text-muted uppercase tracking-wider mb-0.5 truncate w-full">{t("Last Synced")}</h3>
                 <p className="font-black text-xs sm:text-base text-text-main truncate w-full font-mono">
-                  {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : t('Never')}
+                  {syncStatus?.lastSyncedAt ? formatTime12(syncStatus.lastSyncedAt) : t('Never')}
                 </p>
                 <p className="text-[9px] sm:text-xs text-text-muted mt-0.5 truncate w-full">
                   {syncStatus?.lastSyncedAt ? new Date(syncStatus.lastSyncedAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}

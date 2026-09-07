@@ -298,10 +298,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
         unitIndex,
         status: newStatus
       });
-      await fetchKOTs();
+      // fetchKOTs is intentionally skipped here to prevent optimistic UI glitching with stale DB reads
     } catch (error) {
       console.error('Error updating unit status:', error);
-      await fetchKOTs();
+      // fetchKOTs skipped for optimistic UI
     } finally {
       activeActionCount.current = Math.max(0, activeActionCount.current - 1);
       setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
@@ -372,10 +372,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
         itemId,
         status: newStatus
       });
-      await fetchKOTs();
+      // fetchKOTs is intentionally skipped here to prevent optimistic UI glitching with stale DB reads
     } catch (error) {
       console.error('Error updating status:', error);
-      await fetchKOTs();
+      // fetchKOTs skipped for optimistic UI
     } finally {
       activeActionCount.current = Math.max(0, activeActionCount.current - 1);
       setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
@@ -423,7 +423,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
       });
     } catch (error) {
       console.error('Error setting prep time:', error);
-      fetchKOTs();
+      // fetchKOTs skipped for optimistic UI
     } finally {
       setTimeout(() => setSettingPrepKey(null), 500);
     }
@@ -493,10 +493,10 @@ const KDS = ({ onNavigate, onGoBack }) => {
           })
         )
       );
-      await fetchKOTs();
+      // fetchKOTs is intentionally skipped here to prevent optimistic UI glitching with stale DB reads
     } catch (error) {
       console.error('Error updating aggregated item status:', error);
-      await fetchKOTs();
+      // fetchKOTs skipped for optimistic UI
     } finally {
       activeActionCount.current = Math.max(0, activeActionCount.current - 1);
       setProcessingActions(prev => { const next = {...prev}; delete next[actionKey]; return next; });
@@ -563,6 +563,8 @@ const KDS = ({ onNavigate, onGoBack }) => {
       }
 
       (kot.items || []).forEach(item => {
+        if (item.isCancellationSlip) return; // Prevent double-counting from cancellation slips
+
         const isCancelled = item.status === 'Cancelled' || item.isCancelled === true;
         const qty = Math.max(0, parseInt(item.quantity || 0, 10));
         if (qty <= 0 && !isCancelled) return; // Skip 0x items
@@ -943,13 +945,16 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
                             {!isCancelled && (
                               <button
+                                disabled={item.status === 'Ready'}
                                 onClick={() => updateAggregatedItemStatus(item, item.status === 'Pending' ? 'Preparing' : 'Ready', group.tableNo)}
-                                className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg touch-target cursor-pointer ${
-                                  item.status === 'Pending'
-                                    ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700'
-                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40'
+                                className={`w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition-all shadow-lg ${
+                                  item.status === 'Ready'
+                                    ? 'opacity-80 cursor-not-allowed bg-emerald-600/50 text-white shadow-none'
+                                    : item.status === 'Pending'
+                                    ? 'bg-slate-800 hover:bg-amber-600 text-slate-300 hover:text-white border border-slate-700 active:scale-95 cursor-pointer'
+                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/40 active:scale-95 cursor-pointer'
                                 }`}
-                                title={t(item.status === 'Pending' ? 'Start Preparing All' : 'Mark All Ready')}
+                                title={t(item.status === 'Ready' ? 'Already Prepared' : item.status === 'Pending' ? 'Start Preparing All' : 'Mark All Ready')}
                               >
                                 {item.status === 'Pending' ? <ChefHat size={20} /> : <CheckCircle size={20} />}
                               </button>
@@ -976,11 +981,12 @@ const KDS = ({ onNavigate, onGoBack }) => {
                                     return (
                                       <button
                                         key={`unit-${prepKey}-${uIdx}`}
+                                        disabled={isReady}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           updateAggregatedUnitStatus(item, uIdx, nextStatus, group.tableNo);
                                         }}
-                                        className={`px-2 py-1.5 rounded-lg text-[10px] font-black border transition-all flex items-center justify-between gap-1 shadow-xs active:scale-95 cursor-pointer ${
+                                        className={`px-2 py-1.5 rounded-lg text-[10px] font-black border transition-all flex items-center justify-between gap-1 shadow-xs ${isReady ? 'opacity-80 cursor-not-allowed' : 'active:scale-95 cursor-pointer'} ${
                                           isReady
                                             ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 hover:bg-emerald-600/40'
                                             : isPrep

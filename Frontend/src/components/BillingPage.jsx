@@ -8,7 +8,7 @@ import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders, getDailyStats } from '../api/billing';
 import api from '../api/axios';
-import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder } from '../db/offlineDb';
+import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder, getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
 import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X, User, UserPlus, Phone, Loader2 } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import Invoice from './Invoice';
@@ -1484,18 +1484,26 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const match = (iIdStr && idStr === iIdStr) || (iNameStr && idStr === iNameStr);
 
       if (match) {
-        const newQty = Math.max(0, i.quantity + delta);
-        if (newQty === 0) {
+        const cancelledQty = i.cancelledQuantity || 0;
+        const activeQty = Math.max(0, (i.quantity || 0) - cancelledQty);
+        const newActiveQty = Math.max(0, activeQty + delta);
+        // Store back as historical total + cancelled so BillSummary's (quantity - cancelledQuantity) = newActiveQty
+        const newRawQty = newActiveQty + cancelledQty;
+        if (newActiveQty === 0) {
           if ((i.printedQuantity || 0) > 0) {
             showToast(`${i.name} marked for cancellation (Print KOT)`, 'info');
           } else {
             showToast(`${i.name} ${t('removedFromOrder')}`, 'info');
           }
         }
-        return { ...i, quantity: newQty, specialNote: i.specialNote || '' };
+        return { ...i, quantity: newRawQty, specialNote: i.specialNote || '' };
       }
       return i;
-    }).filter((i) => i.quantity > 0 || (i.printedQuantity || 0) > 0);
+    }).filter((i) => {
+      const cancelledQty = i.cancelledQuantity || 0;
+      const activeQty = Math.max(0, (i.quantity || 0) - cancelledQty);
+      return activeQty > 0 || (i.printedQuantity || 0) > 0;
+    });
 
     cartRef.current = newCart;
     setCart(newCart);
@@ -1866,7 +1874,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           if (order && (order.status === 'Billed' || order.status === 'Paid')) {
             setOrderStatus(order.status);
             setBillNumber(order.billNumber);
-            setCompletedBill(order);
+            const currentSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            setCompletedBill({
+              ...order,
+              restaurantDetails: {
+                ...(order.restaurantDetails || currentSettings),
+                logo: (currentSettings.logo && currentSettings.logo !== '[logo_stored]') ? currentSettings.logo : (order.restaurantDetails?.logo || '')
+              }
+            });
             isViewingInvoiceRef.current = true;
             setShowInvoice(true);
             showToast(t('recoveredExistingBill'), 'info');
@@ -1979,7 +1994,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         customerPhone: customerPhone || settledOrder?.customerPhone,
         deliveryCharge: deliveryCharge,
         containerCharge: containerCharge,
-        restaurantDetails: settledOrder?.restaurantDetails || s,
+        restaurantDetails: {
+          ...(settledOrder?.restaurantDetails || s),
+          logo: (s.logo && s.logo !== '[logo_stored]') ? s.logo : (settledOrder?.restaurantDetails?.logo || '')
+        },
         settledAt: settledOrder?.settledAt || new Date(),
         createdAt: settledOrder?.createdAt || new Date()
       };
@@ -2106,6 +2124,30 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setShowKOT(true);
       hasPendingLocalChanges.current = false;
       showToast(t('kotGeneratedSuccess', { defaultValue: 'KOT printed successfully' }), 'success');
+      if (kotData) {
+        getCachedKotHistory().then(cached => {
+          if (Array.isArray(cached)) {
+            const targetId = String(kotData._id || kotData.kotId || '');
+            const exists = targetId && cached.some(k => String(k.kotId || k._id || '') === targetId);
+            if (!exists) {
+              const newEntry = {
+                _id: kotData._id || `local_${Date.now()}`,
+                kotId: kotData._id || `local_${Date.now()}`,
+                kotNumber: kotData.kotNumber || 'KOT-1',
+                tableNo: response.bill?.tableNo || tableNo,
+                billType: billType,
+                orderSource: kotData?.orderSource || orderSource,
+                queueNumber: kotData?.queueNumber || kotData?.tokenNo || queueNo,
+                tokenNo: kotData?.tokenNo || kotData?.queueNumber || queueNo,
+                billId: response.bill?._id || currentId,
+                createdAt: kotData.createdAt || new Date().toISOString(),
+                items: (kotData.items || []).map(i => ({ ...i, status: i.status || 'Pending' }))
+              };
+              cacheKotHistory([newEntry, ...cached]);
+            }
+          }
+        }).catch(() => {});
+      }
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
@@ -2655,6 +2697,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           customerPhone: customerPhone,
           deliveryCharge: deliveryCharge,
           containerCharge: containerCharge,
+          restaurantDetails: JSON.parse(localStorage.getItem('restaurantSettings') || '{}'),
           createdAt: new Date()
         };
         return (

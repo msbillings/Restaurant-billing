@@ -590,7 +590,10 @@ export const saveOrder = async (req, res) => {
 
       if (!order.queueNumber) {
         try {
-          const activeCount = await Bill.countDocuments({ status: { $in: ['Open', 'Billed'] } });
+          const activeCount = await Bill.countDocuments({ 
+            status: { $in: ['Open', 'Billed'] },
+            'kots.0': { $exists: true }
+          });
           const qNo = activeCount + 1;
           order.queueNumber = qNo;
           order.tokenNo = qNo;
@@ -765,10 +768,16 @@ export const saveOrder = async (req, res) => {
     emitSocketEvent(req, 'orderUpdated', { tableNo, status: order.status, order });
 
     if (!req.body.skipNotification) {
+      let itemNames = '';
+      if (order.items && order.items.length > 0) {
+        itemNames = ' (' + order.items.map(i => `${i.quantity}x ${i.name}`).join(', ') + ')';
+        if (itemNames.length > 80) itemNames = itemNames.substring(0, 77) + '...)';
+      }
+
       if (id) {
-        emitNotification(req, 'Order Updated', `Order for Table ${tableNo} was updated`, 'info', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type: 'order_updated' });
+        emitNotification(req, 'Order Updated', `Order for Table ${tableNo} was updated${itemNames}`, 'info', ['Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type: 'order_updated' });
       } else {
-        emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}`, 'success', ['Chef', 'Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type: 'new_order' });
+        emitNotification(req, 'New Order Placed', `New order placed for Table ${tableNo}${itemNames}`, 'success', ['Manager', 'Admin', 'Captain', 'Cashier'], { orderId: order._id, tableNo, type:'new_order' });
       }
     }
 

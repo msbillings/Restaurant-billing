@@ -6,6 +6,7 @@ import { getOpenOrders } from '../api/billing';
 import { getCachedOpenOrders } from '../db/offlineDb';
 import { UtensilsCrossed, Clock, ChevronRight, FileText, CheckCircle, ShoppingBag, Truck, Utensils } from 'lucide-react';
 import realtimeService from '../services/realtimeService';
+import { formatTime12 } from '../utils/timeFormat';
 
 const getOrderCategory = (order) => {
   if (!order) return 'Dine-In';
@@ -54,7 +55,7 @@ const formatOrderDateTime = (dateStr) => {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '';
   const dateFormatted = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  const timeFormatted = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeFormatted = formatTime12(d);
   return `${dateFormatted}, ${timeFormatted}`;
 };
 

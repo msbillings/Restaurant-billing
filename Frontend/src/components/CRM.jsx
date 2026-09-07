@@ -1,11 +1,12 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Users, Search, Star, TrendingUp, Calendar, ChevronLeft, ChevronRight, FileText, X, Loader2, Eye, Settings, ChevronDown, ChevronUp, Save, CheckCircle2 } from 'lucide-react';
 import BackButton from './common/BackButton';
 import Invoice from './Invoice';
 import { getBills, getBillById } from '../api/billing';
 import api from '../api/axios';
+import { formatTime12 } from '../utils/timeFormat';
 
 const CRM = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -18,6 +19,8 @@ const CRM = ({ onNavigate, onGoBack }) => {
   
   // Modal states for viewing bills
   const [billsModal, setBillsModal] = useState({ isOpen: false, customer: null, bills: [], loading: false, error: '' });
+  const [billsPage, setBillsPage] = useState(1);
+  const billsScrollRef = useRef(null);
   const [selectedBill, setSelectedBill] = useState(null);
   const [loadingBillId, setLoadingBillId] = useState(null);
 
@@ -174,9 +177,10 @@ const CRM = ({ onNavigate, onGoBack }) => {
 
   const handleViewBills = async (customer) => {
     if (!customer.phone) return; // Need phone to search bills
+    setBillsPage(1);
     setBillsModal({ isOpen: true, customer, bills: [], loading: true, error: '' });
     try {
-      const data = await getBills({ limit: 50, search: customer.phone });
+      const data = await getBills({ limit: 500, search: customer.phone });
       let customerBills = [];
       if (Array.isArray(data)) {
         customerBills = data;
@@ -339,7 +343,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
             <tr>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Customer")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Contact")}</th>
-              <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Type")}</th>
+              <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Last Visit Type")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-center">{t("Visits")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border text-right whitespace-nowrap">{t("Total Spend")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Last Visit")}</th>
@@ -350,7 +354,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
           <tbody className="divide-y divide-border text-xs">
             {filteredCustomers.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-text-muted">
+                <td colSpan={8} className="p-8 text-center text-text-muted">
                   <Users size={24} className="mx-auto text-text-muted/50 mb-1.5" />
                   <p>{t("No customers found.")}</p>
                 </td>
@@ -391,7 +395,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
                           {expandedFavorites[customer._id] && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }} />
-                              <div className="absolute top-full right-0 mt-1.5 w-48 bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                              <div className="absolute top-full right-0 mt-1.5 w-48 max-w-[calc(100vw-2.5rem)] bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
                                 <div className="text-[9px] font-bold text-text-muted px-1 pb-1 mb-0.5 border-b border-border uppercase tracking-wider">{t("All Favorites")}</div>
                                 {customer.favoriteItems.map((item, idx) => (
                                   <div key={idx} className="text-[10px] bg-surface-hover px-2 py-1.5 rounded-lg text-text-main flex justify-between items-center">
@@ -467,7 +471,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
                     {expandedFavorites[customer._id] && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); toggleFavorites(customer._id); }} />
-                        <div className="absolute top-full left-0 mt-1.5 w-48 bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                        <div className="absolute top-full right-0 mt-1.5 w-48 max-w-[calc(100vw-2.5rem)] bg-background border border-border rounded-xl shadow-2xl z-50 p-1.5 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
                           <div className="text-[9px] font-bold text-text-muted px-1 pb-1 mb-0.5 border-b border-border uppercase tracking-wider">{t("All Favorites")}</div>
                           {customer.favoriteItems.map((item, idx) => (
                             <div key={idx} className="text-[10px] bg-surface-hover px-2 py-1.5 rounded-lg text-text-main flex justify-between items-center">
@@ -497,104 +501,168 @@ const CRM = ({ onNavigate, onGoBack }) => {
       </div>
 
       {/* Customer Bills Modal */}
-      {billsModal.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
-          <div className="w-full sm:w-[450px] bg-background h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            {/* Header */}
-            <div className="p-4 border-b border-border bg-surface flex items-start justify-between sticky top-0 z-10">
-              <div className="flex items-center gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-text-main leading-tight">{t("Customer Bills")}</h2>
-                  <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
-                    <span className="font-medium">{billsModal.customer?.name || 'Guest'}</span>
+      {billsModal.isOpen && (() => {
+        const billsPerPage = 20;
+        const totalBillsCount = billsModal.bills?.length || 0;
+        const billsTotalPages = Math.max(1, Math.ceil(totalBillsCount / billsPerPage));
+        const currentPageSafe = Math.min(billsPage, billsTotalPages);
+        const paginatedBills = (billsModal.bills || []).slice((currentPageSafe - 1) * billsPerPage, currentPageSafe * billsPerPage);
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end">
+            <div className="w-full sm:w-[460px] md:w-[480px] bg-background h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+              {/* Header */}
+              <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-b border-border bg-surface flex items-center justify-between gap-1.5 sm:gap-2.5 sticky top-0 z-10 shadow-xs">
+                {/* Left: Customer Bills Heading & Customer Info */}
+                <div className="min-w-0 flex-1 pr-1">
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold text-text-main leading-tight truncate">
+                    {t("Customer Bills")}
+                  </h2>
+                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-text-muted mt-0.5 truncate">
+                    <span className="font-medium truncate max-w-[80px] sm:max-w-[130px]">
+                      {billsModal.customer?.name || 'Guest'}
+                    </span>
                     <span>•</span>
-                    <span className="font-mono">{billsModal.customer?.phone}</span>
+                    <span className="font-mono text-[9px] sm:text-xs shrink-0">
+                      {billsModal.customer?.phone}
+                    </span>
                   </div>
                 </div>
-                {!billsModal.loading && billsModal.bills.length > 0 && (
-                  <div className="bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-xl flex flex-col items-center justify-center shadow-xs">
-                    <span className="text-[9px] font-bold uppercase tracking-wider leading-none mb-1 opacity-80">{t("Total Bills")}</span>
-                    <span className="text-base font-black leading-none">{billsModal.bills.length}</span>
+
+                {/* Right: Total Badge + Dynamic Pagination (Left & Right arrows only) + Close Button */}
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  {!billsModal.loading && totalBillsCount > 0 && (
+                    <div className="bg-primary/10 border border-primary/20 text-primary px-2 sm:px-2.5 py-1 rounded-xl flex flex-col items-center justify-center shadow-xs shrink-0">
+                      <span className="text-[7px] sm:text-[8px] font-bold uppercase tracking-wider leading-none mb-0.5 opacity-80 whitespace-nowrap">
+                        {t("Total Bills")}
+                      </span>
+                      <span className="text-xs sm:text-sm font-black leading-none font-mono">
+                        {totalBillsCount}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Dynamic Pagination Controls on the SAME ROW - Left and Right Arrows Only */}
+                  {!billsModal.loading && totalBillsCount > 0 && (
+                    <div className="flex items-center gap-0.5 bg-background border border-border rounded-xl px-1 sm:px-1.5 py-0.5 sm:py-1 shrink-0 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBillsPage((p) => Math.max(1, p - 1));
+                          billsScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        disabled={currentPageSafe <= 1}
+                        className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        title={t("Previous Page")}
+                        aria-label="Previous Page"
+                      >
+                        <ChevronLeft size={13} className="sm:w-3.5 sm:h-3.5" />
+                      </button>
+
+                      <span className="text-[10px] sm:text-xs font-mono font-bold text-text-main px-1 select-none whitespace-nowrap">
+                        {currentPageSafe} / {billsTotalPages}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBillsPage((p) => Math.min(billsTotalPages, p + 1));
+                          billsScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        disabled={currentPageSafe >= billsTotalPages}
+                        className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface-hover active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                        title={t("Next Page")}
+                        aria-label="Next Page"
+                      >
+                        <ChevronRight size={13} className="sm:w-3.5 sm:h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={() => {
+                      setBillsModal({ isOpen: false, customer: null, bills: [], loading: false, error: '' });
+                      setBillsPage(1);
+                    }}
+                    className="p-1.5 sm:p-2 hover:bg-surface-hover rounded-full text-text-muted hover:text-text-main cursor-pointer transition-colors shrink-0"
+                    title={t("Close")}
+                    aria-label="Close"
+                  >
+                    <X size={18} className="sm:w-5 sm:h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div ref={billsScrollRef} className="flex-1 overflow-y-auto p-3 sm:p-4">
+                {billsModal.loading ? (
+                  <div className="flex flex-col items-center justify-center h-40 gap-3">
+                    <Loader2 size={24} className="animate-spin text-primary" />
+                    <p className="text-sm text-text-muted">{t("Loading bills...")}</p>
+                  </div>
+                ) : billsModal.error ? (
+                  <div className="p-4 bg-danger/10 text-danger rounded-xl text-sm font-medium text-center">
+                    {t(billsModal.error)}
+                  </div>
+                ) : totalBillsCount === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-40 gap-3 text-text-muted">
+                    <FileText size={32} className="opacity-50" />
+                    <p className="text-sm font-medium">{t("No bills found for this customer")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paginatedBills.map(bill => (
+                      <div key={bill._id} className="bg-surface border border-border rounded-xl p-3.5 hover:border-primary/30 transition-colors shadow-xs group">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="font-mono font-bold text-sm text-text-main group-hover:text-primary transition-colors">
+                              #{bill.billNumber}
+                            </div>
+                            <div className="text-[11px] text-text-muted mt-0.5">
+                              {new Date(bill.createdAt || bill.updatedAt).toLocaleDateString()} {formatTime12(bill.createdAt || bill.updatedAt)}
+                            </div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                            bill.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                          }`}>
+                            {t(bill.status)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between border-t border-border/60 pt-2 mt-2">
+                          <div className="font-black text-text-main">
+                            ₹{(bill.total || 0).toFixed(2)}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              setLoadingBillId(bill._id);
+                              try {
+                                const fullBill = await getBillById(bill._id);
+                                setSelectedBill(fullBill);
+                              } catch (err) {
+                                console.error(err);
+                              } finally {
+                                setLoadingBillId(null);
+                              }
+                            }}
+                            disabled={loadingBillId === bill._id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-bold text-text-main hover:bg-surface-hover hover:text-primary transition-all disabled:opacity-50 cursor-pointer"
+                          >
+                            {loadingBillId === bill._id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                            {t("Invoice")}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-              <button 
-                onClick={() => setBillsModal({ isOpen: false, customer: null, bills: [], loading: false, error: '' })}
-                className="p-2 hover:bg-surface-hover rounded-full text-text-muted cursor-pointer transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {billsModal.loading ? (
-                <div className="flex flex-col items-center justify-center h-40 gap-3">
-                  <Loader2 size={24} className="animate-spin text-primary" />
-                  <p className="text-sm text-text-muted">{t("Loading bills...")}</p>
-                </div>
-              ) : billsModal.error ? (
-                <div className="p-4 bg-danger/10 text-danger rounded-xl text-sm font-medium text-center">
-                  {t(billsModal.error)}
-                </div>
-              ) : billsModal.bills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 gap-3 text-text-muted">
-                  <FileText size={32} className="opacity-50" />
-                  <p className="text-sm font-medium">{t("No bills found for this customer")}</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {billsModal.bills.map(bill => (
-                    <div key={bill._id} className="bg-surface border border-border rounded-xl p-3.5 hover:border-primary/30 transition-colors shadow-xs group">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="font-mono font-bold text-sm text-text-main group-hover:text-primary transition-colors">
-                            #{bill.billNumber}
-                          </div>
-                          <div className="text-[11px] text-text-muted mt-0.5">
-                            {new Date(bill.createdAt || bill.updatedAt).toLocaleDateString()} {new Date(bill.createdAt || bill.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          bill.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
-                          bill.status === 'Cancelled' ? 'bg-red-50 text-red-700 border-red-200' :
-                          'bg-amber-50 text-amber-700 border-amber-200'
-                        }`}>
-                          {t(bill.status)}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between border-t border-border/60 pt-2 mt-2">
-                        <div className="font-black text-text-main">
-                          ₹{(bill.total || 0).toFixed(2)}
-                        </div>
-                        <button
-                          onClick={async () => {
-                            setLoadingBillId(bill._id);
-                            try {
-                              const fullBill = await getBillById(bill._id);
-                              setSelectedBill(fullBill);
-                            } catch (err) {
-                              console.error(err);
-                            } finally {
-                              setLoadingBillId(null);
-                            }
-                          }}
-                          disabled={loadingBillId === bill._id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-background border border-border rounded-lg text-xs font-bold text-text-main hover:bg-surface-hover hover:text-primary transition-all disabled:opacity-50 cursor-pointer"
-                        >
-                          {loadingBillId === bill._id ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
-                          {t("Invoice")}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* VIP Settings Modal */}
       {vipSettingsOpen && (

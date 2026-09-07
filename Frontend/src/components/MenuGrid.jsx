@@ -179,6 +179,8 @@ const MenuGrid = ({
   const setFoodTypeFilter = onFoodTypeFilterChange || setInternalFoodTypeFilter;
   const [sortBy, setSortBy] = useState('latest');
   const [selectedItemVariants, setSelectedItemVariants] = useState(null);
+  const [activeDescCard, setActiveDescCard] = useState(null);
+  const [descFilter, setDescFilter] = useState('all'); // 'all' | 'hasDesc' | 'noDesc'
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(30);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -461,7 +463,12 @@ const MenuGrid = ({
         (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) ||
         (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
 
-      return matchesCategory && matchesSearch && matchesFoodType;
+      const matchesDescFilter =
+        descFilter === 'all' ||
+        (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') ||
+        (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
+
+      return matchesCategory && matchesSearch && matchesFoodType && matchesDescFilter;
     }).sort((a, b) => {
       switch (sortBy) {
         case 'latest':
@@ -480,7 +487,7 @@ const MenuGrid = ({
           return 0;
       }
     });
-  }, [items, category, debouncedSearchTerm, foodTypeFilter, sortBy, categories]);
+  }, [items, category, debouncedSearchTerm, foodTypeFilter, sortBy, categories, descFilter]);
 
   // IntersectionObserver for mobile sentinel (placed AFTER filteredItems is defined)
   useEffect(() => {
@@ -715,6 +722,41 @@ const MenuGrid = ({
             </button>
           </div>
 
+          {/* Description Filter Pills — visible on all screens */}
+          <div className="flex items-center bg-white p-0.5 rounded-xl border border-gray-200 shadow-xs shrink-0 gap-0.5">
+            <button
+              type="button"
+              onClick={() => setDescFilter('all')}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                descFilter === 'all' ? 'bg-gray-900 text-white shadow-xs' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              <span>{t("All")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDescFilter('hasDesc')}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                descFilter === 'hasDesc' ? 'bg-blue-600 text-white shadow-xs' : 'text-blue-700 hover:bg-blue-50'
+              }`}
+              title={t("Has Description")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+              <span>{t("Desc")}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDescFilter('noDesc')}
+              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                descFilter === 'noDesc' ? 'bg-orange-500 text-white shadow-xs' : 'text-orange-700 hover:bg-orange-50'
+              }`}
+              title={t("No Description")}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
+              <span>{t("No Desc")}</span>
+            </button>
+          </div>
+
           {/* Right Controls: Sort, Add Item, Image Toggle */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto justify-end">
             <select
@@ -828,6 +870,26 @@ const MenuGrid = ({
 
                       <div className="flex gap-1.5 items-center">
                         {!isAvailable && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shadow-sm ${showImages ? 'text-white bg-red-500/90 backdrop-blur-sm' : 'text-red-500 bg-red-50'}`}>{t("Out of Stock")}</span>}
+
+                        {/* Description info button */}
+                        {item.description && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveDescCard(activeDescCard === item._id ? null : item._id);
+                            }}
+                            className={`p-1 rounded-full backdrop-blur-sm transition-all shadow-sm flex items-center justify-center ${
+                              activeDescCard === item._id
+                                ? 'bg-blue-500 text-white border border-blue-400'
+                                : showImages
+                                  ? 'bg-black/20 text-white hover:bg-blue-500/80 border border-white/20'
+                                  : 'bg-gray-100 text-gray-500 hover:bg-blue-50 hover:text-blue-600 border border-gray-200'
+                            }`}
+                            title={t("View Description")}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+                          </button>
+                        )}
 
                         <button
                           onClick={(e) => handleToggleFavorite(e, item)}
@@ -1081,6 +1143,40 @@ const MenuGrid = ({
         </div>,
         document.body
       )}
+
+      {/* Description Popup - rendered at root level */}
+      {activeDescCard && (() => {
+        const descItem = items.find(i => i._id === activeDescCard);
+        if (!descItem || !descItem.description) return null;
+        
+        return createPortal(
+          <div className="relative z-[9999]">
+            <div
+              className="fixed inset-0 z-[9999] bg-black/20 backdrop-blur-sm"
+              onClick={(e) => { e.stopPropagation(); setActiveDescCard(null); }}
+            />
+            <div
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[10000] bg-white border border-gray-200 shadow-2xl rounded-2xl p-5 w-[90vw] max-w-[350px] whitespace-normal"
+              onClick={(e) => { e.stopPropagation(); }}
+            >
+              <div className="flex justify-between items-center mb-3 border-b border-gray-100 pb-3">
+                <div className="pr-2">
+                  <p className="font-bold text-base text-gray-800">{(language !== 'en' && descItem.nameTranslations?.[language]) || descItem.name}</p>
+                  <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">{t("Description")}</span>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActiveDescCard(null); }}
+                  className="text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg p-1.5 transition-colors shrink-0 cursor-pointer"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed overflow-y-auto max-h-[60vh] custom-scrollbar pr-1">{descItem.description}</p>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 };

@@ -133,16 +133,22 @@ export const updateMenuItem = async (req, res) => {
       updateData.category = category._id;
     }
 
-    const updatedItem = await Menu.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('category', 'name');
-    if (!updatedItem) {
+    // Fetch the existing item to check if fields actually changed
+    const existingItem = await Menu.findById(req.params.id);
+    if (!existingItem) {
       return res.status(404).json({ message: 'Menu item not found' });
     }
+
+    const nameChanged = updateData.name !== undefined && updateData.name !== existingItem.name;
+    const descChanged = updateData.description !== undefined && updateData.description !== existingItem.description;
+
+    const updatedItem = await Menu.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('category', 'name');
     emitSocketEvent(req, 'menuUpdated', { action: 'update', item: updatedItem });
 
     // Re-translate if name or description changed (non-blocking)
-    if (updateData.name || updateData.description) {
-      const nameToTranslate = updateData.name || updatedItem.name;
-      const descToTranslate = updateData.description || updatedItem.description;
+    if (nameChanged || descChanged) {
+      const nameToTranslate = updatedItem.name;
+      const descToTranslate = updatedItem.description || '';
       translateMenuItem(nameToTranslate, descToTranslate).then(async (translations) => {
         try {
           await Menu.findByIdAndUpdate(req.params.id, {

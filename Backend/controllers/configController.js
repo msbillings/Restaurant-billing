@@ -243,6 +243,22 @@ export const updateRestaurantInfo = async (req, res) => {
 
     let mergedSettings = null;
     if (settingsToSave) {
+      // Validate logo if provided
+      if (settingsToSave.logo && settingsToSave.logo !== '[logo_stored]') {
+        if (typeof settingsToSave.logo === 'string') {
+          const isAllowedType = settingsToSave.logo.startsWith('data:image/png;base64,') ||
+                                settingsToSave.logo.startsWith('data:image/jpeg;base64,') ||
+                                settingsToSave.logo.startsWith('data:image/jpg;base64,');
+          if (!isAllowedType) {
+            return res.status(400).json({ message: 'Invalid logo format. Only PNG and JPG/JPEG images are allowed.' });
+          }
+          // Base64 limit corresponding to 2MB binary (2 * 1024 * 1024 * 1.37 ≈ 2.87MB)
+          if (settingsToSave.logo.length > 2.87 * 1024 * 1024) {
+            return res.status(400).json({ message: 'Logo file size exceeds 2MB limit.' });
+          }
+        }
+      }
+
       const existingDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean().maxTimeMS(2500);
       const existingSettings = existingDoc?.value || {};
       

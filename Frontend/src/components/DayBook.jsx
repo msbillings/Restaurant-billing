@@ -5,9 +5,10 @@ import Toast from './Toast';
 import BackButton from './common/BackButton';
 import { sendWhatsAppMessage, sendWhatsAppBill, getWhatsAppStatus } from '../api/whatsapp';
 import api from '../api/axios';
+import { formatTime12 } from '../utils/timeFormat';
 
 const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [data, setData] = useState({
     summary: { totalSales: 0, salesCount: 0, totalExpenses: 0, expensesCount: 0 },
     cashFlow: { cashIn: 0, cashOut: 0, onlineIn: 0, onlineOut: 0, onlineInBreakdown: [] },
@@ -213,8 +214,17 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                 <input
                   type="date"
                   value={date}
-                  max={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setDate(e.target.value)}
+                  max={new Date().toLocaleDateString('en-CA')}
+                  onChange={(e) => {
+                    const todayStr = new Date().toLocaleDateString('en-CA');
+                    const val = e.target.value;
+                    if (val > todayStr) {
+                      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+                      setDate(todayStr);
+                    } else {
+                      setDate(val);
+                    }
+                  }}
                   className="bg-transparent font-semibold text-gray-200 focus:outline-none cursor-pointer [color-scheme:dark] text-xs sm:text-sm w-[110px] sm:w-[125px]" />
               </div>
             </div>
@@ -384,7 +394,7 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                 <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest rounded-tl-lg">{t("Time")}</th>
                 <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest">{t("Category")}</th>
                 <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest">{t("Particulars")}</th>
-                <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest">{t("Name")}</th>
+                <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest">{t("Mode")}</th>
                 <th className="p-3 text-[11px] font-black text-gray-400 uppercase tracking-widest text-right">{t("Total")}</th>
                 <th className="p-3 text-[11px] font-black text-red-400/80 uppercase tracking-widest text-right">{t("CashOut(-)")}</th>
                 <th className="p-3 text-[11px] font-black text-[#22c55e]/80 uppercase tracking-widest text-right rounded-tr-lg">{t("CashIn(+)")}</th>
@@ -400,15 +410,25 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               ) : (
                 data.transactions.map((tx, i) => (
                   <tr key={`${tx.id}-${i}`} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                    <td className="p-3 text-gray-400 text-xs sm:text-sm whitespace-nowrap">{new Date(tx.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td className="p-3 text-gray-400 text-xs sm:text-sm whitespace-nowrap">{formatTime12(tx.date)}</td>
                     <td className="p-3">
                       <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${tx.type === 'Sale' ? 'bg-[#22c55e]/10 text-[#4ade80] border border-[#22c55e]/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>{tx.type}</span>
                     </td>
                     <td className="p-3 font-semibold text-gray-200 text-xs sm:text-sm">{tx.particulars}</td>
-                    <td className="p-3 text-gray-400 text-xs sm:text-sm truncate max-w-[200px]">{tx.name}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded bg-white/10 text-gray-300 text-[11px] font-mono font-medium">{tx.paymentMode || 'Cash'}</span>
+                    </td>
                     <td className="p-3 font-bold text-white text-right text-xs sm:text-sm font-mono">₹{tx.total.toLocaleString()}</td>
                     <td className="p-3 font-mono font-medium text-red-400 text-right text-xs sm:text-sm">{tx.cashOut > 0 ? `- ₹${tx.cashOut.toLocaleString()}` : '-'}</td>
-                    <td className="p-3 font-mono font-medium text-[#22c55e] text-right text-xs sm:text-sm">{tx.cashIn > 0 ? `+ ₹${tx.cashIn.toLocaleString()}` : '-'}</td>
+                    <td className="p-3 font-mono text-right text-xs sm:text-sm">
+                      {tx.cashIn > 0 && (
+                        <span className="text-[#22c55e] font-bold block">+ ₹{tx.cashIn.toLocaleString()} <span className="text-[10px] text-gray-400 font-sans">Cash</span></span>
+                      )}
+                      {tx.onlineIn > 0 && (
+                        <span className="text-blue-400 font-bold block">+ ₹{tx.onlineIn.toLocaleString()} <span className="text-[10px] text-gray-400 font-sans">Online</span></span>
+                      )}
+                      {!tx.cashIn && !tx.onlineIn && '-'}
+                    </td>
                   </tr>
                 ))
               )}
@@ -427,16 +447,17 @@ const DayBook = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${tx.type === 'Sale' ? 'bg-[#22c55e]/10 text-[#4ade80] border border-[#22c55e]/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>{tx.type}</span>
-                      <span className="text-gray-400 text-[11px] font-mono">{new Date(tx.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-gray-400 text-[11px] font-mono">{formatTime12(tx.date)}</span>
+                      <span className="px-1.5 py-0.2 rounded bg-white/10 text-gray-300 text-[9px] font-mono">{tx.paymentMode || 'Cash'}</span>
                     </div>
                     <p className="font-semibold text-gray-200 text-xs sm:text-sm truncate">{tx.particulars}</p>
-                    {tx.name && <p className="text-gray-400 text-[11px] truncate">{tx.name}</p>}
                   </div>
                   <span className="font-bold text-white text-xs sm:text-sm shrink-0 font-mono">₹{tx.total.toLocaleString()}</span>
                 </div>
-                {(tx.cashIn > 0 || tx.cashOut > 0) && (
-                  <div className="flex gap-3 pt-1.5 border-t border-white/10 font-mono text-[11px]">
-                    {tx.cashIn > 0 && <span className="font-bold text-[#22c55e]">+₹{tx.cashIn.toLocaleString()}</span>}
+                {(tx.cashIn > 0 || tx.onlineIn > 0 || tx.cashOut > 0) && (
+                  <div className="flex flex-wrap gap-2 pt-1.5 border-t border-white/10 font-mono text-[11px]">
+                    {tx.cashIn > 0 && <span className="font-bold text-[#22c55e]">+₹{tx.cashIn.toLocaleString()} (Cash)</span>}
+                    {tx.onlineIn > 0 && <span className="font-bold text-blue-400">+₹{tx.onlineIn.toLocaleString()} (Online)</span>}
                     {tx.cashOut > 0 && <span className="font-bold text-red-400">-₹{tx.cashOut.toLocaleString()}</span>}
                   </div>
                 )}

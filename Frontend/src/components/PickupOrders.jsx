@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
+import { formatTime12 } from '../utils/timeFormat';
 
 const PickupOrders = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -70,6 +71,11 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
   }, [currentPage, searchTerm, paymentFilter, startDate, endDate]);
 
   const handleStartDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) {
+      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+      val = todayStr;
+    }
     setStartDate(val);
     setCurrentPage(1);
     if (endDate && val && val > endDate) {
@@ -78,8 +84,13 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
   };
 
   const handleEndDateChange = (val) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    if (val && val > todayStr) {
+      setToast({ message: t("Future dates are not allowed"), type: 'error' });
+      val = todayStr;
+    }
     if (startDate && val && val < startDate) {
-      setToast({ message: 'End date cannot be earlier than start date', type: 'error' });
+      setToast({ message: t("End date cannot be earlier than start date"), type: 'error' });
       return;
     }
     setEndDate(val);
@@ -121,12 +132,8 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  const filteredOrders = orders.filter((order) => {
-    if (paymentFilter === 'all') {
-      return true;
-    }
-    return order.paymentMode === paymentFilter;
-  });
+  // Orders are strictly filtered and paginated by backend API
+  const filteredOrders = orders;
 
   return (
     <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-y-auto custom-scrollbar w-full">
@@ -168,7 +175,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
               <input
                 type="date"
                 value={startDate}
-                max={endDate || undefined}
+                max={endDate && endDate < new Date().toLocaleDateString('en-CA') ? endDate : new Date().toLocaleDateString('en-CA')}
                 onChange={(e) => handleStartDateChange(e.target.value)}
                 className="bg-surface border border-border rounded-lg px-2 py-1 text-xs font-bold text-text-main focus:outline-none focus:border-primary cursor-pointer w-[115px] sm:w-[130px] shrink-0"
                 title={t("Start Date")}
@@ -181,6 +188,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                 type="date"
                 value={endDate}
                 min={startDate || undefined}
+                max={new Date().toLocaleDateString('en-CA')}
                 onChange={(e) => handleEndDateChange(e.target.value)}
                 className="bg-surface border border-border rounded-lg px-2 py-1 text-xs font-bold text-text-main focus:outline-none focus:border-primary cursor-pointer w-[115px] sm:w-[130px] shrink-0"
                 title={t("End Date")}
@@ -238,6 +246,41 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
             title={t("Refresh")}>
             <RefreshCw size={16} className={`text-primary ${loading ? 'animate-spin' : ''}`} />
           </button>
+
+          {/* Dynamic Pickup Orders Count Badge */}
+          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-orange-50 text-orange-800 border border-orange-200 text-xs font-bold shrink-0 shadow-2xs">
+            <ShoppingBag size={13} className="text-orange-600" />
+            <span>{pagination.totalBills || 0} {t("Pickup Orders")}</span>
+          </div>
+
+          {/* Top Pagination Controls */}
+          {pagination.totalPages >= 1 && (
+            <div className="flex items-center gap-0.5 bg-background border border-border rounded-xl px-1.5 py-1 shrink-0 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || loading}
+                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                title={t("Previous Page")}
+              >
+                <ChevronLeft size={13} />
+              </button>
+
+              <span className="text-[10px] sm:text-[11px] font-bold text-text-main px-1 select-none whitespace-nowrap">
+                {currentPage} / {pagination.totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(pagination.totalPages, p + 1))}
+                disabled={currentPage === pagination.totalPages || loading}
+                className="p-1 rounded-lg text-text-muted hover:text-text-main hover:bg-surface disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+                title={t("Next Page")}
+              >
+                <ChevronRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -250,6 +293,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
               <tr>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Pickup #")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Bill #")}</th>
+                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Customer")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">
                   <div className="flex items-center gap-2">
                     <span>{t("Date & Time")}</span>
@@ -267,6 +311,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                   <tr key={i} className="border-b border-border animate-pulse">
                     <td className="p-3.5"><div className="w-16 h-5 bg-background rounded-lg"></div></td>
                     <td className="p-3.5"><div className="w-14 h-4 bg-background rounded"></div></td>
+                    <td className="p-3.5"><div className="w-20 h-4 bg-background rounded"></div></td>
                     <td className="p-3.5">
                       <div className="w-20 h-4 bg-background rounded mb-1"></div>
                       <div className="w-12 h-3 bg-background rounded"></div>
@@ -278,7 +323,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                 ))
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="p-12 text-center text-text-muted">
+                  <td colSpan="7" className="p-12 text-center text-text-muted">
                     <div className="flex flex-col items-center gap-3">
                       <ShoppingBag size={44} className="text-text-muted/40" />
                       <div>
@@ -299,11 +344,18 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                     </td>
                     {/* Bill # */}
                     <td className="p-3.5 font-bold text-text-main font-mono text-sm">#{order.billNumber}</td>
+                    {/* Customer */}
+                    <td className="p-3.5 whitespace-nowrap">
+                      <div className="flex flex-col text-xs">
+                        <span className="font-semibold text-text-main">{order.customerName || '-'}</span>
+                        {order.customerPhone && <span className="font-mono text-text-muted text-[11px]">{order.customerPhone}</span>}
+                      </div>
+                    </td>
                     {/* Date & Time */}
                     <td className="p-3.5 text-text-muted">
                       <div className="flex flex-col">
                         <span className="text-xs font-bold text-text-main">{new Date(order.updatedAt || order.createdAt).toLocaleDateString()}</span>
-                        <span className="text-[10px] text-text-muted font-mono">{new Date(order.updatedAt || order.createdAt).toLocaleTimeString()}</span>
+                        <span className="text-[10px] text-text-muted font-mono">{formatTime12(order.updatedAt || order.createdAt)}</span>
                       </div>
                     </td>
                     {/* Payment Method Badge */}
@@ -375,7 +427,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                       <span className="font-mono font-bold text-text-main text-sm">#{order.billNumber}</span>
                     </div>
                     <p className="text-[10px] text-text-muted font-medium mt-1">
-                      {new Date(order.updatedAt || order.createdAt).toLocaleDateString()} • {new Date(order.updatedAt || order.createdAt).toLocaleTimeString()}
+                      {new Date(order.updatedAt || order.createdAt).toLocaleDateString()} • {formatTime12(order.updatedAt || order.createdAt)}
                     </p>
                   </div>
                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${getPaymentColor(order.paymentMode || 'Cash')}`}>
@@ -383,6 +435,15 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                     <span>{t(order.paymentMode || 'Cash')}</span>
                   </span>
                 </div>
+
+                {/* Mobile Customer Info */}
+                {(order.customerName || order.customerPhone) && (
+                  <div className="flex flex-col text-xs bg-surface-hover/50 p-2 rounded-lg border border-border/50">
+                    <div className="text-[10px] uppercase font-bold text-text-muted mb-0.5">{t("Customer Details")}</div>
+                    {order.customerName && <div className="font-semibold text-text-main">{order.customerName}</div>}
+                    {order.customerPhone && <div className="font-mono text-text-muted">{order.customerPhone}</div>}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between pt-2 border-t border-border text-xs">
                   <span className="text-text-muted font-medium">{t("Order Total")}</span>

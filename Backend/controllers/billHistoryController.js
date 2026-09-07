@@ -12,12 +12,13 @@ import { emitNotification, emitDismissNotification } from '../utils/notification
 import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { getTableMatchCondition, getDynamicTaxRate, getTenantShopName } from '../utils/billHelpers.js';
+import { getISTDayRange } from '../utils/timezoneHelper.js';
 
 export const getBills = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 100);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 500);
     const skip = (page - 1) * limit;
     const { search, billType, excludeBillType, orderSource, paymentMode, status, startDate, endDate } = req.query;
 
@@ -56,20 +57,18 @@ export const getBills = async (req, res) => {
       query.paymentMode = paymentMode.trim();
     }
 
-    // Date range filter (inclusive of full days)
+    // Date range filter (inclusive of full days in IST)
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) {
-        const s = new Date(startDate);
+        const { startDate: s } = getISTDayRange(startDate);
         if (!isNaN(s.getTime())) {
-          s.setHours(0, 0, 0, 0);
           query.createdAt.$gte = s;
         }
       }
       if (endDate) {
-        const e = new Date(endDate);
+        const { endDate: e } = getISTDayRange(endDate);
         if (!isNaN(e.getTime())) {
-          e.setHours(23, 59, 59, 999);
           query.createdAt.$lte = e;
         }
       }

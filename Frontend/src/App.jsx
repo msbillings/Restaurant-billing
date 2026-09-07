@@ -210,7 +210,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isUpdateDownloading, setIsUpdateDownloading] = useState(false);
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState(0);
-  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.85');
+  const [appVersion, setAppVersion] = useState(packageJson?.version || '6.0.86');
   const [updateSnoozeInfo, setUpdateSnoozeInfo] = useState(() => {
     try {
       const tenantKey = localStorage.getItem('resto_db_name') || 'default';
@@ -767,32 +767,10 @@ function App() {
 
       if (window.electronAPI.onUpdateAvailable) {
         window.electronAPI.onUpdateAvailable((info) => {
-          console.log('[App] Update available info:', info);
+          console.log('[App] Update available info (downloading silently in background):', info);
           setUpdateInfo(info);
           setIsUpdateDownloading(true);
           setUpdateDownloadProgress(0);
-
-          // Check tenant-scoped snooze
-          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
-          const savedSnooze = localStorage.getItem(`update_snooze_${tenantKey}`);
-          let isSnoozed = false;
-          if (savedSnooze) {
-            try {
-              const parsed = JSON.parse(savedSnooze);
-              if (parsed.snoozeUntil && Date.now() < parsed.snoozeUntil) {
-                isSnoozed = true;
-                setUpdateSnoozeInfo(parsed);
-              } else {
-                localStorage.removeItem(`update_snooze_${tenantKey}`);
-                setUpdateSnoozeInfo(null);
-              }
-            } catch {
-              localStorage.removeItem(`update_snooze_${tenantKey}`);
-            }
-          }
-          if (!isSnoozed) {
-            setShowUpdateModal(true);
-          }
         });
       }
 
@@ -805,32 +783,10 @@ function App() {
 
       if (window.electronAPI.onUpdateReady) {
         window.electronAPI.onUpdateReady((info) => {
-          console.log('[App] Update downloaded and ready:', info);
+          console.log('[App] Update downloaded silently and ready for next restart:', info);
           if (info) setUpdateInfo(info);
           setIsUpdateDownloading(false);
           setUpdateDownloadProgress(100);
-
-          // Check tenant-scoped snooze
-          const tenantKey = localStorage.getItem('resto_db_name') || 'default';
-          const savedSnooze = localStorage.getItem(`update_snooze_${tenantKey}`);
-          let isSnoozed = false;
-          if (savedSnooze) {
-            try {
-              const parsed = JSON.parse(savedSnooze);
-              if (parsed.snoozeUntil && Date.now() < parsed.snoozeUntil) {
-                isSnoozed = true;
-                setUpdateSnoozeInfo(parsed);
-              } else {
-                localStorage.removeItem(`update_snooze_${tenantKey}`);
-                setUpdateSnoozeInfo(null);
-              }
-            } catch {
-              localStorage.removeItem(`update_snooze_${tenantKey}`);
-            }
-          }
-          if (!isSnoozed) {
-            setShowUpdateModal(true);
-          }
         });
       }
 
@@ -1235,7 +1191,7 @@ function App() {
       case 'floor': return 'Floor Management';
       case 'orders': return 'Active Orders';
       case 'billing': return isCaptain ? 'Take Order / KOT Menu' : 'Billing / POS';
-      case 'history': return 'Bill History';
+      case 'history': return 'Bill History (Dine-in)';
       case 'kothistory': return 'KOT History';
       case 'analytics': return 'Analytics';
       case 'daybook': return 'DayBook';
@@ -1284,9 +1240,17 @@ function App() {
     if (type.includes('service') || title.includes('service') || msg.includes('water') || msg.includes('waiter') || msg.includes('pay the bill')) {
       return { border: 'border-l-amber-500 shadow-amber-500/10', bgIcon: 'bg-amber-100 text-amber-600', Icon: UserCheck, badge: 'Table Service', badgeBg: 'bg-amber-100 text-amber-700' };
     }
-    // 7. Kitchen / KOT Updates / Order Placed / New Items
-    if (title.includes('kot') || title.includes('order placed') || title.includes('order updated') || title.includes('order saved') || title.includes('order held') || title.includes('item quantity')) {
+    // 7. Kitchen / KOT Updates / New Items
+    if (title.includes('kot') || title.includes('item quantity')) {
       return { border: 'border-l-orange-500 shadow-orange-500/10', bgIcon: 'bg-orange-100 text-orange-600', Icon: ChefHat, badge: 'Kitchen / KOT', badgeBg: 'bg-orange-100 text-orange-700' };
+    }
+    // 7.4 New Order Placed
+    if (title.toLowerCase().includes('order placed')) {
+      return { border: 'border-l-blue-500 shadow-blue-500/10', bgIcon: 'bg-blue-100 text-blue-600', Icon: ClipboardList, badge: 'New Order', badgeBg: 'bg-blue-100 text-blue-700' };
+    }
+    // 7.5 Order Updates (Save, Draft)
+    if (title.toLowerCase().includes('order updated') || title.toLowerCase().includes('order saved') || title.toLowerCase().includes('order held')) {
+      return { border: 'border-l-blue-500 shadow-blue-500/10', bgIcon: 'bg-blue-100 text-blue-600', Icon: ClipboardList, badge: 'Order Update', badgeBg: 'bg-blue-100 text-blue-700' };
     }
     // 8. Low Stock / Inventory Reorder Alert
     if (title.includes('stock') || type.includes('inventory')) {
@@ -1312,7 +1276,7 @@ function App() {
               initial={{ opacity: 0, y: -50, scale: 0.95 }}
               animate={{ opacity: 1, y: 20, scale: 1 }}
               exit={{ opacity: 0, y: -50, scale: 0.95 }}
-              className={`fixed z-[99999] top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md sm:top-6 sm:left-auto sm:-translate-x-0 sm:right-6 sm:w-auto sm:min-w-[350px] bg-white border border-gray-200 border-l-4 ${style.border} px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer`}
+              className={`fixed z-[99999] top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md sm:top-6 sm:left-auto sm:-translate-x-0 sm:right-6 sm:w-auto sm:min-w-[350px] bg-white border border-gray-200 px-4 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3 cursor-pointer`}
               onClick={() => {
                 setToastNotifInfo(null);
                 handleViewChange('notification');
@@ -1334,6 +1298,14 @@ function App() {
                       {style.badge}
                     </span>
                   )}
+                  <span className="text-[10px] text-gray-400 ml-auto shrink-0 font-medium">
+                    {new Date(toastNotifInfo.createdAt || Date.now()).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: true,
+                        timeZone: 'Asia/Kolkata'
+                      })}
+                  </span>
                 </div>
                 <p className="text-xs text-gray-600 leading-snug line-clamp-2">
                   {toastNotifInfo.message}
@@ -1461,16 +1433,16 @@ function App() {
             </div>
           </div>
 
-          {/* Snoozed Update Pill Badge */}
-          {updateInfo && updateSnoozeInfo && Date.now() < updateSnoozeInfo.snoozeUntil && (
+          {/* Silent Background Update Ready Badge (Non-intrusive) */}
+          {updateInfo && !isUpdateDownloading && updateDownloadProgress === 100 && (
             <button
               onClick={() => setShowUpdateModal(true)}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer animate-pulse"
-              title={t("New update ready — Click to install now")}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+              title={t("New update downloaded silently. It will apply automatically on app close, or click to install now.")}
             >
-              <Clock size={13} className="text-amber-600 shrink-0" />
-              <span className="hidden sm:inline">{t("Update Snoozed")} ({updateSnoozeInfo.label || 'Later'})</span>
-              <span className="sm:hidden">{t("Update")}</span>
+              <CheckCircle size={13} className="text-emerald-600 shrink-0" />
+              <span className="hidden sm:inline">{t("Update Ready (v")}{updateInfo?.version || ''})</span>
+              <span className="sm:hidden">{t("v")}{updateInfo?.version || ''}</span>
             </button>
           )}
 
@@ -2041,7 +2013,7 @@ function App() {
                           className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'history' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
 
                           <History size={22} />
-                          <span>{t('Bill History')}</span>
+                          <span>{t('Bill History')} (Dine-in)</span>
                         </button>
                         <button
                           onClick={() => handleViewChange('edited-bills')}

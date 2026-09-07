@@ -4,6 +4,7 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import { generateDayBookWorkbook } from '../utils/excelGenerator.js';
 import ExcelJS from 'exceljs';
 import { resolveTenantInfo } from './whatsappController.js';
+import { getISTDayRange, getISTMonthRange, IST_TIMEZONE } from '../utils/timezoneHelper.js';
 
 // Get comprehensive analytics
 export const getAnalytics = async (req, res) => {
@@ -13,37 +14,27 @@ export const getAnalytics = async (req, res) => {
     
     let startDate, endDate;
     
-    // Use UTC dates to avoid timezone issues in production
-    // MongoDB stores dates in UTC, so we need to query in UTC
     if (customStart && customEnd) {
-      const parsedStart = new Date(customStart);
-      startDate = new Date(Date.UTC(parsedStart.getUTCFullYear(), parsedStart.getUTCMonth(), parsedStart.getUTCDate(), 0, 0, 0, 0));
-      const parsedEnd = new Date(customEnd);
-      endDate = new Date(Date.UTC(parsedEnd.getUTCFullYear(), parsedEnd.getUTCMonth(), parsedEnd.getUTCDate(), 23, 59, 59, 999));
+      startDate = getISTDayRange(customStart).startDate;
+      endDate = getISTDayRange(customEnd).endDate;
     } else if (date) {
-      const parsedDate = new Date(date);
-      startDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 23, 59, 59, 999));
+      const range = getISTDayRange(date);
+      startDate = range.startDate;
+      endDate = range.endDate;
     } else if (month && year) {
-      const monthNum = parseInt(month) - 1; // JavaScript months are 0-indexed
-      const yearNum = parseInt(year);
-      startDate = new Date(Date.UTC(yearNum, monthNum, 1, 0, 0, 0, 0));
-      
-      // Get last day of the month
-      endDate = new Date(Date.UTC(yearNum, monthNum + 1, 0, 23, 59, 59, 999));
+      const range = getISTMonthRange(year, month);
+      startDate = range.startDate;
+      endDate = range.endDate;
     } else if (days) {
-      // Fallback to days if provided
-      const daysCount = parseInt(days);
-      const now = new Date();
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-      startDate = new Date(endDate);
-      startDate.setUTCDate(startDate.getUTCDate() - daysCount);
-      startDate.setUTCHours(0, 0, 0, 0);
+      const daysCount = parseInt(days) || 7;
+      const todayRange = getISTDayRange();
+      endDate = todayRange.endDate;
+      startDate = new Date(todayRange.startDate.getTime() - (daysCount - 1) * 24 * 60 * 60 * 1000);
     } else {
-      // Default to current month
-      const now = new Date();
-      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+      const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+      const range = getISTMonthRange(now.getUTCFullYear(), now.getUTCMonth() + 1);
+      startDate = range.startDate;
+      endDate = range.endDate;
     }
 
     // Ensure dates are valid
@@ -51,10 +42,8 @@ export const getAnalytics = async (req, res) => {
       throw new Error('Invalid date range');
     }
 
-    // Today's date range (UTC)
-    const now = new Date();
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-    const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    // Today's date range in IST
+    const { startDate: todayStart, endDate: todayEnd } = getISTDayRange();
 
     // Run queries concurrently in parallel for sub-50ms performance
     const [
@@ -94,7 +83,7 @@ export const getAnalytics = async (req, res) => {
           }
         }
       ]),
-      // 4. Daily revenue breakdown for the specified period
+      // 4. Daily revenue breakdown for the specified period (IST timezone)
       Bill.aggregate([
         {
           $match: {
@@ -111,7 +100,7 @@ export const getAnalytics = async (req, res) => {
         {
           $group: {
             _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: IST_TIMEZONE }
             },
             revenue: { $sum: '$total' },
             bills: { $sum: 1 },
@@ -149,29 +138,11 @@ export const getAnalytics = async (req, res) => {
           }
         }
       ]),
-      // 6. Payment mode breakdown
-      Bill.aggregate([
-        {
-          $match: {
-            createdAt: { $gte: startDate, $lte: endDate },
-            status: 'Paid',
-            paymentMode: { $exists: true, $ne: null }
-          }
-        },
-        {
-          $project: {
-            paymentMode: 1,
-            total: { $ifNull: ['$total', 0] }
-          }
-        },
-        {
-          $group: {
-            _id: '$paymentMode',
-            count: { $sum: 1 },
-            revenue: { $sum: '$total' }
-          }
-        }
-      ]),
+      // 6. Paid bills for accurate payment mode breakdown (including Mixed split payments)
+      Bill.find({
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: 'Paid'
+      }).select('total paymentMode splitPayments').lean(),
       // 7. Delivery orders count for the period
       Bill.countDocuments({
         createdAt: { $gte: startDate, $lte: endDate },
@@ -191,10 +162,9 @@ export const getAnalytics = async (req, res) => {
     const todayStats = todayStatsRes.status === 'fulfilled' ? todayStatsRes.value : [];
     const dailyRevenue = dailyRevenueRes.status === 'fulfilled' ? dailyRevenueRes.value : [];
     const periodStats = periodStatsRes.status === 'fulfilled' ? periodStatsRes.value : [];
-    const paymentModeStats = paymentModeStatsRes.status === 'fulfilled' ? paymentModeStatsRes.value : [];
+    const paidBillsForPayment = paymentModeStatsRes.status === 'fulfilled' ? paymentModeStatsRes.value : [];
     const deliveryOrdersStats = deliveryOrdersStatsRes.status === 'fulfilled' ? deliveryOrdersStatsRes.value : 0;
     const takeawayOrdersStats = takeawayOrdersStatsRes.status === 'fulfilled' ? takeawayOrdersStatsRes.value : 0;
-
 
     const today = todayStats[0] || {
       totalRevenue: 0,
@@ -212,10 +182,35 @@ export const getAnalytics = async (req, res) => {
       totalTax: 0
     };
 
-    // Ensure paymentModeStats is an array and filter out null values
-    const validPaymentModeStats = Array.isArray(paymentModeStats) 
-      ? paymentModeStats.filter(p => p._id !== null && p._id !== undefined)
-      : [];
+    // Calculate accurate payment mode breakdown (allocating Mixed split payments)
+    const paymentTotals = { Cash: 0, UPI: 0, Card: 0 };
+    const paymentCounts = { Cash: 0, UPI: 0, Card: 0 };
+    (paidBillsForPayment || []).forEach(b => {
+      if (b.paymentMode === 'Cash') {
+        paymentTotals.Cash += b.total || 0;
+        paymentCounts.Cash += 1;
+      } else if (b.paymentMode === 'UPI') {
+        paymentTotals.UPI += b.total || 0;
+        paymentCounts.UPI += 1;
+      } else if (b.paymentMode === 'Card') {
+        paymentTotals.Card += b.total || 0;
+        paymentCounts.Card += 1;
+      } else if (b.paymentMode === 'Mixed' && b.splitPayments) {
+        const cash = Number(b.splitPayments.cash) || 0;
+        const upi = Number(b.splitPayments.upi) || 0;
+        const card = Number(b.splitPayments.card) || 0;
+        if (cash > 0) { paymentTotals.Cash += cash; paymentCounts.Cash += 1; }
+        if (upi > 0) { paymentTotals.UPI += upi; paymentCounts.UPI += 1; }
+        if (card > 0) { paymentTotals.Card += card; paymentCounts.Card += 1; }
+      } else if (b.paymentMode) {
+        paymentTotals[b.paymentMode] = (paymentTotals[b.paymentMode] || 0) + (b.total || 0);
+        paymentCounts[b.paymentMode] = (paymentCounts[b.paymentMode] || 0) + 1;
+      }
+    });
+
+    const validPaymentModeStats = Object.keys(paymentTotals)
+      .filter(mode => paymentTotals[mode] > 0)
+      .map(mode => ({ _id: mode, count: paymentCounts[mode] || 1, revenue: paymentTotals[mode] }));
 
     // Ensure dailyRevenue is an array
     const validDailyRevenue = Array.isArray(dailyRevenue) ? dailyRevenue : [];
@@ -232,6 +227,7 @@ export const getAnalytics = async (req, res) => {
         },
         period: {
           revenue: Number(period.totalRevenue) || 0,
+          netRevenue: Math.max(0, (Number(period.totalRevenue) || 0) - (Number(period.totalTax) || 0)),
           bills: Number(period.totalBills) || 0,
           orders: Number(period.totalOrders) || 0,
           averageBill: Math.round(Number(period.averageBill) || 0),
@@ -319,7 +315,7 @@ export const downloadDailyReportCSV = async (req, res) => {
     // CSV Data
     bills.forEach(bill => {
       const date = new Date(bill.createdAt).toLocaleDateString('en-IN');
-      const time = new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      const time = new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
       const items = bill.items.map(item => `${item.name}(${item.quantity})`).join('; ');
       csv += `${date},${time},${bill._id},${bill.tableNo},"${items}",${bill.subtotal},${bill.discount},${bill.tax},${bill.total},${bill.paymentMode}\n`;
     });
@@ -445,7 +441,7 @@ export const downloadMonthlyReportExcel = async (req, res) => {
       
       row.values = [
         new Date(bill.createdAt).toLocaleDateString('en-IN'),
-        new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
         bill.billNumber || '',
         bill.billType || 'Dine-In',
         bill.tableNo || '',
@@ -603,13 +599,13 @@ export const getDayBook = async (req, res) => {
     let startDate, endDate;
 
     if (date) {
-      const parsedDate = new Date(date);
-      startDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(parsedDate.getUTCFullYear(), parsedDate.getUTCMonth(), parsedDate.getUTCDate(), 23, 59, 59, 999));
+      const r = getISTDayRange(date);
+      startDate = r.startDate;
+      endDate = r.endDate;
     } else {
-      const now = new Date();
-      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+      const r = getISTDayRange();
+      startDate = r.startDate;
+      endDate = r.endDate;
     }
 
     // Ensure dates are valid
@@ -645,24 +641,31 @@ export const getDayBook = async (req, res) => {
     // Process Bills (Sales / Inflow)
     (bills || []).forEach(bill => {
       totalSales += bill.total || 0;
+      let billCashIn = 0;
+      let billOnlineIn = 0;
       
       if (bill.paymentMode === 'Cash') {
         cashFlow.cashIn += bill.total || 0;
+        billCashIn = bill.total || 0;
       } else if (bill.paymentMode === 'UPI') {
         cashFlow.onlineIn.total += bill.total || 0;
         const appName = bill.upiApp || 'UPI Other';
         if (!cashFlow.onlineIn.upiApps[appName]) cashFlow.onlineIn.upiApps[appName] = 0;
         cashFlow.onlineIn.upiApps[appName] += bill.total || 0;
+        billOnlineIn = bill.total || 0;
       } else if (bill.paymentMode === 'Card') {
         cashFlow.onlineIn.total += bill.total || 0;
         const appName = 'Card';
         if (!cashFlow.onlineIn.upiApps[appName]) cashFlow.onlineIn.upiApps[appName] = 0;
         cashFlow.onlineIn.upiApps[appName] += bill.total || 0;
+        billOnlineIn = bill.total || 0;
       } else if (bill.paymentMode === 'Mixed' && bill.splitPayments) {
         const splitCash = Number(bill.splitPayments.cash) || 0;
         const splitUpi = Number(bill.splitPayments.upi) || 0;
         const splitCard = Number(bill.splitPayments.card) || 0;
         cashFlow.cashIn += splitCash;
+        billCashIn = splitCash;
+        billOnlineIn = splitUpi + splitCard;
         if (splitUpi > 0) {
           cashFlow.onlineIn.total += splitUpi;
           const appName = bill.upiApp || 'UPI Other';
@@ -675,8 +678,8 @@ export const getDayBook = async (req, res) => {
           cashFlow.onlineIn.upiApps['Card'] += splitCard;
         }
       } else {
-        // Fallback
         cashFlow.cashIn += bill.total || 0;
+        billCashIn = bill.total || 0;
       }
 
       transactions.push({
@@ -684,8 +687,10 @@ export const getDayBook = async (req, res) => {
         id: bill._id,
         particulars: bill.billNumber ? `#${bill.billNumber}` : 'Sale',
         name: bill.customerName || '--',
+        paymentMode: bill.paymentMode || 'Cash',
         total: bill.total || 0,
-        cashIn: bill.total || 0,
+        cashIn: billCashIn,
+        onlineIn: billOnlineIn,
         cashOut: 0,
         date: bill.createdAt
       });
@@ -753,14 +758,11 @@ export const buildDayBookWorkbookHelper = async (req, date, restaurantName) => {
     throw new Error('Date is required');
   }
 
-  const startDate = new Date(date);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(date);
-  endDate.setHours(23, 59, 59, 999);
+  const { startDate, endDate } = getISTDayRange(date);
 
   const [allBills, expenses] = await Promise.all([
     Bill.find({ createdAt: { $gte: startDate, $lte: endDate } })
-      .select('billNumber customerName paymentMode total createdAt status')
+      .select('billNumber customerName paymentMode splitPayments upiApp total createdAt status')
       .lean(),
     Expense.find({ 
       $or: [
@@ -792,29 +794,52 @@ export const buildDayBookWorkbookHelper = async (req, date, restaurantName) => {
 
   bills.forEach(bill => {
     totalSales += bill.total || 0;
+    let billCashIn = 0;
+    let billOnlineIn = 0;
+
     if (bill.paymentMode === 'Cash') {
       cashFlow.cashIn += bill.total || 0;
+      billCashIn = bill.total || 0;
+    } else if (bill.paymentMode === 'Card') {
+      cashFlow.onlineIn.total += bill.total || 0;
+      cashFlow.onlineIn.upiApps['Card'] = (cashFlow.onlineIn.upiApps['Card'] || 0) + (bill.total || 0);
+      billOnlineIn = bill.total || 0;
+    } else if (bill.paymentMode === 'UPI') {
+      const appName = bill.upiApp || 'UPI';
+      cashFlow.onlineIn.total += bill.total || 0;
+      cashFlow.onlineIn.upiApps[appName] = (cashFlow.onlineIn.upiApps[appName] || 0) + (bill.total || 0);
+      billOnlineIn = bill.total || 0;
+    } else if (bill.paymentMode === 'Mixed' && bill.splitPayments) {
+      const splitCash = Number(bill.splitPayments.cash) || 0;
+      const splitUpi = Number(bill.splitPayments.upi) || 0;
+      const splitCard = Number(bill.splitPayments.card) || 0;
+      cashFlow.cashIn += splitCash;
+      billCashIn = splitCash;
+      billOnlineIn = splitUpi + splitCard;
+      if (splitUpi > 0) {
+        cashFlow.onlineIn.total += splitUpi;
+        const appName = bill.upiApp || 'UPI';
+        cashFlow.onlineIn.upiApps[appName] = (cashFlow.onlineIn.upiApps[appName] || 0) + splitUpi;
+      }
+      if (splitCard > 0) {
+        cashFlow.onlineIn.total += splitCard;
+        cashFlow.onlineIn.upiApps['Card'] = (cashFlow.onlineIn.upiApps['Card'] || 0) + splitCard;
+      }
     } else {
       cashFlow.onlineIn.total += bill.total || 0;
-      if (bill.paymentMode === 'Card') {
-        cashFlow.onlineIn.upiApps['Card'] = (cashFlow.onlineIn.upiApps['Card'] || 0) + (bill.total || 0);
-      } else if (bill.paymentMode === 'Mixed') {
-        cashFlow.onlineIn.upiApps['Mixed'] = (cashFlow.onlineIn.upiApps['Mixed'] || 0) + (bill.total || 0);
-      } else if (bill.paymentMode === 'UPI') {
-        const appName = bill.upiApp || 'UPI';
-        cashFlow.onlineIn.upiApps[appName] = (cashFlow.onlineIn.upiApps[appName] || 0) + (bill.total || 0);
-      } else {
-        cashFlow.onlineIn.upiApps['Other Online'] = (cashFlow.onlineIn.upiApps['Other Online'] || 0) + (bill.total || 0);
-      }
+      cashFlow.onlineIn.upiApps['Other Online'] = (cashFlow.onlineIn.upiApps['Other Online'] || 0) + (bill.total || 0);
+      billOnlineIn = bill.total || 0;
     }
+
     transactions.push({
       type: 'Sale',
       id: bill._id,
       particulars: bill.billNumber || 'Sale',
       name: bill.customerName || '--',
-      paymentMode: bill.paymentMode,
+      paymentMode: bill.paymentMode || 'Cash',
       total: bill.total || 0,
-      cashIn: bill.total || 0,
+      cashIn: billCashIn,
+      onlineIn: billOnlineIn,
       cashOut: 0,
       date: bill.createdAt
     });
@@ -985,7 +1010,7 @@ export const sendAnalyticsWhatsApp = async (req, res) => {
       const d = new Date(bill.createdAt);
       row.values = [
         d.toLocaleDateString('en-IN'),
-        d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
         bill.billNumber || '',
         bill.billType || 'Dine-In',
         bill.tableNo || '',
