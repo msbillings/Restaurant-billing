@@ -244,30 +244,42 @@ function createWindow() {
   });
 }
 
+let backendRestartCount = 0;
+const MAX_BACKEND_RESTARTS = 3;
+
 function startBackend() {
   const { fork } = require('child_process');
 
   // Check if app is packaged
   const isPackaged = app.isPackaged;
 
-  // Path to backend
-  // In development, it's ./backend
-  // In production, it's extracted to process.resourcesPath/backend because we use extraResources
-  const backendPath = isPackaged
+  // Path to backend:
+  // In development: ./backend
+  // In production: process.resourcesPath/backend (via extraResources in electron-builder)
+  let backendPath = isPackaged
     ? path.join(process.resourcesPath, 'backend')
     : path.join(__dirname, 'backend');
 
   let serverPath = path.join(backendPath, 'server.js');
 
-  // When packaged by electron-builder, files unpacked from ASAR are stored in app.asar.unpacked
-  if (serverPath.includes('app.asar')) {
+  // When packaged by electron-builder, files inside ASAR cannot be executed directly.
+  // extraResources places backend outside ASAR at process.resourcesPath, so this is usually
+  // not needed — but kept as a safety net.
+  if (serverPath.includes('app.asar') && !serverPath.includes('app.asar.unpacked')) {
     serverPath = serverPath.replace('app.asar', 'app.asar.unpacked');
     backendPath = backendPath.replace('app.asar', 'app.asar.unpacked');
   }
 
+  console.log(`[Backend] Starting from: ${serverPath}`);
+  console.log(`[Backend] CWD: ${backendPath}`);
+
   const fs = require('fs');
   const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
   let logStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+
+  // NODE_PATH tells Node.js where to find node_modules when using ESM imports
+  // This is critical for the bundled backend inside extraResources
+  const nodeModulesPath = path.join(backendPath, 'node_modules');
 
   // Start the backend Node server using Electron's bundled Node process
   backendProcess = fork(serverPath, [], {
@@ -275,7 +287,8 @@ function startBackend() {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
-      APP_USER_DATA_PATH: app.getPath('userData')
+      APP_USER_DATA_PATH: app.getPath('userData'),
+      NODE_PATH: nodeModulesPath
     },
     stdio: 'pipe'
   });
@@ -292,14 +305,42 @@ function startBackend() {
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start backend server.', err);
-    dialog.showErrorBox('Backend Error', `Failed to start the local database server.\nPath: ${serverPath}\nError: ${err.message}\n\nPlease make sure you have an active internet connection for the database.`);
+    dialog.showErrorBox('Backend Error', `Failed to start the local database server.\nPath: ${serverPath}\nError: ${err.message}\n\nPlease restart the application.`);
   });
 
   backendProcess.on('exit', (code, signal) => {
-    if (code !== 0 && code !== null) {
-      console.error(`Backend process exited with code ${code}`);
+    // Ignore clean shutdowns
+    if (code === 0 || code === null) return;
+
+    console.error(`[Backend] Process exited with code ${code}`);
+
+    // Auto-restart up to MAX_BACKEND_RESTARTS times silently before alerting user
+    if (backendRestartCount < MAX_BACKEND_RESTARTS) {
+      backendRestartCount++;
+      console.log(`[Backend] Auto-restarting (${backendRestartCount}/${MAX_BACKEND_RESTARTS})...`);
+      setTimeout(() => startBackend(), 2000);
+      return;
+    }
+
+    // After max restarts exceeded — show error with Restart button
+    try {
       const tailLogs = fs.readFileSync(backendLogPath, 'utf8').split('\n').slice(-20).join('\n');
-      dialog.showErrorBox('Backend Crashed', `The background database server crashed unexpectedly.\nExit Code: ${code}\n\nLast Logs:\n${tailLogs}\n\nPlease contact support with this screenshot.`);
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Backend Crashed',
+        message: 'MS Billings server stopped unexpectedly.',
+        detail: `Exit Code: ${code}\n\nLast Logs:\n${tailLogs}\n\nPlease contact support with this screenshot.`,
+        buttons: ['Restart App', 'Close'],
+        defaultId: 0
+      }).then((result) => {
+        if (result.response === 0) {
+          backendRestartCount = 0;
+          app.relaunch();
+          app.exit(0);
+        }
+      });
+    } catch (e) {
+      dialog.showErrorBox('Backend Crashed', `The server crashed after ${MAX_BACKEND_RESTARTS} restart attempts.\nExit Code: ${code}\n\nPlease restart the application.`);
     }
   });
 }
