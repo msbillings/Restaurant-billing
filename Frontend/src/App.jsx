@@ -71,7 +71,8 @@ import { clearCategoryCache } from './api/category';
 import { clearAllOfflineData } from './db/offlineDb';
 import { logoutUser } from './api/auth';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat, Send, Edit } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, BarChart2, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat, Send, Edit } from 'lucide-react';
+
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
 import { initSyncEngine } from './utils/syncEngine';
@@ -1421,6 +1422,18 @@ function App() {
               </span>
             </button>
           )}
+
+          {/* Daily Report Button — visible to Admin & Cashier on all screen sizes */}
+          {(isAdmin || userRole === 'Cashier') && features.daybook !== false && (
+            <button
+              onClick={() => handleViewChange('daybook')}
+              title={t('View Daily Report')}
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 border border-blue-200 rounded-lg text-[11px] font-bold transition-all shadow-xs shrink-0 cursor-pointer whitespace-nowrap">
+              <BarChart2 size={13} className="shrink-0" />
+              <span className="hidden md:inline">{t('Daily Report')}</span>
+            </button>
+          )}
+
         </div>
 
         {/* Right Section Header Controls */}
@@ -1840,7 +1853,7 @@ function App() {
                 </>
               )}
 
-              <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
                 <button
                   onClick={() => {
                     handleViewChange('reservation');
@@ -1868,8 +1881,20 @@ function App() {
                       setShowMobileQuickActions(false);
                     }}
                     className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700">
-                    <SettingsIcon size={16} className="text-blue-500" />
+                    <SettingsIcon size={16} className="text-gray-500" />
                     <span>{t('Settings')}</span>
+                  </button>
+                )}
+
+                {(isAdmin || userRole === 'Cashier') && features.daybook !== false && (
+                  <button
+                    onClick={() => {
+                      handleViewChange('daybook');
+                      setShowMobileQuickActions(false);
+                    }}
+                    className="flex items-center justify-center gap-1.5 px-2.5 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-bold text-blue-700">
+                    <BarChart2 size={16} className="text-blue-600" />
+                    <span>{t('Daily Report')}</span>
                   </button>
                 )}
               </div>

@@ -16,7 +16,7 @@ import {
 import './Footer.css';
 import packageJson from '../../../package.json';
 
-const CURRENT_VERSION = packageJson?.version || '6.0.85';
+const CURRENT_VERSION = packageJson?.version || '6.0.87';
 
 /* ─── GitHub Release URLs ─────────────────────────────────────────── */
 const GITHUB_RELEASES = 'https://github.com/msbillings/Restaurant-billing/releases/latest';

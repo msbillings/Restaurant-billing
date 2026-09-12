@@ -222,8 +222,8 @@ export const startWhatsAppScheduler = () => {
       if (mongoose.connection.readyState !== 1) return;
 
       const now = new Date();
-      
-      // Calculate 24-hour time strings for Server Local Time & IST (India Standard Time)
+
+      // Build current IST time string "HH:MM" and today's IST date string
       const hLocal = String(now.getHours()).padStart(2, '0');
       const mLocal = String(now.getMinutes()).padStart(2, '0');
       const timeLocal24 = `${hLocal}:${mLocal}`;
@@ -243,9 +243,9 @@ export const startWhatsAppScheduler = () => {
         }
       } catch (e) {}
 
-      const validTimeStrings = [timeLocal24, timeIST24];
+      const validTimeStrings = new Set([timeLocal24, timeIST24]);
 
-      // Fetch all active tenant databases across cloud & local setups
+      // Fetch all active tenant databases
       let tenantDatabases = [];
       try {
         const clients = await ClientDefault.find({ status: { $ne: 'Inactive' } }).select('databaseName').lean();
@@ -261,39 +261,71 @@ export const startWhatsAppScheduler = () => {
         try {
           const models = await getTenantModels(dbName);
           const Setting = models.Setting;
-          
+
           const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
           if (!settingsDoc) continue;
-          
+
           let settings = settingsDoc.value;
           if (typeof settings === 'string') {
             try { settings = JSON.parse(settings); } catch (e) {}
           }
-
           if (!settings) continue;
 
-          const isEnabled = settings.autoSendDaybook === true || settings.autoSendDaybook === 'true' || settings.autoSendDaybook === 1 || settings.autoSendDaybook === '1';
-          const setTime = (settings.autoSendTime || '22:00').trim();
+          const isEnabled = settings.autoSendDaybook === true || settings.autoSendDaybook === 'true'
+            || settings.autoSendDaybook === 1 || settings.autoSendDaybook === '1';
+          if (!isEnabled) continue;
 
-          if (isEnabled && validTimeStrings.includes(setTime)) {
-            // Check if already sent today to prevent duplicates
-            if (settings.lastAutoDayBookSentDate === todayDateStr) {
-              continue;
-            }
+          // ── Slot 1: Afternoon (autoSendTime, default 14:30) ──
+          const slot1Time = (typeof settings.autoSendTime === 'string' && settings.autoSendTime.trim())
+            ? settings.autoSendTime.trim() : '14:30';
 
-            console.log(`[WhatsApp Scheduler] Time match found (${setTime}) for tenant ${dbName}. Triggering DayBook report...`);
-            
-            const res = await triggerAutoDayBookForTenant(dbName);
-            if (res && res.success) {
-              // Update lastAutoDayBookSentDate in database
-              try {
+          // ── Slot 2: Night (autoSendTime2, default 22:30) ──
+          const slot2Time = (typeof settings.autoSendTime2 === 'string' && settings.autoSendTime2.trim())
+            ? settings.autoSendTime2.trim() : '22:30';
+
+          // Strict: both times must be valid HH:MM, at least 1h apart
+          const toMins = (t) => {
+            const [h, m] = (t || '').split(':').map(Number);
+            return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+          };
+          const diff = Math.abs(toMins(slot1Time) - toMins(slot2Time));
+          const timesValid = diff >= 60; // enforce at least 1 hour gap
+
+          let settingsChanged = false;
+
+          // ── Check Slot 1 ──
+          if (timesValid && validTimeStrings.has(slot1Time)) {
+            if (settings.lastAutoDayBookSentDate !== todayDateStr) {
+              console.log(`[WhatsApp Scheduler] Afternoon slot match (${slot1Time}) for ${dbName}. Sending...`);
+              const res = await triggerAutoDayBookForTenant(dbName);
+              if (res && res.success) {
                 settings.lastAutoDayBookSentDate = todayDateStr;
-                await Setting.findOneAndUpdate(
-                  { key: 'restaurantSettings' },
-                  { value: settings },
-                  { upsert: true }
-                );
-              } catch (saveErr) {}
+                settingsChanged = true;
+              }
+            }
+          }
+
+          // ── Check Slot 2 ──
+          if (timesValid && validTimeStrings.has(slot2Time)) {
+            if (settings.lastAutoDayBookSentDate2 !== todayDateStr) {
+              console.log(`[WhatsApp Scheduler] Night slot match (${slot2Time}) for ${dbName}. Sending...`);
+              const res = await triggerAutoDayBookForTenant(dbName);
+              if (res && res.success) {
+                settings.lastAutoDayBookSentDate2 = todayDateStr;
+                settingsChanged = true;
+              }
+            }
+          }
+
+          if (settingsChanged) {
+            try {
+              await Setting.findOneAndUpdate(
+                { key: 'restaurantSettings' },
+                { value: settings },
+                { upsert: true }
+              );
+            } catch (saveErr) {
+              console.error(`[WhatsApp Scheduler] Failed to save sent-date for ${dbName}:`, saveErr);
             }
           }
         } catch (tenantErr) {
@@ -304,5 +336,6 @@ export const startWhatsAppScheduler = () => {
       console.error('[WhatsApp Scheduler] Cron execution error:', err);
     }
   });
-  console.log('[WhatsApp Scheduler] Auto-DayBook cron job initialized.');
+  console.log('[WhatsApp Scheduler] Auto-DayBook cron job initialized (2 daily slots: afternoon + night).');
 };
+

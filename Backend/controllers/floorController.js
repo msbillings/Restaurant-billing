@@ -24,10 +24,32 @@ export const saveFloors = async (req, res) => {
     }
 
     // Replace all existing floors with the new ones.
-    // In a fully robust system, we would merge, but for Phase 1 migration from localStorage,
-    // total replacement works perfectly.
+    // Ensure all spaces have a valid capacity number
+    const sanitizedFloors = newFloors.map(floor => {
+      const sanitizeItems = (items, defaultCap) => {
+        if (!Array.isArray(items)) return [];
+        return items.map(item => ({
+          ...item,
+          capacity: Number(item.capacity) > 0 ? Number(item.capacity) : defaultCap
+        }));
+      };
+
+      return {
+        ...floor,
+        tables: sanitizeItems(floor.tables, 4),
+        cabins: sanitizeItems(floor.cabins, 6),
+        sofas: sanitizeItems(floor.sofas, 4),
+        spaces: (floor.spaces || []).map(sp => ({
+          ...sp,
+          capacity: Number(sp.capacity) > 0
+            ? Number(sp.capacity)
+            : ((sp.type || '').toLowerCase() === 'cabin' ? 6 : 4)
+        }))
+      };
+    });
+
     await Floor.deleteMany({});
-    const savedFloors = await Floor.insertMany(newFloors);
+    const savedFloors = await Floor.insertMany(sanitizedFloors);
     
     emitSocketEvent(req, 'spacesUpdated', savedFloors);
     

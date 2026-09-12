@@ -29,6 +29,16 @@ export const addExpense = async (expenseData) => {
   }
 };
 
+export const updateExpense = async (id, expenseData) => {
+  try {
+    const response = await api.put(`/expenses/${id}`, expenseData);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    throw error;
+  }
+};
+
 export const deleteExpense = async (id) => {
   try {
     const response = await api.delete(`/expenses/${id}`);
@@ -38,3 +48,4 @@ export const deleteExpense = async (id) => {
     throw error;
   }
 };
+

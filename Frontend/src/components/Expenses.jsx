@@ -1,6 +1,6 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
-import { getExpenses, addExpense, deleteExpense } from '../api/expenses';
-import { Wallet, Plus, Trash2, Calendar, IndianRupee, Tag, Clock, CreditCard } from 'lucide-react';
+import { getExpenses, addExpense, deleteExpense, updateExpense } from '../api/expenses';
+import { Wallet, Plus, Trash2, Calendar, IndianRupee, Tag, Clock, CreditCard, Pencil } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 
@@ -13,15 +13,44 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
   const [toast, setToast] = useState(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    amount: '',
-    description: '',
-    category: 'Miscellaneous',
-    paymentMode: 'Cash',
-    date: new Date().toISOString().split('T')[0]
+  const [editingExpense, setEditingExpense] = useState(null); // null = add mode, obj = edit mode
+  const getISTTime = () => {
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60000;
+    const ist = new Date(now.getTime() + istOffset);
+    const hours = ist.getUTCHours();
+    const minutes = ist.getUTCMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 === 0 ? 12 : hours % 12;
+    return {
+      hour: String(h12).padStart(2, '0'),
+      minute: String(minutes).padStart(2, '0'),
+      ampm
+    };
+  };
+
+  const [formData, setFormData] = useState(() => {
+    const t = getISTTime();
+    return {
+      amount: '',
+      description: '',
+      category: 'Miscellaneous',
+      paymentMode: 'Cash',
+      date: new Date().toISOString().split('T')[0],
+      timeHour: t.hour,
+      timeMinute: t.minute,
+      timeAmpm: t.ampm
+    };
   });
 
   const [dateFilter, setDateFilter] = useState('today');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  const formatExpenseTime = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+  };
 
   const fetchExpensesData = React.useCallback(async () => {
     try {
@@ -58,6 +87,9 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     }
   }, [dateFilter]);
 
+  // Reset to page 1 when filter or expenses change
+  useEffect(() => { setCurrentPage(1); }, [dateFilter, expenses.length]);
+
   useEffect(() => {
     fetchExpensesData();
   }, [fetchExpensesData]);
@@ -70,17 +102,57 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
     }
 
     try {
-      await addExpense({
-        ...formData,
-        amount: Number(formData.amount)
-      });
-      setToast({ message: 'Expense added successfully', type: 'success' });
+      if (editingExpense) {
+        // Edit mode
+        await updateExpense(editingExpense._id, { ...formData, amount: Number(formData.amount) });
+        setToast({ message: 'Expense updated successfully', type: 'success' });
+      } else {
+        // Add mode
+        await addExpense({ ...formData, amount: Number(formData.amount) });
+        setToast({ message: 'Expense added successfully', type: 'success' });
+      }
       setIsModalOpen(false);
-      setFormData({ amount: '', description: '', category: 'Miscellaneous', paymentMode: 'Cash', date: new Date().toISOString().split('T')[0] });
+      setEditingExpense(null);
+      const ti = getISTTime();
+      setFormData({ amount: '', description: '', category: 'Miscellaneous', paymentMode: 'Cash', date: new Date().toISOString().split('T')[0], timeHour: ti.hour, timeMinute: ti.minute, timeAmpm: ti.ampm });
       fetchExpensesData();
     } catch (err) {
-      setToast({ message: 'Failed to add expense', type: 'error' });
+      setToast({ message: editingExpense ? 'Failed to update expense' : 'Failed to add expense', type: 'error' });
     }
+  };
+
+  // Open modal pre-filled for editing
+  const handleOpenEdit = (expense) => {
+    const d = new Date(expense.date);
+    // Convert stored UTC date to IST for display
+    const istD = new Date(d.getTime() + 5.5 * 60 * 60000);
+    const hours = istD.getUTCHours();
+    const minutes = istD.getUTCMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const h12 = hours % 12 === 0 ? 12 : hours % 12;
+    // YYYY-MM-DD in IST
+    const yyyy = istD.getUTCFullYear();
+    const mm = String(istD.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(istD.getUTCDate()).padStart(2, '0');
+    setFormData({
+      amount: String(expense.amount),
+      description: expense.description,
+      category: expense.category,
+      paymentMode: expense.paymentMode,
+      date: `${yyyy}-${mm}-${dd}`,
+      timeHour: String(h12).padStart(2, '0'),
+      timeMinute: String(minutes).padStart(2, '0'),
+      timeAmpm: ampm
+    });
+    setEditingExpense(expense);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingExpense(null);
+    const ti = getISTTime();
+    setFormData({ amount: '', description: '', category: 'Miscellaneous', paymentMode: 'Cash', date: new Date().toISOString().split('T')[0], timeHour: ti.hour, timeMinute: ti.minute, timeAmpm: ti.ampm });
   };
 
   const handleDeleteExpense = async (id) => {
@@ -97,6 +169,8 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const validExpenses = Array.isArray(expenses) ? expenses : [];
   const totalAmount = validExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const totalPages = Math.max(1, Math.ceil(validExpenses.length / PAGE_SIZE));
+  const pagedExpenses = validExpenses.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden w-full">
@@ -121,8 +195,9 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         </div>
       </div>
 
-      <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 border-b border-border bg-background flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 shrink-0">
-        <div className="flex bg-surface-hover p-1 rounded-xl overflow-x-auto shrink-0 justify-between sm:justify-start">
+      <div className="px-2 sm:px-3.5 py-1.5 sm:py-2 border-b border-border bg-background flex flex-wrap items-center justify-between gap-2 shrink-0">
+        {/* Filter tabs */}
+        <div className="flex bg-surface-hover p-1 rounded-xl overflow-x-auto shrink-0">
           {['today', 'week', 'month', 'all'].map((filter) =>
           <button
             key={filter}
@@ -137,14 +212,43 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
           )}
         </div>
 
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 px-3.5 py-2 rounded-xl flex items-center justify-between sm:justify-start gap-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-1 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
-              <IndianRupee size={15} />
-            </div>
-            <p className="text-[11px] sm:text-xs font-bold text-red-600/80 uppercase tracking-wider">{t("Total Expenses")}</p>
+        {/* Pagination + Total */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Simple Pagination — always visible */}
+          <div className="flex items-center gap-1 bg-surface-hover rounded-xl p-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold text-text-muted hover:text-text-main hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all">
+              ‹
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <button
+                key={p}
+                onClick={() => setCurrentPage(p)}
+                className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  currentPage === p ? 'bg-red-500 text-white shadow-sm' : 'text-text-muted hover:text-text-main hover:bg-background'
+                }`}>
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-bold text-text-muted hover:text-text-main hover:bg-background disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all">
+              ›
+            </button>
           </div>
-          <p className="text-base sm:text-xl font-black text-red-700 dark:text-red-400 font-mono">₹{totalAmount.toLocaleString()}</p>
+          {/* Total Expenses */}
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 px-3.5 py-2 rounded-xl flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="p-1 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
+                <IndianRupee size={15} />
+              </div>
+              <p className="text-[11px] sm:text-xs font-bold text-red-600/80 uppercase tracking-wider">{t("Total Expenses")}</p>
+            </div>
+            <p className="text-base sm:text-xl font-black text-red-700 dark:text-red-400 font-mono">₹{totalAmount.toLocaleString()}</p>
+          </div>
         </div>
       </div>
 
@@ -168,44 +272,57 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
               <table className="w-full text-left">
                 <thead className="bg-surface-hover border-b border-border">
                   <tr>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Date")}</th>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Description")}</th>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Category")}</th>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Payment Mode")}</th>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider text-right">{t("Amount")}</th>
-                    <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-wider text-right">{t("Action")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Date & Time")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Description")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Category")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider">{t("Payment Mode")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider text-right">{t("Amount")}</th>
+                    <th className="px-5 py-4 text-xs font-bold text-text-muted uppercase tracking-wider text-right">{t("Action")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {validExpenses.map((expense) =>
+                  {pagedExpenses.map((expense) =>
                 <tr key={expense._id} className="hover:bg-surface-hover/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2 text-text-main font-medium text-xs sm:text-sm">
-                          <Calendar size={14} className="text-text-muted" />
-                          {new Date(expense.date).toLocaleDateString()}
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 text-text-main font-medium text-xs sm:text-sm">
+                            <Calendar size={13} className="text-text-muted shrink-0" />
+                            {new Date(expense.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-text-muted text-[11px]">
+                            <Clock size={11} className="shrink-0" />
+                            {formatExpenseTime(expense.date)}
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-5 py-4">
                         <p className="text-text-main font-bold text-xs sm:text-sm">{expense.description}</p>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-surface-hover text-text-main border border-border">
                           <Tag size={11} />
                           {t(expense.category)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-5 py-4 whitespace-nowrap">
                         <span className="text-xs sm:text-sm font-bold text-text-muted">{t(expense.paymentMode)}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <td className="px-5 py-4 whitespace-nowrap text-right">
                         <span className="text-base sm:text-lg font-black text-red-600 font-mono">₹{expense.amount.toLocaleString()}</span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          onClick={() => handleDeleteExpense(expense._id)}
-                          className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer">
-                          <Trash2 size={16} />
-                        </button>
+                      <td className="px-5 py-4 whitespace-nowrap text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleOpenEdit(expense)}
+                            className="p-1.5 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors cursor-pointer" title="Edit">
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteExpense(expense._id)}
+                            className="p-1.5 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer" title="Delete">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                 )}
@@ -215,20 +332,29 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
           {/* Mobile Card List */}
           <div className="md:hidden space-y-2.5">
-            {validExpenses.map((expense) => (
+            {pagedExpenses.map((expense) => (
               <div key={expense._id} className="bg-surface rounded-xl border border-border p-3 shadow-xs">
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-text-main text-xs sm:text-sm truncate">{expense.description}</p>
-                    <div className="flex items-center gap-1 text-[11px] text-text-muted mt-0.5">
-                      <Calendar size={11} />
-                      <span>{new Date(expense.date).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-2 text-[11px] text-text-muted mt-0.5 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Calendar size={11} />
+                        {new Date(expense.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={11} />
+                        {formatExpenseTime(expense.date)}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <span className="text-xs sm:text-sm font-black text-red-600 font-mono">₹{expense.amount.toLocaleString()}</span>
-                    <button onClick={() => handleDeleteExpense(expense._id)} className="p-1 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer">
-                      <Trash2 size={15} />
+                    <button onClick={() => handleOpenEdit(expense)} className="p-1 text-text-muted hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-colors cursor-pointer" title="Edit">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => handleDeleteExpense(expense._id)} className="p-1 text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer" title="Delete">
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
@@ -252,10 +378,14 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             {/* Header */}
             <div className="p-4 sm:p-5 border-b border-border bg-gradient-to-r from-red-500/10 to-transparent rounded-t-3xl sm:rounded-t-2xl shrink-0 flex items-center justify-between">
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-text-main">{t("Record New Expense")}</h3>
-                <p className="text-[11px] sm:text-xs text-text-muted mt-0.5">{t("Add a new outgoing cash flow record.")}</p>
+                <h3 className="text-base sm:text-lg font-bold text-text-main">
+                  {editingExpense ? t('Edit Expense') : t('Record New Expense')}
+                </h3>
+                <p className="text-[11px] sm:text-xs text-text-muted mt-0.5">
+                  {editingExpense ? t('Update the expense details below.') : t('Add a new outgoing cash flow record.')}
+                </p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text-main p-1 rounded-lg text-lg leading-none cursor-pointer">&times;</button>
+              <button onClick={handleCloseModal} className="text-text-muted hover:text-text-main p-1 rounded-lg text-lg leading-none cursor-pointer">&times;</button>
             </div>
             
             {/* Scrollable Form Fields */}
@@ -297,6 +427,149 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                 className="w-full px-3.5 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-red-500 transition-all font-medium text-xs sm:text-sm" />
               </div>
 
+              {/* Circular Dial Clock Picker */}
+              {(() => {
+                const DIAL_R = 90; // radius of dial circle in px
+                const CENTER = 100; // SVG viewBox centre
+                const HAND_R = 68; // hand length
+                const NUM_R = 78;  // number ring radius
+                const isHourMode = formData._clockMode !== 'minute';
+
+                const hourNum = parseInt(formData.timeHour);
+                const minNum  = parseInt(formData.timeMinute);
+
+                // Angle helpers: 12 at top => -90° offset
+                const hourAngle  = ((hourNum % 12) / 12) * 360 - 90;
+                const minAngle   = (minNum / 60) * 360 - 90;
+                const activeAngle = isHourMode ? hourAngle : minAngle;
+                const handX = CENTER + HAND_R * Math.cos((activeAngle * Math.PI) / 180);
+                const handY = CENTER + HAND_R * Math.sin((activeAngle * Math.PI) / 180);
+
+                return (
+                  <div>
+                    <label className="block text-xs sm:text-sm font-bold text-text-main mb-2 flex items-center gap-1.5">
+                      <Clock size={13} className="text-red-500" />
+                      {t('Time')}
+                    </label>
+
+                    {/* Time display + AM/PM */}
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                      <div className="flex items-center gap-1 bg-surface-hover rounded-2xl px-4 py-2 border border-border">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, _clockMode: 'hour' })}
+                          className={`text-2xl font-black tabular-nums px-1 rounded-lg transition-all cursor-pointer ${isHourMode ? 'text-red-500 bg-red-500/10' : 'text-text-muted hover:text-text-main'}`}>
+                          {formData.timeHour}
+                        </button>
+                        <span className="text-2xl font-black text-text-muted select-none">:</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, _clockMode: 'minute' })}
+                          className={`text-2xl font-black tabular-nums px-1 rounded-lg transition-all cursor-pointer ${!isHourMode ? 'text-red-500 bg-red-500/10' : 'text-text-muted hover:text-text-main'}`}>
+                          {formData.timeMinute}
+                        </button>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {['AM', 'PM'].map(p => (
+                          <button key={p} type="button"
+                            onClick={() => setFormData({ ...formData, timeAmpm: p })}
+                            className={`px-3 py-0.5 rounded-lg text-xs font-black transition-all cursor-pointer ${formData.timeAmpm === p ? 'bg-red-500 text-white shadow-sm' : 'bg-surface-hover text-text-muted hover:text-text-main border border-border'}`}>
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* SVG Dial */}
+                    <div className="flex justify-center">
+                      <svg viewBox="0 0 200 200" width="200" height="200" className="drop-shadow-sm">
+                        {/* Outer ring */}
+                        <circle cx={CENTER} cy={CENTER} r="96" fill="var(--color-surface)" stroke="var(--color-border)" strokeWidth="1.5"/>
+                        {/* Tick marks */}
+                        {Array.from({ length: 60 }, (_, i) => {
+                          const ang = (i / 60) * 360 - 90;
+                          const rad = (ang * Math.PI) / 180;
+                          const isMajor = i % 5 === 0;
+                          const r1 = isMajor ? 84 : 88;
+                          const r2 = 92;
+                          return (
+                            <line key={i}
+                              x1={CENTER + r1 * Math.cos(rad)} y1={CENTER + r1 * Math.sin(rad)}
+                              x2={CENTER + r2 * Math.cos(rad)} y2={CENTER + r2 * Math.sin(rad)}
+                              stroke={isMajor ? 'var(--color-text-muted)' : 'var(--color-border)'}
+                              strokeWidth={isMajor ? 1.5 : 0.8}
+                            />
+                          );
+                        })}
+
+                        {/* Hand */}
+                        <line x1={CENTER} y1={CENTER} x2={handX} y2={handY}
+                          stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"/>
+                        {/* Hand dot end */}
+                        <circle cx={handX} cy={handY} r="5" fill="#ef4444"/>
+                        {/* Centre dot */}
+                        <circle cx={CENTER} cy={CENTER} r="4" fill="#ef4444"/>
+
+                        {/* Hour numbers (always visible) */}
+                        {isHourMode && Array.from({ length: 12 }, (_, i) => {
+                          const h = i + 1;
+                          const ang = (h / 12) * 360 - 90;
+                          const rad = (ang * Math.PI) / 180;
+                          const x = CENTER + NUM_R * Math.cos(rad);
+                          const y = CENTER + NUM_R * Math.sin(rad);
+                          const isActive = h === hourNum;
+                          return (
+                            <g key={h} onClick={() => setFormData({ ...formData, timeHour: String(h).padStart(2,'0'), _clockMode: 'minute' })} style={{ cursor: 'pointer' }}>
+                              {isActive && <circle cx={x} cy={y} r="13" fill="#ef4444"/>}
+                              <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+                                fontSize="13" fontWeight="700"
+                                fill={isActive ? '#fff' : 'var(--color-text-main)'}
+                                fontFamily="inherit">
+                                {h}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Minute markers (5-min steps) */}
+                        {!isHourMode && Array.from({ length: 12 }, (_, i) => {
+                          const m = i * 5;
+                          const ang = (m / 60) * 360 - 90;
+                          const rad = (ang * Math.PI) / 180;
+                          const x = CENTER + NUM_R * Math.cos(rad);
+                          const y = CENTER + NUM_R * Math.sin(rad);
+                          const isActive = minNum === m;
+                          return (
+                            <g key={m} onClick={() => setFormData({ ...formData, timeMinute: String(m).padStart(2,'0') })} style={{ cursor: 'pointer' }}>
+                              {isActive && <circle cx={x} cy={y} r="13" fill="#ef4444"/>}
+                              <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+                                fontSize="12" fontWeight="700"
+                                fill={isActive ? '#fff' : 'var(--color-text-main)'}
+                                fontFamily="inherit">
+                                {String(m).padStart(2,'0')}
+                              </text>
+                            </g>
+                          );
+                        })}
+
+                        {/* Centre label */}
+                        <text x={CENTER} y={CENTER} textAnchor="middle" dominantBaseline="central"
+                          fontSize="9" fontWeight="600" fill="var(--color-text-muted)" fontFamily="inherit">
+                          {isHourMode ? 'HR' : 'MIN'}
+                        </text>
+                      </svg>
+                    </div>
+
+                    <p className="text-[10px] text-text-muted mt-2 flex items-center justify-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+                      IST — {formData.timeHour}:{formData.timeMinute} {formData.timeAmpm}
+                      <span className="ml-1 text-text-muted/60">· tap hour or minute to switch dial</span>
+                    </p>
+                  </div>
+                );
+              })()}
+
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-text-main mb-1">{t("Category")}</label>
@@ -323,13 +596,14 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             <div className="shrink-0 flex items-center justify-end gap-2.5 px-4 sm:px-5 py-3 border-t border-border bg-surface">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleCloseModal}
                 className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-text-muted hover:bg-surface-hover transition-colors cursor-pointer">{t("Cancel")}
               </button>
               <button
                 type="submit"
                 form="expense-form"
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-red-500 text-white hover:bg-red-600 hover:shadow-md hover:shadow-red-500/20 transition-all cursor-pointer">{t("Save Expense")}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-red-500 text-white hover:bg-red-600 hover:shadow-md hover:shadow-red-500/20 transition-all cursor-pointer">
+                {editingExpense ? t('Update Expense') : t('Save Expense')}
               </button>
             </div>
           </div>

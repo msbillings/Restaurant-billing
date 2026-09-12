@@ -2480,7 +2480,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
 
-            <span>🍽️ {t('menuItems')}</span>
+            <span>🍽️ {t('menuItems') === 'menuItems' ? 'Menu Items' : (t('menuItems') || 'Menu Items')}</span>
           </button>
           <button
             id="mobile-cart-tab"
@@ -2491,7 +2491,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`
             }>
 
-            <span>🛒 {t('currentOrder')}</span>
+            <span>🛒 {t('currentOrder') === 'currentOrder' ? 'Current Order' : (t('currentOrder') || 'Current Order')}</span>
             {cart.length > 0 &&
               <span data-mobile-cart-badge="true" className="bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
                 {cart.length}
@@ -2506,7 +2506,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted group-focus-within:text-primary transition-colors" size={16} />
               <input
                 type="text"
-                placeholder={t('searchDishes')}
+                placeholder={t('searchDishes') === 'searchDishes' ? 'Search Dishes...' : (t('searchDishes') || 'Search Dishes...')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-8 py-2 bg-surface border border-border rounded-xl focus:outline-none focus:border-primary text-xs text-text-main transition-all shadow-inner"

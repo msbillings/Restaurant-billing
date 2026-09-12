@@ -5,16 +5,35 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 export const addExpense = async (req, res) => {
   try {
     const Expense = getTenantModel(req, 'Expense', ExpenseDefault);
-    const { amount, description, category, paymentMode, date } = req.body;
-    
+    const { amount, description, category, paymentMode, date, timeHour, timeMinute, timeAmpm } = req.body;
+
     let parsedDate = new Date();
+
     if (date) {
+      let dateStr = date;
+      // Handle DD-MM-YYYY format
       if (typeof date === 'string' && date.split('-')[0].length === 2) {
-        // Handle DD-MM-YYYY
         const [day, month, year] = date.split('-');
-        parsedDate = new Date(`${year}-${month}-${day}`);
+        dateStr = `${year}-${month}-${day}`;
+      }
+
+      // Build hour in 24h from 12h AM/PM
+      let hours24 = 0;
+      if (timeHour && timeMinute && timeAmpm) {
+        let h = parseInt(timeHour, 10);
+        const ampm = (timeAmpm || 'AM').toUpperCase();
+        if (ampm === 'AM') {
+          hours24 = h === 12 ? 0 : h;
+        } else {
+          hours24 = h === 12 ? 12 : h + 12;
+        }
+        const mins = parseInt(timeMinute, 10);
+        // Compose as IST datetime string (IST = UTC+5:30)
+        // We store in UTC so subtract 5h30m
+        const istMs = new Date(`${dateStr}T${String(hours24).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00+05:30`).getTime();
+        parsedDate = new Date(istMs);
       } else {
-        parsedDate = new Date(date);
+        parsedDate = new Date(dateStr);
       }
     }
 
@@ -72,3 +91,50 @@ export const deleteExpense = async (req, res) => {
     res.status(500).json({ message: 'Error deleting expense', error: error.message });
   }
 };
+
+// Update an expense
+export const updateExpense = async (req, res) => {
+  try {
+    const Expense = getTenantModel(req, 'Expense', ExpenseDefault);
+    const { id } = req.params;
+    const { amount, description, category, paymentMode, date, timeHour, timeMinute, timeAmpm } = req.body;
+
+    let parsedDate;
+    if (date) {
+      let dateStr = date;
+      if (typeof date === 'string' && date.split('-')[0].length === 2) {
+        const [day, month, year] = date.split('-');
+        dateStr = `${year}-${month}-${day}`;
+      }
+      if (timeHour && timeMinute && timeAmpm) {
+        let h = parseInt(timeHour, 10);
+        const ampm = (timeAmpm || 'AM').toUpperCase();
+        const hours24 = ampm === 'AM' ? (h === 12 ? 0 : h) : (h === 12 ? 12 : h + 12);
+        const mins = parseInt(timeMinute, 10);
+        const istMs = new Date(`${dateStr}T${String(hours24).padStart(2,'0')}:${String(mins).padStart(2,'0')}:00+05:30`).getTime();
+        parsedDate = new Date(istMs);
+      } else {
+        parsedDate = new Date(dateStr);
+      }
+    }
+
+    const updateFields = {};
+    if (amount !== undefined) updateFields.amount = Number(amount);
+    if (description !== undefined) updateFields.description = description;
+    if (category !== undefined) updateFields.category = category;
+    if (paymentMode !== undefined) updateFields.paymentMode = paymentMode;
+    if (parsedDate) updateFields.date = parsedDate;
+
+    const updated = await Expense.findByIdAndUpdate(id, { $set: updateFields }, { new: true, runValidators: true });
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    res.status(200).json(updated);
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    res.status(500).json({ message: 'Error updating expense', error: error.message });
+  }
+};
+

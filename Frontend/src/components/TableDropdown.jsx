@@ -129,6 +129,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                       >
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 4} {t('seats') || 'seats'})</span>
                           {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
@@ -145,6 +146,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                       >
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 6} {t('seats') || 'seats'})</span>
                           {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('cabin') || 'Cabin'})</span>
@@ -161,6 +163,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                       >
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 4} {t('seats') || 'seats'})</span>
                           {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('sofa') || 'Sofa'})</span>
@@ -177,6 +180,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                       >
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
+                          <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || ((item.type || '').toLowerCase() === 'cabin' ? 6 : 4)} {t('seats') || 'seats'})</span>
                           {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t(item.type || 'space') || item.type || 'Space'})</span>

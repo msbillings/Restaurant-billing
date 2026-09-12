@@ -91,19 +91,23 @@ const TransferTableModal = ({ floors, currentTable, currentOrderId, openOrdersLi
                   <optgroup key={floor.id} label={floor.name}>
                     {availableTables.map((tableObj) => {
                       const val = `${floor.name} - ${tableObj.name}`;
-                      return <option key={`t-${tableObj.id}`} value={val} disabled={val === currentTable}>{tableObj.name} {t("(Table)")}</option>;
+                      const cap = tableObj.capacity || 4;
+                      return <option key={`t-${tableObj.id}`} value={val} disabled={val === currentTable}>{tableObj.name} ({cap} {t("seats") || "seats"}) {t("(Table)")}</option>;
                     })}
                     {availableCabins.map((c) => {
                       const val = `${floor.name} - ${c.name}`;
-                      return <option key={`c-${c.id}`} value={val} disabled={val === currentTable}>{c.name} {t("(Cabin)")}</option>;
+                      const cap = c.capacity || 6;
+                      return <option key={`c-${c.id}`} value={val} disabled={val === currentTable}>{c.name} ({cap} {t("seats") || "seats"}) {t("(Cabin)")}</option>;
                     })}
                     {availableSofas.map((s) => {
                       const val = `${floor.name} - ${s.name}`;
-                      return <option key={`s-${s.id}`} value={val} disabled={val === currentTable}>{s.name} {t("(Sofa)")}</option>;
+                      const cap = s.capacity || 4;
+                      return <option key={`s-${s.id}`} value={val} disabled={val === currentTable}>{s.name} ({cap} {t("seats") || "seats"}) {t("(Sofa)")}</option>;
                     })}
                     {availableSpaces.map((sp) => {
                       const val = `${floor.name} - ${sp.name}`;
-                      return <option key={`sp-${sp.id}`} value={val} disabled={val === currentTable}>{sp.name} {t(`(${sp.type || 'Space'})`)}</option>;
+                      const cap = sp.capacity || ((sp.type || '').toLowerCase() === 'cabin' ? 6 : 4);
+                      return <option key={`sp-${sp.id}`} value={val} disabled={val === currentTable}>{sp.name} ({cap} {t("seats") || "seats"}) {t(`(${sp.type || 'Space'})`)}</option>;
                     })}
                   </optgroup>
                 );

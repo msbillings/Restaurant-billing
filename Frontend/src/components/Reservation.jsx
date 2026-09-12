@@ -158,9 +158,9 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       parsed = [{
         id: 'f-1',
         name: 'Ground Floor',
-        tables: [{ id: 't1', name: 'Table 1', type: 'table' }, { id: 't2', name: 'Table 2', type: 'table' }, { id: 't3', name: 'Table 3', type: 'table' }],
-        cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin' }, { id: 'c2', name: 'Cabin 2', type: 'cabin' }],
-        sofas: [{ id: 's1', name: 'Sofa-01', type: 'sofa' }]
+        tables: [{ id: 't1', name: 'Table 1', type: 'table', capacity: 4 }, { id: 't2', name: 'Table 2', type: 'table', capacity: 4 }, { id: 't3', name: 'Table 3', type: 'table', capacity: 4 }],
+        cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin', capacity: 6 }, { id: 'c2', name: 'Cabin 2', type: 'cabin', capacity: 6 }],
+        sofas: [{ id: 's1', name: 'Sofa-01', type: 'sofa', capacity: 4 }]
       }];
     }
 
@@ -175,7 +175,8 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
         if (floor[category]) {
           floor[category].forEach((space) => {
             if (space.name) {
-              spaces.push({ name: space.name, value: `${floor.name} - ${space.name}` });
+              const cap = space.capacity || (category === 'cabins' ? 6 : 4);
+              spaces.push({ name: space.name, value: `${floor.name} - ${space.name}`, capacity: cap });
             }
           });
         }
@@ -671,7 +672,7 @@ const Reservation = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
                           const status = getTableStatus(s.value);
                           return (
                             <option key={s.value} value={s.value} disabled={status.unavailable}>
-                              {s.name} {status.unavailable ? `(${t(status.reason)})` : ""}
+                              {s.name} {s.capacity ? `(${s.capacity} ${t("seats") || "seats"})` : ""} {status.unavailable ? `(${t(status.reason)})` : ""}
                             </option>
                           );
                         })}

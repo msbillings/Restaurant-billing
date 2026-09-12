@@ -149,7 +149,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
 
             <div className="flex flex-col items-center justify-center p-8 bg-background border border-border rounded-xl">
                   <Wallet size={48} className="text-text-muted mb-4 opacity-20" />
-                  <div className="font-bold text-text-main text-base mb-1">{t("UPI Payment Due:")}{currencySymbol}{total.toFixed(2)}</div>
+                  <div className="font-bold text-text-main text-base mb-1">{t("UPI Payment Due:")} {currencySymbol}{total.toFixed(2)}</div>
                   <div className="text-sm text-text-muted">{t("Waiting for customer to scan and pay...")}</div>
                 </div>
             }
@@ -316,7 +316,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
             ) : (
               <>
                 <CheckCircle size={22} />
-                <span>{t("Complete")}{mode}{t("Payment")}</span>
+                <span>{t("Complete")} {t(mode)} {t("Payment")}</span>
               </>
             )}
           </button>

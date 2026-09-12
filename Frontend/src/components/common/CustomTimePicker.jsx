@@ -1,128 +1,179 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock } from 'lucide-react';
 
-const CustomTimePicker = ({ value, onChange }) => {
+const CustomTimePicker = ({ value, onChange, label }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [clockMode, setClockMode] = useState('hour'); // 'hour' | 'minute'
   const dropdownRef = useRef(null);
 
-  // Parse initial 24h value "HH:MM" to 12h components
-  const parseTime = (timeStr) => {
-    if (!timeStr) return { hour: '10', min: '00', period: 'PM' };
-    let [h, m] = timeStr.split(':');
-    h = parseInt(h, 10);
-    const period = h >= 12 ? 'PM' : 'AM';
+  // Parse 24h "HH:MM" → { hour, minute, ampm }
+  const parse24h = (str) => {
+    if (!str) return { hour: '10', minute: '30', ampm: 'PM' };
+    const [hRaw, mRaw] = str.split(':');
+    let h = parseInt(hRaw, 10) || 0;
+    const m = mRaw ? mRaw.padStart(2, '0') : '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12;
     if (h === 0) h = 12;
-    return {
-      hour: h.toString().padStart(2, '0'),
-      min: m.padStart(2, '0'),
-      period
-    };
+    return { hour: String(h).padStart(2, '0'), minute: m, ampm };
   };
 
-  const [time, setTime] = useState(parseTime(value));
+  const [time, setTime] = useState(() => parse24h(value));
 
-  useEffect(() => {
-    setTime(parseTime(value));
-  }, [value]);
+  useEffect(() => { setTime(parse24h(value)); }, [value]);
 
-  // Click outside listener
+  // Click outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsOpen(false);
+        setClockMode('hour');
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const updateTime = (newTime) => {
-    setTime(newTime);
-    // Convert back to 24h format for parent
-    let h = parseInt(newTime.hour, 10);
-    if (newTime.period === 'PM' && h !== 12) h += 12;
-    if (newTime.period === 'AM' && h === 12) h = 0;
-    const formatted24h = `${h.toString().padStart(2, '0')}:${newTime.min}`;
-    onChange(formatted24h);
+  const emit = (t) => {
+    let h = parseInt(t.hour, 10);
+    if (t.ampm === 'PM' && h !== 12) h += 12;
+    if (t.ampm === 'AM' && h === 12) h = 0;
+    onChange(`${String(h).padStart(2, '0')}:${t.minute}`);
   };
 
-  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString().padStart(2, '0'));
-  const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
-  const periods = ['AM', 'PM'];
+  const update = (newT) => { setTime(newT); emit(newT); };
+
+  // ── Dial geometry ──
+  const CENTER = 100;
+  const HAND_R = 68;
+  const NUM_R  = 78;
+  const isHour = clockMode === 'hour';
+  const hourNum = parseInt(time.hour);
+  const minNum  = parseInt(time.minute);
+  const hourAngle = ((hourNum % 12) / 12) * 360 - 90;
+  const minAngle  = (minNum / 60) * 360 - 90;
+  const ang = isHour ? hourAngle : minAngle;
+  const hx = CENTER + HAND_R * Math.cos((ang * Math.PI) / 180);
+  const hy = CENTER + HAND_R * Math.sin((ang * Math.PI) / 180);
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .hide-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
+      {/* Trigger button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 border border-[#25D366]/30 bg-emerald-50 text-emerald-900 rounded-xl text-sm font-semibold hover:bg-emerald-100 transition-colors focus:outline-none focus:ring-2 focus:ring-[#25D366]/40 shadow-sm"
+        onClick={() => { setIsOpen(o => !o); setClockMode('hour'); }}
+        className="flex items-center gap-2 px-3 py-1.5 border border-[#25D366]/40 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-300 rounded-xl text-sm font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors focus:outline-none shadow-sm"
       >
-        <span>{`${time.hour}:${time.min} ${time.period}`}</span>
-        <Clock size={14} className="text-[#25D366]" />
+        <Clock size={13} className="text-[#25D366]" />
+        <span>{`${time.hour}:${time.minute} ${time.ampm}`}</span>
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-100 p-2 flex gap-2 animate-in fade-in slide-in-from-top-2">
-          {/* Hours */}
-          <div className="h-48 overflow-y-auto hide-scrollbar w-16 border border-gray-100 rounded-lg bg-gray-50 flex flex-col">
-            <div className="sticky top-0 bg-blue-600 text-white text-xs font-bold text-center py-1.5 z-10 shadow-sm rounded-t-lg">Hour</div>
-            <div className="p-1 space-y-1">
-              {hours.map(h => (
-                <button
-                  key={`h-${h}`}
-                  type="button"
-                  onClick={() => updateTime({ ...time, hour: h })}
-                  className={`w-full py-1.5 text-sm rounded-md transition-colors ${time.hour === h ? 'bg-blue-600 text-white font-bold' : 'text-gray-700 hover:bg-gray-200'}`}
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="absolute right-0 mt-2 z-[200] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4 w-64 animate-in fade-in slide-in-from-top-2">
+          {/* Header label */}
+          {label && <p className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">{label}</p>}
 
-          {/* Minutes */}
-          <div className="h-48 overflow-y-auto hide-scrollbar w-16 border border-gray-100 rounded-lg bg-gray-50 flex flex-col">
-            <div className="sticky top-0 bg-blue-600 text-white text-xs font-bold text-center py-1.5 z-10 shadow-sm rounded-t-lg">Min</div>
-            <div className="p-1 space-y-1">
-              {minutes.map(m => (
-                <button
-                  key={`m-${m}`}
-                  type="button"
-                  onClick={() => updateTime({ ...time, min: m })}
-                  className={`w-full py-1.5 text-sm rounded-md transition-colors ${time.min === m ? 'bg-blue-600 text-white font-bold' : 'text-gray-700 hover:bg-gray-200'}`}
-                >
-                  {m}
-                </button>
-              ))}
+          {/* Time display + AM/PM */}
+          <div className="flex items-center justify-center gap-3 mb-3">
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl px-3 py-1.5 border border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setClockMode('hour')}
+                className={`text-xl font-black tabular-nums px-1 rounded-lg transition-all cursor-pointer ${clockMode === 'hour' ? 'text-[#25D366]' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                {time.hour}
+              </button>
+              <span className="text-xl font-black text-gray-400 select-none">:</span>
+              <button
+                type="button"
+                onClick={() => setClockMode('minute')}
+                className={`text-xl font-black tabular-nums px-1 rounded-lg transition-all cursor-pointer ${clockMode === 'minute' ? 'text-[#25D366]' : 'text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                {time.minute}
+              </button>
             </div>
-          </div>
-
-          {/* Period */}
-          <div className="h-48 w-16 border border-gray-100 rounded-lg bg-gray-50 flex flex-col">
-            <div className="sticky top-0 bg-blue-600 text-white text-xs font-bold text-center py-1.5 z-10 shadow-sm rounded-t-lg">AM/PM</div>
-            <div className="p-1 space-y-1">
-              {periods.map(p => (
-                <button
-                  key={`p-${p}`}
-                  type="button"
-                  onClick={() => updateTime({ ...time, period: p })}
-                  className={`w-full py-2 text-sm rounded-md transition-colors ${time.period === p ? 'bg-blue-600 text-white font-bold' : 'text-gray-700 hover:bg-gray-200'}`}
-                >
+            <div className="flex flex-col gap-1">
+              {['AM', 'PM'].map(p => (
+                <button key={p} type="button"
+                  onClick={() => update({ ...time, ampm: p })}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-black transition-all cursor-pointer ${time.ampm === p ? 'bg-[#25D366] text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700'}`}>
                   {p}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* SVG Dial */}
+          <div className="flex justify-center">
+            <svg viewBox="0 0 200 200" width="200" height="200">
+              {/* Outer ring */}
+              <circle cx={CENTER} cy={CENTER} r="96" fill="#f9fafb" stroke="#e5e7eb" strokeWidth="1.5"/>
+              {/* Ticks */}
+              {Array.from({ length: 60 }, (_, i) => {
+                const a = (i / 60) * 360 - 90;
+                const r = (a * Math.PI) / 180;
+                const major = i % 5 === 0;
+                const r1 = major ? 84 : 88;
+                return (
+                  <line key={i}
+                    x1={CENTER + r1 * Math.cos(r)} y1={CENTER + r1 * Math.sin(r)}
+                    x2={CENTER + 92 * Math.cos(r)} y2={CENTER + 92 * Math.sin(r)}
+                    stroke={major ? '#9ca3af' : '#e5e7eb'}
+                    strokeWidth={major ? 1.5 : 0.8}
+                  />
+                );
+              })}
+              {/* Hand */}
+              <line x1={CENTER} y1={CENTER} x2={hx} y2={hy} stroke="#25D366" strokeWidth="2.5" strokeLinecap="round"/>
+              <circle cx={hx} cy={hy} r="5" fill="#25D366"/>
+              <circle cx={CENTER} cy={CENTER} r="4" fill="#25D366"/>
+              {/* Hour numbers */}
+              {isHour && Array.from({ length: 12 }, (_, i) => {
+                const h = i + 1;
+                const a = (h / 12) * 360 - 90;
+                const r = (a * Math.PI) / 180;
+                const x = CENTER + NUM_R * Math.cos(r);
+                const y = CENTER + NUM_R * Math.sin(r);
+                const active = h === hourNum;
+                return (
+                  <g key={h} onClick={() => { update({ ...time, hour: String(h).padStart(2,'0') }); setClockMode('minute'); }} style={{ cursor: 'pointer' }}>
+                    {active && <circle cx={x} cy={y} r="13" fill="#25D366"/>}
+                    <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+                      fontSize="13" fontWeight="700" fill={active ? '#fff' : '#374151'} fontFamily="inherit">
+                      {h}
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Minute markers */}
+              {!isHour && Array.from({ length: 12 }, (_, i) => {
+                const m = i * 5;
+                const a = (m / 60) * 360 - 90;
+                const r = (a * Math.PI) / 180;
+                const x = CENTER + NUM_R * Math.cos(r);
+                const y = CENTER + NUM_R * Math.sin(r);
+                const active = minNum === m;
+                return (
+                  <g key={m} onClick={() => update({ ...time, minute: String(m).padStart(2,'0') })} style={{ cursor: 'pointer' }}>
+                    {active && <circle cx={x} cy={y} r="13" fill="#25D366"/>}
+                    <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
+                      fontSize="11" fontWeight="700" fill={active ? '#fff' : '#374151'} fontFamily="inherit">
+                      {String(m).padStart(2,'0')}
+                    </text>
+                  </g>
+                );
+              })}
+              <text x={CENTER} y={CENTER} textAnchor="middle" dominantBaseline="central"
+                fontSize="9" fontWeight="600" fill="#9ca3af" fontFamily="inherit">
+                {isHour ? 'HR' : 'MIN'}
+              </text>
+            </svg>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => { setIsOpen(false); setClockMode('hour'); }}
+            className="mt-2 w-full py-1.5 rounded-xl text-xs font-bold bg-[#25D366] text-white hover:bg-[#20bd5a] transition-colors cursor-pointer">
+            Done
+          </button>
         </div>
       )}
     </div>

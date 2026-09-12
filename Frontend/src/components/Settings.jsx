@@ -59,7 +59,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     vercelUrl: 'https://restaurant-billing-seven.vercel.app',
     serverIp: '',
     autoSendDaybook: false,
-    autoSendTime: '22:00'
+    autoSendTime: '14:30',
+    autoSendTime2: '22:30'
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -87,6 +88,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         if (parsed.logo === '[logo_stored]') {
           parsed.logo = '';
         }
+        // Migrate: if old single-time setting exists but no second time, apply new defaults
+        if (!parsed.autoSendTime2) {
+          parsed.autoSendTime = '14:30';
+          parsed.autoSendTime2 = '22:30';
+        }
         setSettings((prev) => ({ ...prev, ...parsed }));
       } catch (e) { }
     }
@@ -103,6 +109,11 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               cleanIncoming.logo = '';
             } else if (!cleanIncoming.logo && prev.logo && prev.logo !== '[logo_stored]') {
               cleanIncoming.logo = prev.logo;
+            }
+            // Migrate: if backend settings don't have autoSendTime2 yet, use new defaults
+            if (!cleanIncoming.autoSendTime2) {
+              cleanIncoming.autoSendTime = '14:30';
+              cleanIncoming.autoSendTime2 = '22:30';
             }
             const updated = { ...prev, ...cleanIncoming };
             try {
@@ -894,31 +905,79 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         </label>
                       </div>
 
-                      {settings.autoSendDaybook && (
-                        <div className="flex items-center justify-between animate-in fade-in slide-in-from-top-1">
-                          <label className="text-xs text-text-muted">
-                            {t("Report Time")}
-                          </label>
-                          <CustomTimePicker
-                            value={settings.autoSendTime || '22:00'}
-                            onChange={(val) => handleInputChange('autoSendTime', val)}
-                          />
-                        </div>
-                      )}
+                      {settings.autoSendDaybook && (() => {
+                        // Validation: parse both times to minutes
+                        const toMins = (t24) => {
+                          if (!t24) return 0;
+                          const [h, m] = t24.split(':').map(Number);
+                          return h * 60 + m;
+                        };
+                        const t1 = settings.autoSendTime || '14:30';
+                        const t2 = settings.autoSendTime2 || '22:30';
+                        const mins1 = toMins(t1);
+                        const mins2 = toMins(t2);
+                        const diff = Math.abs(mins1 - mins2);
+                        const sameTime = diff === 0;
+                        const tooClose = diff > 0 && diff < 60;
+                        return (
+                          <div className="space-y-3 animate-in fade-in slide-in-from-top-1">
+                            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                              📅 Two reports sent daily. Tap clock to set each time.
+                            </p>
+
+                            {/* Report 1 — Afternoon */}
+                            <div className="flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-900/10 rounded-xl px-3 py-2 border border-emerald-100 dark:border-emerald-800/30">
+                              <div>
+                                <p className="text-xs font-bold text-text-main">🌤️ {t('Afternoon Report')}</p>
+                                <p className="text-[10px] text-text-muted">{t('Default: 2:30 PM')}</p>
+                              </div>
+                              <CustomTimePicker
+                                value={settings.autoSendTime || '14:30'}
+                                onChange={(val) => {
+                                  // Strict: not same as time2, at least 1h gap
+                                  const m1 = toMins(val);
+                                  const m2 = toMins(settings.autoSendTime2 || '22:30');
+                                  if (Math.abs(m1 - m2) < 60) {
+                                    setToast({ message: 'The two report times must be at least 1 hour apart.', type: 'error' });
+                                    return;
+                                  }
+                                  handleInputChange('autoSendTime', val);
+                                }}
+                              />
+                            </div>
+
+                            {/* Report 2 — Night */}
+                            <div className="flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-900/10 rounded-xl px-3 py-2 border border-emerald-100 dark:border-emerald-800/30">
+                              <div>
+                                <p className="text-xs font-bold text-text-main">🌙 {t('Night Report')}</p>
+                                <p className="text-[10px] text-text-muted">{t('Default: 10:30 PM')}</p>
+                              </div>
+                              <CustomTimePicker
+                                value={settings.autoSendTime2 || '22:30'}
+                                onChange={(val) => {
+                                  const m2 = toMins(val);
+                                  const m1 = toMins(settings.autoSendTime || '14:30');
+                                  if (Math.abs(m1 - m2) < 60) {
+                                    setToast({ message: 'The two report times must be at least 1 hour apart.', type: 'error' });
+                                    return;
+                                  }
+                                  handleInputChange('autoSendTime2', val);
+                                }}
+                              />
+                            </div>
+
+                            {/* Validation warning */}
+                            {(sameTime || tooClose) && (
+                              <p className="text-[11px] text-red-600 font-semibold flex items-center gap-1">
+                                ⚠️ {sameTime ? 'Both times are the same. Please choose different times.' : 'Times are too close. Minimum 1 hour gap required.'}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
-                  {/* Footer Message */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                      <FileText size={14} />{t("Footer Message")}
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.footerMessage}
-                      onChange={(e) => handleInputChange('footerMessage', e.target.value)}
-                      className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main" placeholder={t("Enter footer message for receipts")} />
-                  </div>
                 </div>
 
                 {/* Right Column Settings */}
@@ -1031,9 +1090,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   </div>
 
                   {/* Owner Security PIN */}
-                  <div className="space-y-2 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
-                    <label className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-                      <Lock size={14} className="text-orange-600" />{t("Owner Security PIN (Reports & Security Lock)")}
+                  <div className="space-y-1.5 p-3 bg-orange-50/50 rounded-xl border border-orange-100">
+                    <label className="text-xs font-semibold text-orange-800 flex items-center gap-2">
+                      <Lock size={13} className="text-orange-600" />{t("Owner Security PIN (Reports & Security Lock)")}
                     </label>
                     <div className="relative">
                       <input
@@ -1041,18 +1100,31 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                         value={settings.ownerPin || ''}
                         onChange={(e) => handleInputChange('ownerPin', e.target.value)}
                         maxLength={4}
-                        className="w-full px-4 py-3 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 font-mono tracking-widest font-bold pr-12 placeholder:text-orange-900/40 text-center text-lg"
+                        className="w-full px-3 py-2 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 font-mono tracking-widest font-bold pr-10 placeholder:text-orange-900/40 text-center text-base"
                         placeholder={t("•••• (4 digits)")}
                       />
                       <button
                         type="button"
                         onClick={() => setShowOwnerPin(!showOwnerPin)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors p-1"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-400 hover:text-orange-600 transition-colors p-0.5"
                         title={showOwnerPin ? t("Hide PIN") : t("Show PIN")}
                       >
-                        {showOwnerPin ? <EyeOff size={20} /> : <Eye size={20} />}
+                        {showOwnerPin ? <EyeOff size={16} /> : <Eye size={16} />}
                       </button>
                     </div>
+                  </div>
+
+                  {/* Footer Message */}
+                  <div className="space-y-1.5 p-3 bg-orange-50/50 rounded-xl border border-orange-100">
+                    <label className="text-xs font-semibold text-orange-800 flex items-center gap-2">
+                      <FileText size={13} className="text-orange-600" />{t("Footer Message")}
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.footerMessage}
+                      onChange={(e) => handleInputChange('footerMessage', e.target.value)}
+                      className="w-full px-3 py-2 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 text-sm" placeholder={t("Enter footer message for receipts")} />
+                    <p className="text-[10px] text-orange-600/70">{t("Shown at the bottom of every printed receipt.")}</p>
                   </div>
                 </div>
 

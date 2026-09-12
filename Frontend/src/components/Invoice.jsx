@@ -322,13 +322,52 @@ const Invoice = ({ bill, onClose, onSave }) => {
       if (receiptElement) {
         const canvas = await Promise.race([
           html2canvas(receiptElement, {
-            scale: 1.0,
+            scale: 2.0,
             useCORS: true,
             allowTaint: true,
             logging: false,
             backgroundColor: '#ffffff',
-            imageTimeout: 2000,
+            imageTimeout: 5000,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 420,
+            windowHeight: Math.max(1200, (receiptElement.scrollHeight || 800) + 400),
             onclone: (clonedDoc) => {
+              // 1. Reset root elements so nothing clips or hides overflow
+              if (clonedDoc.documentElement) {
+                clonedDoc.documentElement.style.overflow = 'visible';
+                clonedDoc.documentElement.style.height = 'auto';
+              }
+              if (clonedDoc.body) {
+                clonedDoc.body.style.overflow = 'visible';
+                clonedDoc.body.style.height = 'auto';
+                clonedDoc.body.style.backgroundColor = '#ffffff';
+                clonedDoc.body.style.margin = '0';
+                clonedDoc.body.style.padding = '0';
+              }
+
+              // 2. Un-fix and un-scroll the modal container in clone
+              const printArea = clonedDoc.querySelector('#invoice-print-area');
+              if (printArea) {
+                printArea.style.position = 'static';
+                printArea.style.overflow = 'visible';
+                printArea.style.height = 'auto';
+                printArea.style.maxHeight = 'none';
+                printArea.style.padding = '0';
+                printArea.style.margin = '0';
+                printArea.style.background = '#ffffff';
+                printArea.style.backgroundColor = '#ffffff';
+                printArea.style.backdropFilter = 'none';
+                printArea.style.filter = 'none';
+              }
+
+              // 3. Hide interactive controls / buttons in the clone
+              const controls = printArea?.querySelectorAll('button, .sticky');
+              controls?.forEach((c) => {
+                c.style.display = 'none';
+              });
+
+              // 4. Style the receipt container
               const el = clonedDoc.querySelector('.receipt-print');
               if (el) {
                 el.style.boxShadow = 'none';
@@ -338,18 +377,30 @@ const Invoice = ({ bill, onClose, onSave }) => {
                 el.style.backgroundColor = '#ffffff';
                 el.style.border = 'none';
                 el.style.borderRadius = '0px';
-                el.style.width = '340px';
-                el.style.maxWidth = '340px';
-                el.style.minWidth = '340px';
+                el.style.width = '360px';
+                el.style.maxWidth = '360px';
+                el.style.minWidth = '360px';
+                el.style.height = 'auto';
+                el.style.maxHeight = 'none';
+                el.style.overflow = 'visible';
+                el.style.padding = '12px 14px 28px 14px';
+
+                // Safety spacer at bottom to guarantee footer text never touches canvas bottom edge
+                const spacer = clonedDoc.createElement('div');
+                spacer.style.height = '20px';
+                spacer.style.width = '100%';
+                spacer.style.backgroundColor = '#ffffff';
+                spacer.style.clear = 'both';
+                el.appendChild(spacer);
               }
             }
           }),
-          new Promise((resolve) => setTimeout(() => resolve(null), 8000)) // 8-second capture window
+          new Promise((resolve) => setTimeout(() => resolve(null), 12000)) // 12-second capture window
         ]);
 
         if (canvas) {
           console.log(`[eBill] Canvas captured: ${canvas.width}x${canvas.height}px`);
-          imageBase64 = canvas.toDataURL('image/jpeg', 0.52);
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
           const approxKB = Math.round(imageBase64.length * 0.75 / 1024);
           console.log(`[eBill] Image base64 size: ~${approxKB} KB`);
         } else {
@@ -749,7 +800,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
       )}
 
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 ${getFormatClasses()}`}
         style={{
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
@@ -757,10 +808,12 @@ const Invoice = ({ bill, onClose, onSave }) => {
           fontSize: '13px',
           lineHeight: '1.3',
           width: activeSettings.printFormat === 'A4' ? '100%' : undefined,
-          maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined
+          maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined,
+          overflow: 'visible',
+          boxSizing: 'border-box'
         }}>
         
-        <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', boxSizing: 'border-box' }}>
+        <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '16px', boxSizing: 'border-box' }}>
           
           {/* Header */}
           <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
@@ -788,13 +841,13 @@ const Invoice = ({ bill, onClose, onSave }) => {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
           
           <div style={{ fontSize: '16px', textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
             {bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
           </div>
 
-          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
           
           {/* Customer name & phone hidden for privacy — data kept in bill object, easy to re-enable */}
           {/* {bill.customerName && (
@@ -849,7 +902,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('Token No.:')}{bill.tokenNumber}</div>
           )}
 
-          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
 
           {/* Items Header */}
           <div className="flex pb-0.5" style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: '13px', fontWeight: 'normal' }}>
@@ -859,10 +912,10 @@ const Invoice = ({ bill, onClose, onSave }) => {
             <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t('Amount')}</div>
           </div>
 
-          <div style={{ borderTop: '1px solid black', margin: '2px 0 4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '3px 0 5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
 
           {/* Items List */}
-          <div className="mb-1 pb-1" style={{ borderBottom: '1px solid black' }}>
+          <div className="mb-1 pb-1" style={{ borderBottom: '1.5px solid #000000', paddingBottom: '4px', marginBottom: '4px' }}>
             {bill.items && bill.items.length > 0 ?
             bill.items.filter(item => !item.isCancelled).map((item, idx) => {
               const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
@@ -965,7 +1018,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             })()}
           </div>
           
-          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0 4px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
 
           {/* Total & Round off */}
           <div className="flex flex-col pb-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px' }}>
@@ -1014,7 +1067,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center w-full mt-2" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: '20px', fontWeight: 'bold' }}>
+                  <div className="flex justify-between items-center w-full mt-1.5" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: '20px', fontWeight: 'bold', paddingTop: '3px', paddingBottom: '3px', boxSizing: 'border-box' }}>
                     <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
                     <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                   </div>
@@ -1023,7 +1076,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
             })()}
           </div>
 
-          <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
+          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '4px 0 6px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
 
           {/* Secondary Currencies */}
           {enabledCurrencies.length > 0 &&
@@ -1038,7 +1091,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                   </div>);
 
             })}
-              <div style={{ borderTop: '1px dashed black', margin: '4px 0', marginTop: '6px' }}></div>
+              <div style={{ borderTop: '1.5px dashed #000000', margin: '4px 0', marginTop: '6px', height: '1px', width: '100%' }}></div>
             </div>
           }
 
@@ -1051,7 +1104,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
                   <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '3px' }}>
                     {t("PAID VIA MIXED PAYMENT")}
                   </div>
-                  <div style={{ borderTop: '1px dashed black', margin: '3px 0' }}></div>
+                  <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
                   {Number(bill.splitPayments?.cash || 0) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
                       <span>{t("Cash Paid:")}</span>
@@ -1070,12 +1123,12 @@ const Invoice = ({ bill, onClose, onSave }) => {
                       <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</span>
                     </div>
                   )}
-                  <div style={{ borderTop: '1px dashed black', margin: '3px 0' }}></div>
+                  <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
                 </div>
               );
             } else if (bill.paymentMode === 'Cash') {
               return (
-                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal' }}>
+                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
                   <div style={{ fontWeight: 'bold' }}>{t("Paid via Cash")}</div>
                   {bill.amountPaid && Number(bill.amountPaid) > Number(bill.total) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '2px', padding: '0 4px' }}>
@@ -1090,7 +1143,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
               const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
               const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
               return (
-                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal' }}>
+                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
                   {t("Paid via")} <strong style={{ fontWeight: 'bold' }}>{bill.paymentMode}</strong>{appSuffix}
                 </div>
               );
@@ -1139,8 +1192,8 @@ const Invoice = ({ bill, onClose, onSave }) => {
             );
           })()}
 
-          <div className="mt-2 mb-2 text-center" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-            <p>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
+          <div className="mt-2 text-center" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px', marginBottom: '4px', paddingBottom: '12px', width: '100%', display: 'block' }}>
+            <p style={{ margin: 0, padding: '2px 0 6px 0', lineHeight: '1.4', display: 'block' }}>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
           </div>
           
         </div>

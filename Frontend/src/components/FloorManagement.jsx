@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT, getDailyStats } from '../api/billing';
 import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2 } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2, Users } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 import Toast from './Toast';
@@ -28,7 +28,7 @@ const formatImageUrl = (url) => {
       const urlObj = new URL(trimmed);
       const extracted = urlObj.searchParams.get('mediaurl');
       if (extracted) trimmed = extracted;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
@@ -53,20 +53,20 @@ const isValidOrder = (o) => {
   if (!o) return false;
   if (o.status === 'Cancelled' || o.status === 'Paid') return false;
   if (!o.items || !Array.isArray(o.items) || o.items.length === 0) return false;
-  
+
   const activeItems = o.items.filter(i => {
     if (i.isCancelled || i.status === 'Cancelled') return false;
     const activeQty = Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0));
     return activeQty > 0;
   });
-  
+
   if (activeItems.length === 0) return false;
-  
+
   const subtotal = activeItems.reduce((sum, i) => {
     const activeQty = Math.max(0, Number(i.quantity || 0) - Number(i.cancelledQuantity || 0));
     return sum + (Number(i.price || 0) * activeQty);
   }, 0);
-  
+
   return subtotal > 0;
 };
 
@@ -89,8 +89,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [promptInput, setPromptInput] = useState('');
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [mergeModal, setMergeModal] = useState({ isOpen: false, targetSpace: '', sourceSpaces: [] });
-  const [addSpaceModal, setAddSpaceModal] = useState({ isOpen: false, name: '', type: 'Table' });
-  const [renameSpaceModal, setRenameSpaceModal] = useState({ isOpen: false, id: null, type: '', name: '' });
+  const [addSpaceModal, setAddSpaceModal] = useState({ isOpen: false, name: '', type: 'Table', capacity: 4 });
+  const [renameSpaceModal, setRenameSpaceModal] = useState({ isOpen: false, id: null, type: '', name: '', capacity: 4 });
   const [merging, setMerging] = useState(false);
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [selectedBillForPrint, setSelectedBillForPrint] = useState(null);
@@ -111,8 +111,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         if (!tableGroups[kot.tableNo]) tableGroups[kot.tableNo] = { items: [] };
         tableGroups[kot.tableNo].items.push(...(kot.items || []));
       });
-      const activeTables = Object.values(tableGroups).filter(g => 
-         g.items.some(item => !item.isCancelled && (item.status === 'Pending' || item.status === 'Preparing'))
+      const activeTables = Object.values(tableGroups).filter(g =>
+        g.items.some(item => !item.isCancelled && (item.status === 'Pending' || item.status === 'Preparing'))
       ).length;
       setActiveKdsTableCount(activeTables);
     } catch (e) {
@@ -177,9 +177,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     return [{
       id: 'f-1',
       name: 'Ground Floor',
-      tables: [{ id: 't1', name: 'Table 1', type: 'table' }, { id: 't2', name: 'Table 2', type: 'table' }, { id: 't3', name: 'Table 3', type: 'table' }],
-      cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin' }, { id: 'c2', name: 'Cabin 2', type: 'cabin' }],
-      sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa' }]
+      tables: [{ id: 't1', name: 'Table 1', type: 'table', capacity: 4 }, { id: 't2', name: 'Table 2', type: 'table', capacity: 4 }, { id: 't3', name: 'Table 3', type: 'table', capacity: 4 }],
+      cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin', capacity: 6 }, { id: 'c2', name: 'Cabin 2', type: 'cabin', capacity: 6 }],
+      sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa', capacity: 4 }]
     }];
   });
 
@@ -221,13 +221,13 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         setOrders(cached.filter(isValidOrder));
         setLoading(false);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     getCachedFloors().then((cachedFloors) => {
       if (cachedFloors && Array.isArray(cachedFloors) && cachedFloors.length > 0) {
         setFloors(cachedFloors);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // 2. Background Revalidation
     fetchOrders();
@@ -266,8 +266,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         } else if (data.order && isValidOrder(data.order)) {
           const orderTableNorm = normalizeTable(data.order.tableNo);
           setOrders(prev => {
-            const matchIndex = prev.findIndex(o => 
-              (data.order._id && o._id === data.order._id) || 
+            const matchIndex = prev.findIndex(o =>
+              (data.order._id && o._id === data.order._id) ||
               (orderTableNorm && normalizeTable(o.tableNo) === orderTableNorm)
             );
             if (matchIndex >= 0) {
@@ -401,24 +401,25 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   const handleAddSpace = () => {
     if (!activeFloorId) return;
-    setAddSpaceModal({ isOpen: true, name: '', type: 'Table' });
+    setAddSpaceModal({ isOpen: true, name: '', type: 'Table', capacity: 4 });
   };
 
   const submitAddSpace = () => {
-    const { name, type } = addSpaceModal;
+    const { name, type, capacity } = addSpaceModal;
     if (name && name.trim() !== '' && type && type.trim() !== '') {
+      const cap = Number(capacity) > 0 ? Number(capacity) : (type.toLowerCase() === 'cabin' ? 6 : 4);
       const next = floorsRef.current.map((floor) => {
         if (floor.id === activeFloorId) {
           return {
             ...floor,
-            spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim() }]
+            spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim(), capacity: cap }]
           };
         }
         return floor;
       });
       setFloors(next);
       saveSpacesToCloud(next);
-      setAddSpaceModal({ isOpen: false, name: '', type: 'Table' });
+      setAddSpaceModal({ isOpen: false, name: '', type: 'Table', capacity: 4 });
       setToast({ message: `${type} added successfully!`, type: 'success' });
     }
   };
@@ -450,23 +451,25 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     });
   };
 
-  const handleRenameClick = (e, type, id, currentName) => {
+  const handleRenameClick = (e, type, id, currentName, currentCapacity) => {
     e.stopPropagation();
-    setRenameSpaceModal({ isOpen: true, id, type, name: currentName });
+    const cap = Number(currentCapacity) > 0 ? Number(currentCapacity) : (type.toLowerCase() === 'cabin' ? 6 : 4);
+    setRenameSpaceModal({ isOpen: true, id, type, name: currentName, capacity: cap });
   };
 
   const submitRenameSpace = () => {
-    const { id, type, name } = renameSpaceModal;
+    const { id, type, name, capacity } = renameSpaceModal;
     if (name && name.trim() !== '') {
+      const cap = Number(capacity) > 0 ? Number(capacity) : (type.toLowerCase() === 'cabin' ? 6 : 4);
       const next = floorsRef.current.map((floor) => {
         if (floor.id === activeFloorId) {
           const key = type + 's';
           const newFloor = { ...floor };
           if (newFloor[key]) {
-            newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: name.trim() } : item);
+            newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: name.trim(), capacity: cap } : item);
           }
           if (newFloor.spaces) {
-            newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: name.trim() } : item);
+            newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: name.trim(), capacity: cap } : item);
           }
           return newFloor;
         }
@@ -474,8 +477,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       });
       setFloors(next);
       saveSpacesToCloud(next);
-      setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '' });
-      setToast({ message: `${type} renamed successfully!`, type: 'success' });
+      setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '', capacity: 4 });
+      setToast({ message: `${type} updated successfully!`, type: 'success' });
     }
   };
 
@@ -594,7 +597,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       if (s.enableCgst) totRate += Number(s.cgstRate || 0);
       if (s.enableSgst) totRate += Number(s.sgstRate || 0);
       if (s.enableGst) totRate += Number(s.gstRate || 0);
-    } catch(e) {}
+    } catch (e) { }
 
     // Only if order is already Billed (locked bill), use saved bill tax rate; for open orders, strictly obey restaurantSettings
     if (activeOrder.status === 'Billed' && activeOrder.tax !== undefined && activeOrder.tax !== null) {
@@ -649,10 +652,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     let SmallIcon = CheckCircle;
 
     const resolvedType = (item.type || type).toLowerCase();
-    if (resolvedType === 'table') Icon = Coffee;else
-    if (resolvedType === 'cabin') Icon = Home;else
-    if (resolvedType === 'sofa') Icon = Sofa;else
-    Icon = Utensils; // fallback
+    if (resolvedType === 'table') Icon = Coffee; else
+      if (resolvedType === 'cabin') Icon = Home; else
+        if (resolvedType === 'sofa') Icon = Sofa; else
+          Icon = Utensils; // fallback
 
     if (isOccupied && activeOrder) {
       if (activeOrder.status === 'Open') {
@@ -690,7 +693,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         const tName = uniqueSpaceName.toLowerCase();
         const tNameShort = item.name.toLowerCase();
         const matchesTable = resTable === tName || tName.includes(resTable) || resTable.includes(tName) || resTable === tNameShort || tNameShort.includes(resTable);
-        
+
         const resDateStr = new Date(res.date).toISOString().split('T')[0];
         return resDateStr === todayString && matchesTable;
       });
@@ -701,7 +704,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           const bStart = new Date(`${todayString}T${b.time}`);
           return aStart - bStart;
         });
-        
+
         activeReservation = todayRes.find(res => {
           const resEnd = new Date(`${todayString}T${res.endTime}`);
           return resEnd > currentTime;
@@ -711,7 +714,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           const resStart = new Date(`${todayString}T${activeReservation.time}`);
           const diffMs = resStart - currentTime;
           const diffMins = Math.floor(diffMs / 60000);
-          
+
           if (diffMins > 0) {
             const h = Math.floor(diffMins / 60);
             const m = diffMins % 60;
@@ -754,7 +757,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         key={item._id || `${item.id}-${index}`}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
         className={`group relative flex flex-col items-center justify-between w-full h-full min-h-[100px] sm:min-h-[145px] p-2 sm:p-4 rounded-2xl border border-white/50 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-1 ${statusBgClass}`}>
-        
+
         {insightBadge}
         {isOccupied && activeOrder.createdAt && (
           <div className="absolute top-1 right-1 sm:top-2 sm:right-2 px-1.5 py-0.5 bg-white/90 text-[10px] font-bold text-gray-500 rounded-lg shadow-xs flex items-center gap-1 z-10 border border-gray-100/50">
@@ -766,16 +769,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           </div>
         )}
 
-        <div className="flex flex-col items-center gap-1.5 w-full h-full justify-between">
+        <div className="flex flex-col items-center gap-1 sm:gap-1.5 w-full h-full justify-between">
           <div className={`p-1.5 sm:p-2 rounded-full bg-white shadow-xs ${statusColorClass} mt-0.5`}>
             <Icon size={16} strokeWidth={2.5} className="sm:hidden" />
             <Icon size={22} strokeWidth={2.5} className="hidden sm:block" />
           </div>
-          
-          <h3 className="text-[11px] sm:text-base font-black text-gray-800 leading-tight text-center w-full truncate">
-            {item.name}
-          </h3>
-          
+
+          <div className="flex flex-col items-center w-full px-0.5">
+            <h3 className="text-[11px] sm:text-base font-black text-gray-800 leading-tight text-center w-full truncate">
+              {item.name}
+            </h3>
+            <div className="inline-flex items-center gap-1 text-[9px] sm:text-[10.5px] font-bold text-gray-500 bg-white/90 px-2 py-0.5 rounded-full mt-0.5 border border-gray-200/70 shadow-2xs" title={`${item.capacity || (type === 'cabin' ? 6 : 4)} ${t("Seats")}`}>
+              <Users size={10} className="text-gray-400 shrink-0" />
+              <span>{item.capacity || (type === 'cabin' ? 6 : 4)} {t("Seats")}</span>
+            </div>
+          </div>
+
           {!isOccupied && activeReservation ? (
             <div className={`px-1.5 py-0.5 rounded-xl text-[9px] sm:text-[10px] font-bold tracking-tight bg-white shadow-xs ${statusColorClass} mb-0.5 flex flex-col items-center leading-[1.1]`}>
               <span className="uppercase tracking-wider">{statusText}</span>
@@ -791,10 +800,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               {statusText}
             </div>
           ) : (
-              <div className="flex items-center gap-1 mt-1 w-full justify-center mb-0.5">
-                <div className="px-1.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white shadow-xs text-gray-900 flex-1 text-center truncate">
-                  {currencySymbol}{getCalculatedOrderTotalWithTax(activeOrder).toLocaleString()}
-                </div>
+            <div className="flex items-center gap-1 mt-1 w-full justify-center mb-0.5">
+              <div className="px-1.5 py-1 rounded-full text-[11px] font-black uppercase tracking-wider bg-white shadow-xs text-gray-900 flex-1 text-center truncate">
+                {currencySymbol}{getCalculatedOrderTotalWithTax(activeOrder).toLocaleString()}
+              </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={(e) => {
@@ -821,7 +830,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                     setTimeout(() => setActionLoadingKey(null), 300);
                   }}
                   disabled={!activeOrder?.items || activeOrder.items.length === 0}
-                  className={`bg-white rounded-full p-1 sm:p-1.5 transition-colors shadow-xs cursor-pointer ${!activeOrder?.items || activeOrder.items.length === 0 ? 'opacity-50 cursor-not-allowed text-gray-300' : 'hover:text-blue-600 hover:bg-blue-50 text-gray-500'}`} 
+                  className={`bg-white rounded-full p-1 sm:p-1.5 transition-colors shadow-xs cursor-pointer ${!activeOrder?.items || activeOrder.items.length === 0 ? 'opacity-50 cursor-not-allowed text-gray-300' : 'hover:text-blue-600 hover:bg-blue-50 text-gray-500'}`}
                   title={!activeOrder?.items || activeOrder.items.length === 0 ? t("No items to print") : t("Print KOT & Bill directly")}>
                   {actionLoadingKey === `print_${activeOrder._id || activeOrder.tableNo}` ? (
                     <Loader2 size={13} className="animate-spin text-blue-600" />
@@ -842,7 +851,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               <Trash2 size={13} className="hidden sm:block" />
             </button>
             <button
-              onClick={(e) => handleRenameClick(e, type, item.id, item.name)}
+              onClick={(e) => handleRenameClick(e, type, item.id, item.name, item.capacity)}
               className="absolute top-1 right-1 sm:-top-2 sm:-right-2 bg-blue-500 text-white rounded-full p-1 sm:p-1.5 shadow-md hover:scale-110 animate-fade-in" title={t("Rename")}>
               <Edit2 size={11} className="sm:hidden" />
               <Edit2 size={13} className="hidden sm:block" />
@@ -883,14 +892,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             <button onClick={() => onNavigate('reservation')} className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs">
               {t("Reservation")}
             </button>
-            <button 
-              onClick={() => onNavigate('billing', 'DEL-NEW')} 
+            <button
+              onClick={() => onNavigate('billing', 'DEL-NEW')}
               className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs cursor-pointer"
             >
               {t("Delivery")}
             </button>
-            <button 
-              onClick={() => onNavigate('billing', 'TAK-NEW')} 
+            <button
+              onClick={() => onNavigate('billing', 'TAK-NEW')}
               className="px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#d32f2f] hover:bg-red-700 text-white font-bold rounded-lg shadow-xs transition-colors text-xs cursor-pointer"
             >
               {t("Pick Up")}
@@ -914,14 +923,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           <button onClick={() => onNavigate('reservation')} className="px-2.5 py-1.5 bg-indigo-600 text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">
             {t("Reservation")}
           </button>
-          <button 
-            onClick={() => onNavigate('billing', 'DEL-NEW')} 
+          <button
+            onClick={() => onNavigate('billing', 'DEL-NEW')}
             className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0"
           >
             {t("Delivery")}
           </button>
-          <button 
-            onClick={() => onNavigate('billing', 'TAK-NEW')} 
+          <button
+            onClick={() => onNavigate('billing', 'TAK-NEW')}
             className="px-2.5 py-1.5 bg-[#d32f2f] text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0"
           >
             {t("Pick Up")}
@@ -931,11 +940,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           </button>
         </div>
       </div>
-      
+
       {/* Status Legend & Dynamic Live Counts Bar (Scrollable horizontal pill bar) */}
       <div className="px-2.5 sm:px-6 flex items-center gap-2 sm:gap-3 text-xs font-medium text-gray-600 overflow-x-auto no-scrollbar py-2 border-b border-gray-100 shrink-0">
         {(() => {
           let totalCount = 0;
+          let totalSeatsCount = 0;
           let runningCount = 0;
           let printedCount = 0;
           let paidTablesCount = 0;
@@ -954,6 +964,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             totalCount += allSpaces.length;
 
             allSpaces.forEach((item) => {
+              const itemCap = Number(item.capacity) > 0 ? Number(item.capacity) : (item.type?.toLowerCase() === 'cabin' ? 6 : 4);
+              totalSeatsCount += itemCap;
+
               const uniqueSpaceName = `${floor.name} - ${item.name}`;
               const activeOrder = getSpaceOrder(uniqueSpaceName, item.name, fIdx === 0);
 
@@ -1038,6 +1051,13 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                   <span className="bg-slate-800 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{totalCount}</span>
                 </div>
 
+                {/* 6.5) Total Seats */}
+                <div className="flex items-center gap-1.5 whitespace-nowrap bg-purple-50 text-purple-900 px-3 py-1 rounded-full border border-purple-200 shadow-2xs shrink-0 font-bold">
+                  <Users size={12} className="text-purple-600 shrink-0" />
+                  <span className="text-[11px] uppercase tracking-wider text-purple-600 font-extrabold">{t("Total Seats")}:</span>
+                  <span className="bg-purple-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{totalSeatsCount}</span>
+                </div>
+
                 {/* 7) Delivery Orders Today */}
                 <div className="flex items-center gap-1.5 whitespace-nowrap bg-indigo-50 text-indigo-900 px-3 py-1 rounded-full border border-indigo-200 shadow-2xs shrink-0 font-bold">
                   <span className="text-[11px] uppercase tracking-wider text-indigo-600 font-extrabold">{t("Delivery Today")}:</span>
@@ -1049,7 +1069,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                   <span className="text-[11px] uppercase tracking-wider text-teal-600 font-extrabold">{t("Takeaway Today")}:</span>
                   <span className="bg-teal-600 text-white text-[11px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">{takeawayOrdersToday}</span>
                 </div>
-                
+
                 {/* 9) Active KOTs */}
                 <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50 text-orange-900 px-3 py-1 rounded-full border border-orange-200 shadow-2xs shrink-0 font-bold">
                   <span className="text-[11px] uppercase tracking-wider text-orange-600 font-extrabold">{t("Active KOT")}:</span>
@@ -1067,11 +1087,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           <div
             key={floor._id || `${floor.id}-${index}`}
             onClick={() => setActiveFloorId(floor.id)}
-            className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${
-              activeFloorId === floor.id
-                ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
-                : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
-            }`}>
+            className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${activeFloorId === floor.id
+              ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
+              : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
+              }`}>
             {t(floor.name)}
             <button
               onClick={(e) => handleRemoveFloor(e, floor.id)}
@@ -1135,11 +1154,15 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               </div>
 
               {/* Grid Layout: 2 cols mobile → more cols on larger screens for smaller cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-3 sm:gap-3 w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3 sm:gap-3 w-full">
                 {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
                 {/* Inline Add Button for this category */}
                 <button
-                  onClick={() => setAddSpaceModal({ isOpen: true, name: '', type: typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase() })}
+                  onClick={() => {
+                    const tType = typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase();
+                    const defCap = tType.toLowerCase() === 'cabin' ? 6 : (tType.toLowerCase() === 'ac hall' ? 8 : 4);
+                    setAddSpaceModal({ isOpen: true, name: '', type: tType, capacity: defCap });
+                  }}
                   className="w-full h-full min-h-[100px] sm:min-h-[145px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors">
                   <Plus size={22} />
                   <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
@@ -1152,40 +1175,40 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
       {/* Custom Prompt Modal */}
       {promptModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
             <h3 className="text-xl font-bold text-text-main mb-2">{promptModal.title}</h3>
             <p className="text-sm text-text-muted mb-6">{t("Please enter the details below.")}</p>
             <input
-            type="text"
-            autoFocus
-            value={promptInput}
-            onChange={(e) => setPromptInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                promptModal.onConfirm(promptInput);
-                setPromptModal({ isOpen: false, onConfirm: null });
-              }
-            }}
-            placeholder={promptModal.placeholder}
-            className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium mb-6" />
-          
+              type="text"
+              autoFocus
+              value={promptInput}
+              onChange={(e) => setPromptInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  promptModal.onConfirm(promptInput);
+                  setPromptModal({ isOpen: false, onConfirm: null });
+                }
+              }}
+              placeholder={promptModal.placeholder}
+              className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium mb-6" />
+
             <div className="flex items-center justify-end gap-3">
               <button
-              onClick={() => setPromptModal({ isOpen: false, onConfirm: null })}
-              className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
+                onClick={() => setPromptModal({ isOpen: false, onConfirm: null })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
 
 
-            </button>
+              </button>
               <button
-              onClick={() => {
-                promptModal.onConfirm(promptInput);
-                setPromptModal({ isOpen: false, onConfirm: null });
-              }}
-              className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save")}
+                onClick={() => {
+                  promptModal.onConfirm(promptInput);
+                  setPromptModal({ isOpen: false, onConfirm: null });
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>
@@ -1193,38 +1216,38 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
       {/* Add Space Modal */}
       {addSpaceModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
             <h3 className="text-xl font-bold text-text-main mb-2">{t("Add New Space")}</h3>
-            <p className="text-sm text-text-muted mb-6">{t("Customize the space type and name.")}</p>
-            
+            <p className="text-sm text-text-muted mb-6">{t("Customize the space type, name, and seating capacity.")}</p>
+
             <div className="space-y-4 mb-6">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("Space Type")}</label>
                 <div className="flex flex-col gap-3">
                   <input
-                  type="text"
-                  value={addSpaceModal.type}
-                  onChange={(e) => setAddSpaceModal((prev) => ({ ...prev, type: e.target.value }))} placeholder={t("e.g. Table, AC Hall, Cabin...")}
+                    type="text"
+                    value={addSpaceModal.type}
+                    onChange={(e) => setAddSpaceModal((prev) => ({ ...prev, type: e.target.value }))} placeholder={t("e.g. Table, AC Hall, Cabin...")}
 
-                  className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
-                
+                    className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
+
                   <div className="flex flex-wrap gap-2">
                     {['Table', 'Cabin', 'Sofa', 'AC Hall', 'Non AC', 'Garden'].map((suggestion) =>
-                  <button
-                    key={suggestion}
-                    onClick={() => setAddSpaceModal((prev) => ({ ...prev, type: suggestion }))}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                    
+                      <button
+                        key={suggestion}
+                        onClick={() => {
+                          const defCap = suggestion.toLowerCase() === 'cabin' ? 6 : (suggestion.toLowerCase() === 'ac hall' ? 8 : 4);
+                          setAddSpaceModal((prev) => ({ ...prev, type: suggestion, capacity: defCap }));
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                         {suggestion}
                       </button>
-                  )}
+                    )}
                     <button
-                    onClick={() => setAddSpaceModal((prev) => ({ ...prev, type: '' }))}
-                    className="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">{t("+ Custom")}
-
-
-                  </button>
+                      onClick={() => setAddSpaceModal((prev) => ({ ...prev, type: '' }))}
+                      className="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">{t("+ Custom")}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1232,72 +1255,166 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("Space Name / Number")}</label>
                 <input
-                type="text"
-                autoFocus
-                value={addSpaceModal.name}
-                onChange={(e) => setAddSpaceModal((prev) => ({ ...prev, name: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submitAddSpace();
-                }} placeholder={t("e.g. 1, T1, VIP-1")}
+                  type="text"
+                  autoFocus
+                  value={addSpaceModal.name}
+                  onChange={(e) => setAddSpaceModal((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitAddSpace();
+                  }} placeholder={t("e.g. 1, T1, VIP-1")}
 
-                className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
-              
+                  className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("Chair / Seating Capacity")}</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAddSpaceModal((prev) => ({ ...prev, capacity: Math.max(1, (parseInt(prev.capacity) || 1) - 1) }))}
+                    className="w-11 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xl flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                    -
+                  </button>
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={addSpaceModal.capacity}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1);
+                        setAddSpaceModal((prev) => ({ ...prev, capacity: val }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitAddSpace();
+                      }}
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-black text-center text-lg"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none">
+                      {t("Seats")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddSpaceModal((prev) => ({ ...prev, capacity: (parseInt(prev.capacity) || 0) + 1 }))}
+                    className="w-11 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xl flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                    +
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[2, 4, 6, 8, 10, 12].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setAddSpaceModal((prev) => ({ ...prev, capacity: num }))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${parseInt(addSpaceModal.capacity) === num
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}>
+                      {num} {t("Seats")}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-3">
               <button
-              onClick={() => setAddSpaceModal({ isOpen: false, name: '', type: 'Table' })}
-              className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
-
-
-            </button>
+                onClick={() => setAddSpaceModal({ isOpen: false, name: '', type: 'Table', capacity: 4 })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
+              </button>
               <button
-              onClick={submitAddSpace}
-              className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save Space")}
-
-
-            </button>
+                onClick={submitAddSpace}
+                className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save Space")}
+              </button>
             </div>
           </div>
         </div>
       }
 
-      {/* Rename Space Modal */}
+      {/* Rename & Edit Space Modal */}
       {renameSpaceModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-surface rounded-2xl w-full max-w-sm shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
-            <h3 className="text-xl font-bold text-text-main mb-2">{t("Rename")}{renameSpaceModal.type}</h3>
-            <p className="text-sm text-text-muted mb-6">{t("Enter a new name or number for this space.")}</p>
-            
-            <div className="mb-6">
-              <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("New Name")}</label>
-              <input
-              type="text"
-              autoFocus
-              value={renameSpaceModal.name}
-              onChange={(e) => setRenameSpaceModal((prev) => ({ ...prev, name: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitRenameSpace();
-              }} placeholder={t("e.g. Table 5")}
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
+            <h3 className="text-xl font-bold text-text-main mb-2">{t("Edit Space")} ({renameSpaceModal.type})</h3>
+            <p className="text-sm text-text-muted mb-6">{t("Update name and chair seating capacity.")}</p>
 
-              className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
-            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("Space Name / Number")}</label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={renameSpaceModal.name}
+                  onChange={(e) => setRenameSpaceModal((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') submitRenameSpace();
+                  }} placeholder={t("e.g. Table 5")}
+
+                  className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-medium" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("Chair / Seating Capacity")}</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRenameSpaceModal((prev) => ({ ...prev, capacity: Math.max(1, (parseInt(prev.capacity) || 1) - 1) }))}
+                    className="w-11 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xl flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                    -
+                  </button>
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={renameSpaceModal.capacity}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1);
+                        setRenameSpaceModal((prev) => ({ ...prev, capacity: val }));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitRenameSpace();
+                      }}
+                      className="w-full px-4 py-2.5 bg-background border border-border rounded-xl focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all text-text-main font-black text-center text-lg"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 pointer-events-none">
+                      {t("Seats")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRenameSpaceModal((prev) => ({ ...prev, capacity: (parseInt(prev.capacity) || 0) + 1 }))}
+                    className="w-11 h-11 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-xl flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                    +
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[2, 4, 6, 8, 10, 12].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setRenameSpaceModal((prev) => ({ ...prev, capacity: num }))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${parseInt(renameSpaceModal.capacity) === num
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}>
+                      {num} {t("Seats")}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-3">
               <button
-              onClick={() => setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '' })}
-              className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
-
-
-            </button>
+                onClick={() => setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '', capacity: 4 })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
+              </button>
               <button
-              onClick={submitRenameSpace}
-              className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save")}
-
-
-            </button>
+                onClick={submitRenameSpace}
+                className="px-5 py-2.5 rounded-xl font-bold bg-primary text-white hover:shadow-lg hover:shadow-primary/30 transition-all">{t("Save")}
+              </button>
             </div>
           </div>
         </div>
@@ -1305,26 +1422,26 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
       {/* Custom Confirm Modal */}
       {confirmModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl p-6 transform scale-100 transition-all border border-border/50">
             <h3 className="text-xl font-bold text-text-main mb-3">{confirmModal.title}</h3>
             <p className="text-base text-text-muted mb-6">{confirmModal.message}</p>
             <div className="flex items-center justify-end gap-3">
               <button
-              onClick={() => setConfirmModal({ isOpen: false, onConfirm: null })}
-              className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
+                onClick={() => setConfirmModal({ isOpen: false, onConfirm: null })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
 
 
-            </button>
+              </button>
               <button
-              onClick={() => {
-                confirmModal.onConfirm();
-                setConfirmModal({ isOpen: false, onConfirm: null });
-              }}
-              className="px-5 py-2.5 rounded-xl font-bold bg-danger text-white hover:shadow-lg hover:shadow-danger/30 transition-all">{t("Yes, Continue")}
+                onClick={() => {
+                  confirmModal.onConfirm();
+                  setConfirmModal({ isOpen: false, onConfirm: null });
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold bg-danger text-white hover:shadow-lg hover:shadow-danger/30 transition-all">{t("Yes, Continue")}
 
 
-            </button>
+              </button>
             </div>
           </div>
         </div>
@@ -1332,7 +1449,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
       {/* Merge Tables Modal */}
       {mergeModal.isOpen &&
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-border/60 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
               <div className="flex items-center gap-2.5">
@@ -1352,61 +1469,60 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("1. Select Destination Table (Where the final combined bill will stay):")}
 
-              </label>
+                </label>
                 <select
-                value={mergeModal.targetSpace}
-                onChange={(e) => {
-                  const selected = e.target.value;
-                  setMergeModal((prev) => ({
-                    ...prev,
-                    targetSpace: selected,
-                    sourceSpaces: prev.sourceSpaces.filter((s) => s !== selected)
-                  }));
-                }}
-                className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-amber-500 font-bold text-text-main">
-                
+                  value={mergeModal.targetSpace}
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    setMergeModal((prev) => ({
+                      ...prev,
+                      targetSpace: selected,
+                      sourceSpaces: prev.sourceSpaces.filter((s) => s !== selected)
+                    }));
+                  }}
+                  className="w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-amber-500 font-bold text-text-main">
+
                   <option value="">{t("-- Choose Destination Table --")}</option>
                   {getActiveSpacesForMerge().map((sp, index) =>
-                <option key={`${sp.id || 'sp'}-${index}`} value={sp.orderTableNo}>
+                    <option key={`${sp.id || 'sp'}-${index}`} value={sp.orderTableNo}>
                       {sp.uniqueSpaceName} ({sp.status} - ₹{sp.total?.toLocaleString()})
                     </option>
-                )}
+                  )}
                 </select>
               </div>
 
               {/* Step 2: Source Tables */}
               {mergeModal.targetSpace &&
-            <div>
+                <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-text-muted mb-2">{t("2. Select Table(s) to Merge INTO")}
-                {mergeModal.targetSpace}:
+                    {mergeModal.targetSpace}:
                   </label>
                   <div className="space-y-2 max-h-52 overflow-y-auto border border-border/60 rounded-xl p-3 bg-background/50">
                     {getActiveSpacesForMerge().
-                filter((sp) => sp.orderTableNo !== mergeModal.targetSpace).
-                map((sp, index) => {
-                  const isChecked = mergeModal.sourceSpaces.includes(sp.orderTableNo);
-                  return (
-                    <label
-                      key={`${sp.id || 'sp'}-${index}`}
-                      className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
-                      isChecked ?
-                      'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400 font-bold' :
-                      'bg-surface border-border hover:border-amber-300 text-text-main'}`
-                      }>
-                      
+                      filter((sp) => sp.orderTableNo !== mergeModal.targetSpace).
+                      map((sp, index) => {
+                        const isChecked = mergeModal.sourceSpaces.includes(sp.orderTableNo);
+                        return (
+                          <label
+                            key={`${sp.id || 'sp'}-${index}`}
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${isChecked ?
+                              'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400 font-bold' :
+                              'bg-surface border-border hover:border-amber-300 text-text-main'}`
+                            }>
+
                             <div className="flex items-center gap-3">
                               <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMergeModal((prev) => ({ ...prev, sourceSpaces: [...prev.sourceSpaces, sp.orderTableNo] }));
-                            } else {
-                              setMergeModal((prev) => ({ ...prev, sourceSpaces: prev.sourceSpaces.filter((s) => s !== sp.orderTableNo) }));
-                            }
-                          }}
-                          className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500" />
-                        
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setMergeModal((prev) => ({ ...prev, sourceSpaces: [...prev.sourceSpaces, sp.orderTableNo] }));
+                                  } else {
+                                    setMergeModal((prev) => ({ ...prev, sourceSpaces: prev.sourceSpaces.filter((s) => s !== sp.orderTableNo) }));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500" />
+
                               <div>
                                 <div className="font-bold">{sp.uniqueSpaceName}</div>
                                 <div className="text-xs text-text-muted uppercase font-semibold">{sp.status}</div>
@@ -1415,28 +1531,27 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                             <div className="font-black text-sm">₹{sp.total?.toLocaleString()}</div>
                           </label>);
 
-                })}
+                      })}
                   </div>
                 </div>
-            }
+              }
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-border mt-6">
               <button
-              onClick={() => setMergeModal({ isOpen: false, targetSpace: '', sourceSpaces: [] })}
-              className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
+                onClick={() => setMergeModal({ isOpen: false, targetSpace: '', sourceSpaces: [] })}
+                className="px-5 py-2.5 rounded-xl font-bold text-text-muted hover:bg-surface-hover transition-colors">{t("Cancel")}
 
 
-            </button>
+              </button>
               <button
-              onClick={handleConfirmMerge}
-              disabled={!mergeModal.targetSpace || mergeModal.sourceSpaces.length === 0 || merging}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white shadow-lg transition-all ${
-              !mergeModal.targetSpace || mergeModal.sourceSpaces.length === 0 || merging ?
-              'bg-amber-500/50 cursor-not-allowed' :
-              'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30'}`
-              }>
-              
+                onClick={handleConfirmMerge}
+                disabled={!mergeModal.targetSpace || mergeModal.sourceSpaces.length === 0 || merging}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white shadow-lg transition-all ${!mergeModal.targetSpace || mergeModal.sourceSpaces.length === 0 || merging ?
+                  'bg-amber-500/50 cursor-not-allowed' :
+                  'bg-amber-500 hover:bg-amber-600 shadow-amber-500/30'}`
+                }>
+
                 {merging ? 'Combining Bills...' : `Confirm & Merge (${mergeModal.sourceSpaces.length} Table${mergeModal.sourceSpaces.length === 1 ? '' : 's'})`}
               </button>
             </div>
@@ -1446,9 +1561,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
       {/* Invoice Modal for Print Overview */}
       {selectedBillForPrint && (
-        <Invoice 
-          bill={selectedBillForPrint} 
-          onClose={() => setSelectedBillForPrint(null)} 
+        <Invoice
+          bill={selectedBillForPrint}
+          onClose={() => setSelectedBillForPrint(null)}
         />
       )}
 
@@ -1466,14 +1581,14 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                   {selectedOrderForView.tableNo || selectedOrderForView.table} • #{selectedOrderForView.billNumber || selectedOrderForView.billNo || 'PENDING'}
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedOrderForView(null)}
                 className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white backdrop-blur-md"
               >
                 <X size={20} />
               </button>
             </div>
-            
+
             {/* Light Body */}
             <div className="p-6 overflow-y-auto flex-1 space-y-3 bg-gray-50/70">
               <div className="space-y-3">
@@ -1484,21 +1599,20 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                   const itemImg = item.image || item.imageUrl || menuImagesMap[cleanName] || menuImagesMap[item.name];
 
                   return (
-                    <div 
-                      key={index} 
-                      className={`flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all ${
-                        isCancelled 
-                          ? 'bg-red-50/80 border-red-200 text-red-700' 
-                          : 'bg-white border-gray-200/80 text-gray-800 shadow-sm hover:shadow-md'
-                      }`}
+                    <div
+                      key={index}
+                      className={`flex items-center gap-3.5 p-3.5 rounded-2xl border transition-all ${isCancelled
+                        ? 'bg-red-50/80 border-red-200 text-red-700'
+                        : 'bg-white border-gray-200/80 text-gray-800 shadow-sm hover:shadow-md'
+                        }`}
                     >
                       {/* Dish Image */}
                       <div className="w-14 h-14 rounded-xl overflow-hidden bg-orange-50 shrink-0 border border-orange-200/60 flex items-center justify-center">
                         {itemImg ? (
-                          <img 
-                            src={formatImageUrl(itemImg)} 
-                            alt={item.name} 
-                            className={`w-full h-full object-cover ${isCancelled ? 'grayscale opacity-60' : ''}`} 
+                          <img
+                            src={formatImageUrl(itemImg)}
+                            alt={item.name}
+                            className={`w-full h-full object-cover ${isCancelled ? 'grayscale opacity-60' : ''}`}
                           />
                         ) : (
                           <Utensils size={20} className="text-orange-500" />
@@ -1533,7 +1647,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 })}
               </div>
             </div>
-            
+
             {/* Footer Summary with Light Theme */}
             {(() => {
               const activeSubtotal = selectedOrderForView.items?.reduce((sum, item) => {
@@ -1543,28 +1657,28 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               }, 0) || 0;
 
               const subTotal = activeSubtotal;
-              
+
               let totRate = 0;
               try {
                 const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
                 if (s.enableCgst) totRate += Number(s.cgstRate || 0);
                 if (s.enableSgst) totRate += Number(s.sgstRate || 0);
                 if (s.enableGst) totRate += Number(s.gstRate || 0);
-              } catch(e) {}
+              } catch (e) { }
 
               // Only if order is already Billed (locked bill), use saved bill tax rate; for open orders, strictly obey restaurantSettings
               if (selectedOrderForView.status === 'Billed' && selectedOrderForView.tax !== undefined && selectedOrderForView.tax !== null) {
                 totRate = Number(selectedOrderForView.tax);
               }
-              
+
               const disc = Number(selectedOrderForView.discount || selectedOrderForView.discountValue || 0);
               const taxable = Math.max(0, subTotal - disc);
               const taxAmount = taxable * (totRate / 100);
               const serviceCharge = Number(selectedOrderForView.serviceCharge || 0);
               const packagingCharge = Number(selectedOrderForView.packagingCharge || selectedOrderForView.deliveryCharge || selectedOrderForView.containerCharge || 0);
-              
+
               const calculatedTotal = subTotal - disc + taxAmount + serviceCharge + packagingCharge;
-              
+
               return (
                 <div className="bg-white border-t border-gray-200/80 p-6 shrink-0">
                   <div className="flex justify-between items-center mb-2">
@@ -1580,13 +1694,13 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                     <span className="text-2xl font-black text-orange-600">{currencySymbol}{Math.round(calculatedTotal).toFixed(2)}</span>
                   </div>
                   <div className="mt-6 flex gap-3">
-                    <button 
+                    <button
                       onClick={() => setSelectedOrderForView(null)}
                       className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-bold transition-all border border-gray-200"
                     >
                       {t("Close")}
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
                         const table = selectedOrderForView.tableNo || selectedOrderForView.table;
                         setSelectedOrderForView(null);
