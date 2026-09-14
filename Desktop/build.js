@@ -97,7 +97,7 @@ console.log('Patching API URLs for Desktop (localhost)...');
         const filePath = path.join(assetsDir, file);
         try {
           let content = fs.readFileSync(filePath, 'utf8');
-          content = content.replace(/https:\/\/msbillings-backend\.onrender\.com\/api/g, 'http://127.0.0.1:5002/api');
+          content = content.replace(/https:\/\/msbillings-backend-x9qw\.onrender\.com\/api/g, 'http://127.0.0.1:5002/api');
           content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
           content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
           fs.writeFileSync(filePath, content);
@@ -126,6 +126,16 @@ if (fs.existsSync(backendLock)) {
 
 // Install Backend dependencies inside the Desktop folder
 console.log('Installing Backend dependencies for production...');
-execSync(`${npmCmd} install --omit=dev --no-package-lock`, { cwd: desktopBackend, stdio: 'inherit' });
+try {
+  execSync(`${npmCmd} install --omit=dev --no-package-lock`, { cwd: desktopBackend, stdio: 'inherit' });
+} catch (e) {
+  console.log('Retrying Backend npm install...');
+  try {
+    execSync(`${npmCmd} install --omit=dev --no-package-lock`, { cwd: desktopBackend, stdio: 'inherit' });
+  } catch (e2) {
+    console.log('Retrying Backend npm install one last time...');
+    execSync(`${npmCmd} install --omit=dev --no-package-lock`, { cwd: desktopBackend, stdio: 'inherit' });
+  }
+}
 
 console.log('Files ready for electron-builder!');
