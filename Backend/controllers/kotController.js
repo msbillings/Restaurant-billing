@@ -3,6 +3,8 @@ import BillDefault from '../models/Bill.js';
 import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import ServiceRequestDefault from '../models/ServiceRequest.js';
+import MenuDefault from '../models/Menu.js';
+import PrinterConfigDefault from '../models/PrinterConfig.js';
 import cache from '../utils/cache.js';
 import { deductStockForBillItems } from './inventoryController.js';
 import { updateTableStatusHelper } from './floorController.js';
@@ -273,12 +275,129 @@ export const generateKOT = async (req, res) => {
     bill.tokenNo = queueNumber;
 
     if (itemsToSave.length > 0) {
-      // Generate KOT number
+      // 1. Fetch menu items & active printer configs to resolve category and kitchen department routing
+      let allMenus = [];
+      let activePrinters = [];
+      try {
+        const Menu = getTenantModel(req, 'Menu', MenuDefault);
+        const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
+        [allMenus, activePrinters] = await Promise.all([
+          Menu.find({}, { name: 1, category: 1 }).populate('category', 'name').lean(),
+          PrinterConfig.find({ isActive: true, type: { $in: ['kot', 'general'] } }).lean()
+        ]);
+      } catch (err) {
+        console.warn('Error fetching menus or printers for KOT mapping:', err.message);
+      }
+
+      const menuMap = {};
+      allMenus.forEach(m => {
+        if (m.name) {
+          menuMap[m.name.trim().toLowerCase()] = m.category?.name || '';
+        }
+      });
+
+      // Map each item in itemsToSave to its category and assigned department
+      itemsToSave.forEach(item => {
+        const itemLower = (item.name || '').trim().toLowerCase();
+        const cat = item.category || menuMap[itemLower] || '';
+        item.category = cat;
+
+        let assignedDept = 'Kitchen';
+        for (const printer of activePrinters) {
+          const deptName = printer.name || printer.assignTo || 'Kitchen';
+          if (printer.assignmentMode === 'item' && Array.isArray(printer.assignedItems) && printer.assignedItems.length > 0) {
+            if (printer.assignedItems.some(it => it.trim().toLowerCase() === itemLower)) {
+              assignedDept = deptName;
+              break;
+            }
+          } else if (Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0) {
+            if (printer.assignedCategories.some(c => c.trim().toLowerCase() === cat.trim().toLowerCase())) {
+              assignedDept = deptName;
+              break;
+            }
+          } else if (printer.assignTo && printer.assignTo !== 'All') {
+            if (cat.toLowerCase().includes(printer.assignTo.toLowerCase()) || itemLower.includes(printer.assignTo.toLowerCase())) {
+              assignedDept = deptName;
+              break;
+            }
+          }
+        }
+        item.department = assignedDept;
+      });
+
+      // 2. Daily Global Sequence Counter
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+
       const isCancellationOnly = itemsToSave.every(i => i.isCancelled || i.status === 'Cancelled');
       const prefix = isCancellationOnly ? 'CANCEL-' : 'KOT-';
-      const kotNumber = `${prefix}${(bill.kots ? bill.kots.length : 0) + 1}`;
+
+      // Check existing KOTs for THIS bill today
+      const billKotsToday = (bill.kots || []).filter(k => 
+        k.createdAt && new Date(k.createdAt) >= startOfDay && !k.kotNumber?.startsWith('CANCEL-')
+      );
+      const firstKotToday = billKotsToday[0];
+
+      let dailyKotSerial;
+      let roundNumber = 1;
+      let kotNumber = '';
+
+      if (firstKotToday && firstKotToday.dailyKotSerial) {
+        // Table already has a KOT today: link to table's base dailyKotSerial
+        dailyKotSerial = firstKotToday.dailyKotSerial;
+        roundNumber = billKotsToday.length + 1;
+        kotNumber = `${prefix}${dailyKotSerial} (Round ${roundNumber})`;
+      } else if (firstKotToday && firstKotToday.kotNumber) {
+        const match = firstKotToday.kotNumber.match(/^(?:KOT|CANCEL)-(\d+)/i);
+        if (match) {
+          dailyKotSerial = parseInt(match[1], 10);
+          roundNumber = billKotsToday.length + 1;
+          kotNumber = `${prefix}${dailyKotSerial} (Round ${roundNumber})`;
+        }
+      }
+
+      if (!dailyKotSerial) {
+        // Find maximum dailyKotSerial issued today across all bills for this tenant
+        try {
+          const todayBills = await Bill.find({
+            'kots.createdAt': { $gte: startOfDay }
+          }).select('kots').lean();
+
+          let maxDailySerial = 0;
+          todayBills.forEach(b => {
+            (b.kots || []).forEach(k => {
+              if (k.createdAt && new Date(k.createdAt) >= startOfDay) {
+                if (k.dailyKotSerial && Number(k.dailyKotSerial) > maxDailySerial) {
+                  maxDailySerial = Number(k.dailyKotSerial);
+                } else if (k.kotNumber) {
+                  const numMatch = k.kotNumber.match(/^(?:KOT|CANCEL)-(\d+)/i);
+                  if (numMatch) {
+                    const parsed = parseInt(numMatch[1], 10);
+                    if (parsed > maxDailySerial) maxDailySerial = parsed;
+                  }
+                }
+              }
+            });
+          });
+
+          dailyKotSerial = maxDailySerial + 1;
+          roundNumber = 1;
+          kotNumber = `${prefix}${dailyKotSerial}`;
+        } catch (serialErr) {
+          console.warn('Error calculating max daily KOT serial:', serialErr.message);
+          dailyKotSerial = (bill.kots ? bill.kots.length : 0) + 1;
+          kotNumber = `${prefix}${dailyKotSerial}`;
+        }
+      }
+
+      // Department of the overall ticket (or primary department)
+      const primaryDept = itemsToSave[0]?.department || 'Kitchen';
+
       const newKOT = {
         kotNumber,
+        dailyKotSerial,
+        roundNumber,
+        department: primaryDept,
         queueNumber,
         tokenNo: queueNumber,
         items: itemsToSave,
@@ -290,6 +409,9 @@ export const generateKOT = async (req, res) => {
         _id: savedKOT._id,
         kotId: savedKOT._id,
         kotNumber: savedKOT.kotNumber,
+        dailyKotSerial: savedKOT.dailyKotSerial,
+        roundNumber: savedKOT.roundNumber,
+        department: savedKOT.department,
         items: savedKOT.items,
         createdAt: savedKOT.createdAt,
         tableNo: bill.tableNo,
@@ -447,7 +569,8 @@ export const generateKOT = async (req, res) => {
 export const getTodayKOTs = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
-    const { date, search } = req.query;
+    const { date, search, department } = req.query;
+    const deptFilter = (department || req.user?.assignedDepartment || '').trim();
 
     let targetDateStr = '';
     let queryStart, queryEnd;
@@ -590,6 +713,13 @@ export const getTodayKOTs = async (req, res) => {
             // Skip note-only update items and include cancelled items for history
             .filter(item => !item.isNoteUpdateOnly && (item.quantity > 0 || item.isCancelled));
 
+          if (deptFilter && deptFilter !== 'All') {
+            processedItems = processedItems.filter(item => {
+              const itemDept = (item.department || kot.department || '').toLowerCase();
+              return itemDept.includes(deptFilter.toLowerCase()) || deptFilter.toLowerCase().includes(itemDept);
+            });
+            if (processedItems.length === 0) return;
+          }
 
           const qNo = activeQueueMap[bill._id.toString()] || activeQueueMap[bill.tableNo] || kot.queueNumber || kot.tokenNo || billQueueMap[bill._id.toString()] || bill.queueNumber || bill.tokenNo || 1;
           if (bill._id && (activeQueueMap[bill._id.toString()] || !bill.queueNumber || !bill.tokenNo) && (bill.queueNumber !== qNo || bill.tokenNo !== qNo)) {
@@ -600,6 +730,9 @@ export const getTodayKOTs = async (req, res) => {
             ...kot,
             _id: kot._id || `${bill._id}_${kot.kotNumber}`,
             kotId: kot._id,
+            department: kot.department || (processedItems[0]?.department || 'Kitchen'),
+            dailyKotSerial: kot.dailyKotSerial,
+            roundNumber: kot.roundNumber,
             items: processedItems,
             billId: bill._id,
             tableNo: bill.tableNo,
@@ -641,6 +774,9 @@ export const getTodayKOTs = async (req, res) => {
 export const getActiveKOTs = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { department } = req.query;
+    const deptFilter = (department || req.user?.assignedDepartment || '').trim();
+
     // Fetch all open/billed orders that have KOTs
     const activeOrders = await Bill.find({
       status: { $in: ['Open', 'Billed'] },
@@ -667,7 +803,7 @@ export const getActiveKOTs = async (req, res) => {
       });
 
       order.kots.forEach(kot => {
-        const processedItems = (kot.items || [])
+        let processedItems = (kot.items || [])
           .filter(kItem => {
             // Skip items explicitly flagged as note-only updates
             if (kItem.isNoteUpdateOnly) return false;
@@ -749,6 +885,14 @@ export const getActiveKOTs = async (req, res) => {
           })
           .filter(kItem => kItem.quantity > 0 || kItem.isCancelled); // Keep active items and cancelled items
 
+        // Filter by department if specified
+        if (deptFilter && deptFilter !== 'All') {
+          processedItems = processedItems.filter(item => {
+            const itemDept = (item.department || kot.department || '').toLowerCase();
+            return itemDept.includes(deptFilter.toLowerCase()) || deptFilter.toLowerCase().includes(itemDept);
+          });
+        }
+
         // Include KOTs that have active items needing kitchen preparation or cancelled items
         const hasActiveKitchenItems = processedItems.some(item => (
           item.status === 'Pending' ||
@@ -769,6 +913,9 @@ export const getActiveKOTs = async (req, res) => {
             tokenNo: qNo,
             kotId: kot._id,
             kotNumber: kot.kotNumber,
+            dailyKotSerial: kot.dailyKotSerial,
+            roundNumber: kot.roundNumber,
+            department: kot.department || (processedItems[0]?.department || 'Kitchen'),
             items: processedItems,
             createdAt: kot.createdAt
           });

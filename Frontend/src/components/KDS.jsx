@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLanguage } from "../context/LanguageContext";
-import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer, Loader2, ChevronLeft, ChevronRight, ChevronDown, Layers, Flame, Utensils } from 'lucide-react';
+import { ChefHat, CheckCircle, Clock, Timer, Ban, Printer, Loader2, ChevronLeft, ChevronRight, ChevronDown, Layers, Flame, Utensils, Lock } from 'lucide-react';
 import api from '../api/axios';
 import BackButton from './common/BackButton';
 import Toast from './Toast';
@@ -19,6 +19,87 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const scrollContainerRef = useRef(null);
   const fetchingRef = useRef(false);
   const observerRef = useRef(null);
+
+  // Dedicated Chef Login Credentials & Multi-Kitchen Department Filter
+  const currentUser = useMemo(() => {
+    try {
+      const u = localStorage.getItem('user');
+      return u ? JSON.parse(u) : null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  const isChefUser = Boolean(
+    currentUser?.role === 'Chef' && 
+    currentUser?.assignedDepartment && 
+    currentUser.assignedDepartment !== 'All'
+  );
+
+  const [selectedDepartment, setSelectedDepartment] = useState(() => {
+    try {
+      const u = localStorage.getItem('user');
+      const parsed = u ? JSON.parse(u) : null;
+      if (parsed?.role === 'Chef' && parsed?.assignedDepartment && parsed.assignedDepartment !== 'All') {
+        return parsed.assignedDepartment;
+      }
+      return localStorage.getItem('kds_selected_dept') || 'All';
+    } catch (e) {
+      return 'All';
+    }
+  });
+
+  const [configuredKitchens, setConfiguredKitchens] = useState([]);
+
+  useEffect(() => {
+    api.get('/printer-configs').then(res => {
+      const active = (res.data || []).filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+      const depts = new Set();
+      active.forEach(p => {
+        const name = p.name || p.assignTo;
+        if (name && name !== 'All') depts.add(name);
+      });
+      setConfiguredKitchens(Array.from(depts));
+    }).catch(() => {});
+  }, []);
+
+  const allKitchenDepartments = useMemo(() => {
+    const set = new Set(configuredKitchens);
+    kots.forEach(k => {
+      if (k.department && k.department !== 'All') set.add(k.department);
+      (k.items || []).forEach(i => {
+        if (i.department && i.department !== 'All') set.add(i.department);
+      });
+    });
+    return Array.from(set);
+  }, [configuredKitchens, kots]);
+
+  const handleSelectDepartment = (dept) => {
+    if (isChefUser) return; // Locked to chef station
+    setSelectedDepartment(dept);
+    try {
+      localStorage.setItem('kds_selected_dept', dept);
+    } catch (e) {}
+  };
+
+  const filteredKots = useMemo(() => {
+    if (!selectedDepartment || selectedDepartment === 'All') return kots;
+    const target = selectedDepartment.toLowerCase();
+
+    return kots.map(kot => {
+      const matchingItems = (kot.items || []).filter(item => {
+        const itemDept = (item.department || kot.department || '').toLowerCase();
+        return itemDept.includes(target) || target.includes(itemDept);
+      });
+
+      if (matchingItems.length === 0) return null;
+
+      return {
+        ...kot,
+        items: matchingItems
+      };
+    }).filter(Boolean);
+  }, [kots, selectedDepartment]);
   
   // Track active mutations to prevent polling from reverting optimistic UI
   const activeActionCount = useRef(0);
@@ -547,7 +628,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
   const groupedKOTs = React.useMemo(() => {
     const tableGroups = {};
 
-    kots.forEach(kot => {
+    filteredKots.forEach(kot => {
       const tableKey = kot.tableNo;
       if (!tableGroups[tableKey]) {
         tableGroups[tableKey] = {
@@ -685,7 +766,7 @@ const KDS = ({ onNavigate, onGoBack }) => {
 
     result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     return result;
-  }, [kots]);
+  }, [filteredKots]);
 
   // Apply scroll sync when groupedKOTs changes
   useEffect(() => {
@@ -824,6 +905,60 @@ const KDS = ({ onNavigate, onGoBack }) => {
             {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
         </div>
+      </div>
+
+      {/* Kitchen Department Filter Bar */}
+      <div className="flex items-center gap-2 mb-2 sm:mb-3 overflow-x-auto custom-scrollbar pb-1 shrink-0">
+        {isChefUser ? (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs font-bold shadow-sm">
+            <span>🔒 {t("Station")}: {currentUser?.assignedDepartment}</span>
+            <span className="text-[10px] text-amber-500/70 font-normal">({t("Locked to Chef Station")})</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+              {t("Kitchen")}:
+            </span>
+            <button
+              onClick={() => handleSelectDepartment('All')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                selectedDepartment === 'All'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black scale-[1.02]'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-slate-700'
+              }`}
+            >
+              {t("All Stations")} ({kots.length})
+            </button>
+            {allKitchenDepartments.map((dept) => {
+              const deptKotCount = kots.filter(kot => {
+                const target = dept.toLowerCase();
+                return (kot.items || []).some(item => {
+                  const itemDept = (item.department || kot.department || '').toLowerCase();
+                  return itemDept.includes(target) || target.includes(itemDept);
+                });
+              }).length;
+
+              return (
+                <button
+                  key={dept}
+                  onClick={() => handleSelectDepartment(dept)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                    selectedDepartment === dept
+                      ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black scale-[1.02]'
+                      : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span>{dept}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    selectedDepartment === dept ? 'bg-slate-950/20 text-slate-900 font-black' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {deptKotCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div 

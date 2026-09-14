@@ -1,8 +1,8 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
-import { X, CheckCircle, Wallet, CreditCard, Banknote, PieChart, Loader2 } from 'lucide-react';
+import { X, CheckCircle, Wallet, CreditCard, Banknote, PieChart, Loader2, BookOpen } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
-const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComplete }) => {const { t } = useLanguage();
+const PaymentModal = ({ total, billNumber, tableNo, customerPhone, customerName, isLoading, onClose, onComplete, hideUnpaid = false }) => {const { t } = useLanguage();
   const [mode, setMode] = useState('Cash');
   const [amountPaid, setAmountPaid] = useState(total);
   const [splitPayments, setSplitPayments] = useState({ cash: 0, upi: 0, card: 0 });
@@ -10,8 +10,9 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
   const [enableQrPayment] = useState(() => {
     try {
       const s = JSON.parse(localStorage.getItem('restaurantSettings'));
-      return s?.enableQrPayment !== false;
-    } catch (e) {return true;}
+      const hasValidUpi = s?.upiId && s.upiId.trim() !== '' && s.upiId.trim() !== 'msbillings@upi';
+      return s?.enableQrPayment !== false && Boolean(hasValidUpi);
+    } catch (e) {return false;}
   });
 
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
@@ -28,6 +29,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
       case 'Card':return <CreditCard size={20} />;
       case 'UPI':return <Wallet size={20} />;
       case 'Mixed':return <PieChart size={20} />;
+      case 'Unpaid':return <BookOpen size={20} />;
       default:return <Banknote size={20} />;
     }
   };
@@ -50,8 +52,8 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
 
           <div className="mb-6">
             <label className="text-sm font-medium text-text-muted mb-3 block">{t("Select Payment Mode")}</label>
-            <div className="grid grid-cols-4 gap-3">
-              {['Cash', 'UPI', 'Card', 'Mixed'].map((m) =>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(60px,1fr))] gap-3">
+              {['Cash', 'UPI', 'Card', 'Mixed', 'Unpaid'].filter(m => !(hideUnpaid && m === 'Unpaid')).map((m) =>
               <button
                 key={m}
                 className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
@@ -60,6 +62,10 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
                 'bg-background border-border text-text-muted hover:bg-surface-hover hover:text-text-main'}`
                 }
                 onClick={() => {
+                  if (m === 'Unpaid' && (!customerPhone || !customerName)) {
+                    alert(t("Customer Name and Phone are required for Unpaid (Khata) bills. Please close and link CRM first."));
+                    return;
+                  }
                   setMode(m);
                   if (m !== 'Cash') {
                     setAmountPaid(total);
@@ -303,6 +309,8 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
               ? 'bg-blue-600 text-white shadow-blue-500/30 cursor-not-allowed opacity-90'
               : mode === 'Cash' && balance < 0 || mode === 'Mixed' && !isMixedValid
               ? 'bg-surface-hover text-slate-800 shadow-none cursor-not-allowed border border-border'
+              : mode === 'Unpaid'
+              ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-amber-600/30 hover:shadow-amber-600/50 hover:-translate-y-0.5'
               : 'bg-success text-white hover:bg-green-600 shadow-success/30 hover:shadow-success/50 hover:-translate-y-0.5'}`
             }
             disabled={isLoading || mode === 'Cash' && balance < 0 || mode === 'Mixed' && !isMixedValid}
@@ -316,7 +324,7 @@ const PaymentModal = ({ total, billNumber, tableNo, isLoading, onClose, onComple
             ) : (
               <>
                 <CheckCircle size={22} />
-                <span>{t("Complete")} {t(mode)} {t("Payment")}</span>
+                <span>{mode === 'Unpaid' ? t("Save as Unpaid (Khata)") : `${t("Complete")} ${t(mode)} ${t("Payment")}`}</span>
               </>
             )}
           </button>

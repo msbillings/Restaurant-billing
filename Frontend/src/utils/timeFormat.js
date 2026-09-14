@@ -74,3 +74,63 @@ export const formatDateTime12 = (input, locale = 'en-IN') => {
   const timeFormatted = formatTime12(d);
   return `${dateFormatted}, ${timeFormatted}`;
 };
+
+/**
+ * Formats a Date or timestamp strictly into 12-hour IST format (e.g. "04:26 PM").
+ */
+export const formatTimeToIST12Hour = (input) => {
+  if (!input) return '';
+  const d = input instanceof Date ? input : new Date(input);
+  if (isNaN(d.getTime())) return '';
+
+  return d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+/**
+ * Calculates dynamic relative elapsed time since table was cleared.
+ * Returns { diffMinutes, relativeBadge, relativeText, isRecent (<= 5 min), istTime }
+ */
+export const getRelativeClearedTime = (clearedAt, currentTime = new Date()) => {
+  if (!clearedAt) return null;
+  const cDate = clearedAt instanceof Date ? clearedAt : new Date(clearedAt);
+  if (isNaN(cDate.getTime())) return null;
+
+  const now = currentTime instanceof Date ? currentTime : new Date(currentTime);
+  const diffMs = now.getTime() - cDate.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 0) {
+    return {
+      diffMinutes: 0,
+      relativeBadge: 'Just cleared',
+      relativeText: 'just now',
+      isRecent: true,
+      istTime: formatTimeToIST12Hour(cDate)
+    };
+  }
+
+  const isRecent = diffMinutes <= 5;
+  let relativeBadge = 'Just cleared';
+  let relativeText = 'just now';
+
+  if (diffMinutes === 0) {
+    relativeBadge = 'Just cleared';
+    relativeText = 'just now';
+  } else {
+    relativeBadge = `${diffMinutes}m ago`;
+    relativeText = `${diffMinutes}m ago`;
+  }
+
+  return {
+    diffMinutes,
+    relativeBadge,
+    relativeText,
+    isRecent,
+    istTime: formatTimeToIST12Hour(cDate)
+  };
+};

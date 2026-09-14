@@ -1,8 +1,9 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
 import Invoice from './Invoice';
-import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2, ChevronDown, Receipt, Info } from 'lucide-react';
-import { getBills, deleteBill, getBillById, apiRefundOrder } from '../api/billing';
+import PaymentModal from './PaymentModal';
+import { Search, Eye, EyeOff, CreditCard, Filter, Trash2, ChevronLeft, ChevronRight, RefreshCcw, ArrowLeft, Loader2, ChevronDown, Receipt, Info, CheckCircle, BookOpen } from 'lucide-react';
+import { getBills, deleteBill, getBillById, apiRefundOrder, clearUnpaidBill } from '../api/billing';
 import { getCachedBillHistory, cacheBillHistory } from '../db/offlineDb';
 import useDebounce from '../hooks/useDebounce';
 import ConfirmationModal from './ConfirmationModal';
@@ -24,6 +25,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   const [endDate, setEndDate] = useState('');
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null, password: '', error: '', loading: false, showPassword: false });
   const [refundModal, setRefundModal] = useState({ isOpen: false, billId: null, reason: '' });
+  const [clearModal, setClearModal] = useState({ isOpen: false, billId: null, total: 0, customerName: '', paymentMode: 'Cash', loading: false, error: '' });
   const [toast, setToast] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
@@ -81,6 +83,14 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
   };
 
   const renderPaymentCell = (bill) => {
+    if (bill.status === 'Unpaid') {
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 font-medium">
+          <BookOpen size={14} className="text-red-500 shrink-0" />
+          <span>{t("Unpaid (Khata)")}</span>
+        </div>
+      );
+    }
     const mode = bill.paymentMode || bill.paymentMethod || '-';
     if (mode === 'Mixed' || mode === 'Split') {
       return (
@@ -235,6 +245,39 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
     }
   };
 
+  const handleClearDueClick = (bill) => {
+    setClearModal({ isOpen: true, billId: bill._id, total: bill.total || 0, billNumber: bill.billNumber, tableNo: bill.tableNo, customerPhone: bill.customerPhone, customerName: bill.customerName || 'Customer', paymentMode: 'Cash', loading: false, error: '' });
+  };
+
+  const confirmClearDue = async (paymentData) => {
+    if (!clearModal.billId) return;
+    setClearModal((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const payload = {
+        paymentMode: paymentData.mode,
+        splitPayments: paymentData.splitPayments,
+        upiApp: paymentData.upiApp,
+        amountPaid: paymentData.amountPaid,
+        changeAmount: Math.max(0, (paymentData.amountPaid || 0) - clearModal.total)
+      };
+      const response = await clearUnpaidBill(clearModal.billId, payload);
+      const updatedBill = response?.order || null;
+      setBills((prev) => prev.map((bill) =>
+        bill._id === clearModal.billId
+          ? { ...bill, status: 'Paid', paymentMode: paymentData.mode, splitPayments: paymentData.splitPayments, upiApp: paymentData.upiApp, amountPaid: paymentData.amountPaid, updatedAt: new Date().toISOString(), clearedAt: new Date().toISOString() }
+          : bill
+      ));
+      setClearModal({ isOpen: false, billId: null, total: 0, customerName: '', paymentMode: 'Cash', loading: false, error: '' });
+      setToast({ message: 'Due cleared successfully. Bill is now Paid.', type: 'success' });
+      if (updatedBill) {
+        setSelectedBill(updatedBill);
+      }
+    } catch (error) {
+      console.error('Error clearing due:', error);
+      setClearModal((prev) => ({ ...prev, loading: false, error: error.response?.data?.message || 'Failed to clear due' }));
+    }
+  };
+
   const handleStartDateChange = (val) => {
     const todayStr = new Date().toLocaleDateString('en-CA');
     if (val && val > todayStr) {
@@ -381,6 +424,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                     <option value="UPI">{t("UPI")}</option>
                     <option value="Card">{t("Card")}</option>
                     <option value="Mixed">{t("Mixed")}</option>
+                    <option value="Unpaid">{t("Unpaid")}</option>
                   </select>
                   <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={12} />
                 </div>
@@ -576,6 +620,15 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                               <RefreshCcw size={18} />
                             </button>
                           )}
+                          {bill.status === 'Unpaid' && (
+                            <button
+                              onClick={() => handleClearDueClick(bill)}
+                              className="p-1 px-2 hover:bg-emerald-100 rounded-lg text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 transition-colors inline-flex items-center justify-center gap-1 touch-target cursor-pointer text-xs shadow-sm"
+                              title={t("Clear Due (Khata)")}>
+                              <CheckCircle size={14} />
+                              {t("Clear Due")}
+                            </button>
+                          )}
                           {bill.status !== 'Deleted' && (
                             <button
                               onClick={() => handleDeleteClick(bill._id)}
@@ -737,6 +790,15 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                         className="w-8 h-8 flex items-center justify-center bg-amber-50 text-amber-600 border border-amber-200 rounded-lg text-xs font-bold touch-target cursor-pointer shrink-0"
                         title={t("Refund Bill")}>
                         <RefreshCcw size={15} />
+                      </button>
+                    )}
+                    {bill.status === 'Unpaid' && (
+                      <button
+                        onClick={() => handleClearDueClick(bill)}
+                        className="px-2 py-1.5 flex items-center justify-center bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold touch-target cursor-pointer shrink-0"
+                        title={t("Clear Due")}>
+                        <CheckCircle size={15} className="mr-1" />
+                        {t("Clear Due")}
                       </button>
                     )}
                     {bill.status !== 'Deleted' && (
@@ -922,6 +984,20 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {clearModal.isOpen && (
+        <PaymentModal
+          total={clearModal.total}
+          billNumber={clearModal.billNumber}
+          tableNo={clearModal.tableNo}
+          customerPhone={clearModal.customerPhone}
+          customerName={clearModal.customerName}
+          isLoading={clearModal.loading}
+          hideUnpaid={true}
+          onClose={() => setClearModal({ isOpen: false, billId: null, total: 0, customerName: '', paymentMode: 'Cash', loading: false, error: '' })}
+          onComplete={confirmClearDue}
+        />
       )}
     </div>
   );

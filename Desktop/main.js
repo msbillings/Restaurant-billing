@@ -388,8 +388,12 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
 
   let printWindow = new BrowserWindow({
     show: false, // Always keep print worker window hidden so extra preview window never pops up over main app
-    width: 400,
-    height: 800
+    width: 320,
+    height: 800,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
   });
 
   if (!silent) {
@@ -416,31 +420,35 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
         <style>${cssContent}</style>
         <style>
+          * {
+            box-sizing: border-box !important;
+          }
           html, body {
-            margin: 0;
-            padding: 10px;
-            background-color: #ffffff;
-            font-family: Arial, Helvetica, sans-serif;
+            width: 72mm !important;
+            max-width: 72mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            font-family: Arial, Helvetica, sans-serif !important;
           }
-          .receipt-print {
-            margin: 0 auto !important;
-            max-width: 280px !important;
+          @page {
+            size: 72mm 297mm;
+            margin: 0 !important;
           }
-          @page { margin: 0; size: 80mm auto portrait; }
           @media print {
             html, body {
-              width: 80mm !important;
-              margin: 0 auto !important;
+              width: 72mm !important;
+              max-width: 72mm !important;
+              margin: 0 !important;
               padding: 0 !important;
-              height: auto !important;
-              overflow: visible !important;
+              background-color: #ffffff !important;
             }
-            body > * {
-              margin: 0 auto !important;
-              position: relative !important;
-              top: 0 !important;
-              left: 0 !important;
-              transform: none !important;
+            .receipt-print, #invoice-print-area, #kot-print-area {
+              width: 100% !important;
+              max-width: 72mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
             }
             .print\\:hidden { display: none !important; }
             .print\\:p-0 { padding: 0 !important; }
@@ -448,6 +456,12 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
             .print\\:shadow-none { box-shadow: none !important; }
             .print\\:border-0 { border: 0 !important; }
             .print\\:max-w-none { max-width: none !important; }
+          }
+          .receipt-print, #invoice-print-area, #kot-print-area {
+            width: 100% !important;
+            max-width: 72mm !important;
+            margin: 0 !important;
+            padding: 0 4px !important;
           }
         </style>
       </head>
@@ -476,10 +490,24 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
         margins: { marginType: 'none' },
         landscape: false,
         printBackground: true,
-        color: false
+        color: false,
+        pageSize: {
+          width: 72000,
+          height: 297000
+        }
       };
       if (printerName && typeof printerName === 'string' && printerName.trim()) {
-        printOptions.deviceName = printerName.trim();
+        try {
+          const osPrinters = printWindow.webContents.getPrinters();
+          const exists = osPrinters.some(p => p.name.toLowerCase() === printerName.trim().toLowerCase());
+          if (exists) {
+            printOptions.deviceName = printerName.trim();
+          } else {
+            console.warn(`[Print] Specified printer '${printerName}' not found in OS printers. Falling back to default printer.`);
+          }
+        } catch (_) {
+          printOptions.deviceName = printerName.trim();
+        }
       }
       console.log('[Print] Print options:', JSON.stringify(printOptions));
       printWindow.webContents.print(printOptions, (success, failureReason) => {

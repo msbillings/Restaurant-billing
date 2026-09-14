@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas';
 import api from '../api/axios';
 import { formatTime12 } from '../utils/timeFormat';
 
-const Invoice = ({ bill, onClose, onSave }) => {
+const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false }) => {
   const { t } = useLanguage();
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
   const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
@@ -66,6 +66,36 @@ const Invoice = ({ bill, onClose, onSave }) => {
   const [msgExpanded, setMsgExpanded] = useState(false);
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // ─── Duplicate WhatsApp Send Prevention ──────────────────────────────────────
+  const billIdentifier = bill?.billNumber || bill?._id;
+  const [isAlreadySent, setIsAlreadySent] = useState(() => {
+    if (!billIdentifier) return false;
+    try {
+      if (sessionStorage.getItem(`ms_wa_sent_${billIdentifier}`) === 'true') return true;
+      if (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') return true;
+      if (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true') return true;
+      if (whatsappBillSentIds && (whatsappBillSentIds.has(billIdentifier) || (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) || (bill?._id && whatsappBillSentIds.has(bill._id)))) return true;
+      if (bill?.whatsappSent) return true;
+    } catch (e) {}
+    return false;
+  });
+
+  useEffect(() => {
+    if (!billIdentifier) return;
+    try {
+      const sentInSession = (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') ||
+                            (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true');
+      const sentInSet = whatsappBillSentIds && (
+        (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) ||
+        (bill?._id && whatsappBillSentIds.has(bill._id))
+      );
+      if (sentInSession || sentInSet || bill?.whatsappSent) {
+        setIsAlreadySent(true);
+      }
+    } catch (e) {}
+  }, [bill?.billNumber, bill?._id, bill?.whatsappSent, whatsappBillSentIds]);
+  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -295,13 +325,21 @@ const Invoice = ({ bill, onClose, onSave }) => {
   };
 
   const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null) => {
+    if (isAlreadySent) {
+      setToast({ message: t("This bill has already been sent to customer via WhatsApp"), type: 'info' });
+      return;
+    }
+
     const numToSend = (targetPhone !== null ? targetPhone : (whatsappPhone || bill?.customerPhone || '')).trim();
     let cleanPhone = numToSend.replace(/[^0-9]/g, '');
-    if (cleanPhone.length === 10) {
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+      cleanPhone = '91' + cleanPhone.slice(1);
+    } else if (cleanPhone.length === 10) {
       cleanPhone = '91' + cleanPhone;
     }
 
     if (!cleanPhone || cleanPhone.length < 10) {
+      setShowWhatsAppModal(true);
       setToast({ message: t("Please enter customer WhatsApp number to send bill"), type: 'warning' });
       setSendingAutomated(false);
       return;
@@ -395,7 +433,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
               }
             }
           }),
-          new Promise((resolve) => setTimeout(() => resolve(null), 12000)) // 12-second capture window
+          new Promise((resolve) => setTimeout(() => resolve(null), 10000))
         ]);
 
         if (canvas) {
@@ -404,47 +442,96 @@ const Invoice = ({ bill, onClose, onSave }) => {
           const approxKB = Math.round(imageBase64.length * 0.75 / 1024);
           console.log(`[eBill] Image base64 size: ~${approxKB} KB`);
         } else {
-          console.warn('[eBill] html2canvas returned null/timed-out canvas');
+          console.warn('[eBill] html2canvas returned null/timed-out canvas — fallback to text');
         }
       } else {
-        console.warn('[eBill] .receipt-print element NOT found in DOM — cannot capture image');
+        console.warn('[eBill] .receipt-print element NOT found in DOM');
       }
     } catch (captureErr) {
-      console.error('[eBill] Receipt image capture FAILED:', captureErr);
-    }
-
-    if (!imageBase64) {
-      setToast({ message: t("Failed to generate bill receipt image. Please try sending again."), type: 'error' });
-      setSendingAutomated(false);
-      return;
+      console.error('[eBill] Receipt image capture error (fallback to text):', captureErr);
     }
 
     try {
-      console.log(`[eBill] Calling sendWhatsAppBill API for phone=${cleanPhone}...`);
+      console.log(`[eBill] Calling sendWhatsAppBill API for phone=${cleanPhone}, hasImage=${!!imageBase64}...`);
       const res = await Promise.race([
-        sendWhatsAppBill(cleanPhone, msg, imageBase64, null, `Bill_${bill?.billNumber || 'Receipt'}.jpg`),
+        sendWhatsAppBill(
+          cleanPhone,
+          msg,
+          imageBase64,
+          null,
+          `Bill_${bill?.billNumber || 'Receipt'}.jpg`,
+          null,
+          null,
+          bill?._id || null,
+          bill?.billNumber || null
+        ),
         new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 45000))
       ]);
 
       if (res && res.success) {
         console.log(`[eBill] ✅ Bill sent successfully to +${cleanPhone}`);
         setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
+        setIsAlreadySent(true);
+        if (bill?.billNumber) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) {}
+        }
+        if (bill?._id) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) {}
+        }
+        if (onWhatsAppSent) onWhatsAppSent(bill?.billNumber || bill?._id);
         setShowWhatsAppModal(false);
       } else {
         throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
       }
     } catch (err) {
-      // Log the full error with all details
+      if (err?.response?.status === 409 || err?.response?.data?.alreadySent) {
+        setIsAlreadySent(true);
+        if (bill?.billNumber) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) {}
+        }
+        if (bill?._id) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) {}
+        }
+        setToast({ message: t("This bill has already been sent to customer via WhatsApp"), type: 'info' });
+        setShowWhatsAppModal(false);
+        return;
+      }
       console.error('[eBill] ❌ WhatsApp send FAILED:', err?.message);
-      console.error('[eBill] HTTP status:', err?.response?.status);
-      console.error('[eBill] Server error body:', err?.response?.data);
-      console.error('[eBill] Full error object:', err);
       const errorMsg = err?.response?.data?.error || err?.message || t('Failed to send WhatsApp e-Bill');
       setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
     } finally {
       setSendingAutomated(false);
     }
   };
+
+  // Keep phone and customer name in sync with incoming bill prop
+  useEffect(() => {
+    if (bill?.customerPhone && bill.customerPhone !== whatsappPhone) {
+      setWhatsappPhone(bill.customerPhone);
+    }
+    if (bill?.customerName && bill.customerName !== whatsappCustomerName) {
+      setWhatsappCustomerName(bill.customerName);
+    }
+  }, [bill?.customerPhone, bill?.customerName]);
+
+  // ─── Auto-send WhatsApp e-Bill with original receipt image on mount if autoSendWhatsApp is enabled ───
+  const autoSendTriggeredRef = React.useRef(false);
+  useEffect(() => {
+    if (!autoSendWhatsApp || isAlreadySent || autoSendTriggeredRef.current) return;
+
+    const targetPhone = (whatsappPhone || bill?.customerPhone || '').trim();
+    const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+    const custName = (whatsappCustomerName || bill?.customerName || '').trim();
+
+    if (cleanPhone.length >= 10) {
+      autoSendTriggeredRef.current = true;
+      console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill with original receipt image for ${cleanPhone}...`);
+      // Start auto-send without cancelable cleanup timer so re-renders cannot abort it
+      setTimeout(() => {
+        handleSendWhatsAppBill(targetPhone, custName || undefined);
+      }, 350);
+    }
+  }, [autoSendWhatsApp, isAlreadySent, whatsappPhone, bill?.customerPhone, bill?.billNumber]);
 
   const getFormatClasses = () => {
     switch (activeSettings.printFormat) {
@@ -494,40 +581,47 @@ const Invoice = ({ bill, onClose, onSave }) => {
             <span>{t("Finish")}</span>
           </button>
         }
-        <div className="flex items-center bg-[#25D366] rounded-xl shadow-md overflow-hidden">
-          <button
-            onClick={() => {
-              if (!whatsappPhone && !bill?.customerPhone) {
-                setShowWhatsAppModal(true);
-                setToast({ message: t("Please enter customer WhatsApp number to send bill"), type: 'warning' });
-              } else {
-                handleSendWhatsAppBill();
-              }
-            }}
-            disabled={sendingAutomated}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-gray-900 font-bold text-xs sm:text-sm active:scale-95 cursor-pointer hover:bg-[#20bd5a] transition-all disabled:opacity-75 disabled:cursor-wait"
-            title={t("Send e-Bill directly on WhatsApp (1-Click)")}>
-            {sendingAutomated ? (
-              <>
-                <Loader2 size={15} className="animate-spin shrink-0" />
-                <span className="animate-pulse">{t('Sending...')}</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
-                </svg>
-                <span>{t("WhatsApp e-Bill")}</span>
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => { setShowWhatsAppModal(true); setMsgExpanded(false); }}
-            className="px-2 py-2 text-gray-900/80 hover:text-gray-900 hover:bg-[#20bd5a] border-l border-white/25 transition-colors cursor-pointer"
-            title={t("Edit mobile number")}>
-            <Smartphone size={15} />
-          </button>
-        </div>
+        {isAlreadySent ? (
+          <div className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700/90 text-white rounded-xl shadow-md font-bold text-xs sm:text-sm select-none border border-emerald-600/60" title={t("e-Bill already sent via WhatsApp")}>
+            <span className="text-white text-sm font-black leading-none">✓</span>
+            <span>{t("WhatsApp Sent")}</span>
+          </div>
+        ) : (
+          <div className="flex items-center bg-[#25D366] rounded-xl shadow-md overflow-hidden">
+            <button
+              onClick={() => {
+                if (!whatsappPhone && !bill?.customerPhone) {
+                  setShowWhatsAppModal(true);
+                  setToast({ message: t("Please enter customer WhatsApp number to send bill"), type: 'warning' });
+                } else {
+                  handleSendWhatsAppBill();
+                }
+              }}
+              disabled={sendingAutomated}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-gray-900 font-bold text-xs sm:text-sm active:scale-95 cursor-pointer hover:bg-[#20bd5a] transition-all disabled:opacity-75 disabled:cursor-wait"
+              title={t("Send e-Bill directly on WhatsApp (1-Click)")}>
+              {sendingAutomated ? (
+                <>
+                  <Loader2 size={15} className="animate-spin shrink-0" />
+                  <span className="animate-pulse">{t('Sending...')}</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                  </svg>
+                  <span>{t("WhatsApp e-Bill")}</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => { setShowWhatsAppModal(true); setMsgExpanded(false); }}
+              className="px-2 py-2 text-gray-900/80 hover:text-gray-900 hover:bg-[#20bd5a] border-l border-white/25 transition-colors cursor-pointer"
+              title={t("Edit mobile number")}>
+              <Smartphone size={15} />
+            </button>
+          </div>
+        )}
         <button
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-white text-gray-900 rounded-xl hover:bg-gray-100 transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
@@ -698,11 +792,17 @@ const Invoice = ({ bill, onClose, onSave }) => {
               </button>
               <button
                 type="button"
-                disabled={sendingAutomated}
+                disabled={sendingAutomated || isAlreadySent}
                 onClick={() => handleSendWhatsAppBill(whatsappPhone, whatsappCustomerName)}
-                className="flex-1 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md shadow-[#25D366]/20 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-wait">
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
+                  isAlreadySent
+                    ? 'bg-gray-400 text-white shadow-none'
+                    : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-[#25D366]/20'
+                }`}>
                 {sendingAutomated ? (
                   <><Loader2 size={16} className="animate-spin" /><span className="animate-pulse">{t("Sending...")}</span></>
+                ) : isAlreadySent ? (
+                  <><span className="font-bold">✓</span><span>{t("Already Sent")}</span></>
                 ) : (
                   <><svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg><span>{t("Send e-Bill")}</span></>
                 )}
@@ -844,7 +944,7 @@ const Invoice = ({ bill, onClose, onSave }) => {
           <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
           
           <div style={{ fontSize: '16px', textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
-            {bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
+            {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
           </div>
 
           <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
@@ -1124,6 +1224,12 @@ const Invoice = ({ bill, onClose, onSave }) => {
                     </div>
                   )}
                   <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
+                </div>
+              );
+            } else if (bill.status === 'Unpaid') {
+              return (
+                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '5px', marginBottom: '4px', borderTop: '1.5px dashed #000', borderBottom: '1.5px dashed #000', padding: '4px 0' }}>
+                  {t("UNPAID (KHATA BILL)")}
                 </div>
               );
             } else if (bill.paymentMode === 'Cash') {

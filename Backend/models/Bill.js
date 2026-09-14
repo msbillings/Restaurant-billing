@@ -126,8 +126,11 @@ const billSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Open', 'Billed', 'Paid', 'Cancelled', 'Deleted', 'Refunded'],
+    enum: ['Open', 'Billed', 'Paid', 'Unpaid', 'Cancelled', 'Deleted', 'Refunded'],
     default: 'Open'
+  },
+  clearedAt: { 
+    type: Date 
   },
   cancelReason: {
     type: String
@@ -167,10 +170,16 @@ const billSchema = new mongoose.Schema({
   kitchenNotes: String,
   kots: [{
     kotNumber: String,
+    dailyKotSerial: Number,
+    roundNumber: { type: Number, default: 1 },
+    department: String,
+    targetPrinterId: { type: mongoose.Schema.Types.ObjectId, ref: 'PrinterConfig' },
     queueNumber: Number,
     tokenNo: Number,
     items: [{
       name: String,
+      category: String,
+      department: String,
       quantity: Number,
       specialNote: String,
       status: {
@@ -237,11 +246,22 @@ const billSchema = new mongoose.Schema({
       discountValue: Number
     }
   }],
+  whatsappSent: {
+    type: Boolean,
+    default: false
+  },
+  whatsappSentAt: {
+    type: Date
+  },
   billedAt: {
     type: Date
   },
   settledAt: {
     type: Date
+  },
+  feedbackProcessed: {
+    type: Boolean,
+    default: false
   },
   restaurantDetails: {
     type: mongoose.Schema.Types.Mixed,

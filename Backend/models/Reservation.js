@@ -44,6 +44,18 @@ const reservationSchema = new mongoose.Schema({
   specialRequests: {
     type: String,
     trim: true
+  },
+  whatsappSent: {
+    type: Boolean,
+    default: false
+  },
+  whatsappSentAt: {
+    type: Date,
+    default: null
+  },
+  whatsappReminderSent: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

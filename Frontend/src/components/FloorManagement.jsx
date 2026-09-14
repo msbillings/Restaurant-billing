@@ -4,11 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT, getDailyStats } from '../api/billing';
 import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2, Users } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2, Users, Lock, Unlock } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 import Toast from './Toast';
 import Invoice from './Invoice';
+import { formatTimeToIST12Hour, getRelativeClearedTime } from '../utils/timeFormat';
 
 const formatImageUrl = (url) => {
   if (!url) return '';
@@ -79,6 +80,34 @@ const formatTime12Hour = (time24) => {
   return `${hours12.toString().padStart(2, '0')}:${m} ${ampm}`;
 };
 
+const isMatchingFloor = (floor, targetId) => {
+  if (!floor || !targetId) return false;
+  return (
+    floor.id === targetId ||
+    floor._id === targetId ||
+    String(floor.id) === String(targetId) ||
+    String(floor._id) === String(targetId)
+  );
+};
+
+const getCurrentFloor = (floorList, currentId) => {
+  if (!Array.isArray(floorList) || floorList.length === 0) return null;
+  const found = floorList.find((f) => isMatchingFloor(f, currentId));
+  return found || floorList[0] || null;
+};
+
+const normalizeFloors = (list) => {
+  if (!Array.isArray(list)) return [];
+  return list.map((f, idx) => ({
+    ...f,
+    id: f.id || (f._id ? String(f._id) : `floor-${idx}`),
+    tables: Array.isArray(f.tables) ? f.tables : [],
+    cabins: Array.isArray(f.cabins) ? f.cabins : [],
+    sofas: Array.isArray(f.sofas) ? f.sofas : [],
+    spaces: Array.isArray(f.spaces) ? f.spaces : []
+  }));
+};
+
 const FloorManagement = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
@@ -101,6 +130,47 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [dailyStats, setDailyStats] = useState({ sales: 0, orders: 0 });
   const [activeKdsTableCount, setActiveKdsTableCount] = useState(0);
+  const [clearedTables, setClearedTables] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('msbillings_cleared_tables') || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  const markTableAsCleared = React.useCallback((tableNo, timestamp) => {
+    if (!tableNo) return;
+    const tNorm = normalizeTable(tableNo);
+    const isoTime = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+    setClearedTables(prev => {
+      const next = { ...prev, [tNorm]: isoTime };
+      if (tableNo.includes(' - ')) {
+        const shortName = normalizeTable(tableNo.split(' - ').pop());
+        next[shortName] = isoTime;
+      }
+      try {
+        localStorage.setItem('msbillings_cleared_tables', JSON.stringify(next));
+      } catch (e) { }
+      return next;
+    });
+  }, []);
+
+  const unmarkTableAsCleared = React.useCallback((tableNo) => {
+    if (!tableNo) return;
+    const tNorm = normalizeTable(tableNo);
+    setClearedTables(prev => {
+      const next = { ...prev };
+      delete next[tNorm];
+      if (tableNo.includes(' - ')) {
+        const shortName = normalizeTable(tableNo.split(' - ').pop());
+        delete next[shortName];
+      }
+      try {
+        localStorage.setItem('msbillings_cleared_tables', JSON.stringify(next));
+      } catch (e) { }
+      return next;
+    });
+  }, []);
 
   const fetchActiveKdsCount = async () => {
     try {
@@ -162,24 +232,20 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const [floors, setFloors] = useState(() => {
     const saved = localStorage.getItem('msbillings_spaces');
     if (saved) {
-      let parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) {
-        parsed = [{
-          id: 'f-default',
-          name: t('Ground Floor'),
-          tables: parsed.tables || [],
-          cabins: parsed.cabins || [],
-          sofas: parsed.sofas || []
-        }];
-      }
-      return parsed;
+      try {
+        let parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return normalizeFloors(parsed);
+        }
+      } catch (e) { }
     }
     return [{
       id: 'f-1',
       name: 'Ground Floor',
       tables: [{ id: 't1', name: 'Table 1', type: 'table', capacity: 4 }, { id: 't2', name: 'Table 2', type: 'table', capacity: 4 }, { id: 't3', name: 'Table 3', type: 'table', capacity: 4 }],
       cabins: [{ id: 'c1', name: 'Cabin 1', type: 'cabin', capacity: 6 }, { id: 'c2', name: 'Cabin 2', type: 'cabin', capacity: 6 }],
-      sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa', capacity: 4 }]
+      sofas: [{ id: 's1', name: 'Sofa 1', type: 'sofa', capacity: 4 }],
+      spaces: []
     }];
   });
 
@@ -188,10 +254,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     floorsRef.current = floors;
   }, [floors]);
 
+  const [lockedFloorId, setLockedFloorId] = useState(() => {
+    try {
+      return localStorage.getItem('msbillings_locked_floor_id') || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [activeFloorId, setActiveFloorId] = useState(() => {
-    const saved = localStorage.getItem('activeFloorId');
-    if (saved) return saved;
-    return floors[0]?.id || null;
+    try {
+      const locked = localStorage.getItem('msbillings_locked_floor_id');
+      if (locked) return locked;
+      const saved = localStorage.getItem('activeFloorId');
+      if (saved) return saved;
+    } catch { }
+    return floors[0]?.id || (floors[0]?._id ? String(floors[0]._id) : null);
   });
 
   useEffect(() => {
@@ -200,11 +278,44 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     }
   }, [activeFloorId]);
 
+  // Ensure activeFloorId is always valid and aligns to loaded floors
+  useEffect(() => {
+    if (floors.length > 0) {
+      const current = getCurrentFloor(floors, activeFloorId);
+      if (current) {
+        const canonicalId = current.id || current._id;
+        if (activeFloorId !== canonicalId) {
+          setActiveFloorId(canonicalId);
+        }
+      }
+    }
+  }, [floors]);
+
+  // Ensure terminal stays pinned to locked floor if set
+  useEffect(() => {
+    if (lockedFloorId) {
+      const exists = floors.some((f) => isMatchingFloor(f, lockedFloorId));
+      if (exists && !isMatchingFloor({ id: activeFloorId, _id: activeFloorId }, lockedFloorId)) {
+        const lockedFloor = getCurrentFloor(floors, lockedFloorId);
+        if (lockedFloor) {
+          setActiveFloorId(lockedFloor.id || lockedFloor._id);
+        }
+      }
+    }
+  }, [floors, lockedFloorId, activeFloorId]);
+
   const saveSpacesToCloud = async (newFloors) => {
-    localStorage.setItem('msbillings_spaces', JSON.stringify(newFloors));
+    const normalized = normalizeFloors(newFloors);
+    localStorage.setItem('msbillings_spaces', JSON.stringify(normalized));
     try {
-      await cacheFloors(newFloors);
-      await api.post('/floors', { spaces: newFloors });
+      await cacheFloors(normalized);
+      const res = await api.post('/floors', { spaces: normalized });
+      if (res?.data?.spaces && Array.isArray(res.data.spaces)) {
+        const serverFloors = normalizeFloors(res.data.spaces);
+        floorsRef.current = serverFloors;
+        setFloors(serverFloors);
+        localStorage.setItem('msbillings_spaces', JSON.stringify(serverFloors));
+      }
     } catch (e) {
       console.error('Failed to save floors to cloud database', e);
     }
@@ -257,6 +368,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         const targetStatus = data.status || data.order?.status;
 
         if (targetStatus === 'Paid' || targetStatus === 'Cancelled' || targetStatus === 'Available' || (data.order && !isValidOrder(data.order))) {
+          if (targetTable) {
+            markTableAsCleared(targetTable, data.clearedAt || new Date().toISOString());
+          }
           setOrders(prev => prev.filter(o => {
             if (data.orderId && o._id === data.orderId) return false;
             if (data.order?._id && o._id === data.order._id) return false;
@@ -264,6 +378,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             return isValidOrder(o);
           }));
         } else if (data.order && isValidOrder(data.order)) {
+          if (targetTable || data.order?.tableNo) {
+            unmarkTableAsCleared(targetTable || data.order?.tableNo);
+          }
           const orderTableNorm = normalizeTable(data.order.tableNo);
           setOrders(prev => {
             const matchIndex = prev.findIndex(o =>
@@ -283,6 +400,26 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       syncSpaces();
     };
 
+    const handleBillSettledEvent = (data) => {
+      const tNo = data?.tableNo || data?.order?.tableNo;
+      if (tNo) {
+        markTableAsCleared(tNo, data.clearedAt || new Date().toISOString());
+      }
+      handleRealtimeRefresh(data);
+    };
+
+    const handleTableStatusChangedEvent = (data) => {
+      if (data) {
+        const tNo = data.tableNo || data.tableId;
+        if (data.status === 'Available' && tNo) {
+          markTableAsCleared(tNo, data.clearedAt || new Date().toISOString());
+        } else if (data.status && data.status !== 'Available' && tNo) {
+          unmarkTableAsCleared(tNo);
+        }
+      }
+      handleRealtimeRefresh(data);
+    };
+
     const handleSpacesSocket = (newFloors) => {
       if (newFloors && Array.isArray(newFloors)) {
         setFloors(newFloors);
@@ -295,11 +432,24 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     };
     window.addEventListener('refreshFloorOrders', handleFloorRefresh);
 
+    const handleTableCleared = (event) => {
+      if (event.detail?.tableNo) {
+        markTableAsCleared(event.detail.tableNo, event.detail.clearedAt);
+      }
+    };
+    const handleTableOccupied = (event) => {
+      if (event.detail?.tableNo) {
+        unmarkTableAsCleared(event.detail.tableNo);
+      }
+    };
+    window.addEventListener('tableCleared', handleTableCleared);
+    window.addEventListener('tableOccupied', handleTableOccupied);
+
     const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', handleRealtimeRefresh);
     const unsubOrdersUpdated = realtimeService.subscribe('ordersUpdated', handleRealtimeRefresh);
     const unsubTableTransferred = realtimeService.subscribe('tableTransferred', handleRealtimeRefresh);
-    const unsubBillSettled = realtimeService.subscribe('billSettled', handleRealtimeRefresh);
-    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', handleRealtimeRefresh);
+    const unsubBillSettled = realtimeService.subscribe('billSettled', handleBillSettledEvent);
+    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', handleTableStatusChangedEvent);
     const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeRefresh);
     const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleRealtimeRefresh);
     const unsubFoodReady = realtimeService.subscribe('foodReady', handleRealtimeRefresh);
@@ -310,6 +460,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       clearInterval(interval);
       window.removeEventListener('spacesUpdated', handleSpacesUpdated);
       window.removeEventListener('refreshFloorOrders', handleFloorRefresh);
+      window.removeEventListener('tableCleared', handleTableCleared);
+      window.removeEventListener('tableOccupied', handleTableOccupied);
       unsubOrderUpdated();
       unsubOrdersUpdated();
       unsubTableTransferred();
@@ -321,7 +473,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       unsubSpacesUpdated();
       unsubReservationUpdated();
     };
-  }, []);
+  }, [markTableAsCleared, unmarkTableAsCleared]);
 
   async function syncSpaces() {
     try {
@@ -330,6 +482,43 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         localStorage.setItem('msbillings_spaces', JSON.stringify(res.data));
         await cacheFloors(res.data);
         setFloors(res.data);
+
+        // Sync clearedAt timestamps from floor items
+        setClearedTables(prev => {
+          const next = { ...prev };
+          let changed = false;
+          res.data.forEach(floor => {
+            ['tables', 'cabins', 'sofas', 'spaces'].forEach(group => {
+              (floor[group] || []).forEach(item => {
+                if (item.clearedAt) {
+                  const uNorm = normalizeTable(`${floor.name} - ${item.name}`);
+                  const sNorm = normalizeTable(item.name);
+                  const isoTime = new Date(item.clearedAt).toISOString();
+                  if (!next[uNorm] || new Date(next[uNorm]).getTime() < new Date(isoTime).getTime()) {
+                    next[uNorm] = isoTime;
+                    next[sNorm] = isoTime;
+                    changed = true;
+                  }
+                }
+              });
+            });
+          });
+
+          // Clean up entries older than 15 minutes
+          const nowMs = Date.now();
+          Object.keys(next).forEach(k => {
+            const tMs = new Date(next[k]).getTime();
+            if (nowMs - tMs > 15 * 60 * 1000) {
+              delete next[k];
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            try { localStorage.setItem('msbillings_cleared_tables', JSON.stringify(next)); } catch (e) { }
+          }
+          return changed ? next : prev;
+        });
       }
     } catch (e) {
       console.error('Failed to sync spaces from cloud database', e);
@@ -363,7 +552,44 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     }
   };
 
+  const handleToggleFloorLock = () => {
+    if (lockedFloorId) {
+      setLockedFloorId(null);
+      try {
+        localStorage.removeItem('msbillings_locked_floor_id');
+      } catch (e) { }
+      setToast({ message: t('Floor unlocked. You can now switch floors freely.'), type: 'info' });
+    } else {
+      if (!activeFloorId) return;
+      const curFloor = getCurrentFloor(floors, activeFloorId);
+      const floorName = curFloor ? curFloor.name : 'Current Floor';
+      const targetLockId = curFloor ? (curFloor.id || curFloor._id) : activeFloorId;
+      setLockedFloorId(targetLockId);
+      try {
+        localStorage.setItem('msbillings_locked_floor_id', targetLockId);
+      } catch (e) { }
+      setToast({ message: `🔒 ${t('Floor locked to')} "${t(floorName)}" ${t('on this system.')}`, type: 'success' });
+    }
+  };
+
+  const handleSelectFloor = (floorId) => {
+    if (lockedFloorId && !isMatchingFloor({ id: floorId, _id: floorId }, lockedFloorId)) {
+      const curFloor = getCurrentFloor(floors, lockedFloorId);
+      const floorName = curFloor ? curFloor.name : 'locked floor';
+      setToast({
+        message: `🔒 ${t('Floor is locked to')} "${t(floorName)}". ${t('Click the lock icon to unlock.')}`,
+        type: 'warning'
+      });
+      return;
+    }
+    setActiveFloorId(floorId);
+  };
+
   const handleAddFloor = () => {
+    if (lockedFloorId) {
+      setToast({ message: t('Floor management is locked on this terminal. Unlock first to add floors.'), type: 'warning' });
+      return;
+    }
     setPromptInput('');
     setPromptModal({
       isOpen: true,
@@ -372,10 +598,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       onConfirm: (name) => {
         if (name && name.trim() !== '') {
           const newFloorId = Date.now().toString();
-          const next = [...floorsRef.current, { id: newFloorId, name: name.trim(), tables: [], cabins: [], sofas: [] }];
+          const next = [...floorsRef.current, { id: newFloorId, name: name.trim(), tables: [], cabins: [], sofas: [], spaces: [] }];
+          floorsRef.current = next;
           setFloors(next);
-          saveSpacesToCloud(next);
           setActiveFloorId(newFloorId);
+          localStorage.setItem('msbillings_spaces', JSON.stringify(next));
+          saveSpacesToCloud(next);
           setToast({ message: 'Floor added successfully!', type: 'success' });
         }
       }
@@ -384,70 +612,248 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
   const handleRemoveFloor = (e, id) => {
     e.stopPropagation();
+    if (lockedFloorId) {
+      setToast({ message: t('Floor management is locked on this terminal. Unlock first to delete floors.'), type: 'warning' });
+      return;
+    }
     setConfirmModal({
       isOpen: true,
       title: 'Remove Floor',
       message: 'Are you sure you want to completely remove this floor and all its tables?',
       onConfirm: () => {
-        const nextFloors = floorsRef.current.filter((f) => f.id !== id);
+        const nextFloors = floorsRef.current.filter((f) => !isMatchingFloor(f, id));
+        floorsRef.current = nextFloors;
         setFloors(nextFloors);
-        if (activeFloorId === id) {
-          setActiveFloorId(nextFloors[0]?.id || null);
+        if (isMatchingFloor({ id, _id: id }, activeFloorId)) {
+          setActiveFloorId(nextFloors[0]?.id || (nextFloors[0]?._id ? String(nextFloors[0]._id) : null));
         }
+        localStorage.setItem('msbillings_spaces', JSON.stringify(nextFloors));
         saveSpacesToCloud(nextFloors);
       }
     });
   };
 
+  const getNextSerialInfo = (categoryType, currentFloor) => {
+    const cat = (categoryType || 'Table').trim();
+    if (!currentFloor) {
+      return { nextNum: 1, nextName: `${cat} 1`, maxNum: 0, existingNumbers: [], missingNumbers: [] };
+    }
+
+    const allSpaces = [
+      ...(currentFloor.tables || []).map((t) => ({ ...t, _origType: 'table' })),
+      ...(currentFloor.cabins || []).map((c) => ({ ...c, _origType: 'cabin' })),
+      ...(currentFloor.sofas || []).map((s) => ({ ...s, _origType: 'sofa' })),
+      ...(currentFloor.spaces || []).map((sp) => ({ ...sp, _origType: 'space' }))
+    ];
+
+    const categorySpaces = allSpaces.filter((s) => {
+      const sType = (s.type || s._origType || 'table').trim().toLowerCase();
+      return sType === cat.toLowerCase();
+    });
+
+    const existingNumbers = categorySpaces
+      .map((s) => {
+        const m = (s.name || '').match(/\d+/);
+        return m ? parseInt(m[0], 10) : null;
+      })
+      .filter((n) => n !== null && !isNaN(n));
+
+    const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+    const missingNumbers = [];
+    for (let i = 1; i <= maxNum; i++) {
+      if (!existingNumbers.includes(i)) missingNumbers.push(i);
+    }
+
+    const nextNum = missingNumbers.length > 0 ? missingNumbers[0] : (maxNum + 1);
+    const nextName = `${cat} ${nextNum}`;
+
+    return { nextNum, nextName, maxNum, existingNumbers, missingNumbers, categorySpaces, allSpaces };
+  };
+
   const handleAddSpace = () => {
     if (!activeFloorId) return;
-    setAddSpaceModal({ isOpen: true, name: '', type: 'Table', capacity: 4 });
+    const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
+    const { nextName } = getNextSerialInfo('Table', currentFloor);
+    setAddSpaceModal({ isOpen: true, name: nextName, type: 'Table', capacity: 4 });
   };
 
   const submitAddSpace = () => {
-    const { name, type, capacity } = addSpaceModal;
-    if (name && name.trim() !== '' && type && type.trim() !== '') {
-      const cap = Number(capacity) > 0 ? Number(capacity) : (type.toLowerCase() === 'cabin' ? 6 : 4);
-      const next = floorsRef.current.map((floor) => {
-        if (floor.id === activeFloorId) {
-          return {
-            ...floor,
-            spaces: [...(floor.spaces || []), { id: Date.now().toString(), name: name.trim(), type: type.trim(), capacity: cap }]
-          };
-        }
-        return floor;
-      });
-      setFloors(next);
-      saveSpacesToCloud(next);
-      setAddSpaceModal({ isOpen: false, name: '', type: 'Table', capacity: 4 });
-      setToast({ message: `${type} added successfully!`, type: 'success' });
+    const rawName = addSpaceModal.name ? addSpaceModal.name.trim() : '';
+    const rawType = addSpaceModal.type ? addSpaceModal.type.trim() : 'Table';
+    const capacity = addSpaceModal.capacity;
+
+    if (!rawName) {
+      setToast({ message: t('Please enter a space / table name.'), type: 'warning' });
+      return;
     }
+
+    if (!rawType) {
+      setToast({ message: t('Please specify a space type (e.g. Table, Cabin).'), type: 'warning' });
+      return;
+    }
+
+    const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
+    if (!currentFloor) {
+      setToast({ message: t('No floor selected.'), type: 'error' });
+      return;
+    }
+
+    const allSpaces = [
+      ...(currentFloor.tables || []).map((t) => ({ ...t, _origType: 'table' })),
+      ...(currentFloor.cabins || []).map((c) => ({ ...c, _origType: 'cabin' })),
+      ...(currentFloor.sofas || []).map((s) => ({ ...s, _origType: 'sofa' })),
+      ...(currentFloor.spaces || []).map((sp) => ({ ...sp, _origType: 'space' }))
+    ];
+
+    const normalizeString = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const inputNorm = normalizeString(rawName);
+    const typeNorm = normalizeString(rawType);
+    const inputWithPrefixNorm = inputNorm.startsWith(typeNorm) ? inputNorm : `${typeNorm}${inputNorm}`;
+
+    // 1. Strict duplicate validation across this floor
+    const isDuplicate = allSpaces.some((existing) => {
+      const existingNorm = normalizeString(existing.name);
+      const existingTypeNorm = normalizeString(existing.type || existing._origType || 'table');
+      const existingWithPrefixNorm = existingNorm.startsWith(existingTypeNorm) ? existingNorm : `${existingTypeNorm}${existingNorm}`;
+
+      if (existing.name.trim().toLowerCase() === rawName.toLowerCase()) return true;
+      if (existingNorm === inputNorm) return true;
+      if (existingTypeNorm === typeNorm && existingWithPrefixNorm === inputWithPrefixNorm) return true;
+
+      return false;
+    });
+
+    if (isDuplicate) {
+      setToast({
+        message: `❌ "${rawName}" ${t('already exists on this floor. Duplicate creation is not allowed.')}`,
+        type: 'error'
+      });
+      return;
+    }
+
+    // 2. Strict serial order validation
+    const categorySpaces = allSpaces.filter((s) => {
+      const sType = (s.type || s._origType || 'table').trim().toLowerCase();
+      return sType === rawType.toLowerCase();
+    });
+
+    const existingNumbers = categorySpaces
+      .map((s) => {
+        const m = (s.name || '').match(/\d+/);
+        return m ? parseInt(m[0], 10) : null;
+      })
+      .filter((n) => n !== null && !isNaN(n));
+
+    const inputNumMatch = rawName.match(/\d+/);
+
+    if (inputNumMatch) {
+      const inputNum = parseInt(inputNumMatch[0], 10);
+
+      // Check if this number already exists
+      if (existingNumbers.includes(inputNum)) {
+        setToast({
+          message: `❌ ${rawType} ${inputNum} ${t('already exists on this floor. Duplicate table creation is not allowed.')}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      // Check if in serial order
+      const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+      const missingNumbers = [];
+      for (let i = 1; i <= maxNum; i++) {
+        if (!existingNumbers.includes(i)) missingNumbers.push(i);
+      }
+
+      const allowedNextNumbers = missingNumbers.length > 0 ? [...missingNumbers, maxNum + 1] : [maxNum + 1];
+      const nextExpected = missingNumbers.length > 0 ? missingNumbers[0] : (maxNum + 1);
+
+      if (!allowedNextNumbers.includes(inputNum)) {
+        setToast({
+          message: `⚠️ ${t('You should add serial wise based on the numbers.')} ${t('Next expected is')} ${rawType} ${nextExpected}.`,
+          type: 'warning'
+        });
+        return;
+      }
+    } else {
+      const maxNum = existingNumbers.length > 0 ? Math.max(...existingNumbers) : 0;
+      const nextExpected = maxNum + 1;
+      setToast({
+        message: `⚠️ ${t('You should add serial wise based on the numbers.')} ${t('Please include the number, e.g.,')} ${rawType} ${nextExpected}.`,
+        type: 'warning'
+      });
+      return;
+    }
+
+    let finalName = rawName;
+    if (/^\d+$/.test(rawName)) {
+      finalName = `${rawType} ${rawName}`;
+    }
+
+    const cap = Number(capacity) > 0 ? Number(capacity) : (rawType.toLowerCase() === 'cabin' ? 6 : 4);
+    const newSpaceItem = {
+      id: Date.now().toString(),
+      name: finalName,
+      type: rawType.toLowerCase(),
+      capacity: cap,
+      status: 'Available'
+    };
+
+    const catKey = rawType.toLowerCase() === 'table' ? 'tables'
+                 : rawType.toLowerCase() === 'cabin' ? 'cabins'
+                 : rawType.toLowerCase() === 'sofa' ? 'sofas'
+                 : 'spaces';
+
+    const next = floorsRef.current.map((floor) => {
+      if (isMatchingFloor(floor, activeFloorId)) {
+        return {
+          ...floor,
+          [catKey]: [...(floor[catKey] || []), newSpaceItem]
+        };
+      }
+      return floor;
+    });
+
+    // Immediately update ref and state for instant zero-delay UI update
+    floorsRef.current = next;
+    setFloors(next);
+    localStorage.setItem('msbillings_spaces', JSON.stringify(next));
+
+    setAddSpaceModal({ isOpen: false, name: '', type: 'Table', capacity: 4 });
+    setToast({ message: `${finalName} ${t('added successfully!')}`, type: 'success' });
+
+    // Asynchronously save to cloud database in background
+    saveSpacesToCloud(next);
   };
 
   const handleRemoveSpace = (e, type, id) => {
     e.stopPropagation();
+    const confirmDeleteSpace = () => {
+      const next = floorsRef.current.map((floor) => {
+        if (isMatchingFloor(floor, activeFloorId)) {
+          const key = type.toLowerCase() + 's';
+          const newFloor = { ...floor };
+          if (newFloor[key]) {
+            newFloor[key] = newFloor[key].filter((item) => item.id !== id);
+          }
+          if (newFloor.spaces) {
+            newFloor.spaces = newFloor.spaces.filter((item) => item.id !== id);
+          }
+          return newFloor;
+        }
+        return floor;
+      });
+      floorsRef.current = next;
+      setFloors(next);
+      localStorage.setItem('msbillings_spaces', JSON.stringify(next));
+      saveSpacesToCloud(next);
+    };
+
     setConfirmModal({
       isOpen: true,
       title: `Remove ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       message: `Are you sure you want to remove this ${type}?`,
-      onConfirm: () => {
-        const next = floorsRef.current.map((floor) => {
-          if (floor.id === activeFloorId) {
-            const key = type + 's';
-            const newFloor = { ...floor };
-            if (newFloor[key]) {
-              newFloor[key] = newFloor[key].filter((item) => item.id !== id);
-            }
-            if (newFloor.spaces) {
-              newFloor.spaces = newFloor.spaces.filter((item) => item.id !== id);
-            }
-            return newFloor;
-          }
-          return floor;
-        });
-        setFloors(next);
-        saveSpacesToCloud(next);
-      }
+      onConfirm: confirmDeleteSpace
     });
   };
 
@@ -460,51 +866,101 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   const submitRenameSpace = () => {
     const { id, type, name, capacity } = renameSpaceModal;
     if (name && name.trim() !== '') {
-      const cap = Number(capacity) > 0 ? Number(capacity) : (type.toLowerCase() === 'cabin' ? 6 : 4);
+      const rawName = name.trim();
+      const rawType = (type || 'Table').trim();
+      const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
+      if (!currentFloor) return;
+
+      const allSpaces = [
+        ...(currentFloor.tables || []).map((t) => ({ ...t, _origType: 'table' })),
+        ...(currentFloor.cabins || []).map((c) => ({ ...c, _origType: 'cabin' })),
+        ...(currentFloor.sofas || []).map((s) => ({ ...s, _origType: 'sofa' })),
+        ...(currentFloor.spaces || []).map((sp) => ({ ...sp, _origType: 'space' }))
+      ];
+
+      const normalizeString = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const inputNorm = normalizeString(rawName);
+      const typeNorm = normalizeString(rawType);
+      const inputWithPrefixNorm = inputNorm.startsWith(typeNorm) ? inputNorm : `${typeNorm}${inputNorm}`;
+
+      // Duplicate check (ignoring current item itself)
+      const isDuplicate = allSpaces.some((existing) => {
+        if (existing.id === id) return false;
+        const existingNorm = normalizeString(existing.name);
+        const existingTypeNorm = normalizeString(existing.type || existing._origType || 'table');
+        const existingWithPrefixNorm = existingNorm.startsWith(existingTypeNorm) ? existingNorm : `${existingTypeNorm}${existingNorm}`;
+
+        if (existing.name.trim().toLowerCase() === rawName.toLowerCase()) return true;
+        if (existingNorm === inputNorm) return true;
+        if (existingTypeNorm === typeNorm && existingWithPrefixNorm === inputWithPrefixNorm) return true;
+        return false;
+      });
+
+      if (isDuplicate) {
+        setToast({
+          message: `❌ "${rawName}" ${t('already exists on this floor. Duplicate creation is not allowed.')}`,
+          type: 'error'
+        });
+        return;
+      }
+
+      let finalName = rawName;
+      if (/^\d+$/.test(rawName)) {
+        finalName = `${rawType} ${rawName}`;
+      }
+
+      const cap = Number(capacity) > 0 ? Number(capacity) : (rawType.toLowerCase() === 'cabin' ? 6 : 4);
       const next = floorsRef.current.map((floor) => {
-        if (floor.id === activeFloorId) {
-          const key = type + 's';
+        if (isMatchingFloor(floor, activeFloorId)) {
+          const key = rawType.toLowerCase() + 's';
           const newFloor = { ...floor };
           if (newFloor[key]) {
-            newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: name.trim(), capacity: cap } : item);
+            newFloor[key] = newFloor[key].map((item) => item.id === id ? { ...item, name: finalName, capacity: cap } : item);
           }
           if (newFloor.spaces) {
-            newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: name.trim(), capacity: cap } : item);
+            newFloor.spaces = newFloor.spaces.map((item) => item.id === id ? { ...item, name: finalName, capacity: cap } : item);
           }
           return newFloor;
         }
         return floor;
       });
+
+      floorsRef.current = next;
       setFloors(next);
-      saveSpacesToCloud(next);
+      localStorage.setItem('msbillings_spaces', JSON.stringify(next));
       setRenameSpaceModal({ isOpen: false, id: null, type: '', name: '', capacity: 4 });
-      setToast({ message: `${type} updated successfully!`, type: 'success' });
+      setToast({ message: `${finalName} ${t('updated successfully!')}`, type: 'success' });
+      saveSpacesToCloud(next);
     }
   };
 
   const handleRemoveSpaceCategory = (e, typeName) => {
     e.stopPropagation();
+    const confirmDeleteCategory = () => {
+      const next = floorsRef.current.map((floor) => {
+        if (isMatchingFloor(floor, activeFloorId)) {
+          const newFloor = { ...floor };
+          if (typeName.toLowerCase() === 'table' && newFloor.tables) newFloor.tables = [];
+          if (typeName.toLowerCase() === 'cabin' && newFloor.cabins) newFloor.cabins = [];
+          if (typeName.toLowerCase() === 'sofa' && newFloor.sofas) newFloor.sofas = [];
+          if (newFloor.spaces) {
+            newFloor.spaces = newFloor.spaces.filter((s) => (s.type || '').toLowerCase() !== typeName.toLowerCase());
+          }
+          return newFloor;
+        }
+        return floor;
+      });
+      floorsRef.current = next;
+      setFloors(next);
+      localStorage.setItem('msbillings_spaces', JSON.stringify(next));
+      saveSpacesToCloud(next);
+    };
+
     setConfirmModal({
       isOpen: true,
       title: `Remove ${typeName} Category`,
       message: `Are you sure you want to delete ALL spaces inside the ${typeName} category?`,
-      onConfirm: () => {
-        const next = floorsRef.current.map((floor) => {
-          if (floor.id === activeFloorId) {
-            const newFloor = { ...floor };
-            if (typeName.toLowerCase() === 'table' && newFloor.tables) newFloor.tables = [];
-            if (typeName.toLowerCase() === 'cabin' && newFloor.cabins) newFloor.cabins = [];
-            if (typeName.toLowerCase() === 'sofa' && newFloor.sofas) newFloor.sofas = [];
-            if (newFloor.spaces) {
-              newFloor.spaces = newFloor.spaces.filter((s) => (s.type || '').toUpperCase() !== typeName.toUpperCase());
-            }
-            return newFloor;
-          }
-          return floor;
-        });
-        setFloors(next);
-        saveSpacesToCloud(next);
-      }
+      onConfirm: confirmDeleteCategory
     });
   };
 
@@ -635,13 +1091,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
   };
 
   const renderSpaceCard = (item, type, IconComponent, index = 0) => {
-    const currentFloor = floors.find((f) => f.id === activeFloorId);
+    const currentFloor = getCurrentFloor(floors, activeFloorId);
     const uniqueSpaceName = currentFloor ? `${currentFloor.name} - ${item.name}` : item.name;
-    const isFirstFloor = floors.length > 0 && floors[0].id === activeFloorId;
+    const isFirstFloor = floors.length > 0 && isMatchingFloor(floors[0], activeFloorId);
 
     // Dynamically calculate status from real-time orders instead of static item status
     const activeOrder = getSpaceOrder(uniqueSpaceName, item.name, isFirstFloor);
     const isOccupied = !!activeOrder;
+
+    // Dynamic cleared status check (for Available tables cleared within last 5 minutes)
+    const normUnique = normalizeTable(uniqueSpaceName);
+    const normItem = normalizeTable(item.name);
+    const clearedTimestamp = item.clearedAt || clearedTables[normUnique] || clearedTables[normItem];
+    const clearedInfo = (!isOccupied && clearedTimestamp)
+      ? getRelativeClearedTime(clearedTimestamp, currentTime)
+      : null;
+    const isJustCleared = Boolean(clearedInfo && clearedInfo.isRecent);
 
     let statusColorClass = 'text-emerald-600';
     let statusBgClass = 'bg-emerald-100/60';
@@ -756,7 +1221,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       <div
         key={item._id || `${item.id}-${index}`}
         onClick={() => handleSpaceClick(uniqueSpaceName)}
-        className={`group relative flex flex-col items-center justify-between w-full h-full min-h-[100px] sm:min-h-[145px] p-2 sm:p-4 rounded-2xl border border-white/50 transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-1 ${statusBgClass}`}>
+        title={isJustCleared ? `${item.name}: ${t("Cleared at")} ${clearedInfo.istTime} IST (${clearedInfo.relativeText}) • ${t("Available & Empty")}` : undefined}
+        className={`group relative flex flex-col items-center justify-between w-full h-[148px] sm:h-[152px] max-h-[148px] sm:max-h-[152px] ${isJustCleared ? 'p-1.5 sm:p-2' : 'p-2 sm:p-3.5'} rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md hover:-translate-y-1 ${statusBgClass} ${isJustCleared ? 'border-emerald-300 ring-1 ring-emerald-300/40' : 'border-white/50'}`}>
 
         {insightBadge}
         {isOccupied && activeOrder.createdAt && (
@@ -769,20 +1235,22 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           </div>
         )}
 
-        <div className="flex flex-col items-center gap-1 sm:gap-1.5 w-full h-full justify-between">
-          <div className={`p-1.5 sm:p-2 rounded-full bg-white shadow-xs ${statusColorClass} mt-0.5`}>
-            <Icon size={16} strokeWidth={2.5} className="sm:hidden" />
-            <Icon size={22} strokeWidth={2.5} className="hidden sm:block" />
+        <div className="flex flex-col items-center gap-0.5 sm:gap-1 w-full h-full justify-between">
+          <div className={`p-1 ${isJustCleared ? 'sm:p-1' : 'sm:p-1.5'} rounded-full bg-white shadow-xs ${statusColorClass} mt-0.5`}>
+            <Icon size={14} strokeWidth={2.5} className="sm:hidden" />
+            <Icon size={isJustCleared ? 16 : 20} strokeWidth={2.5} className="hidden sm:block" />
           </div>
 
           <div className="flex flex-col items-center w-full px-0.5">
-            <h3 className="text-[11px] sm:text-base font-black text-gray-800 leading-tight text-center w-full truncate">
+            <h3 className={`font-black text-gray-800 text-center w-full truncate ${isJustCleared ? 'text-[11px] sm:text-[13px] leading-none' : 'text-[11px] sm:text-base leading-tight'}`}>
               {item.name}
             </h3>
-            <div className="inline-flex items-center gap-1 text-[9px] sm:text-[10.5px] font-bold text-gray-500 bg-white/90 px-2 py-0.5 rounded-full mt-0.5 border border-gray-200/70 shadow-2xs" title={`${item.capacity || (type === 'cabin' ? 6 : 4)} ${t("Seats")}`}>
-              <Users size={10} className="text-gray-400 shrink-0" />
-              <span>{item.capacity || (type === 'cabin' ? 6 : 4)} {t("Seats")}</span>
-            </div>
+            {!isJustCleared && (
+              <div className="inline-flex items-center gap-1 text-[9px] sm:text-[10.5px] font-bold text-gray-500 bg-white/90 px-2 py-0.5 rounded-full mt-0.5 border border-gray-200/70 shadow-2xs" title={`${item.capacity || (type === 'cabin' ? 6 : 4)} ${t("Seats")}`}>
+                <Users size={10} className="text-gray-400 shrink-0" />
+                <span>{item.capacity || (type === 'cabin' ? 6 : 4)} {t("Seats")}</span>
+              </div>
+            )}
           </div>
 
           {!isOccupied && activeReservation ? (
@@ -794,6 +1262,44 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               <span className="text-[8.5px] lowercase tracking-normal text-amber-600">
                 ({timeToReservationStr})
               </span>
+            </div>
+          ) : !isOccupied && isJustCleared ? (
+            <div className="w-full bg-white/95 rounded-xl border border-emerald-200/90 shadow-2xs divide-y divide-emerald-100/60 text-[8px] sm:text-[8.5px] overflow-hidden my-0.5">
+              {/* 1. Status Row */}
+              <div className="flex items-center justify-between px-2 py-[2px] sm:py-[2.5px] leading-tight">
+                <span className="font-bold uppercase tracking-wider text-[7px] sm:text-[7.5px] text-emerald-700">{t("Status")}</span>
+                <span className="font-black uppercase tracking-wider text-[7.5px] sm:text-[8.5px] text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                  {statusText}
+                </span>
+              </div>
+
+              {/* 2. Seats Row */}
+              <div className="flex items-center justify-between px-2 py-[2px] sm:py-[2.5px] leading-tight">
+                <span className="font-bold uppercase tracking-wider text-[7px] sm:text-[7.5px] text-blue-700">{t("Seats")}</span>
+                <span className="font-black text-[7.5px] sm:text-[8.5px] text-blue-600 flex items-center gap-1">
+                  <Users size={8} className="text-blue-500 shrink-0" />
+                  <span>{item.capacity || (type === 'cabin' ? 6 : 4)} {t("Seats")}</span>
+                </span>
+              </div>
+
+              {/* 3. Cleared Row */}
+              <div className="flex items-center justify-between px-2 py-[2px] sm:py-[2.5px] leading-tight">
+                <span className="font-bold uppercase tracking-wider text-[7px] sm:text-[7.5px] text-amber-700">{t("Cleared")}</span>
+                <div className="flex items-center gap-1 font-mono font-black text-[7.5px] sm:text-[8.5px] text-amber-600">
+                  <Clock size={8} className="text-amber-500 shrink-0" />
+                  <span>{clearedInfo.istTime}</span>
+                </div>
+              </div>
+
+              {/* 4. Time Row */}
+              <div className="flex items-center justify-between px-2 py-[2px] sm:py-[2.5px] leading-tight">
+                <span className="font-bold uppercase tracking-wider text-[7px] sm:text-[7.5px] text-purple-700">{t("Time")}</span>
+                <div className="flex items-center gap-1 font-black text-[7.5px] sm:text-[8.5px] text-purple-600">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shrink-0"></span>
+                  <span>{clearedInfo.diffMinutes === 0 ? t("Just cleared") : clearedInfo.relativeBadge}</span>
+                </div>
+              </div>
             </div>
           ) : !isOccupied ? (
             <div className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-white shadow-xs ${statusColorClass} mb-0.5`}>
@@ -1082,34 +1588,78 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       </div>
 
       {/* Floor Tabs */}
-      <div className="px-2.5 sm:px-6 pt-2 border-b border-gray-100 bg-white flex gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-        {floors.map((floor, index) => (
-          <div
-            key={floor._id || `${floor.id}-${index}`}
-            onClick={() => setActiveFloorId(floor.id)}
-            className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${activeFloorId === floor.id
-              ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
-              : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
-              }`}>
-            {t(floor.name)}
+      <div className="px-2.5 sm:px-6 pt-2 border-b border-gray-100 bg-white flex items-center justify-between gap-2 overflow-x-auto no-scrollbar shrink-0">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {floors.map((floor, index) => {
+            const floorKey = floor.id || floor._id || `floor-${index}`;
+            const isCurrentActive = isMatchingFloor(floor, activeFloorId);
+            const isLockedToThis = isMatchingFloor(floor, lockedFloorId);
+            const isOtherFloorLocked = lockedFloorId && !isLockedToThis;
+
+            return (
+              <div
+                key={floor._id || `${floor.id}-${index}`}
+                onClick={() => handleSelectFloor(floor.id || floor._id)}
+                title={isOtherFloorLocked ? `${t('Floor is locked to')} ${getCurrentFloor(floors, lockedFloorId)?.name || ''}` : ''}
+                className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${
+                  isCurrentActive
+                    ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
+                    : isOtherFloorLocked
+                    ? 'border-transparent text-gray-300 hover:text-gray-400 cursor-not-allowed rounded-t-xl'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
+                }`}>
+                {isLockedToThis && (
+                  <Lock size={14} className="text-amber-600 shrink-0" />
+                )}
+                <span>{t(floor.name)}</span>
+                {!lockedFloorId && (
+                  <button
+                    onClick={(e) => handleRemoveFloor(e, floor.id || floor._id)}
+                    className={`p-1 rounded-full ${isCurrentActive ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {!lockedFloorId && (
             <button
-              onClick={(e) => handleRemoveFloor(e, floor.id)}
-              className={`p-1 rounded-full ${activeFloorId === floor.id ? 'hover:bg-red-100 text-red-600' : 'hover:bg-gray-200 text-gray-400'} opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity`}>
-              <Trash2 size={12} />
+              onClick={handleAddFloor}
+              className="flex items-center gap-1 px-3 py-2 border-b-2 border-transparent text-gray-500 hover:bg-gray-50 font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl text-sm sm:text-base">
+              <Plus size={16} />{t("Add Floor")}
             </button>
-          </div>
-        ))}
-        <button
-          onClick={handleAddFloor}
-          className="flex items-center gap-1 px-3 py-2 border-b-2 border-transparent text-gray-500 hover:bg-gray-50 font-bold cursor-pointer transition-colors whitespace-nowrap rounded-t-xl text-sm sm:text-base">
-          <Plus size={16} />{t("Add Floor")}
-        </button>
+          )}
+        </div>
+
+        {/* Lock Floor Toggle Button (Device/System-specific counter isolation) */}
+        <div className="shrink-0 pb-1 pl-2">
+          <button
+            onClick={handleToggleFloorLock}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer border ${
+              lockedFloorId
+                ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-200/50 ring-2 ring-amber-300'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300'
+            }`}
+            title={lockedFloorId ? t("Floor is locked to this terminal. Click to unlock.") : t("Lock this terminal to the current floor")}>
+            {lockedFloorId ? (
+              <>
+                <Lock size={15} className="shrink-0" />
+                <span className="whitespace-nowrap">{t("Floor Locked")}</span>
+              </>
+            ) : (
+              <>
+                <Unlock size={15} className="shrink-0 text-gray-500" />
+                <span className="whitespace-nowrap">{t("Lock Floor")}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-6 space-y-4 sm:space-y-6 bg-gray-50/40">
         {/* Dynamic Spaces Rendering */}
         {(() => {
-          const currentFloor = floors.find((f) => f.id === activeFloorId);
+          const currentFloor = getCurrentFloor(floors, activeFloorId);
           if (!currentFloor) return null;
 
           const allSpaces = [
@@ -1127,7 +1677,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             return acc;
           }, {});
 
-          return Object.entries(grouped).map(([typeName, items], index) => (
+          return Object.entries(grouped).map(([typeName, items], index) => {
+            // Sort items serially based on numeric values in their names to prevent random ordering
+            items.sort((a, b) => {
+              const getNum = (name) => {
+                const match = (name || '').match(/\d+/);
+                return match ? parseInt(match[0], 10) : 0;
+              };
+              return getNum(a.name) - getNum(b.name);
+            });
+
+            return (
             <section key={`${typeName}-${index}`}>
               <div className="flex items-center justify-between w-full mb-3 group/section">
                 <div className="flex items-center gap-2">
@@ -1154,22 +1714,25 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               </div>
 
               {/* Grid Layout: 2 cols mobile → more cols on larger screens for smaller cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3 sm:gap-3 w-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3 sm:gap-3 w-full auto-rows-[148px] sm:auto-rows-[152px]">
                 {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
                 {/* Inline Add Button for this category */}
                 <button
                   onClick={() => {
                     const tType = typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase();
-                    const defCap = tType.toLowerCase() === 'cabin' ? 6 : (tType.toLowerCase() === 'ac hall' ? 8 : 4);
-                    setAddSpaceModal({ isOpen: true, name: '', type: tType, capacity: defCap });
+                    const defCap = tType.toLowerCase() === 'cabin' ? 6 : (tType.toLowerCase() === 'ac hall' ? 8 : (tType.toLowerCase() === 'sofa' ? 4 : 4));
+                    const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
+                    const { nextName } = getNextSerialInfo(tType, currentFloor);
+                    setAddSpaceModal({ isOpen: true, name: nextName, type: tType, capacity: defCap });
                   }}
-                  className="w-full h-full min-h-[100px] sm:min-h-[145px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors">
+                  className="w-full h-[148px] sm:h-[152px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors cursor-pointer">
                   <Plus size={22} />
                   <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
                 </button>
               </div>
             </section>
-          ));
+            );
+          });
         })()}
       </div>
 
@@ -1236,17 +1799,27 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                     {['Table', 'Cabin', 'Sofa', 'AC Hall', 'Non AC', 'Garden'].map((suggestion) =>
                       <button
                         key={suggestion}
+                        type="button"
                         onClick={() => {
-                          const defCap = suggestion.toLowerCase() === 'cabin' ? 6 : (suggestion.toLowerCase() === 'ac hall' ? 8 : 4);
-                          setAddSpaceModal((prev) => ({ ...prev, type: suggestion, capacity: defCap }));
+                          const defCap = suggestion.toLowerCase() === 'cabin' ? 6 : (suggestion.toLowerCase() === 'ac hall' ? 8 : (suggestion.toLowerCase() === 'sofa' ? 4 : 4));
+                          const currentFloor = floorsRef.current.find((f) => f.id === activeFloorId);
+                          const { nextName } = getNextSerialInfo(suggestion, currentFloor);
+                          setAddSpaceModal((prev) => ({ 
+                            ...prev, 
+                            type: suggestion, 
+                            name: nextName, 
+                            // Only override capacity if it was untouched default
+                            capacity: [4, 6, 8].includes(parseInt(prev.capacity)) ? defCap : prev.capacity 
+                          }));
                         }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                         {suggestion}
                       </button>
                     )}
                     <button
-                      onClick={() => setAddSpaceModal((prev) => ({ ...prev, type: '' }))}
-                      className="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">{t("+ Custom")}
+                      type="button"
+                      onClick={() => setAddSpaceModal((prev) => ({ ...prev, type: '', name: '' }))}
+                      className="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all cursor-pointer">{t("+ Custom")}
                     </button>
                   </div>
                 </div>
@@ -1719,8 +2292,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>);
-
+    </div>
+  );
 };
 
 export default FloorManagement;

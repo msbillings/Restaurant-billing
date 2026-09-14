@@ -15,7 +15,7 @@ export const getUsers = async (req, res) => {
 export const createUser = async (req, res) => {
   try {
     const User = getTenantModel(req, 'User', UserDefault);
-    const { username, password, role } = req.body;
+    const { username, password, role, assignedDepartment, assignedKitchenId } = req.body;
     
     const existingUser = await User.findOne({ username });
     if (existingUser) {
@@ -25,7 +25,9 @@ export const createUser = async (req, res) => {
     const newUser = new User({
       username,
       password, // Password will be hashed by the pre-save hook
-      role: role || 'Cashier'
+      role: role || 'Cashier',
+      assignedDepartment: assignedDepartment || 'All',
+      assignedKitchenId: assignedKitchenId || null
     });
 
     await newUser.save();
@@ -44,7 +46,7 @@ export const createUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const User = getTenantModel(req, 'User', UserDefault);
-    const { username, role, password } = req.body;
+    const { username, role, password, assignedDepartment, assignedKitchenId } = req.body;
     const user = await User.findById(req.params.id);
     
     if (!user) {
@@ -62,6 +64,8 @@ export const updateUser = async (req, res) => {
     if (username) user.username = username;
     if (role) user.role = role;
     if (password) user.password = password; // Pre-save hook will hash it
+    if (assignedDepartment !== undefined) user.assignedDepartment = assignedDepartment;
+    if (assignedKitchenId !== undefined) user.assignedKitchenId = assignedKitchenId;
 
     await user.save();
     

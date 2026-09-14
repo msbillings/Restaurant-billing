@@ -123,7 +123,9 @@ export const login = async (req, res) => {
       user: {
         id: user._id,
         username: user.username,
-        role: user.role
+        role: user.role,
+        assignedDepartment: user.assignedDepartment || 'All',
+        assignedKitchenId: user.assignedKitchenId || null
       },
       databaseName,
       licenseExpiry
@@ -315,13 +317,28 @@ export const updateFcmToken = async (req, res) => {
 };
 
 export const register = async (req, res) => {
-  const { username, password, role } = req.body;
+  const { username, password, role, assignedDepartment, assignedKitchenId } = req.body;
   try {
     let User;
     try { User = getTenantModel(req, 'User', UserDefault); } catch (err) { return handleTenantError(err, res); }
-    const user = new User({ username, password, role: role || 'Cashier' });
+    const user = new User({ 
+      username, 
+      password, 
+      role: role || 'Cashier',
+      assignedDepartment: assignedDepartment || 'All',
+      assignedKitchenId: assignedKitchenId || null
+    });
     await user.save();
-    res.status(201).json({ message: 'User created successfully', user: { id: user._id, username: user.username, role: user.role } });
+    res.status(201).json({ 
+      message: 'User created successfully', 
+      user: { 
+        id: user._id, 
+        username: user.username, 
+        role: user.role,
+        assignedDepartment: user.assignedDepartment,
+        assignedKitchenId: user.assignedKitchenId
+      } 
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

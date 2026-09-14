@@ -17,6 +17,15 @@ const userSchema = new mongoose.Schema({
     enum: ['Admin', 'Manager', 'Cashier', 'Captain', 'Chef'],
     default: 'Cashier'
   },
+  assignedDepartment: {
+    type: String,
+    default: 'All',
+    trim: true
+  },
+  assignedKitchenId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PrinterConfig'
+  },
   activeSessions: [{
     accessToken: { type: String, required: true },
     refreshToken: { type: String, required: true },

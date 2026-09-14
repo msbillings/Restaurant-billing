@@ -7,6 +7,7 @@ import PaymentModal from './PaymentModal';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders, getDailyStats } from '../api/billing';
+import { sendWhatsAppBill, getWhatsAppStatus } from '../api/whatsapp';
 import api from '../api/axios';
 import { getCachedOpenOrders, upsertCachedOpenOrder, removeCachedOpenOrder, getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
 import { Search, UtensilsCrossed, Maximize, Minimize, TrendingUp, ShoppingBag, LayoutGrid, ArrowRightLeft, Menu, ChevronLeft, ChevronRight, ChevronDown, Lock, Unlock, X, User, UserPlus, Phone, Loader2 } from 'lucide-react';
@@ -124,6 +125,20 @@ const isTableMatching = (tableA, tableB) => {
   }
 
   return false;
+};
+
+const removeClearedTableRecord = (table) => {
+  if (!table) return;
+  try {
+    const clearedMap = JSON.parse(localStorage.getItem('msbillings_cleared_tables') || '{}');
+    delete clearedMap[table.trim().toLowerCase()];
+    if (table.includes(' - ')) {
+      const shortName = table.split(' - ').pop().trim().toLowerCase();
+      delete clearedMap[shortName];
+    }
+    localStorage.setItem('msbillings_cleared_tables', JSON.stringify(clearedMap));
+    window.dispatchEvent(new CustomEvent('tableOccupied', { detail: { tableNo: table } }));
+  } catch (e) { }
 };
 
 const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRole = 'Admin' }) => {
@@ -431,6 +446,50 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // 'save' | 'hold' | 'print' | 'kot' | 'edit' | 'cancel' | 'settle'
 
+  // ─── WhatsApp Auto-Send Toggle & Status ──────────────────────────────────────
+  // Toggle persisted across sessions in localStorage so it stays active
+  const [autoWhatsappEnabled, setAutoWhatsappEnabled] = useState(() => {
+    try {
+      const local = localStorage.getItem('ms_auto_wa');
+      if (local !== null) return local === '1';
+      const sess = sessionStorage.getItem('ms_auto_wa');
+      if (sess !== null) return sess === '1';
+      return false;
+    } catch {
+      return false;
+    }
+  });
+  // Tracks bill IDs already sent via WhatsApp to prevent duplicate sends
+  const whatsappBillSentIds = useRef(new Set());
+  const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
+  const [autoSendWhatsAppToInvoice, setAutoSendWhatsAppToInvoice] = useState(false);
+
+  const checkWhatsAppConnection = useCallback(async () => {
+    try {
+      const res = await getWhatsAppStatus();
+      const connected = Boolean(res && (res.status === 'CONNECTED' || res.connectedNumber));
+      setIsWhatsAppConnected(connected);
+    } catch {
+      setIsWhatsAppConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkWhatsAppConnection();
+    const interval = setInterval(checkWhatsAppConnection, 20000);
+    return () => clearInterval(interval);
+  }, [checkWhatsAppConnection]);
+
+  const isBillAlreadySent = (id) => {
+    if (!id) return false;
+    try {
+      if (whatsappBillSentIds.current.has(id)) return true;
+      if (sessionStorage.getItem(`ms_wa_sent_${id}`) === 'true') return true;
+    } catch {}
+    return false;
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Safety guard: Automatically reset actionLoading state after 10s so UI buttons never stay permanently frozen in "Saving..."
   useEffect(() => {
     if (actionLoading) {
@@ -531,7 +590,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, [initialTable]);
 
   useEffect(() => {
-    const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
+    // Only consider it a "local cart" if it's unsaved. If orderId exists, it's an occupied table from DB, so we should allow clearing it to switch tabs.
+    const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0 && !orderId);
     if ((billType === 'Delivery' || billType === 'Takeaway') && (!activeTable || activeTable === 'DEL-NEW' || activeTable === 'TAK-NEW' || !activeTable.startsWith(billType === 'Delivery' ? 'DEL-' : 'TAK-'))) {
       const prefix = billType === 'Delivery' ? 'DEL-' : 'TAK-';
       const isRecentOrder = (o) => {
@@ -600,7 +660,28 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       prevActiveTableRef.current = activeTable;
     }
 
-    const isExistingInOpenOrders = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, activeTable));
+    const isExistingInOpenOrders = openOrdersList && openOrdersList.some(o => {
+      if (!o || !o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
+      return isTableMatching(o.tableNo, activeTable);
+    });
+
+    if (isTableChanged && !isExistingInOpenOrders) {
+      // ⚡ Immediate 0ms cart clear on switching to an empty table — no loading spinner
+      setLoading(false);
+      setCart([]);
+      cartRef.current = [];
+      setOrderId(null);
+      setOrderStatus('Open');
+      setBillNumber(null);
+      setCompletedBill(null);
+      setCustomerPhone('');
+      setCustomerName('');
+      setCustomerInfo(null);
+      setDiscount({ type: 'percentage', value: '' });
+      setDeliveryCharge('');
+      setContainerCharge('');
+    }
+
     if (activeTable && (isExistingInOpenOrders || !newlyGeneratedTables.current.has(activeTable))) {
       newlyGeneratedTables.current.delete(activeTable);
       fetchActiveOrder(activeTable, isTableChanged);
@@ -1026,9 +1107,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           } else if (cached.billType === 'Delivery' || cached.tableNo?.startsWith('DEL-')) {
             setOrderSource('Direct');
           }
-          if (!hasLocalEdits()) {
-            setCustomerPhone(cached.customerPhone || '');
-            setCustomerName(cached.customerName || '');
+          if (cached.customerPhone) {
+            setCustomerPhone(cached.customerPhone);
+          }
+          if (cached.customerName) {
+            setCustomerName(cached.customerName);
           }
           setDeliveryCharge(cached.deliveryCharge !== undefined ? String(cached.deliveryCharge) : '0');
           setContainerCharge(cached.containerCharge !== undefined ? String(cached.containerCharge) : '0');
@@ -1072,15 +1155,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // If this is a brand new empty table generated by user action, don't show loading or fetch
-    const isNewlyGenerated = newlyGeneratedTables.current && newlyGeneratedTables.current.has(tableToFetch);
-    const isKnownOrder = openOrdersList && openOrdersList.some(o => isTableMatching(o.tableNo, tableToFetch));
-    if (isNewlyGenerated && !isKnownOrder) {
-      if (hasLocalEdits()) {
-        newlyGeneratedTables.current.delete(tableToFetch);
+    // Never clobber cart or completedBill while invoice or payment is active
+    if (isViewingInvoiceRef.current || showInvoiceRef.current || showPaymentRef.current) {
+      return;
+    }
+
+    const isKnownOrder = openOrdersList && openOrdersList.some(o => {
+      if (!o || !o.tableNo || (o.status !== 'Open' && o.status !== 'Billed')) return false;
+      return isTableMatching(o.tableNo, tableToFetch);
+    });
+
+    // ⚡ EMPTY TABLE FAST-PATH: If table has no active order in open orders, it is an EMPTY table.
+    // Instantly reset the cart to 0 items with 0ms latency. NEVER show loading spinner or skeleton!
+    if (!isKnownOrder) {
+      newlyGeneratedTables.current.delete(tableToFetch);
+      if (hasLocalEdits() && isTableMatching(tableToFetch, prevActiveTableRef.current)) {
         return;
       }
-      newlyGeneratedTables.current.delete(tableToFetch);
       setLoading(false);
       setCart([]);
       cartRef.current = [];
@@ -1088,16 +1179,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       setOrderStatus('Open');
       setBillNumber(null);
       setCompletedBill(null);
+      setCustomerPhone('');
+      setCustomerName('');
+      setCustomerInfo(null);
+      setDiscount({ type: 'percentage', value: '' });
+      setDeliveryCharge('');
+      setContainerCharge('');
+
+      // Silent background verification only (NEVER sets loading = true)
+      getActiveOrder(tableToFetch).then(freshOrder => {
+        if (reqId !== activeFetchReqIdRef.current || !isTableMatching(tableToFetch, activeTableRef.current)) return;
+        if (freshOrder && freshOrder.tableNo && isTableMatching(freshOrder.tableNo, tableToFetch) && freshOrder.items && freshOrder.items.length > 0) {
+          checkAndApplyCache([freshOrder]);
+        }
+      }).catch(() => {});
       return;
     }
 
-    // Never clobber cart or completedBill while invoice or payment is active
-    if (isViewingInvoiceRef.current || showInvoiceRef.current || showPaymentRef.current) {
-      return;
-    }
-
-    // Only set loading when the cart is currently empty — if we already have items
-    // showing, keep them visible while refreshing in the background to avoid flicker.
+    // Only set loading for known orders when cart is currently empty
     if (!isBackground && cartRef.current.length === 0) setLoading(true);
 
     try {
@@ -1177,9 +1276,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         if (order.billType === 'Delivery') {
           setOrderSource(order.orderSource || 'Direct');
         }
-        if (!hasLocalEdits()) {
-          setCustomerPhone(order.customerPhone || '');
-          setCustomerName(order.customerName || '');
+        if (order.customerPhone) {
+          setCustomerPhone(order.customerPhone);
+        }
+        if (order.customerName) {
+          setCustomerName(order.customerName);
         }
         setDeliveryCharge(order.deliveryCharge !== undefined ? String(order.deliveryCharge) : '0');
         setContainerCharge(order.containerCharge !== undefined ? String(order.containerCharge) : '0');
@@ -1549,65 +1650,115 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     showToast(t('Note updated for kitchen'), 'success');
   };
 
-  const handleSaveOrder = async () => {
-    setActionLoading(prev => prev === 'hold' ? 'hold' : 'save');
+  // ─── Generate WhatsApp text bill (no DOM / image capture needed) ─────────────
+  const generateBillTextMessage = (billData, overrideName = null) => {
+    try {
+      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+      const restName = (s.restaurantName || 'Restaurant').trim();
+      const billNo = billData?.billNumber || 'PREVIEW';
+      const now = new Date(billData?.settledAt || billData?.billedAt || Date.now());
+      const dateStr = now.toLocaleDateString('en-GB');
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const bType = billData?.billType || 'Dine-In';
+      const tableInfo = bType === 'Dine-In'
+        ? `Table: ${billData?.tableNo || 'N/A'}`
+        : `${bType} ${billData?.tableNo ? `(${billData?.tableNo})` : ''}`;
+      const custName = overrideName || billData?.customerName || '';
+      const itemsList = (billData?.items || [])
+        .filter(i => !i.isCancelled)
+        .map(i => {
+          const qty = (i.quantity || 0) - (i.cancelledQuantity || 0);
+          if (qty <= 0) return null;
+          return `• ${i.name} x ${qty} @ ₹${(i.price || 0).toFixed(2)} = ₹${((i.price || 0) * qty).toFixed(2)}`;
+        }).filter(Boolean).join('\n');
+      const sub = Number(billData?.subtotal || 0);
+      const disc = Number(billData?.discount || 0);
+      const taxable = Math.max(0, sub - disc);
+      const taxRupees = Number(billData?.total || 0) - taxable - Number(billData?.deliveryCharge || 0) - Number(billData?.containerCharge || 0);
+      const header = custName
+        ? `👋 Dear *${custName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🧾 *DIGITAL e-BILL RECEIPT* 🧾\n🏨 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      const discText = disc > 0 ? `\n• *Discount:* -₹${disc.toFixed(2)}` : '';
+      const taxText = taxRupees > 0 ? `\n• *Tax:* +₹${taxRupees.toFixed(2)}` : '';
+      const dlvText = Number(billData?.deliveryCharge || 0) > 0 ? `\n• *Delivery:* +₹${Number(billData.deliveryCharge).toFixed(2)}` : '';
+      const ctnText = Number(billData?.containerCharge || 0) > 0 ? `\n• *Container:* +₹${Number(billData.containerCharge).toFixed(2)}` : '';
+      const payMode = billData?.paymentMode || 'Cash';
+      const footer = s.footerMessage || '*** Thank You! Visit Again ***';
+      return `${header}\n` +
+        (s.address ? `📍 ${s.address.split('\n')[0]}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `*Bill No:* #${billNo}\n*Date & Time:* ${dateStr}, ${timeStr}\n*Order Type:* ${tableInfo}\n` +
+        (custName ? `*Customer:* ${custName}\n` : '') +
+        (billData?.customerPhone ? `*Phone:* ${billData.customerPhone}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━\n🛒 *ITEMS ORDERED:*\n${itemsList}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n• *Subtotal:* ₹${sub.toFixed(2)}` +
+        discText + taxText + dlvText + ctnText +
+        `\n• *GRAND TOTAL:* *₹${Number(billData?.total || 0).toFixed(2)}*\n• *Payment Mode:* ${payMode}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n_${footer}_`;
+    } catch (e) { return ''; }
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const handleSaveOrder = async (isHold = false) => {
+    const isHoldStrict = isHold === true;
+    setActionLoading(isHoldStrict ? 'hold' : 'save');
     if (!activeTable) {
       if (billType === 'Delivery' || billType === 'Takeaway') {
         const generatedOrderNo = generateSequentialOrderNo(billType);
         newlyGeneratedTables.current.add(generatedOrderNo);
         setActiveTable(generatedOrderNo);
-        setTimeout(() => handleSaveOrderWithTable(generatedOrderNo), 100);
+        setTimeout(() => handleSaveOrderWithTable(generatedOrderNo, isHoldStrict), 100);
       } else {
         showToast(t('pleaseSelectTable'), 'error');
         setActionLoading(null);
         return;
       }
     } else {
-      handleSaveOrderWithTable(activeTable);
+      handleSaveOrderWithTable(activeTable, isHoldStrict);
     }
   };
 
-  const handleSaveOrderWithTable = async (tableNo) => {
+  const handleSaveOrderWithTable = async (tableNo, isHold = false) => {
     if (cart.length === 0) {
       showToast(t('pleaseAddItemsToOrder'), 'warning');
       setActionLoading(null);
       return;
     }
-    setActionLoading(prev => prev === 'hold' ? 'hold' : 'save');
-    lastLocalEditTime.current = Date.now(); // Lock out background fetches during save
+
+    const isHoldStrict = isHold === true;
+    const actionType = isHoldStrict ? 'hold' : 'save';
+    setActionLoading(actionType);
 
     const isUpdate = !!(orderId && !orderId.startsWith('offline_'));
+    lastLocalEditTime.current = Date.now();
+
+    const orderData = {
+      tableNo: tableNo,
+      items: cart,
+      billType,
+      customerName,
+      customerPhone,
+      discount: discountAmount,
+      discountType: discount.type,
+      discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+      discountName: discount.name || discount.offerName || '',
+      applicableTo: discount.applicableTo || 'all',
+      targetCategory: discount.targetCategory || '',
+      tax: taxVal,
+      deliveryCharge: parseFloat(deliveryCharge || 0),
+      containerCharge: parseFloat(containerCharge || 0),
+      isHold: isHoldStrict,
+      ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
+      ...(billType === 'Delivery' && { orderSource })
+    };
 
     try {
-      const orderData = {
-        tableNo: tableNo,
-        items: cart,
-        billType,
-        customerName,
-        customerPhone,
-        discount: discountAmount,
-        discountType: discount.type,
-        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-        discountName: discount.name || discount.offerName || '',
-        applicableTo: discount.applicableTo || 'all',
-        targetCategory: discount.targetCategory || '',
-        tax: taxVal,
-        deliveryCharge: parseFloat(deliveryCharge || 0),
-        containerCharge: parseFloat(containerCharge || 0),
-        ...(orderId && !orderId.startsWith('offline_') && { id: orderId }),
-        ...(billType === 'Delivery' && {
-          orderSource
-        })
-      };
-      // Send to server — UI already updated optimistically above
+      // ⚡ Direct dynamic execution - pure server response time with 0ms artificial delay
       const savedOrder = await saveOrder(orderData);
-      setOrderId(savedOrder._id);
-      // Only setActiveTable if it's different to avoid triggering the activeTable
-      // useEffect which calls fetchActiveOrder(forceReset=true) unnecessarily.
-      if (tableNo !== activeTable) {
-        setActiveTable(tableNo);
-      }
       if (savedOrder) {
+        // Silently reconcile orderId and cart with server-confirmed values
+        if (savedOrder._id) setOrderId(savedOrder._id);
+        if (tableNo !== activeTable) setActiveTable(tableNo);
         if (savedOrder.discountType || savedOrder.discountValue !== undefined || savedOrder.discountName) {
           setDiscount({
             type: savedOrder.discountType || discount.type || 'flat',
@@ -1617,82 +1768,74 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             targetCategory: savedOrder.targetCategory || discount.targetCategory || ''
           });
         }
-      }
-      // Apply the backend-confirmed items directly (instant 0ms update)
-      // This ensures removals are reflected immediately without a refetch race
-      if (savedOrder.items && savedOrder.items.length > 0) {
-        const kotStatusMap = {};
-        if (savedOrder.kots && Array.isArray(savedOrder.kots)) {
-          savedOrder.kots.forEach(kot => {
-            (kot.items || []).forEach(kItem => {
-              if (kItem.name) kotStatusMap[kItem.name] = kItem.status;
-              if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+        if (savedOrder.items && savedOrder.items.length > 0) {
+          const kotStatusMap = {};
+          if (savedOrder.kots && Array.isArray(savedOrder.kots)) {
+            savedOrder.kots.forEach(kot => {
+              (kot.items || []).forEach(kItem => {
+                if (kItem.name) kotStatusMap[kItem.name] = kItem.status;
+                if (kItem._id) kotStatusMap[kItem._id.toString()] = kItem.status;
+              });
             });
+          }
+          const confirmedItems = savedOrder.items
+            .filter(i => i.quantity > 0 || i.isCancelled)
+            .map(i => ({ ...i, status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status }));
+          setCart(confirmedItems);
+          cartRef.current = confirmedItems;
+        }
+        lastLocalEditTime.current = Date.now();
+        if (savedOrder._id) {
+          setOpenOrdersList(prev => {
+            const list = Array.isArray(prev) ? prev : [];
+            const idx = list.findIndex(o => (savedOrder._id && o._id === savedOrder._id) || isTableMatching(o.tableNo, savedOrder.tableNo));
+            if (idx !== -1) {
+              const updated = [...list];
+              updated[idx] = { ...updated[idx], ...savedOrder };
+              return updated;
+            }
+            return [savedOrder, ...list];
           });
         }
-        const confirmedItems = savedOrder.items
-          .filter(i => i.quantity > 0 || i.isCancelled)
-          .map(i => ({ ...i, status: kotStatusMap[i._id?.toString()] || kotStatusMap[i.name] || i.status }));
-        setCart(confirmedItems);
-        cartRef.current = confirmedItems;
+        if (onOrderUpdate) onOrderUpdate();
       }
-      // Extend edit lock after save so the 5s poll cannot fire immediately and
-      // trigger a fetchActiveOrder that shows the loading skeleton.
-      lastLocalEditTime.current = Date.now();
       hasPendingLocalChanges.current = false;
-      // Instantly update openOrdersList in memory with authoritative savedOrder
-      if (savedOrder && savedOrder._id) {
-        setOpenOrdersList(prev => {
-          const list = Array.isArray(prev) ? prev : [];
-          const idx = list.findIndex(o => (savedOrder._id && o._id === savedOrder._id) || isTableMatching(o.tableNo, savedOrder.tableNo));
-          if (idx !== -1) {
-            const updated = [...list];
-            updated[idx] = { ...updated[idx], ...savedOrder };
-            return updated;
-          }
-          return [savedOrder, ...list];
-        });
-      }
-
-      showToast(isUpdate ? t('orderUpdated', { defaultValue: 'Order updated successfully' }) : t('orderSaved'), 'success');
-      if (onOrderUpdate) onOrderUpdate();
+      // ⚡ Synchronized parallel completion: Toast + Notification arrive together when operation finishes
+      const successMsg = isHoldStrict
+        ? t('orderHeld', { defaultValue: 'Order placed on hold' })
+        : (isUpdate ? t('orderUpdated', { defaultValue: 'Order updated successfully' }) : t('orderSaved'));
+      showToast(successMsg, 'success');
     } catch (error) {
-      console.error('Error saving order:', error);
+      console.error('Error saving order (background):', error);
       showToast(`${t('failedToSave')}: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
       setActionLoading(null);
     }
   };
 
-
-
   // HOLD = SAVE: backend always stores with status 'Open' and marks table Occupied.
   // The "Hold Bills" counter in the header reflects all saved-but-unpaid Open orders.
   const handleHoldOrder = () => {
-    setActionLoading('hold');
-    handleSaveOrder();
+    handleSaveOrder(true);
   };
 
   const handleReopenOrder = async () => {
     if (!orderId && cart.length === 0) return;
-    setActionLoading('edit');
-    try {
-      if (orderId && !orderId.startsWith('offline_')) {
-        await apiReopenOrder(orderId);
-      }
-      setOrderStatus('Open');
-      hasPendingLocalChanges.current = true;
-      lastLocalEditTime.current = Date.now();
-      showToast(t('Order unlocked for editing', { defaultValue: 'Order unlocked for editing' }), 'success');
+    // ⚡ INSTANT OPTIMISTIC UNLOCK (0ms): Immediately unlock UI so cashier never waits
+    setOrderStatus('Open');
+    hasPendingLocalChanges.current = true;
+    lastLocalEditTime.current = Date.now();
+    showToast(t('Order unlocked for editing', { defaultValue: 'Order unlocked for editing' }), 'success');
+
+    // Notify backend and active order list in the background without blocking the UI
+    if (orderId && !orderId.startsWith('offline_')) {
+      apiReopenOrder(orderId).then(() => {
+        if (onOrderUpdate) onOrderUpdate();
+      }).catch(err => {
+        console.error('Error reopening order for edit on server:', err);
+      });
+    } else {
       if (onOrderUpdate) onOrderUpdate();
-    } catch (err) {
-      console.error('Error reopening order for edit:', err);
-      setOrderStatus('Open');
-      hasPendingLocalChanges.current = true;
-      lastLocalEditTime.current = Date.now();
-      showToast(t('Order unlocked for editing', { defaultValue: 'Order unlocked for editing' }), 'info');
-    } finally {
-      setActionLoading(null);
     }
   };
 
@@ -1761,9 +1904,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
-    // Dynamic loading button spinner active
     setActionLoading('print');
-    setLoading(true);
 
     try {
       const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -1798,8 +1939,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         total: total,
         billType,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
-        customerName,
-        customerPhone,
+        customerName: customerName || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerName || ''),
+        customerPhone: customerPhone || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerPhone || ''),
         restaurantDetails: restDetailsNoLogo,
         taxBreakdown: {
           cgst: cAmt,
@@ -1808,52 +1949,55 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
       };
 
-      // ⚡ ONE SINGLE ATOMIC ROUND-TRIP: Eliminates redundant saveOrder, cuts latency by 50%!
       const targetId = (orderId && !orderId.startsWith('offline_')) ? orderId : 'new';
+      // ⚡ Direct dynamic execution - pure server response time
       const billedOrder = await generateBill(targetId, billData);
-      const confirmedBillNumber = billedOrder?.billNumber || 'MS0001';
+      if (billedOrder) {
+        const confirmedBillNumber = billedOrder?.billNumber || 'MS0001';
+        if (billedOrder?._id) {
+          setOrderId(billedOrder._id);
+          upsertCachedOpenOrder(billedOrder).catch(() => { });
+        }
+        removeClearedTableRecord(tableToUse);
+        const billedData = {
+          ...billedOrder,
+          items: (cart && cart.length > 0) ? cart : (billedOrder.items || []),
+          tableNo: billedOrder.tableNo || tableToUse,
+          subtotal: subtotal || billedOrder.subtotal,
+          tax: taxVal || billedOrder.tax,
+          discount: discountAmount || billedOrder.discount,
+          total: total || billedOrder.total,
+          billType: billType || billedOrder.billType,
+          orderSource: orderSource || billedOrder.orderSource,
+          customerName: customerName || billedOrder.customerName || '',
+          customerPhone: customerPhone || billedOrder.customerPhone || '',
+          deliveryCharge: deliveryCharge,
+          containerCharge: containerCharge,
+          restaurantDetails: s,
+          billNumber: confirmedBillNumber,
+          status: 'Billed',
+          billedAt: billedOrder.billedAt || new Date(),
+          createdAt: billedOrder.createdAt || new Date()
+        };
+        setBillNumber(confirmedBillNumber);
+        setCompletedBill(billedData);
+        setOrderStatus('Billed');
+        hasPendingLocalChanges.current = false;
+        try {
+          sessionStorage.setItem('ms_invoice_open', 'true');
+          sessionStorage.setItem('ms_completed_bill', JSON.stringify(billedData));
+        } catch (e) { }
 
-      if (billedOrder?._id) {
-        setOrderId(billedOrder._id);
-        upsertCachedOpenOrder(billedOrder).catch(() => { });
+        // Save & Print displays print receipt preview exclusively (no auto-send popup)
+        setAutoSendWhatsAppToInvoice(false);
+
+        isViewingInvoiceRef.current = true;
+        setShowInvoice(true);
+        fetchDailyStats();
+        if (onOrderUpdate) onOrderUpdate();
+        // ⚡ Parallel notification & toast arrival
+        showToast(t('Bill saved & printed successfully', { defaultValue: 'Bill saved & printed successfully' }), 'success');
       }
-
-      const billedData = {
-        ...billedOrder,
-        items: (cart && cart.length > 0) ? cart : (billedOrder.items || []),
-        tableNo: billedOrder.tableNo || tableToUse,
-        subtotal: subtotal || billedOrder.subtotal,
-        tax: taxVal || billedOrder.tax,
-        discount: discountAmount || billedOrder.discount,
-        total: total || billedOrder.total,
-        billType: billType || billedOrder.billType,
-        orderSource: orderSource || billedOrder.orderSource,
-        customerName: customerName || billedOrder.customerName,
-        customerPhone: customerPhone || billedOrder.customerPhone,
-        deliveryCharge: deliveryCharge,
-        containerCharge: containerCharge,
-        restaurantDetails: s, // Invoice component displays local settings with full logo
-        billNumber: confirmedBillNumber,
-        status: 'Billed',
-        billedAt: billedOrder.billedAt || new Date(),
-        createdAt: billedOrder.createdAt || new Date()
-      };
-
-      setBillNumber(confirmedBillNumber);
-      setCompletedBill(billedData);
-      setOrderStatus('Billed');
-      hasPendingLocalChanges.current = false;
-      isViewingInvoiceRef.current = true;
-      setShowInvoice(true);
-      showToast(t('Bill saved & printed successfully', { defaultValue: 'Bill saved & printed successfully' }), 'success');
-
-      try {
-        sessionStorage.setItem('ms_invoice_open', 'true');
-        sessionStorage.setItem('ms_completed_bill', JSON.stringify(billedData));
-      } catch (e) { }
-
-      fetchDailyStats();
-      if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error generating bill:', error);
 
@@ -1912,88 +2056,84 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return;
     }
 
+    let tableToUse = activeTable;
+    if (!tableToUse) {
+      tableToUse = generateSequentialOrderNo(billType);
+      newlyGeneratedTables.current.add(tableToUse);
+      setActiveTable(tableToUse);
+    }
+
     setActionLoading('settle');
-    setLoading(true);
+
+    const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+    const { logo, ...restDetailsNoLogo } = s;
+    const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
+    const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
+    const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
+    const totRate = cRate + sRate + gRate;
+    let cAmt = 0, sAmt = 0, gAmt = 0;
+    if (totRate > 0) {
+      cAmt = taxVal * (cRate / totRate) || 0;
+      sAmt = taxVal * (sRate / totRate) || 0;
+      gAmt = taxVal * (gRate / totRate) || 0;
+    }
+
+    const optimisticBillNumber = billNumber || `MS${Date.now().toString().slice(-4)}`;
+
+    // Build full settlement payload for server
+    const settlementPayload = {
+      tableNo: tableToUse,
+      items: cart,
+      subtotal,
+      total,
+      tax: taxVal,
+      taxBreakdown: { cgst: cAmt, sgst: sAmt, igst: gAmt },
+      discount: discountAmount,
+      discountType: discount.type,
+      discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
+      discountName: discount.name || discount.offerName || '',
+      billType,
+      orderSource: billType === 'Delivery' ? orderSource : undefined,
+      customerPhone: customerPhone || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerPhone || ''),
+      customerName: customerName || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerName || ''),
+      deliveryCharge: parseFloat(deliveryCharge || 0),
+      containerCharge: parseFloat(containerCharge || 0),
+      restaurantDetails: restDetailsNoLogo,
+      paymentMode: paymentData.mode,
+      status: paymentData.mode === 'Unpaid' ? 'Unpaid' : undefined,
+      splitPayments: paymentData.splitPayments,
+      amountPaid: paymentData.amountPaid,
+      upiApp: paymentData.upiApp
+    };
+
     try {
-      let tableToUse = activeTable;
-      if (!tableToUse) {
-        tableToUse = generateSequentialOrderNo(billType);
-        newlyGeneratedTables.current.add(tableToUse);
-        setActiveTable(tableToUse);
-      }
-
-      const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-      const { logo, ...restDetailsNoLogo } = s; // ⚡ Strip 300KB logo from settlement payload
-      const cRate = s.enableCgst !== false ? s.cgstRate !== undefined ? Number(s.cgstRate) : 2.5 : 0;
-      const sRate = s.enableSgst !== false ? s.sgstRate !== undefined ? Number(s.sgstRate) : 2.5 : 0;
-      const gRate = s.enableGst === true ? s.gstRate !== undefined ? Number(s.gstRate) : 5 : 0;
-      const totRate = cRate + sRate + gRate;
-
-      let cAmt = 0, sAmt = 0, gAmt = 0;
-      if (totRate > 0) {
-        cAmt = taxVal * (cRate / totRate) || 0;
-        sAmt = taxVal * (sRate / totRate) || 0;
-        gAmt = taxVal * (gRate / totRate) || 0;
-      }
-
-      const settlementPayload = {
-        tableNo: tableToUse,
-        items: cart,
-        subtotal,
-        total,
-        tax: taxVal,
-        taxBreakdown: {
-          cgst: cAmt,
-          sgst: sAmt,
-          igst: gAmt
-        },
-        discount: discountAmount,
-        discountType: discount.type,
-        discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
-        discountName: discount.name || discount.offerName || '',
-        billType,
-        orderSource: billType === 'Delivery' ? orderSource : undefined,
-        customerPhone,
-        customerName,
-        deliveryCharge: parseFloat(deliveryCharge || 0),
-        containerCharge: parseFloat(containerCharge || 0),
-        restaurantDetails: restDetailsNoLogo,
-        paymentMode: paymentData.mode,
-        splitPayments: paymentData.splitPayments,
-        amountPaid: paymentData.amountPaid,
-        upiApp: paymentData.upiApp
-      };
-
-      const targetId = orderId || 'new';
-
-      // Send settlement request to server — Complete Payment button shows dynamic loading spinner
-      const settledOrder = await settleBill(targetId, settlementPayload);
-
-      const confirmedBillNumber = settledOrder?.billNumber || billNumber || 'MS0001';
-      if (settledOrder?.billNumber) {
-        setBillNumber(settledOrder.billNumber);
+      // ⚡ Direct dynamic execution - pure server response time
+      const settledOrder = await settleBill(orderId || 'new', settlementPayload);
+      const confirmedBillNumber = settledOrder?.billNumber || optimisticBillNumber;
+      if (confirmedBillNumber) {
+        setBillNumber(confirmedBillNumber);
       }
 
       const confirmedBill = {
-        ...settledOrder,
+        ...(settledOrder || {}),
         items: (cart && cart.length > 0) ? cart : (settledOrder?.items || []),
-        status: 'Paid',
-        paymentMode: paymentData.mode,
+        status: paymentData.mode === 'Unpaid' ? 'Unpaid' : 'Paid',
+        paymentMode: paymentData.mode === 'Unpaid' ? undefined : paymentData.mode,
         splitPayments: paymentData.splitPayments || settledOrder?.splitPayments,
         amountPaid: paymentData.amountPaid || settledOrder?.amountPaid,
         upiApp: paymentData.upiApp || settledOrder?.upiApp,
         billNumber: confirmedBillNumber,
-        tableNo: settledOrder?.tableNo || tableToUse || activeTable,
-        subtotal: subtotal || settledOrder?.subtotal,
-        tax: taxVal || settledOrder?.tax,
-        discount: discountAmount || settledOrder?.discount,
-        total: total || settledOrder?.total,
-        billType: billType || settledOrder?.billType,
+        tableNo: tableToUse,
+        subtotal,
+        tax: taxVal,
+        discount: discountAmount,
+        total,
+        billType,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
-        customerName: customerName || settledOrder?.customerName,
-        customerPhone: customerPhone || settledOrder?.customerPhone,
-        deliveryCharge: deliveryCharge,
-        containerCharge: containerCharge,
+        customerName: customerName || settledOrder?.customerName || '',
+        customerPhone: customerPhone || settledOrder?.customerPhone || '',
+        deliveryCharge,
+        containerCharge,
         restaurantDetails: {
           ...(settledOrder?.restaurantDetails || s),
           logo: (s.logo && s.logo !== '[logo_stored]') ? s.logo : (settledOrder?.restaurantDetails?.logo || '')
@@ -2002,31 +2142,52 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         createdAt: settledOrder?.createdAt || new Date()
       };
 
-      // In ONE single shot: close payment modal, update status to Paid, open invoice with real bill number
       setShowPayment(false);
-      setOrderStatus('Paid');
+      setOrderStatus(confirmedBill.status);
       hasPendingLocalChanges.current = false;
+      // ⚡ Prepare Auto-send WhatsApp e-Bill with original receipt image via <Invoice>
+      const alreadySent = Boolean(settledOrder?.whatsappSent || (confirmedBillNumber && isBillAlreadySent(confirmedBillNumber)));
+      const shouldAutoSend = Boolean(autoWhatsappEnabled && !alreadySent);
+      setAutoSendWhatsAppToInvoice(shouldAutoSend);
+
       isViewingInvoiceRef.current = true;
       setCompletedBill(confirmedBill);
       setShowInvoice(true);
-      showToast(t('billSettled'), 'success');
-
       try {
         sessionStorage.setItem('ms_invoice_open', 'true');
         sessionStorage.setItem('ms_completed_bill', JSON.stringify(confirmedBill));
       } catch (e) { }
 
-      // Remove from offline cache so table is immediately released
       if (settledOrder?._id) removeCachedOpenOrder(settledOrder._id).catch(() => { });
-      if (activeTable) removeCachedOpenOrder(activeTable).catch(() => { });
-
+      if (tableToUse) {
+        removeCachedOpenOrder(tableToUse).catch(() => { });
+        if (billType === 'Dine-In') {
+          try {
+            const clearedMap = JSON.parse(localStorage.getItem('msbillings_cleared_tables') || '{}');
+            const nowIso = new Date().toISOString();
+            clearedMap[tableToUse.trim().toLowerCase()] = nowIso;
+            // Also store short table name if prefixed (e.g. Ground Floor - Table 3 -> table 3)
+            if (tableToUse.includes(' - ')) {
+              const shortName = tableToUse.split(' - ').pop().trim().toLowerCase();
+              clearedMap[shortName] = nowIso;
+            }
+            localStorage.setItem('msbillings_cleared_tables', JSON.stringify(clearedMap));
+            window.dispatchEvent(new CustomEvent('tableCleared', { detail: { tableNo: tableToUse, clearedAt: nowIso } }));
+          } catch (e) { }
+        }
+      }
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
+
+      // ⚡ Parallel completion: Toast + Notification arrive together when settlement finishes
+      showToast(t('billSettled'), 'success');
     } catch (error) {
       console.error('Error settling bill:', error);
-      showToast(error.response?.data?.message || error.message || t('failedToSettle'), 'error');
+      showToast(
+        `⚠️ Payment recorded locally but server sync failed. Tap to retry: ${error.response?.data?.message || error.message}`,
+        'error'
+      );
     } finally {
-      setLoading(false);
       setActionLoading(null);
     }
   };
@@ -2092,6 +2253,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         }
       }
 
+      removeClearedTableRecord(tableNo);
       const response = await apiGenerateKOT(currentId, cart, tableNo);
 
       // In ONE single shot: update cart with confirmed KOT items, show preview, show toast
@@ -2160,6 +2322,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
 
   const handleFinish = () => {
+    setAutoSendWhatsAppToInvoice(false);
     isViewingInvoiceRef.current = false;
     if (completedBill && completedBill.status === 'Paid') {
       showToast(`${t('billSaved')} ${completedBill.billNumber || ''}`, 'success');
@@ -2229,28 +2392,29 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const confirmCancelOrder = async (cancelReason) => {
     setShowCancelModal(false);
+    setActionLoading('cancel');
+    const orderIdToCancel = orderId;
+    const tableToCancel = activeTable;
 
     try {
-      setActionLoading('cancel');
-      const response = await apiCancelOrder(orderId, cancelReason);
-
-      if (response.kot) {
-        setActiveKOTData({
-          ...response.kot,
-          tableNo: activeTable,
-          billType,
-          orderSource
-        });
-        setShowKOT(true);
+      if (orderIdToCancel && !orderIdToCancel.startsWith('offline_')) {
+        const response = await apiCancelOrder(orderIdToCancel, cancelReason);
+        if (response?.kot) {
+          setActiveKOTData({
+            ...response.kot,
+            tableNo: tableToCancel,
+            billType,
+            orderSource
+          });
+          setShowKOT(true);
+        }
       }
-
-      showToast(t('orderCancelled'), 'success');
-
       setCart([]);
       setOrderId(null);
       setOrderStatus('Open');
       setBillNumber(null);
-
+      hasPendingLocalChanges.current = false;
+      showToast(t('orderCancelled'), 'success');
       if (onOrderUpdate) onOrderUpdate();
     } catch (error) {
       console.error('Error cancelling order:', error);
@@ -2607,8 +2771,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
                 orderStatus={orderStatus}
                 activeTable={activeTable}
-                onSaveOrder={handleSaveOrder}
-                onHoldOrder={handleHoldOrder}
+                onSaveOrder={() => handleSaveOrder(false)}
+                onHoldOrder={() => handleHoldOrder()}
                 onGenerateBill={handleGenerateBill}
                 onSettleBill={() => setShowPayment(true)}
                 onPrintKOT={handlePrintKOT}
@@ -2646,7 +2810,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                 hasPendingChanges={hasPendingLocalChanges.current}
                 openOrders={openOrdersList}
                 reservations={reservations}
-                onOpenCustomerModal={handleOpenCustomerModal} />
+                onOpenCustomerModal={handleOpenCustomerModal}
+                autoWhatsappEnabled={autoWhatsappEnabled}
+                onToggleAutoWhatsapp={(val) => {
+                  setAutoWhatsappEnabled(val);
+                  try {
+                    localStorage.setItem('ms_auto_wa', val ? '1' : '0');
+                    sessionStorage.setItem('ms_auto_wa', val ? '1' : '0');
+                  } catch (e) {}
+                }}
+                isWhatsAppConnected={isWhatsAppConnected}
+                whatsappBillSentIds={whatsappBillSentIds.current}
+              />
             </div>
 
           </div>
@@ -2674,7 +2849,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           total={total}
           billNumber={billNumber}
           tableNo={activeTable}
-          isLoading={loading}
+          customerPhone={customerPhone}
+          customerName={customerName}
+          isLoading={loading || actionLoading === 'settle'}
           onClose={() => setShowPayment(false)}
           onComplete={handleSettleBill} />
 
@@ -2702,9 +2879,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         };
         return (
           <Invoice
+            key={billToShow?.billNumber || billToShow?._id || 'active_invoice'}
             bill={billToShow}
-            onClose={handleFinish}
-            onSave={handleFinish} />
+            onClose={() => {
+              setAutoSendWhatsAppToInvoice(false);
+              handleFinish();
+            }}
+            onSave={() => {
+              setAutoSendWhatsAppToInvoice(false);
+              handleFinish();
+            }}
+            whatsappBillSentIds={whatsappBillSentIds.current}
+            onWhatsAppSent={(id) => {
+              setAutoSendWhatsAppToInvoice(false);
+              whatsappBillSentIds.current.add(id);
+              try { sessionStorage.setItem(`ms_wa_sent_${id}`, 'true'); } catch (e) {}
+            }}
+            autoSendWhatsApp={autoSendWhatsAppToInvoice}
+          />
         );
       })()}
 

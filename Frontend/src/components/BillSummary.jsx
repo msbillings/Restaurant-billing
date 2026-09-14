@@ -5,6 +5,7 @@ import { getApiUrl } from '../config.js';
 import { getCachedMenuItems } from '../db/offlineDb';
 import { useLanguage } from '../context/LanguageContext';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2, Gift, Tags, Clock, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { getOfferCategoryMeta, OFFER_CATEGORIES } from './DiscountConfig';
 
 const BillSummary = ({
   orderId,
@@ -52,7 +53,11 @@ const BillSummary = ({
   hasPendingChanges = false,
   openOrders = [],
   reservations = [],
-  onOpenCustomerModal
+  onOpenCustomerModal,
+  autoWhatsappEnabled = false,
+  onToggleAutoWhatsapp,
+  isWhatsAppConnected = false,
+  whatsappBillSentIds = new Set()
 }) => {
   const { t, language } = useLanguage();
   const isBilledLocked = orderStatus === 'Billed' && !hasPendingChanges;
@@ -130,8 +135,25 @@ const BillSummary = ({
     }
   };
 
-  const [tenantDiscounts, setTenantDiscounts] = useState([]);
+  const [tenantDiscounts, setTenantDiscounts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('resto_discounts_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [hasFetchedDiscounts, setHasFetchedDiscounts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('resto_discounts_cache');
+      return Boolean(cached && JSON.parse(cached).length > 0);
+    } catch {
+      return false;
+    }
+  });
+  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
   const [showOffersModal, setShowOffersModal] = useState(false);
+  const [offersModalCategoryFilter, setOffersModalCategoryFilter] = useState('All');
   const [cachedMenuMap, setCachedMenuMap] = useState({});
 
   useEffect(() => {
@@ -184,12 +206,20 @@ const BillSummary = ({
   const isOfferValid = (d) => {
     if (!d || d.isActive === false) return false;
     if (d.hasTimeline && d.endDate) {
-      const endStr = `${d.endDate.split('T')[0]}T${d.endTime || '23:59'}:59`;
-      const startStr = `${(d.startDate || d.endDate).split('T')[0]}T${d.startTime || '00:00'}:00`;
-      const now = new Date();
-      const end = new Date(endStr);
-      const start = new Date(startStr);
-      if (now > end || now < start) return false;
+      try {
+        const rawEnd = typeof d.endDate === 'string' ? d.endDate.split('T')[0] : new Date(d.endDate).toISOString().split('T')[0];
+        const rawStart = d.startDate
+          ? (typeof d.startDate === 'string' ? d.startDate.split('T')[0] : new Date(d.startDate).toISOString().split('T')[0])
+          : rawEnd;
+        const endStr = `${rawEnd}T${d.endTime || '23:59'}:59`;
+        const startStr = `${rawStart}T${d.startTime || '00:00'}:00`;
+        const now = new Date();
+        const end = new Date(endStr);
+        const start = new Date(startStr);
+        if (now > end || now < start) return false;
+      } catch {
+        return true;
+      }
     }
     return true;
   };
@@ -244,6 +274,7 @@ const BillSummary = ({
           value: bogoDiscount,
           name: rule.name,
           offerName: rule.name,
+          offerCategory: rule.offerCategory || 'Special offers',
           applicableTo: rule.applicableTo || 'all',
           targetCategory: rule.targetCategory || ''
         });
@@ -259,6 +290,7 @@ const BillSummary = ({
         value: rule.value,
         name: rule.name,
         offerName: rule.name,
+        offerCategory: rule.offerCategory || 'Special offers',
         applicableTo: rule.applicableTo || 'all',
         targetCategory: rule.targetCategory || ''
       });
@@ -267,23 +299,90 @@ const BillSummary = ({
     }
   };
 
+  const fetchTenantDiscounts = async (isManualRefresh = false) => {
+    try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      if (!token) return;
+      if (isManualRefresh || tenantDiscounts.length === 0) {
+        setLoadingDiscounts(true);
+      }
+      const res = await axios.get(`${getApiUrl()}/discounts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (Array.isArray(res.data)) {
+        setTenantDiscounts(res.data);
+        setHasFetchedDiscounts(true);
+        try {
+          localStorage.setItem('resto_discounts_cache', JSON.stringify(res.data));
+        } catch {}
+      }
+    } catch (err) {
+      console.error('Error loading tenant discounts in BillSummary:', err);
+    } finally {
+      setLoadingDiscounts(false);
+      setHasFetchedDiscounts(true);
+    }
+  };
+
   useEffect(() => {
-    const fetchTenantDiscounts = async () => {
-      try {
-        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-        if (!token) return;
-        const res = await axios.get(`${getApiUrl()}/discounts`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (Array.isArray(res.data)) {
-          setTenantDiscounts(res.data);
-        }
-      } catch (err) {
-        console.error('Error loading tenant discounts in BillSummary:', err);
+    fetchTenantDiscounts();
+
+    // Listen for real-time discount updates dispatched from DiscountConfig or other tabs
+    const handleDiscountsUpdated = (e) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setTenantDiscounts(e.detail);
+        setHasFetchedDiscounts(true);
+      } else {
+        fetchTenantDiscounts(false);
       }
     };
-    fetchTenantDiscounts();
+    window.addEventListener('resto_discounts_updated', handleDiscountsUpdated);
+
+    const handleStorage = (e) => {
+      if (e.key === 'resto_discounts_cache' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setTenantDiscounts(parsed);
+            setHasFetchedDiscounts(true);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      window.removeEventListener('resto_discounts_updated', handleDiscountsUpdated);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
+
+  const handleOpenOffersModal = () => {
+    // 1. Instantly sync latest cache from localStorage so newly saved offers appear with 0ms latency
+    let cachedList = [];
+    try {
+      const cached = localStorage.getItem('resto_discounts_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          cachedList = parsed;
+          setTenantDiscounts(parsed);
+          setHasFetchedDiscounts(true);
+        }
+      }
+    } catch {}
+
+    setOffersModalCategoryFilter('All');
+    setShowOffersModal(true);
+
+    // If neither state nor localStorage has any discounts yet, show loader instead of false "No active offers"
+    if (tenantDiscounts.length === 0 && cachedList.length === 0) {
+      setLoadingDiscounts(true);
+    }
+
+    // Refresh discounts from backend
+    fetchTenantDiscounts(true);
+  };
 
   useEffect(() => {
     if (total > 0) {
@@ -782,7 +881,7 @@ const BillSummary = ({
 
       {/* Cart Items List */}
       <div className="bg-white p-0.5 relative">
-        {loading ? (
+        {loading && (orderId || orderStatus === 'Billed' || cart.length > 0) ? (
           <div className="p-3 space-y-2.5 animate-in fade-in duration-150">
             {/* Dynamic Status Header */}
             <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
@@ -1044,8 +1143,19 @@ const BillSummary = ({
                   <span className="truncate">
                     {t("Discount")}
                     {discount?.name ? (
-                      <span className="text-[10px] font-bold text-emerald-800 ml-1 bg-emerald-100/90 px-1.5 py-0.5 rounded-md border border-emerald-300/70 inline-block truncate max-w-[140px]" title={discount.name}>
-                        {discount.name}{discount.type === 'percentage' && discount.value ? ` (${discount.value}%)` : (discount.type === 'flat' && discount.value ? ` (${currencySymbol}${discount.value})` : '')}
+                      <span className="inline-flex items-center gap-1 ml-1 flex-wrap">
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded-md border border-emerald-300/70 inline-block truncate max-w-[140px]" title={discount.name}>
+                          {discount.name}{discount.type === 'percentage' && discount.value ? ` (${discount.value}%)` : (discount.type === 'flat' && discount.value ? ` (${currencySymbol}${discount.value})` : '')}
+                        </span>
+                        {discount.offerCategory && (() => {
+                          const catMeta = getOfferCategoryMeta(discount.offerCategory);
+                          return (
+                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${catMeta.badgeColor}`}>
+                              <span>{catMeta.icon}</span>
+                              <span>{catMeta.label}</span>
+                            </span>
+                          );
+                        })()}
                       </span>
                     ) : (
                       discount?.type === 'percentage' && discount?.value ? ` (${discount.value}%)` : (discount?.type === 'complimentary' ? ' (100%)' : '')
@@ -1101,9 +1211,10 @@ const BillSummary = ({
                           const catLabel = d.applicableTo === 'category' && d.targetCategory ? ` on ${d.targetCategory}` : '';
                           const statusInfo = getOfferValidityStatus(d);
                           const timeStr = statusInfo.timeRemaining ? ` • ${statusInfo.timeRemaining}` : '';
+                          const catName = d.offerCategory ? `[${d.offerCategory}] ` : '';
                           return (
                             <option key={d._id} value={`preset_${d._id}`}>
-                              {d.name} ({d.type === 'percentage' ? `${d.value}%` : (d.type === 'bogo' ? 'BOGO' : `${currencySymbol}${d.value}`)}{catLabel}{timeStr})
+                              {catName}{d.name} ({d.type === 'percentage' ? `${d.value}%` : (d.type === 'bogo' ? 'BOGO' : `${currencySymbol}${d.value}`)}{catLabel}{timeStr})
                             </option>
                           );
                         })}
@@ -1186,7 +1297,7 @@ const BillSummary = ({
           <div className="flex items-center gap-1 shrink-0">
             <button
               disabled={isLocked}
-              onClick={() => setShowOffersModal(true)}
+              onClick={handleOpenOffersModal}
               className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors whitespace-nowrap disabled:opacity-50 flex items-center gap-1 cursor-pointer ${
                 discount?.name
                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs hover:bg-emerald-700'
@@ -1220,7 +1331,7 @@ const BillSummary = ({
           </div>
           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
             <span className="text-gray-500 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">{t("Total")}</span>
-            {loading ? (
+            {loading && (orderId || orderStatus === 'Billed' || cart.length > 0) ? (
               <div className="h-5 w-14 bg-orange-100/80 rounded-md animate-pulse" />
             ) : (
               <span className="text-primary text-base sm:text-lg font-black">{currencySymbol}{total.toFixed(0)}</span>
@@ -1259,7 +1370,7 @@ const BillSummary = ({
                 setIsPaid(true);
                 if (onSettleBill) onSettleBill();
               }}
-              disabled={cart.length === 0 || orderStatus === 'Paid' || loading}
+              disabled={cart.length === 0 || orderStatus === 'Paid' || loading || actionLoading !== null}
               className="bg-gradient-to-r from-red-600 to-orange-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm hover:shadow-md active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer">
               {actionLoading === 'settle' ? (
                 <>
@@ -1273,14 +1384,133 @@ const BillSummary = ({
           </div>
         </div>
 
-        {/* Row 4: Checkboxes */}
-        <div className="flex items-center justify-center gap-4 py-1.5 bg-gray-50/30 w-full overflow-x-auto no-scrollbar">
-          <label className="flex items-center gap-1.5 text-gray-600 text-xs font-bold cursor-pointer">
+        {/* Row 4: Checkboxes & WhatsApp Auto/Manual Toggle */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/50 border-t border-b border-gray-100 w-full overflow-x-auto no-scrollbar gap-2">
+          <label className="flex items-center gap-1.5 text-gray-700 text-xs font-bold cursor-pointer select-none shrink-0">
             <div className={`w-3.5 h-3.5 flex items-center justify-center rounded border-2 transition-colors ${isPaid ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
               {isPaid && <CheckCircle size={9} className="text-white shrink-0" strokeWidth={3} />}
             </div>
-            <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />{t("It's Paid")}
+            <input type="checkbox" checked={isPaid} onChange={(e) => setIsPaid(e.target.checked)} className="hidden" />
+            <span>{t("It's Paid")}</span>
           </label>
+
+          {/* WhatsApp Mode Toggle: Automatic vs Manual */}
+          {onToggleAutoWhatsapp && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => onToggleAutoWhatsapp(!autoWhatsappEnabled)}
+                title={
+                  autoWhatsappEnabled
+                    ? (!isWhatsAppConnected
+                        ? t("WhatsApp is not connected in Settings. Auto-send will be skipped.")
+                        : (!customerPhone)
+                          ? t("Auto WhatsApp is ON, but customer Phone is required in CRM to auto-send.")
+                          : t("Auto WhatsApp is ON — Bill will be sent automatically to customer on payment."))
+                    : t("Manual WhatsApp — Click to switch to Auto WhatsApp on payment.")
+                }
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer select-none shadow-xs active:scale-95 ${
+                  autoWhatsappEnabled
+                    ? isWhatsAppConnected && customerPhone
+                      ? 'bg-emerald-600 border-emerald-700 text-white shadow-emerald-200'
+                      : !isWhatsAppConnected
+                        ? 'bg-amber-500 border-amber-600 text-white'
+                        : 'bg-emerald-600/90 border-emerald-700 text-white'
+                    : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                }`}
+              >
+                <span>{autoWhatsappEnabled ? (isWhatsAppConnected && customerPhone ? '⚡' : !isWhatsAppConnected ? '⚠️' : '📱') : '💬'}</span>
+                <span>
+                  {autoWhatsappEnabled
+                    ? !isWhatsAppConnected
+                      ? 'Auto WA (Offline)'
+                      : (!customerPhone)
+                        ? 'Auto WA (+CRM)'
+                        : 'WhatsApp: Auto'
+                    : 'WhatsApp: Manual'}
+                </span>
+                {/* Visual toggle switch knob */}
+                <span className={`w-3.5 h-2 rounded-full flex items-center p-0.5 ml-0.5 transition-colors ${autoWhatsappEnabled ? 'bg-white/40 justify-end' : 'bg-gray-300 justify-start'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${autoWhatsappEnabled ? 'bg-white' : 'bg-gray-500'}`} />
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Dynamic WhatsApp Connection & CRM Status Message */}
+        <div className="px-3 py-1.5 bg-gray-50/80 border-b border-gray-100 flex flex-col gap-1 text-[11px] animate-in fade-in duration-200">
+          {/* Status Indicators */}
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            {/* WhatsApp Status Badge */}
+            <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+              isWhatsAppConnected
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs'
+                : 'bg-red-50 text-red-600 border-red-200 shadow-2xs'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isWhatsAppConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              <span>{isWhatsAppConnected ? t("WhatsApp: Connected") : t("WhatsApp: Not Connected")}</span>
+            </div>
+
+            {/* CRM Status Badge */}
+            <button
+              type="button"
+              onClick={onOpenCustomerModal}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                customerPhone
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 animate-pulse'
+              }`}
+              title={customerPhone ? `${customerName ? `${customerName} • ` : ''}${customerPhone} (${t("Click to edit CRM")})` : t("Click to add Customer in CRM")}
+            >
+              <User size={10} className={customerPhone ? 'text-blue-600' : 'text-amber-600'} />
+              <span>{customerPhone ? `${t("CRM")}: ${customerPhone}` : t("CRM: Not Entered (+)")}</span>
+            </button>
+          </div>
+
+          {/* Dynamic User-Friendly Message */}
+          <div className="text-[10px] leading-tight font-medium">
+            {autoWhatsappEnabled ? (
+              isWhatsAppConnected && customerPhone ? (
+                <span className="text-emerald-700 flex items-center gap-1">
+                  <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                  <span>{t("Auto WhatsApp Ready: Bill will be sent to")} <strong className="font-bold">{customerPhone}</strong> {t("on payment.")}</span>
+                </span>
+              ) : !isWhatsAppConnected && !customerPhone ? (
+                <span className="text-red-700 flex items-center gap-1">
+                  <AlertTriangle size={11} className="text-red-500 shrink-0" />
+                  <span>{t("WhatsApp is not connected & CRM phone is missing.")}</span>
+                </span>
+              ) : !isWhatsAppConnected ? (
+                <span className="text-amber-800 flex items-center gap-1">
+                  <AlertTriangle size={11} className="text-amber-600 shrink-0" />
+                  <span>{t("WhatsApp not connected in Settings. Connect to auto-send bill.")}</span>
+                </span>
+              ) : (
+                <span className="text-amber-800 flex items-center gap-1">
+                  <AlertTriangle size={11} className="text-amber-600 shrink-0" />
+                  <span>
+                    {t("WhatsApp is connected, but customer phone is required in CRM.")}{' '}
+                    <button
+                      type="button"
+                      onClick={onOpenCustomerModal}
+                      className="text-orange-600 font-bold underline hover:text-orange-700 cursor-pointer ml-0.5"
+                    >
+                      {t("+ Enter CRM")}
+                    </button>
+                  </span>
+                </span>
+              )
+            ) : (
+              <span className="text-gray-500 flex items-center gap-1">
+                <span>💬</span>
+                <span>
+                  {isWhatsAppConnected ? t("WhatsApp is connected (Manual mode).") : t("WhatsApp is not connected.")}
+                  {customerPhone ? ` ${t("CRM")}: ${customerPhone}.` : ` ${t("CRM not entered.")}`}
+                </span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* User-friendly Unsaved Items & Navigation Reminder */}
@@ -1293,10 +1523,10 @@ const BillSummary = ({
             <button
               type="button"
               onClick={onReopenOrder}
-              disabled={loading}
+              disabled={loading || actionLoading !== null}
               className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold transition-all shadow-2xs cursor-pointer ml-1.5"
             >
-              {t("EDIT")}
+              {actionLoading === 'edit' ? t("Editing...") : t("EDIT")}
             </button>
           </div>
         )}
@@ -1315,7 +1545,7 @@ const BillSummary = ({
       {/* Action Buttons - ALWAYS PINNED at bottom, outside scroll area */}
       <div className="grid grid-cols-3 gap-1.5 px-2 py-2 bg-white border-t border-gray-200 w-full shrink-0 shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
         <button
-          onClick={onSaveOrder}
+          onClick={() => onSaveOrder && onSaveOrder()}
           disabled={actionLoading !== null || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked || (!!orderId && !hasPendingChanges)}
           className="col-span-1 bg-red-50 text-red-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-red-100 active:scale-95 transition-all shadow-sm border border-red-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'save' ? (
@@ -1328,7 +1558,7 @@ const BillSummary = ({
           )}
         </button>
         <button
-          onClick={onHoldOrder}
+          onClick={() => onHoldOrder && onHoldOrder()}
           disabled={actionLoading !== null || cart.length === 0 || orderStatus === 'Paid' || isBilledLocked || (!!orderId && !hasPendingChanges)}
           className="col-span-1 bg-orange-50 text-orange-600 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black tracking-wide hover:bg-orange-100 active:scale-95 transition-all shadow-sm border border-orange-100 disabled:opacity-50 flex items-center justify-center gap-1">
           {actionLoading === 'hold' ? (
@@ -1360,7 +1590,7 @@ const BillSummary = ({
           return (
             <button
               onClick={onPrintKOT}
-              disabled={loading || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
+              disabled={loading || actionLoading !== null || cart.length === 0 || !hasUnprintedItems || orderStatus === 'Paid'}
               title={!hasUnprintedItems && cart.length > 0 ? t("All items already sent to kitchen. No changes detected.") : (isKotAlreadyFired ? t("KOT UPDATE", { defaultValue: "KOT UPDATE" }) : t("KOT"))}
               className={`col-span-1 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center text-center gap-1 ${
                 hasUnprintedItems
@@ -1924,86 +2154,161 @@ const BillSummary = ({
 
               {/* Modal Body */}
               <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-1">
-                {tenantDiscounts.filter(d => isOfferValid(d)).length === 0 ? (
+                {/* Occasion / Category Filter Pills */}
+                {tenantDiscounts.filter(d => isOfferValid(d)).length > 0 && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mb-1 shrink-0 custom-scrollbar">
+                    <button
+                      type="button"
+                      onClick={() => setOffersModalCategoryFilter('All')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        offersModalCategoryFilter === 'All'
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {t("All")} ({tenantDiscounts.filter(d => isOfferValid(d)).length})
+                    </button>
+                    {OFFER_CATEGORIES.map(cat => {
+                      const count = tenantDiscounts.filter(d => isOfferValid(d) && (d.offerCategory || 'Special offers').toLowerCase() === cat.label.toLowerCase()).length;
+                      if (count === 0 && offersModalCategoryFilter !== cat.label) return null;
+                      const isSel = offersModalCategoryFilter === cat.label;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setOffersModalCategoryFilter(cat.label)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border transition-all cursor-pointer flex items-center gap-1 ${
+                            isSel
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                          }`}
+                        >
+                          <span>{cat.icon}</span>
+                          <span>{cat.label}</span>
+                          <span className={`text-[9px] px-1 rounded-full ${isSel ? 'bg-white/20' : 'bg-gray-200'}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {(loadingDiscounts || !hasFetchedDiscounts) && tenantDiscounts.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400 flex flex-col items-center justify-center">
+                    <Loader2 size={28} className="animate-spin text-primary mb-2" />
+                    <p className="font-bold text-xs text-gray-600">{t("Checking available offers...")}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">{t("Fetching discounts from store configuration")}</p>
+                  </div>
+                ) : tenantDiscounts.filter(d => isOfferValid(d)).length === 0 ? (
                   <div className="text-center py-8 text-gray-400">
                     <Tags size={32} className="mx-auto mb-2 text-gray-300" />
                     <p className="font-bold text-sm text-gray-700">{t("No active offers available")}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{t("Configure discounts and BOGO rules in the Discounts & Offers page.")}</p>
                   </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {tenantDiscounts.filter(d => isOfferValid(d)).map((offer) => {
-                      const isCurrent = discount?.name === offer.name;
-                      const statusInfo = getOfferValidityStatus(offer);
-                      return (
-                        <div
-                          key={offer._id}
-                          className={`p-3.5 rounded-xl border transition-all flex items-start justify-between gap-3 ${
-                            isCurrent
-                              ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20 shadow-xs'
-                              : 'bg-white hover:bg-orange-50/40 border-gray-200 shadow-2xs'
-                          }`}
+                ) : (() => {
+                  const filteredOffers = tenantDiscounts
+                    .filter(d => isOfferValid(d))
+                    .filter(d => {
+                      if (offersModalCategoryFilter === 'All') return true;
+                      return (d.offerCategory || 'Special offers').toLowerCase() === offersModalCategoryFilter.toLowerCase();
+                    });
+
+                  if (filteredOffers.length === 0) {
+                    return (
+                      <div className="text-center py-6 text-gray-400 border border-dashed border-gray-200 rounded-xl p-4">
+                        <p className="font-bold text-xs text-gray-600">
+                          {t("No active offers found under")} "{offersModalCategoryFilter}"
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setOffersModalCategoryFilter('All')}
+                          className="mt-2 text-xs font-bold text-primary hover:underline cursor-pointer"
                         >
-                          <div className="flex items-start gap-2.5 min-w-0">
-                            <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
-                              offer.type === 'bogo'
-                                ? 'bg-amber-100 text-amber-700'
-                                : offer.type === 'percentage'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-emerald-100 text-emerald-700'
-                            }`}>
-                              {offer.type === 'bogo' ? <Gift size={16} /> : <Tags size={16} />}
-                            </div>
+                          {t("Show All Offers")} ({tenantDiscounts.filter(d => isOfferValid(d)).length})
+                        </button>
+                      </div>
+                    );
+                  }
 
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-sm text-gray-900 truncate">{offer.name}</span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                                  offer.type === 'bogo'
-                                    ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                    : offer.type === 'percentage'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                }`}>
-                                  {offer.type === 'bogo'
-                                    ? `Buy ${offer.buyQty || 2} Get ${offer.getQty || 1} Free`
-                                    : offer.type === 'percentage'
-                                    ? `${offer.value}% Off`
-                                    : `${currencySymbol}${offer.value} Flat`}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 flex-wrap">
-                                <span className="font-medium text-gray-600">
-                                  {offer.applicableTo === 'category'
-                                    ? `${t("Applies to")}: ${typeof offer.targetCategory === 'object' && offer.targetCategory !== null ? offer.targetCategory.name : (offer.targetCategory || t("Category"))}`
-                                    : `${t("Applies to")}: ${t("All Menu Items")}`}
-                                </span>
-                                {statusInfo.timeRemaining && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 font-bold">
-                                    <Clock size={10} />
-                                    {statusInfo.timeRemaining}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => applyPresetOffer(offer)}
-                            className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                  return (
+                    <div className="space-y-2.5">
+                      {filteredOffers.map((offer) => {
+                        const isCurrent = discount?.name === offer.name;
+                        const statusInfo = getOfferValidityStatus(offer);
+                        const catMeta = getOfferCategoryMeta(offer.offerCategory);
+                        return (
+                          <div
+                            key={offer._id}
+                            className={`p-3.5 rounded-xl border transition-all flex items-start justify-between gap-3 ${
                               isCurrent
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                                : 'bg-primary hover:bg-primary-hover text-white shadow-xs'
+                                ? 'bg-emerald-50/80 border-emerald-300 ring-2 ring-emerald-500/20 shadow-xs'
+                                : 'bg-white hover:bg-orange-50/40 border-gray-200 shadow-2xs'
                             }`}
                           >
-                            {isCurrent ? t("Applied ✓") : t("Apply")}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                                offer.type === 'bogo'
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : offer.type === 'percentage'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                              }`}>
+                                {offer.type === 'bogo' ? <Gift size={16} /> : <Tags size={16} />}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-sm text-gray-900 truncate">{offer.name}</span>
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${catMeta.badgeColor}`}>
+                                    <span>{catMeta.icon}</span>
+                                    <span>{catMeta.label}</span>
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                    offer.type === 'bogo'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                      : offer.type === 'percentage'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  }`}>
+                                    {offer.type === 'bogo'
+                                      ? `Buy ${offer.buyQty || 2} Get ${offer.getQty || 1} Free`
+                                      : offer.type === 'percentage'
+                                      ? `${offer.value}% Off`
+                                      : `${currencySymbol}${offer.value} Flat`}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500 flex-wrap">
+                                  <span className="font-medium text-gray-600">
+                                    {offer.applicableTo === 'category'
+                                      ? `${t("Applies to")}: ${typeof offer.targetCategory === 'object' && offer.targetCategory !== null ? offer.targetCategory.name : (offer.targetCategory || t("Category"))}`
+                                      : `${t("Applies to")}: ${t("All Menu Items")}`}
+                                  </span>
+                                  {statusInfo.timeRemaining && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 font-bold">
+                                      <Clock size={10} />
+                                      {statusInfo.timeRemaining}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => applyPresetOffer(offer)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                                  : 'bg-primary hover:bg-primary-hover text-white shadow-xs'
+                              }`}
+                            >
+                              {isCurrent ? t("Applied ✓") : t("Apply")}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {/* Expired Offers List */}
                 {tenantDiscounts.filter(d => !isOfferValid(d) && d.hasTimeline).length > 0 && (
@@ -2012,17 +2317,24 @@ const BillSummary = ({
                       {t("Expired / Scheduled Offers (Not Currently Applicable)")}
                     </span>
                     <div className="space-y-1.5">
-                      {tenantDiscounts.filter(d => !isOfferValid(d) && d.hasTimeline).map((expired) => (
-                        <div key={expired._id} className="p-2 rounded-lg bg-gray-50 border border-gray-200/60 flex items-center justify-between opacity-60">
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <AlertTriangle size={13} className="text-red-400" />
-                            <span className="font-medium line-through">{expired.name}</span>
-                            <span className="text-[10px] text-red-600 font-bold bg-red-50 px-1.5 rounded">
-                              {t("Expired")}
-                            </span>
+                      {tenantDiscounts.filter(d => !isOfferValid(d) && d.hasTimeline).map((expired) => {
+                        const expCat = getOfferCategoryMeta(expired.offerCategory);
+                        return (
+                          <div key={expired._id} className="p-2 rounded-lg bg-gray-50 border border-gray-200/60 flex items-center justify-between opacity-60">
+                            <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                              <AlertTriangle size={13} className="text-red-400" />
+                              <span className="font-medium line-through">{expired.name}</span>
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold border ${expCat.badgeColor}`}>
+                                <span>{expCat.icon}</span>
+                                <span>{expCat.label}</span>
+                              </span>
+                              <span className="text-[10px] text-red-600 font-bold bg-red-50 px-1.5 rounded">
+                                {t("Expired")}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

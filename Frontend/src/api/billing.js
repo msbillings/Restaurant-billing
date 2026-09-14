@@ -71,6 +71,10 @@ export const settleBill = async (id, paymentData) => {
   }
 };
 
+export const clearUnpaidBill = async (id, paymentData) => {
+  const response = await api.post(`/bills/clear-unpaid/${id}`, paymentData);
+  return response.data;
+};
 
 export const apiReopenOrder = async (id) => {
   const response = await api.post(`/bills/reopen/${id}`);
@@ -272,10 +276,11 @@ export const apiGenerateKOT = async (id, cartItems, tableNo) => {
   }
 };
 
-export const apiGetTodayKOTs = async (date = '', search = '') => {
+export const apiGetTodayKOTs = async (date = '', search = '', department = '') => {
   const params = new URLSearchParams();
   if (date) params.append('date', date);
   if (search) params.append('search', search);
+  if (department && department !== 'All') params.append('department', department);
   
   const response = await api.get(`/bills/kots/today?${params.toString()}`);
   return response.data;

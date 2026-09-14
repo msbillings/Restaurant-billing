@@ -1,8 +1,9 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { apiGetTodayKOTs } from '../api/billing';
+import api from '../api/axios';
 import { getCachedKotHistory, cacheKotHistory } from '../db/offlineDb';
-import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp, ChefHat } from 'lucide-react';
+import { Printer, Calendar, Search, FileText, ArrowLeft, ChevronDown, ChevronUp, ChefHat, Layers } from 'lucide-react';
 import KOT from './KOT';
 import Toast from './Toast';
 import useDebounce from '../hooks/useDebounce';
@@ -21,6 +22,9 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('All');
+  const [kitchenDepartments, setKitchenDepartments] = useState([]);
+
   const getTodayDateStr = () => {
     const today = new Date();
     const y = today.getFullYear();
@@ -32,16 +36,30 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
   const [selectedDate, setSelectedDate] = useState(getTodayDateStr);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  const fetchKOTs = useCallback(async (dateParam, searchParam, isBackground = false) => {
+  // Fetch kitchen departments from active printer configs
+  useEffect(() => {
+    api.get('/printer-configs').then(res => {
+      const active = (res.data || []).filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+      const depts = new Set();
+      active.forEach(p => {
+        const name = p.name || p.assignTo;
+        if (name && name !== 'All') depts.add(name);
+      });
+      setKitchenDepartments(Array.from(depts));
+    }).catch(() => {});
+  }, []);
+
+  const fetchKOTs = useCallback(async (dateParam, searchParam, deptParam, isBackground = false) => {
     const d = dateParam !== undefined ? dateParam : selectedDate;
     const s = searchParam !== undefined ? searchParam : debouncedSearchTerm;
+    const dept = deptParam !== undefined ? deptParam : selectedDepartment;
     if (!isBackground) {
       setLoading(true);
     } else {
       setRefreshing(true);
     }
     try {
-      const data = await apiGetTodayKOTs(d, s);
+      const data = await apiGetTodayKOTs(d, s, dept);
       const safeData = Array.isArray(data) ? data : [];
       setKots(safeData);
       cacheKotHistory(safeData, d).catch(() => {});
@@ -53,7 +71,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedDate, debouncedSearchTerm]);
+  }, [selectedDate, debouncedSearchTerm, selectedDepartment]);
 
   // Initial load
   useEffect(() => {
@@ -66,7 +84,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
     }).catch(() => {});
 
     // 2. Fetch fresh with background refresh so cache is displayed immediately and dynamic top loader shows
-    fetchKOTs(selectedDate, debouncedSearchTerm, true);
+    fetchKOTs(selectedDate, debouncedSearchTerm, selectedDepartment, true);
   }, []);
 
   // When debounced search term changes
@@ -76,7 +94,7 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
       isFirstMount.current = false;
       return;
     }
-    fetchKOTs(selectedDate, debouncedSearchTerm, false);
+    fetchKOTs(selectedDate, debouncedSearchTerm, selectedDepartment, false);
   }, [debouncedSearchTerm]);
 
   const handleDateChange = (newDate) => {
@@ -93,14 +111,20 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
         setKots(cached);
       }
     }).catch(() => {});
-    fetchKOTs(finalDate, debouncedSearchTerm, false);
+    fetchKOTs(finalDate, debouncedSearchTerm, selectedDepartment, false);
+  };
+
+  const handleDepartmentChange = (dept) => {
+    setSelectedDepartment(dept);
+    fetchKOTs(selectedDate, debouncedSearchTerm, dept, false);
   };
 
   const handleResetToToday = () => {
     const todayStr = getTodayDateStr();
     setSelectedDate(todayStr);
     setSearchTerm('');
-    fetchKOTs(todayStr, '', false);
+    setSelectedDepartment('All');
+    fetchKOTs(todayStr, '', 'All', false);
   };
 
   useEffect(() => {
@@ -340,6 +364,21 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
             </button>
           )}
 
+          {/* Department / Kitchen Filter */}
+          <div className="relative flex-1 sm:w-36 md:w-44 shrink-0">
+            <select
+              value={selectedDepartment}
+              onChange={(e) => handleDepartmentChange(e.target.value)}
+              className="w-full pl-3 pr-7 py-1.5 bg-background border border-border rounded-xl text-xs text-text-main focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 font-bold appearance-none cursor-pointer"
+            >
+              <option value="All">{t("All Kitchens")}</option>
+              {kitchenDepartments.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+          </div>
+
           {/* Search Bar */}
           <div className="relative flex-1 sm:w-36 md:w-44 lg:w-56">
             <input
@@ -476,12 +515,19 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                       {expandedRow === group.id && group.kots.map(kot => (
                         <tr key={`${kot.billId}-${kot.kotNumber}`} className="bg-surface/30">
                           <td className="px-3 py-2.5 whitespace-nowrap pl-8">
-                            <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
-                              kot.kotNumber.startsWith('CANCEL') || getKOTStatus(kot.items, kot.billStatus) === 'Cancelled' ?
-                              'bg-red-50 text-red-700 border-red-200' :
-                              'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                              {kot.kotNumber}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block px-2.5 py-1 text-xs font-bold rounded-lg font-mono border whitespace-nowrap ${
+                                kot.kotNumber.startsWith('CANCEL') || getKOTStatus(kot.items, kot.billStatus) === 'Cancelled' ?
+                                'bg-red-50 text-red-700 border-red-200' :
+                                'bg-orange-50 text-orange-700 border-orange-200'}`}>
+                                {kot.kotNumber}
+                              </span>
+                              {kot.department && kot.department !== 'All' && (
+                                <span className="inline-block px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 text-amber-800 border border-amber-300">
+                                  {kot.department}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-3 py-2.5 whitespace-nowrap">
                             <span className="font-mono font-medium text-text-muted text-xs">
@@ -577,7 +623,14 @@ const KOTHistory = ({ onNavigate, onGoBack }) => {
                       {group.kots.map((kot) => (
                         <div key={`${kot.billId}-${kot.kotNumber}`} className="bg-surface p-2.5 rounded-lg border border-border/60 flex items-center justify-between text-xs">
                           <div>
-                            <span className="font-bold font-mono text-orange-600 block">{kot.kotNumber}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold font-mono text-orange-600 block">{kot.kotNumber}</span>
+                              {kot.department && kot.department !== 'All' && (
+                                <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-amber-100 text-amber-800 border border-amber-300">
+                                  {kot.department}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-text-muted">
                               {formatTime12(kot.createdAt)}
                             </span>

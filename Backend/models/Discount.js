@@ -6,6 +6,11 @@ const discountSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  offerCategory: {
+    type: String,
+    default: 'Festival Offer',
+    trim: true
+  },
   type: {
     type: String,
     enum: ['percentage', 'flat', 'bogo'],

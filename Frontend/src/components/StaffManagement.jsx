@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from "../context/LanguageContext";
 import { Users, Plus, Edit2, Trash2, Clock, CheckCircle, X, Camera, Image as ImageIcon } from 'lucide-react';
 import { getStaff, addStaff, updateStaff, deleteStaff } from '../api/staff';
+import api from '../api/axios';
 import Toast from './Toast';
 import FaceRegistration from './FaceRegistration';
 import BackButton from './common/BackButton';
@@ -23,6 +24,15 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
     } catch (e) {}
     return [];
   });
+
+  const [kitchens, setKitchens] = useState([]);
+
+  useEffect(() => {
+    api.get('/printer-configs').then(res => {
+      const active = (res.data || []).filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+      setKitchens(active);
+    }).catch(() => {});
+  }, []);
 
   const [loading, setLoading] = useState(() => {
     try {
@@ -52,7 +62,9 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
     phone: '',
     pin: '',
     baseSalary: '',
-    salaryType: 'Monthly'
+    salaryType: 'Monthly',
+    assignedDepartment: 'All',
+    assignedKitchenId: null
   });
 
   const fetchStaff = async (isBackground = false) => {
@@ -114,7 +126,16 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
 
   const openAddModal = () => {
     setEditingStaff(null);
-    setFormData({ name: '', role: 'Waiter', phone: '', pin: '', baseSalary: '', salaryType: 'Monthly' });
+    setFormData({ 
+      name: '', 
+      role: 'Waiter', 
+      phone: '', 
+      pin: '', 
+      baseSalary: '', 
+      salaryType: 'Monthly',
+      assignedDepartment: 'All',
+      assignedKitchenId: null
+    });
     setIsModalOpen(true);
   };
 
@@ -126,7 +147,9 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
       phone: s.phone || '',
       pin: s.pin,
       baseSalary: s.baseSalary || '',
-      salaryType: s.salaryType
+      salaryType: s.salaryType,
+      assignedDepartment: s.assignedDepartment || 'All',
+      assignedKitchenId: s.assignedKitchenId || null
     });
     setIsModalOpen(true);
   };
@@ -242,7 +265,16 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
                   return (
                     <tr key={s._id} className="border-b border-border hover:bg-surface-hover transition-colors">
                       <td className="p-4 font-medium text-text-main">{s.name}</td>
-                      <td className="p-4 text-text-muted">{s.role}</td>
+                      <td className="p-4 text-text-muted">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{s.role}</span>
+                          {s.role === 'Chef' && s.assignedDepartment && s.assignedDepartment !== 'All' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              📍 {s.assignedDepartment}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-4 font-mono tracking-widest text-primary font-bold">{s.pin}</td>
                       <td className="p-4">
                         {todayAttendance ?
@@ -318,7 +350,14 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <p className="font-bold text-text-main">{s.name}</p>
-                        <p className="text-sm text-text-muted">{s.role}</p>
+                        <p className="text-sm text-text-muted flex items-center gap-1.5 flex-wrap">
+                          <span>{s.role}</span>
+                          {s.role === 'Chef' && s.assignedDepartment && s.assignedDepartment !== 'All' && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              📍 {s.assignedDepartment}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs font-mono text-primary font-bold mt-0.5">PIN: {s.pin}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
@@ -368,6 +407,34 @@ const StaffManagement = ({ onNavigate, onGoBack }) => {
                   <label className="text-xs text-text-muted mb-1 block">{t("PIN (4 digits)")}</label>
                   <input required type="text" maxLength="4" value={formData.pin} onChange={(e) => setFormData({ ...formData, pin: e.target.value })} className="w-full bg-background border border-border rounded-xl p-2 text-text-main font-mono" />
                 </div>
+                {formData.role === 'Chef' && (
+                  <div className="col-span-2">
+                    <label className="text-xs text-text-muted mb-1 block">{t("Assigned Kitchen Station")}</label>
+                    <select
+                      value={formData.assignedDepartment || 'All'}
+                      onChange={(e) => {
+                        const selectedVal = e.target.value;
+                        const matched = kitchens.find(k => (k.name || k.assignTo) === selectedVal);
+                        setFormData({
+                          ...formData,
+                          assignedDepartment: selectedVal,
+                          assignedKitchenId: matched ? matched._id : null
+                        });
+                      }}
+                      className="w-full bg-background border border-border rounded-xl p-2 text-text-main font-medium"
+                    >
+                      <option value="All">{t("All Kitchens (Unrestricted)")}</option>
+                      {kitchens.map((k) => {
+                        const deptName = k.name || k.assignTo;
+                        return (
+                          <option key={k._id} value={deptName}>
+                            {deptName} {k.location ? `(${k.location})` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 mt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 border border-border rounded-xl">{t("Cancel")}</button>

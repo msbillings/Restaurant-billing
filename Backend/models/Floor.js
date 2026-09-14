@@ -6,7 +6,8 @@ const spaceItemSchema = new mongoose.Schema({
   type: { type: String, required: true },
   capacity: { type: Number, default: 4, min: 1 },
   status: { type: String, enum: ['Available', 'Occupied', 'Billed', 'Reserved'], default: 'Available' },
-  currentOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bill', default: null } // Link to active order
+  currentOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bill', default: null }, // Link to active order
+  clearedAt: { type: Date, default: null } // Timestamp when table was cleared/settled
 });
 
 const floorSchema = new mongoose.Schema({

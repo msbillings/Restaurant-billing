@@ -64,7 +64,10 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: todayStart, $lte: todayEnd },
+            $or: [
+              { createdAt: { $gte: todayStart, $lte: todayEnd } },
+              { clearedAt: { $gte: todayStart, $lte: todayEnd } }
+            ],
             status: 'Paid'
           }
         },
@@ -87,7 +90,10 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: startDate, $lte: endDate },
+            $or: [
+              { createdAt: { $gte: startDate, $lte: endDate } },
+              { clearedAt: { $gte: startDate, $lte: endDate } }
+            ],
             status: 'Paid'
           }
         },
@@ -115,7 +121,10 @@ export const getAnalytics = async (req, res) => {
       Bill.aggregate([
         {
           $match: {
-            createdAt: { $gte: startDate, $lte: endDate },
+            $or: [
+              { createdAt: { $gte: startDate, $lte: endDate } },
+              { clearedAt: { $gte: startDate, $lte: endDate } }
+            ],
             status: 'Paid'
           }
         },
@@ -140,18 +149,27 @@ export const getAnalytics = async (req, res) => {
       ]),
       // 6. Paid bills for accurate payment mode breakdown (including Mixed split payments)
       Bill.find({
-        createdAt: { $gte: startDate, $lte: endDate },
+        $or: [
+          { createdAt: { $gte: startDate, $lte: endDate } },
+          { clearedAt: { $gte: startDate, $lte: endDate } }
+        ],
         status: 'Paid'
       }).select('total paymentMode splitPayments').lean(),
       // 7. Delivery orders count for the period
       Bill.countDocuments({
-        createdAt: { $gte: startDate, $lte: endDate },
+        $or: [
+          { createdAt: { $gte: startDate, $lte: endDate } },
+          { clearedAt: { $gte: startDate, $lte: endDate } }
+        ],
         status: 'Paid',
         billType: 'Delivery'
       }),
       // 8. Takeaway orders count for the period
       Bill.countDocuments({
-        createdAt: { $gte: startDate, $lte: endDate },
+        $or: [
+          { createdAt: { $gte: startDate, $lte: endDate } },
+          { clearedAt: { $gte: startDate, $lte: endDate } }
+        ],
         status: 'Paid',
         billType: 'Takeaway'
       })
@@ -305,7 +323,10 @@ export const downloadDailyReportCSV = async (req, res) => {
     }
 
     const bills = await Bill.find({
-      createdAt: { $gte: startDate, $lte: endDate },
+      $or: [
+        { createdAt: { $gte: startDate, $lte: endDate } },
+        { clearedAt: { $gte: startDate, $lte: endDate } }
+      ],
       status: 'Paid'
     }).sort({ createdAt: -1 });
 
@@ -370,7 +391,10 @@ export const downloadMonthlyReportExcel = async (req, res) => {
     }
 
     const bills = await Bill.find({
-      createdAt: { $gte: startDate, $lte: endDate },
+      $or: [
+        { createdAt: { $gte: startDate, $lte: endDate } },
+        { clearedAt: { $gte: startDate, $lte: endDate } }
+      ],
       status: 'Paid'
     })
     .select('billNumber tableNo items subtotal discount tax total paymentMode billType orderSource createdAt')
@@ -616,9 +640,12 @@ export const getDayBook = async (req, res) => {
     // Fetch Bills and Expenses concurrently in parallel
     const [bills, expenses] = await Promise.all([
       Bill.find({
-        createdAt: { $gte: startDate, $lte: endDate },
+        $or: [
+          { createdAt: { $gte: startDate, $lte: endDate } },
+          { clearedAt: { $gte: startDate, $lte: endDate } }
+        ],
         status: 'Paid'
-      }).select('billNumber tableNo total paymentMode upiApp splitPayments customerName createdAt').lean(),
+      }).select('billNumber tableNo total paymentMode upiApp splitPayments customerName createdAt clearedAt').lean(),
       Expense.find({
         date: { $gte: startDate, $lte: endDate }
       }).lean()

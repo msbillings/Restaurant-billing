@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '../config.js';
 import api from '../api/axios';
 import { useLanguage } from '../context/LanguageContext';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Unlock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2, X, ShieldAlert } from 'lucide-react';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Unlock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2, X, ShieldAlert, Clock, MessageSquare, Star, Gift } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
@@ -60,7 +60,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     serverIp: '',
     autoSendDaybook: false,
     autoSendTime: '14:30',
-    autoSendTime2: '22:30'
+    autoSendTime2: '22:30',
+    reservationReminderLeadMinutes: 120
   });
 
   const [username, setUsername] = useState(user ? user.username : '');
@@ -71,6 +72,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [systemPrinters, setSystemPrinters] = useState([]);
   const [showOwnerPin, setShowOwnerPin] = useState(false);
   const [showWhatsAppConnectModal, setShowWhatsAppConnectModal] = useState(false);
+  const [showWhatsappSettingsModal, setShowWhatsappSettingsModal] = useState(false);
   const [areCoordsLocked, setAreCoordinatesLocked] = useState(() => {
     return localStorage.getItem('resto_coords_locked') !== 'false';
   });
@@ -135,7 +137,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
           const pinStr = String(res.data.ownerPin).replace(/\D/g, '').slice(0, 4);
           setSettings(prev => ({ ...prev, ownerPin: pinStr }));
         }
-      }).catch(() => {});
+      }).catch(() => { });
 
     // Load available printers if running in Desktop App
     if (window.electronAPI && window.electronAPI.getPrinters) {
@@ -371,9 +373,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
 
     if (!allowedExtensions.includes(fileExtension) || !allowedMimeTypes.includes(file.type)) {
-      setToast({ 
-        message: t('Invalid image format. Only PNG and JPG/JPEG files are allowed.'), 
-        type: 'error' 
+      setToast({
+        message: t('Invalid image format. Only PNG and JPG/JPEG files are allowed.'),
+        type: 'error'
       });
       e.target.value = '';
       return;
@@ -383,9 +385,9 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     const MAX_SIZE = 2 * 1024 * 1024; // 2MB
     if (file.size > MAX_SIZE) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-      setToast({ 
-        message: t(`File size is too large (${sizeMB} MB). Maximum allowed size is 2MB.`), 
-        type: 'error' 
+      setToast({
+        message: t(`File size is too large (${sizeMB} MB). Maximum allowed size is 2MB.`),
+        type: 'error'
       });
       e.target.value = '';
       return;
@@ -858,124 +860,48 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       className={`w-full px-4 py-3 border ${errors.upiId ? 'border-red-500 ring-1 ring-red-500 focus:ring-red-500' : 'border-blue-200 focus:ring-blue-500/20 focus:border-blue-500'} rounded-xl focus:outline-none focus:ring-2 bg-blue-50 text-blue-900 font-mono`} placeholder={t("e.g. restaurant@upi")} />
                     {errors.upiId && <p className="text-xs text-red-500 mt-1 font-semibold">{errors.upiId}</p>}
                   </div>
-
-                  {/* WhatsApp Automated Bot Configuration */}
-                  <div className="p-4 bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors rounded-2xl border border-emerald-500/20 shadow-sm space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-10 h-10 rounded-2xl bg-[#25D366]/15 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shrink-0 mt-0.5 shadow-sm">
+                  {/* WhatsApp Automated Bot Configuration - Trigger */}
+                  <div
+                    className="p-4 bg-emerald-50/60 hover:bg-emerald-50 transition-all rounded-xl border border-emerald-200/80 shadow-xs cursor-pointer group"
+                    onClick={() => setShowWhatsappSettingsModal(true)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shrink-0 shadow-xs group-hover:scale-105 transition-transform">
                           <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
                             <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
                           </svg>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <label className="text-sm font-bold text-text-main leading-tight block">
-                            {t("WhatsApp Automated Gateway")}
-                          </label>
-                          <p className="text-xs text-text-muted leading-relaxed mt-1">
-                            {t("Link your WhatsApp to send automatic e-bills & DayBook reports in background.")}
-                          </p>
-                        </div>
+                        <span className="text-sm font-bold text-text-main">
+                          {t("WhatsApp Automations")}
+                        </span>
                       </div>
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 group-hover:bg-emerald-200 px-3 py-1 rounded-lg shrink-0 transition-colors">
+                        {t("Configure")} →
+                      </span>
                     </div>
-
-                    <div className="pt-1 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setShowWhatsAppConnectModal(true)}
-                        className="w-full py-2.5 px-4 bg-[#25D366] hover:bg-[#20bd5a] active:scale-[0.98] text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer">
-                        <RefreshCw size={14} />
-                        <span>{t("Scan QR / Link Bot")}</span>
-                      </button>
+                    <p className="text-xs text-text-muted mt-2 text-left">
+                      {t("DayBook, Reminders, Feedback & Win-Back campaigns")}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
+                      {settings.autoSendDaybook && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">DayBook ✓</span>}
+                      {settings.feedback_whatsapp_enabled && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Feedback ✓</span>}
+                      {settings.winback_enabled && <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-semibold">Win-Back ✓</span>}
+                      {!settings.autoSendDaybook && !settings.feedback_whatsapp_enabled && !settings.winback_enabled && <span className="text-[10px] text-text-muted">No automations enabled</span>}
                     </div>
+                  </div>
 
-                    <div className="pt-3 mt-3 border-t border-emerald-500/20 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-semibold text-text-main">
-                          {t("Auto-Send DayBook Report")}
-                        </label>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={settings.autoSendDaybook || false}
-                            onChange={(e) => handleInputChange('autoSendDaybook', e.target.checked)}
-                          />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div>
-                        </label>
-                      </div>
-
-                      {settings.autoSendDaybook && (() => {
-                        // Validation: parse both times to minutes
-                        const toMins = (t24) => {
-                          if (!t24) return 0;
-                          const [h, m] = t24.split(':').map(Number);
-                          return h * 60 + m;
-                        };
-                        const t1 = settings.autoSendTime || '14:30';
-                        const t2 = settings.autoSendTime2 || '22:30';
-                        const mins1 = toMins(t1);
-                        const mins2 = toMins(t2);
-                        const diff = Math.abs(mins1 - mins2);
-                        const sameTime = diff === 0;
-                        const tooClose = diff > 0 && diff < 60;
-                        return (
-                          <div className="space-y-3 animate-in fade-in slide-in-from-top-1">
-                            <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
-                              📅 Two reports sent daily. Tap clock to set each time.
-                            </p>
-
-                            {/* Report 1 — Afternoon */}
-                            <div className="flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-900/10 rounded-xl px-3 py-2 border border-emerald-100 dark:border-emerald-800/30">
-                              <div>
-                                <p className="text-xs font-bold text-text-main">🌤️ {t('Afternoon Report')}</p>
-                                <p className="text-[10px] text-text-muted">{t('Default: 2:30 PM')}</p>
-                              </div>
-                              <CustomTimePicker
-                                value={settings.autoSendTime || '14:30'}
-                                onChange={(val) => {
-                                  // Strict: not same as time2, at least 1h gap
-                                  const m1 = toMins(val);
-                                  const m2 = toMins(settings.autoSendTime2 || '22:30');
-                                  if (Math.abs(m1 - m2) < 60) {
-                                    setToast({ message: 'The two report times must be at least 1 hour apart.', type: 'error' });
-                                    return;
-                                  }
-                                  handleInputChange('autoSendTime', val);
-                                }}
-                              />
-                            </div>
-
-                            {/* Report 2 — Night */}
-                            <div className="flex items-center justify-between bg-emerald-50/60 dark:bg-emerald-900/10 rounded-xl px-3 py-2 border border-emerald-100 dark:border-emerald-800/30">
-                              <div>
-                                <p className="text-xs font-bold text-text-main">🌙 {t('Night Report')}</p>
-                                <p className="text-[10px] text-text-muted">{t('Default: 10:30 PM')}</p>
-                              </div>
-                              <CustomTimePicker
-                                value={settings.autoSendTime2 || '22:30'}
-                                onChange={(val) => {
-                                  const m2 = toMins(val);
-                                  const m1 = toMins(settings.autoSendTime || '14:30');
-                                  if (Math.abs(m1 - m2) < 60) {
-                                    setToast({ message: 'The two report times must be at least 1 hour apart.', type: 'error' });
-                                    return;
-                                  }
-                                  handleInputChange('autoSendTime2', val);
-                                }}
-                              />
-                            </div>
-
-                            {/* Validation warning */}
-                            {(sameTime || tooClose) && (
-                              <p className="text-[11px] text-red-600 font-semibold flex items-center gap-1">
-                                ⚠️ {sameTime ? 'Both times are the same. Please choose different times.' : 'Times are too close. Minimum 1 hour gap required.'}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
+                  {/* Footer Message */}
+                  <div className="space-y-1.5 p-3 bg-orange-50/50 rounded-xl border border-orange-100">
+                    <label className="text-xs font-semibold text-orange-800 flex items-center gap-2">
+                      <FileText size={13} className="text-orange-600" />{t("Footer Message")}
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.footerMessage}
+                      onChange={(e) => handleInputChange('footerMessage', e.target.value)}
+                      className="w-full px-3 py-2 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 text-sm" placeholder={t("Enter footer message for receipts")} />
+                    <p className="text-[10px] text-orange-600/70">{t("Shown at the bottom of every printed receipt.")}</p>
                   </div>
 
                 </div>
@@ -1113,19 +1039,6 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       </button>
                     </div>
                   </div>
-
-                  {/* Footer Message */}
-                  <div className="space-y-1.5 p-3 bg-orange-50/50 rounded-xl border border-orange-100">
-                    <label className="text-xs font-semibold text-orange-800 flex items-center gap-2">
-                      <FileText size={13} className="text-orange-600" />{t("Footer Message")}
-                    </label>
-                    <input
-                      type="text"
-                      value={settings.footerMessage}
-                      onChange={(e) => handleInputChange('footerMessage', e.target.value)}
-                      className="w-full px-3 py-2 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white text-orange-900 text-sm" placeholder={t("Enter footer message for receipts")} />
-                    <p className="text-[10px] text-orange-600/70">{t("Shown at the bottom of every printed receipt.")}</p>
-                  </div>
                 </div>
 
                 {/* Geo-Fencing Security */}
@@ -1203,11 +1116,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                                 setToast({ message: t("Coordinates locked successfully!"), type: 'info' });
                               }
                             }}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${
-                              areCoordsLocked
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 transition-all cursor-pointer ${areCoordsLocked
                                 ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
                                 : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                            }`}
+                              }`}
                             title={areCoordsLocked ? t("Click to unlock coordinates") : t("Click to lock coordinates")}
                           >
                             {areCoordsLocked ? <Lock size={13} className="text-amber-600" /> : <Unlock size={13} className="text-emerald-600" />}
@@ -1224,11 +1136,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                               onChange={(e) => handleInputChange('latitude', e.target.value)}
                               disabled={areCoordsLocked}
                               placeholder="e.g. 14.475281"
-                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${
-                                areCoordsLocked
+                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${areCoordsLocked
                                   ? 'bg-gray-100/90 text-gray-500 border-gray-300 cursor-not-allowed'
                                   : 'bg-white text-text-main border-primary focus:ring-2 focus:ring-primary/20'
-                              }`}
+                                }`}
                             />
                           </div>
                           <div>
@@ -1239,11 +1150,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                               onChange={(e) => handleInputChange('longitude', e.target.value)}
                               disabled={areCoordsLocked}
                               placeholder="e.g. 78.837492"
-                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${
-                                areCoordsLocked
+                              className={`w-full px-3 py-2 border rounded-lg text-xs font-mono font-bold transition-all ${areCoordsLocked
                                   ? 'bg-gray-100/90 text-gray-500 border-gray-300 cursor-not-allowed'
                                   : 'bg-white text-text-main border-primary focus:ring-2 focus:ring-primary/20'
-                              }`}
+                                }`}
                             />
                           </div>
                         </div>
@@ -1261,11 +1171,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                             }
                           }}
                           disabled={locating}
-                          className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-colors border flex items-center justify-center gap-1 cursor-pointer mt-1 ${
-                            areCoordsLocked
+                          className={`w-full px-3 py-2 rounded-lg text-xs font-bold transition-colors border flex items-center justify-center gap-1 cursor-pointer mt-1 ${areCoordsLocked
                               ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
                               : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
-                          }`}
+                            }`}
                         >
                           {locating ? <Loader2 size={13} className="animate-spin" /> : areCoordsLocked ? <Lock size={13} /> : <MapPin size={13} />}
                           {locating ? t("Getting Location...") : areCoordsLocked ? t("Locked — Unlock PIN to Set Current Location") : t("Set to Current Location")}
@@ -1404,7 +1313,49 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
 
           {/* Preview Section */}
           <div className="lg:sticky lg:top-24 h-fit bg-surface rounded-2xl p-4 border border-border shadow-lg">
-            <h2 className="text-xl font-bold text-text-main mb-4">{t("Receipt Preview")}</h2>
+            <h2 className="text-xl font-bold text-text-main mb-4">{showWhatsappSettingsModal ? t("WhatsApp Preview") : t("Receipt Preview")}</h2>
+            {showWhatsappSettingsModal ? (
+              <div className="bg-[#e5ddd5] rounded-xl p-3 max-w-xs mx-auto shadow-sm min-h-[300px] flex flex-col gap-2">
+                <div className="bg-[#075E54] text-white rounded-t-xl -mx-3 -mt-3 px-4 py-3 flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-full bg-[#25D366] flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">{settings.restaurantName || 'Your Restaurant'}</p>
+                    <p className="text-[10px] text-green-200">WhatsApp Business Bot</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {settings.autoSendDaybook && (
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm max-w-[85%]">
+                      <p className="text-[11px] font-semibold text-gray-800">&#x1F4CA; DayBook Report</p>
+                      <p className="text-[10px] text-gray-600 mt-0.5">Total Sales: &#x20B9;12,450 | Orders: 48</p>
+                      <p className="text-[9px] text-gray-400 text-right mt-1">{settings.autoSendTime || '14:30'} &#10003;&#10003;</p>
+                    </div>
+                  )}
+                  {settings.feedback_whatsapp_enabled && (
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm max-w-[85%]">
+                      <p className="text-[11px] font-semibold text-gray-800">&#x2B50; Feedback Request</p>
+                      <p className="text-[10px] text-gray-600 mt-0.5">Hi! Thank you for dining with us &#x1F60A;</p>
+                      <p className="text-[9px] text-gray-400 text-right mt-1">After bill &#10003;&#10003;</p>
+                    </div>
+                  )}
+                  {settings.winback_enabled && (
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm max-w-[85%]">
+                      <p className="text-[11px] font-semibold text-gray-800">&#x1F381; Win-Back</p>
+                      <p className="text-[10px] text-gray-600 mt-0.5">Hi Ravi, we miss you! &#x1F97A;</p>
+                      <p className="text-[9px] text-gray-400 text-right mt-1">{settings.winback_execute_time || '11:00'} &#10003;&#10003;</p>
+                    </div>
+                  )}
+                  {!settings.autoSendDaybook && !settings.feedback_whatsapp_enabled && !settings.winback_enabled && (
+                    <div className="bg-white rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm max-w-[85%]">
+                      <p className="text-[11px] text-gray-500">Enable automations to see a preview here &#x1F448;</p>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[9px] text-gray-400 text-center mt-auto pt-2">Live preview based on your settings</p>
+              </div>
+            ) : (
             <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm">
               {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
                 <div className="flex justify-center mb-2">
@@ -1500,6 +1451,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 {settings.footerMessage}
               </div>
             </div>
+            )}
           </div>
         </div>
 
@@ -1602,6 +1554,137 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20 active:scale-[0.98] transition-all"
               >
                 {t("Unlock Coordinates")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Settings Modal */}
+      {showWhatsappSettingsModal && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 md:p-8">
+          <div className="bg-surface w-full max-w-2xl max-h-[92vh] rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-border animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-border bg-emerald-50/50 shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-[#25D366]/15 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shrink-0">
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base font-bold text-text-main truncate">{t("WhatsApp Automations")}</h2>
+                  <p className="text-[11px] sm:text-xs text-text-muted truncate">{t("Configure bots, reports, and CRM campaigns")}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowWhatsappSettingsModal(false)} className="w-8 h-8 sm:w-9 sm:h-9 rounded-full hover:bg-surface-hover flex items-center justify-center transition-colors cursor-pointer shrink-0">
+                <X size={18} className="text-text-muted" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
+              {/* QR Link Bot / WhatsApp Gateway */}
+              <div className="p-3.5 sm:p-4 bg-emerald-500/5 hover:bg-emerald-500/10 rounded-2xl border border-emerald-500/20 transition-colors space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#25D366]/15 border border-[#25D366]/30 flex items-center justify-center text-[#25D366] shrink-0 shadow-xs">
+                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-text-main leading-snug">{t("WhatsApp Automated Gateway")}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{t("Link bot to send e-bills & reports automatically")}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsAppConnectModal(true)}
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-[#25D366] hover:bg-[#20bd5a] active:scale-[0.98] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0 whitespace-nowrap"
+                >
+                  <RefreshCw size={13} className="shrink-0" />
+                  <span>{t("Link Bot")}</span>
+                </button>
+              </div>
+              {/* Auto-Send DayBook */}
+              <div className="p-3.5 sm:p-4 bg-surface rounded-2xl border border-border space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm font-semibold text-text-main">{t("Auto-Send DayBook Report")}</label>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input type="checkbox" className="sr-only peer" checked={settings.autoSendDaybook || false} onChange={(e) => handleInputChange('autoSendDaybook', e.target.checked)} />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div>
+                  </label>
+                </div>
+                {settings.autoSendDaybook && (() => {
+                  const toMins = (t24) => { if (!t24) return 0; const [h, m] = t24.split(':').map(Number); return h * 60 + m; };
+                  const diff = Math.abs(toMins(settings.autoSendTime || '14:30') - toMins(settings.autoSendTime2 || '22:30'));
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100 gap-2">
+                        <div className="min-w-0"><p className="text-xs font-bold truncate">🌤️ {t('Afternoon Report')}</p><p className="text-[10px] text-text-muted">{t('Default: 2:30 PM')}</p></div>
+                        <CustomTimePicker value={settings.autoSendTime || '14:30'} onChange={(val) => { if (Math.abs(toMins(val) - toMins(settings.autoSendTime2 || '22:30')) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime', val); }} />
+                      </div>
+                      <div className="flex items-center justify-between bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100 gap-2">
+                        <div className="min-w-0"><p className="text-xs font-bold truncate">🌙 {t('Night Report')}</p><p className="text-[10px] text-text-muted">{t('Default: 10:30 PM')}</p></div>
+                        <CustomTimePicker value={settings.autoSendTime2 || '22:30'} onChange={(val) => { if (Math.abs(toMins(settings.autoSendTime || '14:30') - toMins(val)) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime2', val); }} />
+                      </div>
+                      {diff < 60 && <p className="text-[11px] text-red-600 font-semibold">⚠️ Times too close — minimum 1 hour gap required.</p>}
+                    </div>
+                  );
+                })()}
+              </div>
+              {/* Reservation Reminder */}
+              <div className="p-3.5 sm:p-4 bg-surface rounded-2xl border border-border space-y-2.5">
+                <label className="text-sm font-bold flex items-center gap-1.5"><Clock size={14} className="text-emerald-600 shrink-0" /><span>{t("Reservation Reminder Window")}</span></label>
+                <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
+                  {[{label:'30m',mins:30},{label:'1h',mins:60},{label:'2h (Default)',mins:120},{label:'3h',mins:180},{label:'4h',mins:240},{label:'5h',mins:300}].map(p => (
+                    <button key={p.mins} type="button" onClick={() => handleInputChange('reservationReminderLeadMinutes', p.mins)} className={`px-2.5 py-1.5 sm:py-1 text-xs font-bold rounded-lg border cursor-pointer transition-all text-center ${(Number(settings.reservationReminderLeadMinutes)||120)===p.mins?'bg-emerald-600 text-white border-emerald-600':'bg-surface text-text-main border-border hover:bg-surface-hover'}`}>{p.label}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Post-Meal Feedback */}
+              <div className="p-3.5 sm:p-4 bg-surface rounded-2xl border border-border space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <label className="text-sm font-bold flex items-center gap-1.5"><Star size={14} className="text-emerald-600 shrink-0" /><span>{t("Post-Meal Feedback & Google Reviews")}</span></label>
+                    <p className="text-xs text-text-muted mt-0.5">{t("Sent to first-time customers after bill is settled.")}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0"><input type="checkbox" className="sr-only peer" checked={settings.feedback_whatsapp_enabled || false} onChange={(e) => handleInputChange('feedback_whatsapp_enabled', e.target.checked)} /><div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div></label>
+                </div>
+                {settings.feedback_whatsapp_enabled && (
+                  <div className="space-y-3 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                    <div><label className="text-xs font-bold block mb-1">{t("Google Review Link")}</label><input type="url" value={settings.google_review_link || ''} onChange={(e) => handleInputChange('google_review_link', e.target.value)} placeholder="https://g.page/r/..." className="w-full px-3 py-2 bg-white border border-border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none" /></div>
+                    <div>
+                      <label className="text-xs font-bold block mb-1.5">{t("Send Delay (After Bill Settled)")}</label>
+                      <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-1.5">
+                        {[{label:'Instant',mins:0},{label:'15m',mins:15},{label:'30m',mins:30},{label:'1h',mins:60},{label:'2h',mins:120}].map(p=>(
+                          <button key={p.mins} type="button" onClick={()=>handleInputChange('feedback_whatsapp_delay_minutes',p.mins)} className={`px-2.5 py-1.5 sm:py-1 text-xs font-bold rounded-lg border cursor-pointer transition-all text-center ${(Number(settings.feedback_whatsapp_delay_minutes)||0)===p.mins?'bg-emerald-600 text-white border-emerald-600':'bg-white text-text-main border-slate-200 hover:bg-slate-50'}`}>{p.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* CRM Win-Back */}
+              <div className="p-3.5 sm:p-4 bg-surface rounded-2xl border border-border space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <label className="text-sm font-bold flex items-center gap-1.5"><Gift size={14} className="text-emerald-600 shrink-0" /><span>{t("CRM Win-Back Campaign")}</span></label>
+                    <p className="text-xs text-text-muted mt-0.5">{t("'We miss you' messages to inactive customers.")}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0"><input type="checkbox" className="sr-only peer" checked={settings.winback_enabled || false} onChange={(e) => handleInputChange('winback_enabled', e.target.checked)} /><div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div></label>
+                </div>
+                {settings.winback_enabled && (
+                  <div className="space-y-3 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1"><label className="text-xs font-bold block mb-1">{t("Inactivity (Days)")}</label><div className="relative"><input type="number" min="1" max="365" value={settings.winback_days_inactive ?? 60} onChange={(e) => handleInputChange('winback_days_inactive', parseInt(e.target.value)||60)} className="w-full px-3 py-2 bg-white border border-border rounded-lg text-xs font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted">Days</span></div></div>
+                      <div className="flex-1"><label className="text-xs font-bold block mb-1">{t("Send Time")}</label><div className="bg-white rounded-lg border border-border px-1"><CustomTimePicker value={settings.winback_execute_time || '11:00'} onChange={(val) => handleInputChange('winback_execute_time', val)} /></div></div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold block mb-1 flex items-center justify-between"><span>{t("Win-Back Message")}</span><span className="text-[10px] text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono">Use [Name]</span></label>
+                      <textarea rows="3" value={settings.winback_offer_text !== undefined ? settings.winback_offer_text : "Hi [Name], we haven't seen you in a while! We miss you. \uD83E\uDD7A\n\nVisit us this week and show this message for a complimentary dessert! \uD83C\uDF70"} onChange={(e) => handleInputChange('winback_offer_text', e.target.value)} className="w-full px-3 py-2 bg-white border border-border rounded-lg text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none resize-none" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-border bg-surface shrink-0 flex items-center justify-end gap-2.5 sm:gap-3">
+              <button type="button" onClick={() => setShowWhatsappSettingsModal(false)} className="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold border border-border text-text-muted hover:bg-surface-hover cursor-pointer text-center">{t("Cancel")}</button>
+              <button type="button" disabled={saving} onClick={() => { setShowWhatsappSettingsModal(false); handleSave(); }} className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-70 cursor-pointer">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{t("Save & Close")}
               </button>
             </div>
           </div>

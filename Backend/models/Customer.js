@@ -42,6 +42,14 @@ const customerSchema = new mongoose.Schema({
     type: String,
     enum: ['Dine-In', 'Delivery', 'Takeaway', 'Pick Up', ''],
     default: 'Dine-In'
+  },
+  feedbackWhatsAppSent: {
+    type: Boolean,
+    default: false
+  },
+  lastWinbackSentDate: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

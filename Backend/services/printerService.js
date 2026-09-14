@@ -114,7 +114,11 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig, q
   content += CMD.INIT;
   content += CMD.ALIGN_CENTER;
   content += CMD.TEXT_LARGE + CMD.BOLD_ON + 'KITCHEN ORDER (KOT)' + CMD.LINE_FEED;
-  content += CMD.TEXT_DOUBLE_HEIGHT + `KOT NO: ${kotNumber}` + CMD.LINE_FEED;
+  const cleanKotNo = (kotNumber || '').toString().replace(/^KOT-?/i, '').trim();
+  const kotDisplay = kotNumber?.toUpperCase().includes('UPDATE')
+    ? kotNumber
+    : cleanKotNo ? `KOT NO: ${cleanKotNo}` : `KOT NO: ${kotNumber}`;
+  content += CMD.TEXT_DOUBLE_HEIGHT + kotDisplay + CMD.LINE_FEED;
   if (kotNumber && !kotNumber.toUpperCase().includes('UPDATE')) {
     const queueNo = queueNumber || bill.tokenNo || bill.queueNumber || '1';
     content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + `QUEUE NO: #${queueNo}` + CMD.LINE_FEED;
@@ -158,8 +162,10 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig, q
   });
 
   content += lineDivider + CMD.LINE_FEED;
-  if (printerConfig.assignTo && printerConfig.assignTo.trim() !== '') {
-    content += CMD.ALIGN_CENTER + `[ DEPT: ${printerConfig.assignTo.toUpperCase()} ]` + CMD.LINE_FEED;
+  const kitchenTitle = (printerConfig.name || printerConfig.assignTo || '').trim().toUpperCase();
+  const locationSub = printerConfig.location ? ` - ${printerConfig.location.trim().toUpperCase()}` : '';
+  if (kitchenTitle) {
+    content += CMD.ALIGN_CENTER + `[ ${kitchenTitle}${locationSub} ]` + CMD.LINE_FEED;
   }
   content += CMD.LINE_FEED + CMD.LINE_FEED + CMD.LINE_FEED;
   content += CMD.CUT_PAPER;
@@ -225,24 +231,35 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
         return;
       }
 
-      // Department Filtering Logic
-      const assignedDept = (printer.assignTo || '').trim().toLowerCase();
+      // Department / Item / Category Filtering Logic
       let targetItems = kotItems;
+      const isItemMode = printer.assignmentMode === 'item' && Array.isArray(printer.assignedItems) && printer.assignedItems.length > 0;
+      const isCatMode = Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0;
+      const assignedDept = (printer.assignTo || '').trim().toLowerCase();
 
-      if (assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general') {
-        const deptTokens = assignedDept.split(',').map(d => d.trim()).filter(Boolean);
-
+      if (isItemMode) {
+        const itemSet = new Set(printer.assignedItems.map(it => it.trim().toLowerCase()));
+        targetItems = kotItems.filter(item => itemSet.has((item.name || '').trim().toLowerCase()));
+      } else if (isCatMode) {
+        const catSet = new Set(printer.assignedCategories.map(c => c.trim().toLowerCase()));
         targetItems = kotItems.filter(item => {
           const itemLower = (item.name || '').toLowerCase();
           const catLower = categoryMap[itemLower] || (item.category?.name || item.category || '').toLowerCase();
-
+          return catSet.has(catLower);
+        });
+      } else if (assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general') {
+        const deptTokens = assignedDept.split(',').map(d => d.trim()).filter(Boolean);
+        targetItems = kotItems.filter(item => {
+          const itemLower = (item.name || '').toLowerCase();
+          const catLower = categoryMap[itemLower] || (item.category?.name || item.category || '').toLowerCase();
           return deptTokens.some(token => catLower.includes(token) || itemLower.includes(token));
         });
       }
 
-      // If specific department is assigned but no items matched this department, skip printing on this specific printer
-      if (targetItems.length === 0 && assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general') {
-        console.log(`[PrinterService] Skipping printer '${printer.name}' (${printer.assignTo}) - no items matched department.`);
+      // If specific items/categories/department are assigned but no items matched, skip this printer
+      const hasSpecificFilter = isItemMode || isCatMode || (assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general');
+      if (targetItems.length === 0 && hasSpecificFilter) {
+        console.log(`[PrinterService] Skipping printer '${printer.name}' - no items matched assigned routing.`);
         return;
       }
 

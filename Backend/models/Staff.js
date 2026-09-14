@@ -33,6 +33,15 @@ const staffSchema = new mongoose.Schema({
     enum: ['Active', 'Inactive'],
     default: 'Active'
   },
+  assignedDepartment: {
+    type: String,
+    default: 'All'
+  },
+  assignedKitchenId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'PrinterConfig',
+    default: null
+  },
   tenantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant', // If applicable, or just a string if they prefer

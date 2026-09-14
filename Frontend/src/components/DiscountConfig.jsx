@@ -5,10 +5,11 @@ import axios from 'axios';
 import {
   Plus, Trash2, Edit2, Tags, Gift, Sparkles, CheckCircle2,
   XCircle, AlertCircle, Loader2, Calendar, Clock, AlertTriangle,
-  Info, ShieldCheck, Timer
+  Info, ShieldCheck, Timer, MessageCircle
 } from 'lucide-react';
 import BackButton from './common/BackButton';
 import { getMenuItems } from '../api/menu';
+import BroadcastCampaignModal from './BroadcastCampaignModal';
 
 const getTodayDateStr = () => {
   const d = new Date();
@@ -19,6 +20,37 @@ const getFutureDateStr = (days = 4) => {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
+};
+
+export const OFFER_CATEGORIES = [
+  { id: 'weekend', label: 'Weekend offers', icon: '⚡', badgeColor: 'bg-amber-50 text-amber-800 border-amber-200' },
+  { id: 'birthday', label: 'Birthday offers', icon: '🎂', badgeColor: 'bg-pink-50 text-pink-700 border-pink-200' },
+  { id: 'anniversary', label: 'Anniversary offers', icon: '💍', badgeColor: 'bg-purple-50 text-purple-700 border-purple-200' },
+  { id: 'festival', label: 'Festival offers', icon: '🎉', badgeColor: 'bg-rose-50 text-rose-700 border-rose-200' },
+  { id: 'new_menu', label: 'New menu announcements', icon: '🍲', badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  { id: 'lunch', label: 'Lunch offers', icon: '☀️', badgeColor: 'bg-orange-50 text-orange-700 border-orange-200' },
+  { id: 'dinner', label: 'Dinner offers', icon: '🌙', badgeColor: 'bg-blue-50 text-blue-700 border-blue-200' },
+  { id: 'coupon', label: 'Coupon codes', icon: '🎟️', badgeColor: 'bg-teal-50 text-teal-700 border-teal-200' },
+  { id: 'loyal', label: 'Special discounts for loyal customers', icon: '👑', badgeColor: 'bg-yellow-50 text-yellow-800 border-yellow-200' },
+  { id: 'opening', label: 'Shop opening offers', icon: '🚀', badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  { id: 'special', label: 'Special offers', icon: '✨', badgeColor: 'bg-sky-50 text-sky-700 border-sky-200' }
+];
+
+export const getOfferCategoryMeta = (catStr) => {
+  if (!catStr) {
+    return {
+      label: 'Special offers',
+      icon: '✨',
+      badgeColor: 'bg-sky-50 text-sky-700 border-sky-200'
+    };
+  }
+  const match = OFFER_CATEGORIES.find(c => c.label.toLowerCase() === catStr.trim().toLowerCase());
+  if (match) return match;
+  return {
+    label: catStr,
+    icon: '🏷️',
+    badgeColor: 'bg-gray-100 text-gray-700 border-gray-200'
+  };
 };
 
 const getOfferStatus = (discount) => {
@@ -100,9 +132,20 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+
+  // WhatsApp Promotional Broadcast state
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
+  const [broadcastDiscount, setBroadcastDiscount] = useState(null);
+  const [broadcastOnSave, setBroadcastOnSave] = useState(false);
+  const [restaurantName, setRestaurantName] = useState(() => {
+    return localStorage.getItem('resto_restaurant_name') || '';
+  });
 
   const [formData, setFormData] = useState({
     name: '',
+    offerCategory: 'Festival offers',
+    customCategory: '',
     type: 'percentage',
     value: '',
     buyQty: 2,
@@ -118,6 +161,11 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
     validityDays: 4
   });
 
+  const handleBroadcastClick = (discount) => {
+    setBroadcastDiscount(discount);
+    setBroadcastModalOpen(true);
+  };
+
   const fetchDiscounts = async () => {
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -125,6 +173,12 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDiscounts(response.data);
+      if (Array.isArray(response.data)) {
+        try {
+          localStorage.setItem('resto_discounts_cache', JSON.stringify(response.data));
+          window.dispatchEvent(new CustomEvent('resto_discounts_updated', { detail: response.data }));
+        } catch {}
+      }
     } catch (error) {
       console.error('Error fetching discounts', error);
     } finally {
@@ -150,6 +204,22 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
   useEffect(() => {
     fetchDiscounts();
     fetchCategories();
+
+    // Fetch restaurant name for campaign message branding
+    const fetchSettings = async () => {
+      try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        const res = await axios.get(`${getApiUrl()}/settings`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.data?.restaurantName) {
+          setRestaurantName(res.data.restaurantName);
+        }
+      } catch (err) {
+        // Silently fallback
+      }
+    };
+    fetchSettings();
   }, []);
 
   // Quick Preset Helper for Timeline
@@ -265,8 +335,13 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
     setSaving(true);
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const resolvedCategory = formData.offerCategory === 'Custom'
+        ? (formData.customCategory?.trim() || 'Special offers')
+        : (formData.offerCategory || 'Festival offers');
+
       const payload = {
         name: formData.name.trim(),
+        offerCategory: resolvedCategory,
         type: formData.type,
         value: formData.type === 'bogo' ? 0 : Number(formData.value) || 0,
         buyQty: formData.type === 'bogo' ? (Number(formData.buyQty) || 2) : 2,
@@ -282,19 +357,33 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
         validityDays: formData.hasTimeline ? Number(formData.validityDays) || 0 : 0
       };
 
+      let savedDiscount = null;
       if (editingDiscount) {
-        await axios.put(`${getApiUrl()}/discounts/${editingDiscount._id}`, payload, {
+        const res = await axios.put(`${getApiUrl()}/discounts/${editingDiscount._id}`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        savedDiscount = res.data;
       } else {
-        await axios.post(`${getApiUrl()}/discounts`, payload, {
+        const res = await axios.post(`${getApiUrl()}/discounts`, payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        savedDiscount = res.data;
       }
 
       setIsModalOpen(false);
       setEditingDiscount(null);
       fetchDiscounts();
+
+      // If owner chose to broadcast immediately upon saving
+      if (broadcastOnSave) {
+        const targetDiscount = savedDiscount || {
+          ...payload,
+          _id: editingDiscount?._id || 'new_offer'
+        };
+        setBroadcastDiscount(targetDiscount);
+        setBroadcastModalOpen(true);
+        setBroadcastOnSave(false);
+      }
     } catch (error) {
       console.error('Error saving discount', error);
       const msg = error.response?.data?.message || 'Error saving discount';
@@ -322,6 +411,7 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
   const handleEditClick = (discount) => {
     setEditingDiscount(discount);
     setValidationError('');
+    setBroadcastOnSave(false);
     const catName = typeof discount.targetCategory === 'object' && discount.targetCategory !== null
       ? discount.targetCategory.name
       : (discount.targetCategory || '');
@@ -329,8 +419,13 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
     const sDate = discount.startDate ? discount.startDate.split('T')[0] : getTodayDateStr();
     const eDate = discount.endDate ? discount.endDate.split('T')[0] : getFutureDateStr(4);
 
+    const existingCat = discount.offerCategory || 'Festival offers';
+    const isPreset = OFFER_CATEGORIES.some(c => c.label.toLowerCase() === existingCat.toLowerCase());
+
     setFormData({
       name: discount.name || '',
+      offerCategory: isPreset ? existingCat : 'Custom',
+      customCategory: isPreset ? '' : existingCat,
       type: discount.type || 'percentage',
       value: discount.value || '',
       buyQty: discount.buyQty || 2,
@@ -348,11 +443,14 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
     setIsModalOpen(true);
   };
 
-  const openNewModal = (initialType = 'percentage') => {
+  const openNewModal = (initialType = 'percentage', defaultCat = 'Festival offers') => {
     setEditingDiscount(null);
     setValidationError('');
+    setBroadcastOnSave(false);
     setFormData({
       name: '',
+      offerCategory: defaultCat,
+      customCategory: '',
       type: initialType,
       value: '',
       buyQty: 2,
@@ -369,6 +467,15 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
     });
     setIsModalOpen(true);
   };
+
+  // Filtered discounts based on occasion category pill
+  const filteredDiscounts = useMemo(() => {
+    if (selectedCategoryFilter === 'All') return discounts;
+    return discounts.filter(d => {
+      const cat = d.offerCategory || 'Special offers';
+      return cat.toLowerCase() === selectedCategoryFilter.toLowerCase();
+    });
+  }, [discounts, selectedCategoryFilter]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 p-1.5 sm:p-2.5 md:p-4 overflow-y-auto custom-scrollbar">
@@ -439,10 +546,53 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
         </div>
       ) : (
         <>
+          {/* OCCASION / CATEGORY FILTER PILLS */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 mb-3 shrink-0 custom-scrollbar">
+            <button
+              type="button"
+              onClick={() => setSelectedCategoryFilter('All')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategoryFilter === 'All'
+                  ? 'bg-gray-900 text-white shadow-sm'
+                  : 'bg-white hover:bg-gray-100 text-gray-600 border border-gray-200'
+              }`}
+            >
+              {t("All Occasions")} ({discounts.length})
+            </button>
+            {OFFER_CATEGORIES.map(cat => {
+              const count = discounts.filter(d => (d.offerCategory || 'Special offers').toLowerCase() === cat.label.toLowerCase()).length;
+              if (count === 0 && selectedCategoryFilter !== cat.label) return null;
+              const isSelected = selectedCategoryFilter === cat.label;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter(cat.label)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-primary text-white border-primary shadow-sm'
+                      : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-600'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* MOBILE VIEW (< sm): Responsive Cards */}
           <div className="block sm:hidden space-y-3">
-            {discounts.map((discount) => {
+            {filteredDiscounts.length === 0 ? (
+              <div className="bg-white rounded-xl p-6 text-center text-xs text-gray-400 border border-gray-200">
+                {t("No offers found under this category filter.")}
+              </div>
+            ) : filteredDiscounts.map((discount) => {
               const statusInfo = getOfferStatus(discount);
+              const catMeta = getOfferCategoryMeta(discount.offerCategory);
               return (
                 <div key={discount._id} className="bg-white rounded-xl p-3.5 shadow-sm border border-gray-200 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between gap-2">
@@ -450,10 +600,23 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                       <div className={`p-1.5 rounded-lg shrink-0 ${discount.type === 'bogo' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-primary'}`}>
                         {discount.type === 'bogo' ? <Gift size={15} /> : <Tags size={15} />}
                       </div>
-                      <span className="font-bold text-gray-900 text-xs truncate">{discount.name}</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-gray-900 text-xs truncate block">{discount.name}</span>
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-bold border mt-0.5 ${catMeta.badgeColor}`}>
+                          <span>{catMeta.icon}</span>
+                          <span>{catMeta.label}</span>
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleBroadcastClick(discount)}
+                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                        title={t("Broadcast Offer via WhatsApp")}>
+                        <MessageCircle size={15} />
+                      </button>
                       <button
                         onClick={() => handleEditClick(discount)}
                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
@@ -528,12 +691,19 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-xs">
-                  {discounts.map((discount) => {
+                  {filteredDiscounts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-8 text-center text-gray-400 font-medium text-xs">
+                        {t("No offers found under this category filter.")}
+                      </td>
+                    </tr>
+                  ) : filteredDiscounts.map((discount) => {
                     const statusInfo = getOfferStatus(discount);
+                    const catMeta = getOfferCategoryMeta(discount.offerCategory);
                     return (
                       <tr key={discount._id} className={`transition-colors ${statusInfo.status === 'expired' ? 'bg-red-50/20 hover:bg-red-50/40' : 'hover:bg-orange-50/30'}`}>
                         <td className="px-5 py-3.5 font-bold text-gray-900 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
                             {discount.type === 'bogo' ? (
                               <div className="p-1.5 bg-orange-100 text-orange-600 rounded-lg shrink-0">
                                 <Gift size={15} />
@@ -544,12 +714,20 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                               </div>
                             )}
                             <div>
-                              <span>{discount.name}</span>
-                              {statusInfo.status === 'expired' && (
-                                <span className="ml-2 text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.2 rounded border border-red-200">
-                                  {t("EXPIRED")}
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-gray-900 text-xs">{discount.name}</span>
+                                {statusInfo.status === 'expired' && (
+                                  <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.2 rounded border border-red-200">
+                                    {t("EXPIRED")}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${catMeta.badgeColor}`}>
+                                  <span>{catMeta.icon}</span>
+                                  <span>{catMeta.label}</span>
                                 </span>
-                              )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -617,7 +795,17 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                         </td>
 
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                          <div className="flex justify-end items-center gap-1">
+                          <div className="flex justify-end items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleBroadcastClick(discount)}
+                              className="p-1.5 px-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/80 border border-emerald-200/80 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 font-bold text-xs shadow-xs active:scale-95"
+                              title={t("Broadcast Offer to Customers via WhatsApp")}>
+                              <MessageCircle size={14} className="text-emerald-600 shrink-0" />
+                              <span className="hidden md:inline text-[11px] font-bold">
+                                {t("Broadcast")}
+                              </span>
+                            </button>
                             <button
                               onClick={() => handleEditClick(discount)}
                               className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
@@ -732,6 +920,76 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                     ₹ {t("Flat Off")}
                   </button>
                 </div>
+              </div>
+
+              {/* OFFER CATEGORY / OCCASION SELECTOR */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    {t("Offer Category / Occasion")}
+                  </label>
+                  <span className="text-[10px] text-gray-400 font-medium">
+                    {t("Theme & Campaign Tag")}
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={formData.offerCategory}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({
+                        ...formData,
+                        offerCategory: val,
+                        customCategory: val === 'Custom' ? formData.customCategory : ''
+                      });
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-xs font-bold text-gray-800 cursor-pointer shadow-xs"
+                  >
+                    {OFFER_CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.label}>
+                        {cat.icon} {cat.label}
+                      </option>
+                    ))}
+                    <option value="Custom">✏️ {t("Custom Category...")}</option>
+                  </select>
+                </div>
+
+                {/* Quick 1-Click Chips for Popular Occasions */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {OFFER_CATEGORIES.slice(0, 5).map(cat => {
+                    const isSelected = formData.offerCategory === cat.label;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, offerCategory: cat.label })}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-primary text-white border-primary shadow-xs'
+                            : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-200'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Category Input if Custom is selected */}
+                {formData.offerCategory === 'Custom' && (
+                  <div className="mt-2 animate-fade-in">
+                    <input
+                      type="text"
+                      required
+                      placeholder={t("Enter custom offer category (e.g. Monsoon Dhamaka, Midnight Special)")}
+                      value={formData.customCategory}
+                      onChange={(e) => setFormData({ ...formData, customCategory: e.target.value })}
+                      className="w-full px-3.5 py-2 bg-amber-50/50 border border-amber-300 rounded-xl text-xs font-medium text-gray-800 outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Offer Name */}
@@ -998,6 +1256,30 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
                 </label>
               </div>
 
+              {/* Broadcast via WhatsApp on Save toggle */}
+              <div className="flex items-center justify-between p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <MessageCircle size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950">
+                      {t("Broadcast via WhatsApp on Save")}
+                    </p>
+                    <p className="text-[10px] text-emerald-700">
+                      {t("Automatically open customer audience selector to broadcast this offer")}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="broadcastOnSave"
+                  checked={broadcastOnSave}
+                  onChange={(e) => setBroadcastOnSave(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 accent-emerald-600 rounded cursor-pointer"
+                />
+              </div>
+
               <div className="pt-3 flex gap-2 shrink-0">
                 <button
                   type="button"
@@ -1022,6 +1304,19 @@ const DiscountConfig = ({ onNavigate, onGoBack }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Campaign Broadcast Modal */}
+      {broadcastModalOpen && (
+        <BroadcastCampaignModal
+          isOpen={broadcastModalOpen}
+          onClose={() => {
+            setBroadcastModalOpen(false);
+            setBroadcastDiscount(null);
+          }}
+          discount={broadcastDiscount}
+          restaurantName={restaurantName}
+        />
       )}
     </div>
   );

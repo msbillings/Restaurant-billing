@@ -11,14 +11,38 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [formData, setFormData] = useState({ username: '', password: '', role: 'Cashier' });
+  const [kitchens, setKitchens] = useState([]);
+  const [formData, setFormData] = useState({ 
+    username: '', 
+    password: '', 
+    role: 'Cashier',
+    assignedDepartment: 'All',
+    assignedKitchenId: null
+  });
 
   // For translation extractor
-  const dummyTranslationStrings = [t('Admin'), t('Cashier'), t('Captain')];
+  const dummyTranslationStrings = [t('Admin'), t('Cashier'), t('Captain'), t('Chef'), t('Manager')];
 
   useEffect(() => {
     fetchUsers();
+    fetchKitchens();
   }, []);
+
+  const fetchKitchens = async () => {
+    try {
+      const API_BASE_URL = getApiUrl();
+      const response = await axios.get(`${API_BASE_URL}/printer-configs`, {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+          'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
+        }
+      });
+      const active = (response.data || []).filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+      setKitchens(active);
+    } catch (e) {
+      console.error('Error fetching printer configs', e);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -48,15 +72,29 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
         'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
       };
       
+      const isChef = formData.role === 'Chef';
+      const assignedDept = isChef ? (formData.assignedDepartment || 'All') : 'All';
+      const assignedKitchen = isChef ? formData.assignedKitchenId : null;
+
       if (editingUser) {
         // If editing, only send password if it was changed
-        const updateData = { username: formData.username, role: formData.role };
+        const updateData = { 
+          username: formData.username, 
+          role: formData.role,
+          assignedDepartment: assignedDept,
+          assignedKitchenId: assignedKitchen
+        };
         if (formData.password) {
           updateData.password = formData.password;
         }
         await axios.put(`${API_BASE_URL}/admin/users/${editingUser._id}`, updateData, { headers });
       } else {
-        await axios.post(`${API_BASE_URL}/admin/users`, formData, { headers });
+        const payload = {
+          ...formData,
+          assignedDepartment: assignedDept,
+          assignedKitchenId: assignedKitchen
+        };
+        await axios.post(`${API_BASE_URL}/admin/users`, payload, { headers });
       }
       setIsModalOpen(false);
       fetchUsers();
@@ -84,14 +122,26 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
 
   const openAddModal = () => {
     setEditingUser(null);
-    setFormData({ username: '', password: '', role: 'Cashier' });
+    setFormData({ 
+      username: '', 
+      password: '', 
+      role: 'Cashier',
+      assignedDepartment: 'All',
+      assignedKitchenId: null
+    });
     setShowPassword(false);
     setIsModalOpen(true);
   };
 
   const openEditModal = (user) => {
     setEditingUser(user);
-    setFormData({ username: user.username, password: '', role: user.role });
+    setFormData({ 
+      username: user.username, 
+      password: '', 
+      role: user.role,
+      assignedDepartment: user.assignedDepartment || 'All',
+      assignedKitchenId: user.assignedKitchenId || null
+    });
     setShowPassword(false);
     setIsModalOpen(true);
   };
@@ -143,13 +193,21 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
                       </div>
                     </td>
                     <td className="p-3 sm:p-4">
-                      <span className={`px-2 py-1 rounded text-[11px] sm:text-xs font-bold whitespace-nowrap ${
-                        user.role === 'Admin' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
-                        user.role === 'Captain' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                        'bg-green-100 text-green-700 border border-green-200'}`
-                      }>
-                        {t(user.role)}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`px-2 py-1 rounded text-[11px] sm:text-xs font-bold whitespace-nowrap ${
+                          user.role === 'Admin' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                          user.role === 'Captain' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                          user.role === 'Chef' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                          'bg-green-100 text-green-700 border border-green-200'}`
+                        }>
+                          {t(user.role)}
+                        </span>
+                        {user.role === 'Chef' && user.assignedDepartment && user.assignedDepartment !== 'All' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            📍 {user.assignedDepartment}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 sm:p-4 text-xs sm:text-sm text-gray-500 whitespace-nowrap">
                       {new Date(user.createdAt).toLocaleDateString()}
@@ -233,6 +291,40 @@ const AdminDashboard = ({ onNavigate, onGoBack }) => {const { t } = useLanguage(
                   <option value="Admin">{t("Admin (Full Control)")}</option>
                 </select>
               </div>
+
+              {formData.role === 'Chef' && (
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    {t("Assigned Kitchen Station")}
+                  </label>
+                  <select
+                    value={formData.assignedDepartment || 'All'}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      const matched = kitchens.find(k => (k.name || k.assignTo) === selectedVal);
+                      setFormData({
+                        ...formData,
+                        assignedDepartment: selectedVal,
+                        assignedKitchenId: matched ? matched._id : null
+                      });
+                    }}
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-primary font-medium"
+                  >
+                    <option value="All">{t("All Kitchens (Unrestricted KDS)")}</option>
+                    {kitchens.map((k) => {
+                      const deptName = k.name || k.assignTo;
+                      return (
+                        <option key={k._id} value={deptName}>
+                          {deptName} {k.location ? `(${k.location})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {t("The chef will be locked to this station upon logging into KDS.")}
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4 flex gap-3">
                 <button

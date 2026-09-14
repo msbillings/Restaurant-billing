@@ -73,6 +73,7 @@ export const createDiscount = async (req, res) => {
     const Discount = getTenantModel(req, 'Discount', DiscountDefault);
     const {
       name,
+      offerCategory,
       type,
       value,
       isActive,
@@ -112,6 +113,7 @@ export const createDiscount = async (req, res) => {
 
     const newDiscount = new Discount({
       name: name.trim(),
+      offerCategory: offerCategory && offerCategory.trim() ? offerCategory.trim() : 'Special Offer',
       type: type || 'percentage',
       value: value ? Number(value) : 0,
       isActive: isActive !== undefined ? isActive : true,
@@ -149,6 +151,7 @@ export const updateDiscount = async (req, res) => {
     const { id } = req.params;
     const {
       name,
+      offerCategory,
       type,
       value,
       isActive,
@@ -187,6 +190,7 @@ export const updateDiscount = async (req, res) => {
 
     const payload = {
       name: name?.trim(),
+      offerCategory: offerCategory && offerCategory.trim() ? offerCategory.trim() : 'Special Offer',
       type: type || 'percentage',
       value: value ? Number(value) : 0,
       isActive: isActive !== undefined ? isActive : true,

@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import mongoose from 'mongoose';
+import fs from 'fs';
 import { generateDayBookWorkbook } from './excelGenerator.js';
 import ClientDefault from '../models/Client.js';
 import BillDefault from '../models/Bill.js';
@@ -216,6 +217,284 @@ export const triggerAutoDayBookForTenant = async (dbName) => {
   }
 };
 
+export const processFeedbackMessagesForTenant = async (dbName, targetBillId = null) => {
+  const logFb = (msg) => {
+    try {
+      fs.appendFileSync('D:/restaurant/Restaurant-billing/Backend/feedback_debug.log', `[${new Date().toISOString()}] ${msg}\n`);
+    } catch(e) {}
+    console.log(`[WhatsApp Feedback] ${msg}`);
+  };
+  logFb(`Checking feedback for tenant "${dbName}", targetBillId: ${targetBillId || 'none'}`);
+  try {
+    logFb('Step 1: calling getTenantModels...');
+    const models = await getTenantModels(dbName);
+    logFb('Step 2: models obtained');
+    const Setting = models.Setting;
+    const Bill = models.Bill;
+    const Customer = models.Customer;
+    
+    logFb('Step 3: fetching settingsDoc...');
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    logFb('Step 4: settingsDoc = ' + Boolean(settingsDoc));
+    if (!settingsDoc) {
+      logFb(`No settings found for ${dbName}`);
+      return { success: false, reason: 'no_settings' };
+    }
+    let settings = settingsDoc.value;
+    if (typeof settings === 'string') {
+      try { settings = JSON.parse(settings); } catch (e) {}
+    }
+    if (!settings) {
+      logFb(`Invalid settings for ${dbName}`);
+      return { success: false, reason: 'invalid_settings' };
+    }
+
+    const isFeedbackEnabled = settings.feedback_whatsapp_enabled === true || settings.feedback_whatsapp_enabled === 'true';
+    if (!isFeedbackEnabled) {
+      logFb(`Feedback not enabled for ${dbName} (value: ${settings.feedback_whatsapp_enabled})`);
+      return { success: false, reason: 'feedback_disabled' };
+    }
+
+    let reviewLink = settings.google_review_link || settings.googleReviewLink;
+    if (!reviewLink || !reviewLink.trim()) {
+      const reviewDoc = await Setting.findOne({ key: 'googleReviewLink' }).lean();
+      reviewLink = reviewDoc?.value;
+    }
+    logFb(`reviewLink found: "${reviewLink}"`);
+    if (!reviewLink || !reviewLink.trim()) {
+      logFb(`Feedback is enabled but no Google Review link is set.`);
+      return { success: false, reason: 'no_review_link' };
+    }
+    
+    // Construct the short link (Hide dbName using Base64 encoding)
+    const frontendUrl = process.env.FRONTEND_URL || 'https://restaurant-billing-seven.vercel.app';
+    const encodedDbName = Buffer.from(dbName).toString('base64url');
+    const shortReviewLink = `${frontendUrl}/api/public/r/${encodedDbName}`;
+
+    const delayMins = Number(settings.feedback_whatsapp_delay_minutes) || 0;
+    const cutoffTime = new Date(Date.now() - delayMins * 60000);
+
+    let eligibleBills = [];
+    if (targetBillId) {
+      const targetBill = await Bill.findById(targetBillId);
+      if (targetBill && targetBill.status === 'Paid' && targetBill.feedbackProcessed !== true && targetBill.customerPhone) {
+        if (delayMins === 0 || (targetBill.settledAt && targetBill.settledAt <= cutoffTime)) {
+          eligibleBills.push(targetBill);
+        }
+      }
+    }
+
+    const timeCondition = delayMins > 0
+      ? { settledAt: { $lte: cutoffTime } }
+      : {
+          $or: [
+            { settledAt: { $lte: new Date(Date.now() + 60000) } },
+            { settledAt: { $exists: false } },
+            { settledAt: null }
+          ]
+        };
+
+    const query = {
+      status: 'Paid',
+      feedbackProcessed: { $ne: true },
+      ...timeCondition,
+      customerPhone: { $exists: true, $ne: '' }
+    };
+    if (targetBillId) {
+      query._id = { $ne: targetBillId };
+    }
+
+    const pendingBills = await Bill.find(query).sort({ settledAt: -1, createdAt: -1 }).limit(20);
+    if (pendingBills && pendingBills.length > 0) {
+      eligibleBills = [...eligibleBills, ...pendingBills];
+    }
+
+    logFb(`Found ${eligibleBills.length} eligible bill(s).`);
+    if (eligibleBills.length === 0) {
+      return { success: true, count: 0, message: 'No eligible bills found' };
+    }
+
+    const waManager = whatsappManager.getInstance(dbName, settings.restaurantName);
+    logFb(`Ensuring WhatsApp connection for ${dbName}...`);
+    await waManager.ensureConnection();
+
+    const waStatus = waManager.getStatus();
+    const isSocketOpen = waManager.sock && (waManager.sock.ws?.readyState === 1 || waManager.sock.ws?.isOpen === true || waManager.sock.ws?.socket?.readyState === 1);
+    const isReady = (waStatus.status === 'CONNECTED' || Boolean(waManager.sock?.user?.id)) && isSocketOpen;
+    logFb(`WhatsApp status: ${waStatus.status}, isReady: ${isReady}, sock: ${Boolean(waManager.sock)}`);
+
+    if (!isReady && waStatus.status !== 'CONNECTED') {
+      logFb(`WhatsApp is currently ${waStatus.status}. Will process feedback once bot is connected.`);
+      return { success: false, reason: 'whatsapp_not_connected', status: waStatus.status };
+    }
+
+    let sentCount = 0;
+    let skippedCount = 0;
+    for (const bill of eligibleBills) {
+      let rawPhone = (bill.customerPhone || '').replace(/[^0-9]/g, '');
+      if (!rawPhone || rawPhone.length < 10) {
+        bill.feedbackProcessed = true;
+        await bill.save();
+        skippedCount++;
+        continue;
+      }
+
+      let cleanPhone = rawPhone;
+      if (cleanPhone.length === 10) {
+        cleanPhone = '91' + cleanPhone;
+      } else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+        cleanPhone = '91' + cleanPhone.slice(1);
+      }
+
+      const phone10 = cleanPhone.slice(-10);
+
+      // Check if customer already received feedback
+      let customer = await Customer.findOne({
+        phone: { $in: [phone10, '91' + phone10, '+91' + phone10, cleanPhone] }
+      });
+
+      if (customer && customer.feedbackWhatsAppSent === true) {
+        console.log(`[WhatsApp Feedback] Customer ${phone10} already received feedback previously. Marking bill #${bill.billNumber} processed.`);
+        bill.feedbackProcessed = true;
+        await bill.save();
+        skippedCount++;
+        continue;
+      }
+
+      const custName = (customer?.name && customer.name !== 'Guest') 
+        ? customer.name 
+        : (bill.customerName && bill.customerName !== 'Guest' ? bill.customerName : '');
+
+      try {
+        logFb(`🚀 Sending review link to ${cleanPhone} (Bill #${bill.billNumber}) for tenant ${dbName}...`);
+        await Promise.race([
+          waManager.sendFeedbackMessage(cleanPhone, custName, shortReviewLink, settings.restaurantName),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Feedback message send timed out')), 15000))
+        ]);
+        
+        // Mark customer as sent so they never receive duplicate review requests
+        if (customer) {
+          customer.feedbackWhatsAppSent = true;
+          await customer.save();
+        } else {
+          await Customer.findOneAndUpdate(
+            { phone: phone10 },
+            {
+              $set: {
+                feedbackWhatsAppSent: true,
+                name: custName || 'Guest'
+              }
+            },
+            { upsert: true }
+          );
+        }
+
+        bill.feedbackProcessed = true;
+        await bill.save();
+        sentCount++;
+        logFb(`✅ Feedback successfully sent to ${cleanPhone} for bill #${bill.billNumber}!`);
+      } catch (sendErr) {
+        logFb(`❌ Failed to send feedback to ${cleanPhone}: ${sendErr?.message || sendErr}`);
+        console.error(`[WhatsApp Feedback] ❌ Failed to send feedback to ${cleanPhone}:`, sendErr?.message || sendErr);
+        // Do NOT mark bill.feedbackProcessed = true so it can be retried on next pass or reconnection!
+      }
+
+      // Small delay between sends to prevent rate limits
+      await new Promise(res => setTimeout(res, 500));
+    }
+
+    return { success: true, sentCount, skippedCount, total: eligibleBills.length };
+  } catch (err) {
+    logFb(`FATAL ERROR: ${err?.message || err}\n${err?.stack || ''}`);
+    console.error(`[WhatsApp Scheduler] Error processing feedback for ${dbName}:`, err);
+    return { success: false, error: err.message };
+  }
+};
+
+export const processWinbackCampaignsForTenant = async (dbName, validTimeStrings, todayDateStr) => {
+  try {
+    const models = await getTenantModels(dbName);
+    const Setting = models.Setting;
+    const Customer = models.Customer;
+    
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    if (!settingsDoc) return;
+    let settings = settingsDoc.value;
+    if (typeof settings === 'string') {
+      try { settings = JSON.parse(settings); } catch (e) {}
+    }
+    if (!settings) return;
+
+    const isEnabled = settings.winback_enabled === true || settings.winback_enabled === 'true';
+    if (!isEnabled) return;
+
+    // Check execute time (default 11:00 AM)
+    const executeTime = settings.winback_execute_time || '11:00';
+    if (!validTimeStrings.has(executeTime)) return;
+
+    // Only run once per day
+    if (settings.lastWinbackRunDate === todayDateStr) return;
+
+    const offerText = settings.winback_offer_text;
+    if (!offerText || !offerText.trim()) return;
+
+    const inactivityDays = Number(settings.winback_days_inactive) || 60;
+    const cutoffDate = new Date(Date.now() - inactivityDays * 86400000);
+    const cooldownDate = new Date(Date.now() - 60 * 86400000); // 60 days cooldown
+
+    // Find customers who haven't visited in `inactivityDays` and either never received a winback OR received one > 60 days ago
+    const eligibleCustomers = await Customer.find({
+      lastVisit: { $lte: cutoffDate },
+      $or: [
+        { lastWinbackSentDate: null },
+        { lastWinbackSentDate: { $lte: cooldownDate } }
+      ],
+      phone: { $exists: true, $ne: '' }
+    }).limit(50);
+
+    if (eligibleCustomers.length === 0) {
+      // Still mark as run for today so it doesn't query again next minute
+      settings.lastWinbackRunDate = todayDateStr;
+      await Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: settings }, { upsert: true });
+      return;
+    }
+
+    const waManager = whatsappManager.getInstance(dbName);
+    await waManager.ensureConnection();
+    const waStatus = waManager.getStatus();
+    
+    if (waStatus.status !== 'CONNECTED') return;
+
+    console.log(`[WhatsApp Scheduler] Running Win-Back for ${dbName}. Target: ${eligibleCustomers.length} customers.`);
+
+    for (const customer of eligibleCustomers) {
+      let phone = customer.phone;
+      let cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+      if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+
+      if (!cleanPhone || cleanPhone.length < 10) continue;
+
+      const customerName = customer.name || 'there';
+      const personalizedMessage = offerText.replace(/\[Name\]/gi, customerName);
+
+      try {
+        await waManager.sendTextMessage(cleanPhone, personalizedMessage);
+        customer.lastWinbackSentDate = new Date();
+        await customer.save();
+        await new Promise(res => setTimeout(res, 3000)); // 3s delay to avoid spamming WhatsApp
+      } catch (err) {
+        console.error(`[WhatsApp Scheduler] Failed to send win-back to ${cleanPhone} for db ${dbName}:`, err);
+      }
+    }
+
+    settings.lastWinbackRunDate = todayDateStr;
+    await Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: settings }, { upsert: true });
+
+  } catch (err) {
+    console.error(`[WhatsApp Scheduler] Error processing win-back for ${dbName}:`, err);
+  }
+};
+
 export const startWhatsAppScheduler = () => {
   cron.schedule('* * * * *', async () => {
     try {
@@ -263,6 +542,27 @@ export const startWhatsAppScheduler = () => {
           const Setting = models.Setting;
 
           const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+
+          // ── Process Feedback Messages ──
+          try {
+            if (settingsDoc) {
+              let s = settingsDoc.value;
+              if (typeof s === 'string') { try { s = JSON.parse(s); } catch (e) {} }
+              if (s && (s.feedback_whatsapp_enabled === true || s.feedback_whatsapp_enabled === 'true')) {
+                await processFeedbackMessagesForTenant(dbName);
+              }
+            }
+          } catch (e) {
+            console.error(`[WhatsApp Scheduler] Feedback error for ${dbName}:`, e);
+          }
+
+          // ── Process Win-Back Campaigns ──
+          try {
+            await processWinbackCampaignsForTenant(dbName, validTimeStrings, todayDateStr);
+          } catch (e) {
+            console.error(`[WhatsApp Scheduler] Win-Back error for ${dbName}:`, e);
+          }
+
           if (!settingsDoc) continue;
 
           let settings = settingsDoc.value;

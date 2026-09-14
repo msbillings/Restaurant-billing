@@ -12,9 +12,26 @@ const printerConfigSchema = new mongoose.Schema({
     required: true
   },
   assignTo: {
-    type: String, // e.g. "Kitchen", "Bar", "Pantry"
+    type: String, // e.g. "Kitchen 1", "Bar", "Pantry"
     trim: true
   },
+  location: {
+    type: String, // e.g. "Ground Floor", "First Floor"
+    trim: true
+  },
+  assignmentMode: {
+    type: String,
+    enum: ['category', 'item'],
+    default: 'category'
+  },
+  assignedCategories: [{
+    type: String,
+    trim: true
+  }],
+  assignedItems: [{
+    type: String,
+    trim: true
+  }],
   ipAddress: {
     type: String,
     trim: true

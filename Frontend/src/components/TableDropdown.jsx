@@ -23,7 +23,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
     setIsOpen(false);
   };
 
-  const getTableStatus = (tableName) => {
+  const getTableStatus = (tableName, clearedAtProp = null) => {
     // Check busy
     const isBusyNow = openOrders.some(order => {
       if (!order || order.status === 'Cancelled' || order.status === 'Paid') return false;
@@ -49,12 +49,32 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
 
     if (isReserved) return 'Reserved';
 
+    // Check if table was recently cleared (within 5 minutes)
+    try {
+      const clearedMap = JSON.parse(localStorage.getItem('msbillings_cleared_tables') || '{}');
+      const tNorm = tableName.trim().toLowerCase();
+      const shortName = tableName.includes(' - ') ? tableName.split(' - ').pop().trim().toLowerCase() : tNorm;
+      const clearedAt = clearedAtProp || clearedMap[tNorm] || clearedMap[shortName];
+      if (clearedAt) {
+        const diffMs = Date.now() - new Date(clearedAt).getTime();
+        const diffM = Math.floor(diffMs / 60000);
+        if (diffM >= 0 && diffM <= 5) {
+          return { status: 'Empty', justCleared: true, clearedMins: diffM };
+        }
+      }
+    } catch (e) { }
+
     return 'Empty';
   };
 
-  const renderStatusBadge = (status) => {
+  const renderStatusBadge = (statusObj) => {
+    const status = typeof statusObj === 'object' ? statusObj.status : statusObj;
     if (status === 'Busy') return <span className="text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold ml-2">(Busy)</span>;
     if (status === 'Reserved') return <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold ml-2">(Reserved)</span>;
+    if (typeof statusObj === 'object' && statusObj.justCleared) {
+      const label = statusObj.clearedMins === 0 ? (t('Just cleared') || 'Just cleared') : `${statusObj.clearedMins}m ago`;
+      return <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded font-bold ml-2">(Empty • {label})</span>;
+    }
     return <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold ml-2">(Empty)</span>;
   };
 
@@ -130,7 +150,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
                           <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 4} {t('seats') || 'seats'})</span>
-                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`, item.clearedAt))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('table') || 'Table'})</span>
                       </div>
@@ -147,7 +167,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
                           <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 6} {t('seats') || 'seats'})</span>
-                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`, item.clearedAt))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('cabin') || 'Cabin'})</span>
                       </div>
@@ -164,7 +184,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
                           <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || 4} {t('seats') || 'seats'})</span>
-                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`, item.clearedAt))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t('sofa') || 'Sofa'})</span>
                       </div>
@@ -181,7 +201,7 @@ const TableDropdown = ({ floors, activeTable, onSelect, align = 'left', customBu
                         <div className="flex items-center">
                           <span className="font-medium text-gray-700 group-hover:text-red-600">{item.name}</span>
                           <span className="text-[10px] text-gray-400 font-medium ml-1.5">({item.capacity || ((item.type || '').toLowerCase() === 'cabin' ? 6 : 4)} {t('seats') || 'seats'})</span>
-                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`))}
+                          {renderStatusBadge(getTableStatus(`${floor.name} - ${item.name}`, item.clearedAt))}
                         </div>
                         <span className="text-[10px] text-gray-400 uppercase tracking-wide group-hover:text-red-400">({t(item.type || 'space') || item.type || 'Space'})</span>
                       </div>

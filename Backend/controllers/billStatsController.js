@@ -54,7 +54,13 @@ export const getDailyStats = async (req, res) => {
     ] = await Promise.allSettled([
       // 1. Paid Stats
       Bill.aggregate([
-        { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+        { $match: { 
+            $or: [
+              { createdAt: { $gte: today, $lt: tomorrow } },
+              { clearedAt: { $gte: today, $lt: tomorrow } }
+            ], 
+            status: 'Paid' 
+        } },
         {
           $project: {
             total: { $ifNull: ['$total', 0] },
@@ -77,12 +83,21 @@ export const getDailyStats = async (req, res) => {
       ]),
       // 2. Paid Bills for accurate payment methods (including Mixed/Split)
       Bill.find({
-        createdAt: { $gte: today, $lt: tomorrow },
+        $or: [
+          { createdAt: { $gte: today, $lt: tomorrow } },
+          { clearedAt: { $gte: today, $lt: tomorrow } }
+        ],
         status: 'Paid'
       }).select('total paymentMode splitPayments').lean(),
       // 3. Top Items (excluding cancelled items)
       Bill.aggregate([
-        { $match: { createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' } },
+        { $match: { 
+            $or: [
+              { createdAt: { $gte: today, $lt: tomorrow } },
+              { clearedAt: { $gte: today, $lt: tomorrow } }
+            ], 
+            status: 'Paid' 
+        } },
         { $unwind: "$items" },
         { $match: { "items.isCancelled": { $ne: true } } },
         { $group: { _id: "$items.name", quantity: { $sum: "$items.quantity" }, revenue: { $sum: "$items.total" } } },
@@ -90,7 +105,13 @@ export const getDailyStats = async (req, res) => {
         { $limit: 10 }
       ]),
       // 4. Recent Bills
-      Bill.find({ createdAt: { $gte: today, $lt: tomorrow }, status: 'Paid' })
+      Bill.find({ 
+        $or: [
+          { createdAt: { $gte: today, $lt: tomorrow } },
+          { clearedAt: { $gte: today, $lt: tomorrow } }
+        ], 
+        status: 'Paid' 
+      })
         .select('billNumber tableNo billType paymentMode total orderSource items status createdAt updatedAt')
         .sort({ createdAt: -1 })
         .limit(10)

@@ -1097,9 +1097,9 @@ export const settleBill = async (req, res) => {
       order.total = Math.round(taxable + taxAmt + (Number(order.deliveryCharge) || 0) + (Number(order.containerCharge) || 0));
     }
 
-    // Set status to 'Paid' - this makes it appear in billing history
-    order.status = 'Paid';
-    order.paymentMode = paymentMode;
+    // Set status to 'Paid' or 'Unpaid' - this makes it appear in billing history
+    order.status = paymentMode === 'Unpaid' ? 'Unpaid' : 'Paid';
+    order.paymentMode = paymentMode === 'Unpaid' ? undefined : paymentMode;
     if (upiApp) {
       order.upiApp = upiApp;
     }
@@ -1145,8 +1145,8 @@ export const settleBill = async (req, res) => {
           console.warn('[settleBill] VersionError caught, retrying on fresh document...');
           const freshOrder = await Bill.findById(order._id);
           if (freshOrder) {
-            freshOrder.status = 'Paid';
-            freshOrder.paymentMode = paymentMode;
+            freshOrder.status = paymentMode === 'Unpaid' ? 'Unpaid' : 'Paid';
+            freshOrder.paymentMode = paymentMode === 'Unpaid' ? undefined : paymentMode;
             if (upiApp) freshOrder.upiApp = upiApp;
             if (amountPaid !== undefined) {
               freshOrder.amountPaid = Number(amountPaid) || 0;
@@ -1487,6 +1487,54 @@ export const updateBillCustomer = async (req, res) => {
     res.json({ success: true, order });
   } catch (err) {
     console.error('Error updating bill customer:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const clearUnpaidBill = async (req, res) => {
+  try {
+    const Bill = getTenantModel(req, 'Bill', BillDefault);
+    const { id } = req.params;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount } = req.body;
+    
+    if (!paymentMode) {
+      return res.status(400).json({ message: 'Payment mode is required to clear an unpaid bill.' });
+    }
+
+    let order = await Bill.findById(id);
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (order.status !== 'Unpaid') {
+      return res.status(400).json({ message: 'Only Unpaid bills can be cleared.' });
+    }
+
+    order.status = 'Paid';
+    order.paymentMode = paymentMode;
+    if (splitPayments) order.splitPayments = splitPayments;
+    if (upiApp) order.upiApp = upiApp;
+    if (amountPaid !== undefined) order.amountPaid = amountPaid;
+    if (changeAmount !== undefined) order.changeAmount = changeAmount;
+    
+    order.clearedAt = new Date();
+    order.updatedAt = new Date();
+
+    await order.save();
+
+    // Bypass Mongoose timestamps immutability to force update createdAt
+    // This ensures the bill counts towards TODAY's DayBook and analytics!
+    const newDate = new Date();
+    await Bill.updateOne({ _id: order._id }, { $set: { createdAt: newDate } });
+    order.createdAt = newDate;
+
+    cache.clear('dailyStats');
+    cache.clear('openOrders');
+
+    emitSocketEvent(req, 'billSettled', order);
+
+    res.json({ success: true, order, message: 'Bill cleared successfully.' });
+  } catch (err) {
+    console.error('Error clearing unpaid bill:', err);
     res.status(500).json({ message: err.message });
   }
 };

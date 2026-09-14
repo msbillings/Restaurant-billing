@@ -29,7 +29,7 @@ export const getBills = async (req, res) => {
     if (status) {
       query.status = status.includes(',') ? { $in: status.split(',').map(s => s.trim()) } : status;
     } else {
-      query.status = { $in: ['Paid', 'Cancelled', 'Deleted'] };
+      query.status = { $in: ['Paid', 'Unpaid', 'Cancelled', 'Deleted'] };
     }
 
     // Bill type filter (e.g. Delivery, Takeaway, or Dine-In,Takeaway)
@@ -54,7 +54,12 @@ export const getBills = async (req, res) => {
 
     // Payment mode filter
     if (paymentMode && paymentMode !== 'all' && paymentMode !== 'All') {
-      query.paymentMode = paymentMode.trim();
+      const pMode = paymentMode.trim();
+      if (pMode === 'Unpaid') {
+        query.status = 'Unpaid';
+      } else {
+        query.paymentMode = pMode;
+      }
     }
 
     // Date range filter (inclusive of full days in IST)
@@ -88,7 +93,7 @@ export const getBills = async (req, res) => {
     // Run query and count concurrently in parallel for 2x faster execution
     const [bills, total] = await Promise.all([
       Bill.find(query)
-        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone items billedAt settledAt createdAt updatedAt')
+        .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone items billedAt settledAt createdAt updatedAt whatsappSent whatsappSentAt')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)

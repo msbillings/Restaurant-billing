@@ -1,5 +1,8 @@
+import mongoose from 'mongoose';
 import whatsappManager from '../services/whatsappService.js';
 import { getTenantModels } from '../utils/tenantManager.js';
+import { getTenantModel } from '../utils/tenantHelper.js';
+import BillDefault from '../models/Bill.js';
 
 export const resolveTenantInfo = async (req) => {
   let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
@@ -157,7 +160,7 @@ export const sendMessage = async (req, res) => {
 
 export const sendBill = async (req, res) => {
   try {
-    const { phone, billText, imageBase64, pdfBase64, documentBase64, mimetype, fileName } = req.body;
+    const { phone, billText, imageBase64, pdfBase64, documentBase64, mimetype, fileName, billId, billNumber } = req.body;
     if (!phone) {
       return res.status(400).json({ error: 'Destination phone number is required.' });
     }
@@ -166,9 +169,35 @@ export const sendBill = async (req, res) => {
     const imgKB  = imageBase64    ? Math.round(imageBase64.length    * 0.75 / 1024) : 0;
     const pdfKB  = pdfBase64      ? Math.round(pdfBase64.length      * 0.75 / 1024) : 0;
     const docKB  = documentBase64 ? Math.round(documentBase64.length * 0.75 / 1024) : 0;
-    console.log(`[WhatsApp sendBill] ▶ phone=${phone} | imageKB=${imgKB} | pdfKB=${pdfKB} | docKB=${docKB} | hasText=${!!billText}`);
+    console.log(`[WhatsApp sendBill] ▶ phone=${phone} | imageKB=${imgKB} | pdfKB=${pdfKB} | docKB=${docKB} | hasText=${!!billText} | billId=${billId || 'none'} | billNumber=${billNumber || 'none'}`);
 
     const { tenantId, whatsappService } = await resolveTenantInfo(req);
+
+    // --- Prevent duplicate WhatsApp sends for the same bill ---
+    let models = null;
+    try {
+      models = req.models || (await getTenantModels(tenantId));
+    } catch (e) {}
+
+    const BillModel = (models && models.Bill) || getTenantModel(req, 'Bill', BillDefault);
+
+    if (BillModel && (billId || billNumber)) {
+      try {
+        const query = billId && mongoose.Types.ObjectId.isValid(billId)
+          ? { _id: billId }
+          : { billNumber: billNumber || billId };
+        const existingBill = await BillModel.findOne(query).select('whatsappSent billNumber').lean();
+        if (existingBill && existingBill.whatsappSent) {
+          console.warn(`[WhatsApp sendBill] ⚠️ Bill ${existingBill.billNumber || billId} was already sent via WhatsApp. Preventing duplicate send.`);
+          return res.status(409).json({
+            error: 'This bill has already been sent to customer via WhatsApp.',
+            alreadySent: true
+          });
+        }
+      } catch (checkErr) {
+        console.warn('[WhatsApp sendBill] Duplicate check warning:', checkErr?.message);
+      }
+    }
 
     // --- DIAGNOSTIC: Log socket state BEFORE ensureConnection ---
     const wsStateBefore = whatsappService.sock?.ws?.socket?.readyState ?? whatsappService.sock?.ws?.readyState ?? 'none';
@@ -201,6 +230,21 @@ export const sendBill = async (req, res) => {
       console.log(`[WhatsApp sendBill] Sending TEXT to ${phone}...`);
       await whatsappService.sendMessage(phone, billText);
       console.log(`[WhatsApp sendBill] ✅ Text sent successfully to ${phone}`);
+    }
+
+    // --- Mark bill as sent in DB ---
+    if (BillModel && (billId || billNumber)) {
+      try {
+        const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
+          ? { _id: billId }
+          : { billNumber: billNumber || billId };
+        const updateRes = await BillModel.updateOne(updateQuery, {
+          $set: { whatsappSent: true, whatsappSentAt: new Date() }
+        });
+        console.log(`[WhatsApp sendBill] ✅ Marked bill ${billNumber || billId} as whatsappSent in DB (matched: ${updateRes?.matchedCount}, modified: ${updateRes?.modifiedCount})`);
+      } catch (dbErr) {
+        console.warn('[WhatsApp sendBill] Could not update Bill whatsappSent flag:', dbErr?.message);
+      }
     }
 
     res.json({ success: true, message: 'e-Bill sent successfully via WhatsApp!' });
@@ -249,6 +293,81 @@ export const triggerAutoDayBook = async (req, res) => {
     }
   } catch (error) {
     console.error('Error triggering auto DayBook:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const logCampaign = async (req, res) => {
+  try {
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    const CampaignModel = models?.Campaign;
+    if (!CampaignModel) {
+      return res.status(500).json({ error: 'Campaign model not available' });
+    }
+
+    const {
+      title,
+      offerName,
+      offerId,
+      message,
+      imageUrl,
+      targetSegment,
+      totalRecipients,
+      sentCount,
+      failedCount,
+      status,
+      recipients
+    } = req.body;
+
+    const campaign = new CampaignModel({
+      title: title || 'WhatsApp Offer Broadcast',
+      offerName: offerName || '',
+      offerId: offerId && mongoose.Types.ObjectId.isValid(offerId) ? offerId : null,
+      message: message || '',
+      imageUrl: imageUrl || '',
+      targetSegment: targetSegment || 'all',
+      totalRecipients: Number(totalRecipients) || 0,
+      sentCount: Number(sentCount) || 0,
+      failedCount: Number(failedCount) || 0,
+      status: status || 'completed',
+      recipients: Array.isArray(recipients) ? recipients : []
+    });
+
+    await campaign.save();
+    res.json({ success: true, campaign });
+  } catch (error) {
+    console.error('[WhatsApp logCampaign error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to log campaign.' });
+  }
+};
+
+export const getCampaignHistory = async (req, res) => {
+  try {
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    const CampaignModel = models?.Campaign;
+    if (!CampaignModel) {
+      return res.status(500).json({ error: 'Campaign model not available' });
+    }
+
+    const campaigns = await CampaignModel.find().sort({ sentAt: -1 }).limit(50).lean();
+    res.json({ success: true, campaigns });
+  } catch (error) {
+    console.error('[WhatsApp getCampaignHistory error]:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch campaign history.' });
+  }
+};
+
+export const triggerFeedback = async (req, res) => {
+  try {
+    const { tenantId } = await resolveTenantInfo(req);
+    const { processFeedbackMessagesForTenant } = await import('../utils/whatsappScheduler.js');
+    const billId = req.body?.billId || req.query?.billId || null;
+    processFeedbackMessagesForTenant(tenantId, billId).catch(err => console.error('[triggerFeedback error]:', err));
+    res.json({ success: true, message: 'Feedback processing triggered in background' });
+  } catch (error) {
+    console.error('Error triggering feedback:', error);
     res.status(500).json({ error: error.message });
   }
 };

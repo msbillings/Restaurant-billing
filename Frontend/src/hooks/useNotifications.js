@@ -322,19 +322,27 @@ export const getNotificationFingerprint = (n) => {
   } else if (title.includes('print') || notifType.includes('print') || title.includes('saved & printed')) {
     actionKey = 'print';
   } else if (title.includes('kot') || notifType.includes('kot')) {
-    actionKey = 'kot';
+    actionKey = (title.includes('update') || notifType.includes('update') || title.includes('item quantity') || title.includes('reduced')) ? 'kot_updated' : 'kot';
   } else if (title.includes('cancel') || notifType.includes('cancel')) {
     actionKey = `cancel_${data.itemId || ''}`;
+  } else if (title.includes('held') || notifType.includes('hold') || title.includes('hold')) {
+    actionKey = 'order_held';
+  } else if (title.includes('update') || notifType.includes('update') || notifType === 'order_updated') {
+    actionKey = 'order_updated';
+  } else if (title.includes('order placed') || title.includes('new order') || notifType === 'new_order') {
+    actionKey = 'new_order';
   } else if (title.includes('order') || notifType.includes('order')) {
     actionKey = 'order';
   } else if (title.includes('water') || title.includes('waiter') || notifType.includes('service')) {
     actionKey = 'service';
   }
 
-  if (billNo) return `${actionKey}::bill_${billNo}`;
-  if (orderId && orderId !== 'undefined') return `${actionKey}::order_${orderId}`;
-  if (tableNo) return `${actionKey}::table_${tableNo}`;
-  return `${actionKey}::${title}::${message}`;
+  // Include sanitized message content so separate updates or changes on the same table/order are NEVER erroneously suppressed as duplicates
+  const cleanMsg = message.replace(/\s+/g, ' ').trim();
+  if (billNo) return `${actionKey}::bill_${billNo}::${cleanMsg}`;
+  if (orderId && orderId !== 'undefined') return `${actionKey}::order_${orderId}::${cleanMsg}`;
+  if (tableNo) return `${actionKey}::table_${tableNo}::${cleanMsg}`;
+  return `${actionKey}::${title}::${cleanMsg}`;
 };
 
 // ── 4. MAIN USE_NOTIFICATIONS HOOK ──────────────────────────────────────────
@@ -677,13 +685,13 @@ const useNotifications = (userRole = 'Admin') => {
         return;
       }
 
-      // 3. Semantic Fingerprint Deduplication (10-second sliding window)
+      // 3. Semantic Fingerprint Deduplication (2.5-second sliding window for identical socket + poll duplicate packets)
       const now = Date.now();
       const fp = getNotificationFingerprint(notification);
       if (fp && recentFingerprintsRef.current.has(fp)) {
         const lastSeen = recentFingerprintsRef.current.get(fp);
-        if (now - lastSeen < 10000) {
-          console.log(`[useNotifications] 🛡️ Suppressed duplicate notification within 10s: [${fp}] "${notification.title}"`);
+        if (now - lastSeen < 2500) {
+          console.log(`[useNotifications] 🛡️ Suppressed duplicate notification within 2.5s: [${fp}] "${notification.title}"`);
           if (notifId) knownNotifIdsRef.current.add(notifId);
           return;
         }

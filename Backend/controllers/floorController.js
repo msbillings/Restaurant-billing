@@ -30,7 +30,8 @@ export const saveFloors = async (req, res) => {
         if (!Array.isArray(items)) return [];
         return items.map(item => ({
           ...item,
-          capacity: Number(item.capacity) > 0 ? Number(item.capacity) : defaultCap
+          capacity: Number(item.capacity) > 0 ? Number(item.capacity) : defaultCap,
+          clearedAt: item.clearedAt || null
         }));
       };
 
@@ -43,7 +44,8 @@ export const saveFloors = async (req, res) => {
           ...sp,
           capacity: Number(sp.capacity) > 0
             ? Number(sp.capacity)
-            : ((sp.type || '').toLowerCase() === 'cabin' ? 6 : 4)
+            : ((sp.type || '').toLowerCase() === 'cabin' ? 6 : 4),
+          clearedAt: sp.clearedAt || null
         }))
       };
     });
@@ -64,20 +66,29 @@ export const updateTableStatus = async (req, res) => {
   try {
     const Floor = getTenantModel(req, 'Floor', FloorDefault);
     const { floorId, tableId } = req.params;
-    const { status, currentOrderId } = req.body;
+    const { status, currentOrderId, clearedAt } = req.body;
 
     const floor = await Floor.findOne({ id: floorId });
     if (!floor) return res.status(404).json({ message: 'Floor not found' });
 
     let itemFound = false;
+    let updatedClearedAt = null;
     const arraysToCheck = ['tables', 'cabins', 'sofas', 'spaces'];
     
     for (let arrayName of arraysToCheck) {
       if (floor[arrayName]) {
         for (let item of floor[arrayName]) {
           if (item.id === tableId) {
-            if (status) item.status = status;
+            if (status) {
+              item.status = status;
+              if (status === 'Available') {
+                item.clearedAt = clearedAt !== undefined ? clearedAt : new Date();
+              } else {
+                item.clearedAt = null;
+              }
+            }
             if (currentOrderId !== undefined) item.currentOrderId = currentOrderId;
+            updatedClearedAt = item.clearedAt;
             itemFound = true;
             break;
           }
@@ -91,7 +102,7 @@ export const updateTableStatus = async (req, res) => {
     await floor.save();
     
     // Broadcast the change!
-    emitSocketEvent(req, 'tableStatusChanged', { floorId, tableId, status, currentOrderId });
+    emitSocketEvent(req, 'tableStatusChanged', { floorId, tableId, status, currentOrderId, clearedAt: updatedClearedAt });
 
     res.status(200).json(floor);
   } catch (error) {
@@ -100,7 +111,7 @@ export const updateTableStatus = async (req, res) => {
 };
 
 // Helper function for other controllers to update table status
-export const updateTableStatusHelper = async (req, tableIdentifier, status, currentOrderId = null) => {
+export const updateTableStatusHelper = async (req, tableIdentifier, status, currentOrderId = null, clearedAt = undefined) => {
   if (!tableIdentifier || typeof tableIdentifier !== 'string') return;
   try {
     const Floor = getTenantModel(req, 'Floor', FloorDefault);
@@ -109,6 +120,7 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
     let tableFound = false;
     let targetFloorId = null;
     let targetTableId = null;
+    let updatedClearedAt = null;
 
     const tableIdentifierLower = tableIdentifier.trim().toLowerCase();
     const hasFloorPrefix = tableIdentifier.includes(' - ');
@@ -131,9 +143,15 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
             if (matches) {
               item.status = status;
               item.currentOrderId = currentOrderId;
+              if (status === 'Available') {
+                item.clearedAt = clearedAt !== undefined ? clearedAt : new Date();
+              } else {
+                item.clearedAt = null;
+              }
               tableFound = true;
               targetFloorId = floor.id;
               targetTableId = item.id;
+              updatedClearedAt = item.clearedAt;
               break;
             }
           }
@@ -147,7 +165,14 @@ export const updateTableStatusHelper = async (req, tableIdentifier, status, curr
     }
 
     if (tableFound) {
-      emitSocketEvent(req, 'tableStatusChanged', { floorId: targetFloorId, tableId: targetTableId, status, currentOrderId });
+      emitSocketEvent(req, 'tableStatusChanged', {
+        floorId: targetFloorId,
+        tableId: targetTableId,
+        status,
+        currentOrderId,
+        clearedAt: updatedClearedAt,
+        tableNo: tableIdentifier
+      });
     }
   } catch (error) {
     console.error('Error updating table status via helper:', error);

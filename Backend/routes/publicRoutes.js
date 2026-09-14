@@ -11,6 +11,7 @@ import ReservationDefault from '../models/Reservation.js';
 import ClientDefault from '../models/Client.js';
 import CustomerDefault from '../models/Customer.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import { getTenantModels } from '../utils/tenantManager.js';
 import { updateTableStatusHelper } from '../controllers/floorController.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { emitNotification, emitDismissNotification, getTenantDbFromReq } from '../utils/notificationHelper.js';
@@ -734,6 +735,42 @@ router.post('/request-item-cancel', async (req, res) => {
   } catch (error) {
     console.error("Error requesting item cancellation:", error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Public endpoint for shortened review link redirect
+router.get('/r/:encodedDbName', async (req, res) => {
+  try {
+    const encodedDbName = req.params.encodedDbName;
+    const tenantDb = Buffer.from(encodedDbName, 'base64url').toString('utf-8');
+    const models = await getTenantModels(tenantDb);
+    const Setting = models.Setting;
+    
+    let reviewLink = '';
+    const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+    if (settingsDoc && settingsDoc.value) {
+      let settings = settingsDoc.value;
+      if (typeof settings === 'string') {
+        try { settings = JSON.parse(settings); } catch (e) {}
+      }
+      reviewLink = settings.google_review_link || settings.googleReviewLink;
+    }
+    
+    if (!reviewLink) {
+      const reviewDoc = await Setting.findOne({ key: 'googleReviewLink' }).lean();
+      if (reviewDoc && reviewDoc.value) {
+        reviewLink = reviewDoc.value;
+      }
+    }
+    
+    if (reviewLink && reviewLink.trim()) {
+      return res.redirect(302, reviewLink.trim());
+    } else {
+      return res.status(404).send('Review link not found for this restaurant.');
+    }
+  } catch (error) {
+    console.error("Error in review short link redirect:", error);
+    res.status(500).send('Internal Server Error');
   }
 });
 

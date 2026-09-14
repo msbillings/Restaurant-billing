@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 
 import { 
-  getActiveOrder, saveOrder, generateBill, settleBill, getOpenOrders, reopenOrder, cancelOrder, refundOrder, updateBillCustomer 
+  getActiveOrder, saveOrder, generateBill, settleBill, getOpenOrders, reopenOrder, cancelOrder, refundOrder, updateBillCustomer, clearUnpaidBill
 } from '../controllers/orderController.js';
 import { 
   generateKOT, getTodayKOTs, getActiveKOTs, updateKOTItemStatus, updateItemPrepTime, resolveItemCancel 
@@ -40,6 +40,7 @@ router.post('/generate/:id', authenticateToken, generateBill);
 router.post('/reopen/:id', authenticateToken, reopenOrder);
 router.post('/cancel/:id', authenticateToken, cancelOrder);
 router.post('/settle/:id', authenticateToken, settleBill);
+router.post('/clear-unpaid/:id', authenticateToken, clearUnpaidBill);
 router.post('/transfer/:id', authenticateToken, transferTable);
 router.post('/merge', authenticateToken, mergeTableOrders);
 router.post('/kot/:id', authenticateToken, generateKOT);

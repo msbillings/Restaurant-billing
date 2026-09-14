@@ -188,9 +188,15 @@ class WhatsAppService {
           console.warn(`[WhatsApp Diagnostics - ${this.tenantId}] Connection CLOSED! Code: ${statusCode}, Reason: "${errorMessage || errorPayload?.error || 'Unknown'}"`);
 
           const isConflict = statusCode === 440;
-          const isExplicitLoggedOut = statusCode === DisconnectReason.loggedOut && 
-            (errorPayload?.error === 'Unauthorized' || String(errorMessage).toLowerCase().includes('logged out'));
-          const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired || statusCode === 401 || statusCode === 408;
+          // DisconnectReason.loggedOut === 401. Catch ALL 401s as a logout — do NOT
+          // require a specific message text, because WhatsApp sometimes sends 401 with
+          // non-standard messages (e.g. empty, "Stream Errored"). If we miss it here it
+          // falls into isRestartRequired (also 401) and loops forever with dead creds.
+          const isExplicitLoggedOut = statusCode === 401 || statusCode === DisconnectReason.loggedOut ||
+            String(errorMessage).toLowerCase().includes('logged out') ||
+            errorPayload?.error === 'Unauthorized';
+          // 401 deliberately excluded — it is handled exclusively by isExplicitLoggedOut above.
+          const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired || statusCode === 408;
           
           if (isExplicitLoggedOut) {
             console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Logged out explicitly. Clearing credentials...`);
@@ -217,13 +223,17 @@ class WhatsAppService {
               this.init();
             }, 2000);
           } else if (isConflict) {
-            // Code 440: WhatsApp server kicked us out due to a session conflict.
-            // Wait before reconnecting so the old session expires on WhatsApp's end.
+            // Code 440: WhatsApp server kicked us out due to a session conflict
+            // (most commonly caused by WhatsApp Web being open simultaneously in a browser).
+            // SILENT RECOVERY: do NOT change status, do NOT notify listeners, do NOT update
+            // MongoDB. The frontend keeps showing CONNECTED while the bot quietly reconnects
+            // in the background. The user never sees a disconnect flicker.
             this._conflictCount = (this._conflictCount || 0) + 1;
             const conflictDelay = Math.min(8000 + (this._conflictCount - 1) * 3000, 20000);
-            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Code 440 conflict #${this._conflictCount} — waiting ${conflictDelay}ms before reconnect...`);
-            this.status = 'CONNECTING';
-            this.notifyListeners();
+            console.log(`[WhatsApp Diagnostics - ${this.tenantId}] Code 440 silent recovery #${this._conflictCount} — reconnecting in ${conflictDelay}ms (status kept CONNECTED, UI not notified)...`);
+            // ✅ No this.status change — stays 'CONNECTED'
+            // ✅ No this.notifyListeners() — frontend sees no flicker
+            // ✅ No MongoDB whatsapp_status update — cross-device view stays green
             setTimeout(() => {
               this._initPromise = null;
               this.isInitializing = false;
@@ -352,7 +362,8 @@ class WhatsAppService {
       return { success: true, pairingCode: formattedCode, rawCode: code };
     } catch (err) {
       console.error('[WhatsApp Service] Pairing code error:', err);
-      this.clearAuth();
+      // NOTE: Do NOT call clearAuth() here — a pairing code network error or timeout
+      // must NOT wipe saved MongoDB credentials. Only reinitialize the socket and retry.
       this.isInitializing = false;
       await this.init();
       let waited = 0;
@@ -373,6 +384,12 @@ class WhatsAppService {
   }
 
   async refreshQR() {
+    // Guard: never tear down a live connected session just because the user
+    // clicked "Refresh QR". Only regenerate if we are not already connected.
+    if (this.status === 'CONNECTED' && this.sock?.user?.id && isSocketOpen(this.sock)) {
+      console.log(`[WhatsApp Service - ${this.tenantId}] refreshQR() skipped — socket is already CONNECTED.`);
+      return { success: true, message: 'Already connected — no QR refresh needed' };
+    }
     this.isInitializing = false;
     this.qrDataUrl = null;
     this.status = 'DISCONNECTED';
@@ -383,7 +400,8 @@ class WhatsAppService {
   getStatus() {
     const isActuallyConnected = (this.status === 'CONNECTED' || Boolean(this.sock?.user?.id)) && isSocketOpen(this.sock);
     const phone = isActuallyConnected ? (this.connectedNumber || (this.sock?.user?.id ? this.sock.user.id.split(':')[0].replace(/[^0-9]/g, '') : null)) : null;
-    const { name: deviceName, platform: platformName } = this.getPlatformInfo();
+    // getPlatformInfo() returns { browserConfig, platformName, deviceName } — use correct keys.
+    const { platformName, deviceName } = this.getPlatformInfo();
 
     let currentStatus = this.status;
     if (isActuallyConnected) {
@@ -523,6 +541,35 @@ class WhatsAppService {
       }
       throw sendErr;
     }
+  }
+
+  async sendTextMessage(rawPhone, text) {
+    return this.sendMessage(rawPhone, text);
+  }
+
+  async sendFeedbackMessage(rawPhone, customerName, reviewLink, restaurantName) {
+    if (!reviewLink) {
+      console.warn(`[WhatsApp Service - ${this.tenantId}] No review link provided, skipping feedback message.`);
+      return;
+    }
+    const greeting = (customerName && customerName !== 'Guest' && String(customerName).trim()) 
+      ? String(customerName).trim() 
+      : 'there';
+    const restName = (restaurantName && String(restaurantName).trim()) 
+      ? String(restaurantName).trim() 
+      : 'our restaurant';
+
+    const text = `Hi ${greeting},
+
+We hope you enjoyed your meal at *${restName}*! 🍽️
+⭐ How was your experience?
+
+We would love to hear your feedback. Rate your experience here:
+${reviewLink}
+
+Thank you for visiting!`;
+    
+    return this.sendMessage(rawPhone, text);
   }
 
   async sendBillMedia(rawPhone, { imageBase64, pdfBase64, documentBase64, mimetype, caption, fileName }) {

@@ -1,35 +1,166 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Printer, ArrowLeft } from 'lucide-react';
+import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2 } from 'lucide-react';
+import axios from 'axios';
+import { getApiUrl } from '../config';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
   const [settings, setSettings] = useState({
     restaurantName: 'msbillings'
   });
+  const [printerConfigs, setPrinterConfigs] = useState([]);
+  const [selectedDept, setSelectedDept] = useState('ALL'); // 'ALL' or specific kitchen department
+  const [isPrintingAll, setIsPrintingAll] = useState(false);
 
   useEffect(() => {
     const savedSettings = localStorage.getItem('restaurantSettings');
     if (savedSettings) {
       setSettings(JSON.parse(savedSettings));
     }
+
+    // Fetch configured printers to link departments to printer hardware
+    const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+    axios.get(`${getApiUrl()}/printer-configs`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(res => {
+      setPrinterConfigs(res.data || []);
+    }).catch(() => {});
   }, []);
 
-  const handlePrint = () => {
+  // Group items dynamically by Kitchen Station / Printer Config
+  const stationGroups = useMemo(() => {
+    if (!order?.items || !Array.isArray(order.items) || order.items.length === 0) {
+      return [];
+    }
+
+    const activePrinters = printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+
+    const map = new Map();
+
+    order.items.forEach(item => {
+      const itemLower = (item.name || '').trim().toLowerCase();
+      const catLower = (item.category?.name || item.category || '').trim().toLowerCase();
+      const deptLower = (item.department || '').trim().toLowerCase();
+
+      let matchedPrinter = null;
+      for (const printer of activePrinters) {
+        // 1. Check item-level assignment
+        if (printer.assignmentMode === 'item' && Array.isArray(printer.assignedItems) && printer.assignedItems.length > 0) {
+          if (printer.assignedItems.some(it => it.trim().toLowerCase() === itemLower)) {
+            matchedPrinter = printer;
+            break;
+          }
+        }
+        // 2. Check category-level assignment
+        else if (Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0) {
+          if (catLower && printer.assignedCategories.some(c => c.trim().toLowerCase() === catLower)) {
+            matchedPrinter = printer;
+            break;
+          }
+        }
+        // 3. Check station name or assignTo match
+        if (deptLower && deptLower !== 'all' && deptLower !== 'general') {
+          if (printer.name && printer.name.trim().toLowerCase() === deptLower) {
+            matchedPrinter = printer;
+            break;
+          }
+          if (printer.assignTo && printer.assignTo.trim().toLowerCase() === deptLower) {
+            matchedPrinter = printer;
+            break;
+          }
+        }
+      }
+
+      const key = matchedPrinter
+        ? matchedPrinter._id || matchedPrinter.name
+        : (deptLower && deptLower !== 'all' && deptLower !== 'general' ? deptLower : 'Kitchen');
+
+      const name = matchedPrinter
+        ? matchedPrinter.name
+        : (deptLower && deptLower !== 'all' && deptLower !== 'general' ? item.department : 'Kitchen');
+
+      const location = matchedPrinter ? (matchedPrinter.location || '') : '';
+
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          name,
+          location,
+          printer: matchedPrinter,
+          items: []
+        });
+      }
+      map.get(key).items.push(item);
+    });
+
+    return Array.from(map.values());
+  }, [order?.items, printerConfigs]);
+
+  const activeStationGroup = useMemo(() => {
+    if (selectedDept === 'ALL') return null;
+    return stationGroups.find(g => g.key === selectedDept || g.name === selectedDept) || null;
+  }, [selectedDept, stationGroups]);
+
+  // Filter items for currently selected view
+  const displayedItems = useMemo(() => {
+    if (!order?.items) return [];
+    if (selectedDept === 'ALL') return order.items;
+    if (activeStationGroup) return activeStationGroup.items;
+    return order.items.filter(item => 
+      (item.department || '').trim().toLowerCase() === selectedDept.trim().toLowerCase()
+    );
+  }, [order?.items, selectedDept, activeStationGroup]);
+
+  // Print current active tab/kitchen
+  const handlePrintCurrent = () => {
     if (window.electronAPI) {
       const receiptNode = document.querySelector('#kot-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
       const isSilent = settings.silentPrinting !== false;
-      if (isSilent && settings.kotPrinter) {
-        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter, true);
-      } else {
-        window.electronAPI.silentPrint(htmlContent, settings.kotPrinter || '', false);
+
+      // Find if there is a specific physical printer configured for this station
+      let targetPrinter = settings.kotPrinter || '';
+      if (activeStationGroup?.printer?.deviceName) {
+        targetPrinter = activeStationGroup.printer.deviceName;
       }
+
+      window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {
       window.print();
     }
+  };
+
+  // Print separate sub-slips for each kitchen station sequentially
+  const handlePrintAllKitchens = async () => {
+    if (stationGroups.length <= 1) {
+      handlePrintCurrent();
+      return;
+    }
+
+    setIsPrintingAll(true);
+    for (let i = 0; i < stationGroups.length; i++) {
+      const grp = stationGroups[i];
+      setSelectedDept(grp.key);
+      // Allow DOM to re-render with the station's items and title badge
+      await new Promise(res => setTimeout(res, 280));
+
+      if (window.electronAPI) {
+        const receiptNode = document.querySelector('#kot-print-area .receipt-print');
+        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
+        const isSilent = settings.silentPrinting !== false;
+
+        const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
+        window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
+      } else {
+        window.print();
+      }
+      await new Promise(res => setTimeout(res, 350));
+    }
+    setIsPrintingAll(false);
+    setSelectedDept('ALL');
   };
 
   const getFormatClasses = () => {
@@ -42,7 +173,7 @@ const KOT = ({ order, onClose }) => {
   };
 
   return (
-    <div id="kot-print-area" className="invoice-container fixed inset-0 bg-black/30 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
+    <div id="kot-print-area" className="invoice-container fixed inset-0 bg-black/40 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-3 sm:p-4 print:p-0 print:block print:w-full print:h-full">
       <style>
         {`
           @media print {
@@ -70,25 +201,85 @@ const KOT = ({ order, onClose }) => {
         `}
       </style>
 
-      {/* Controls - Hidden on Print */}
-      <div className="sticky top-4 flex items-center justify-center gap-2.5 print:hidden w-full max-w-xl mx-auto z-30 px-3 py-2 bg-transparent mb-4">
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-2 bg-white text-gray-900 rounded-xl hover:bg-gray-100 transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
-          <Printer size={16} />
-          <span>{t("Print KOT")}</span>
-        </button>
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
-          <ArrowLeft size={16} />
-          <span>{t("Close")}</span>
-        </button>
+      {/* Top Floating Controls - Hidden on Print */}
+      <div className="sticky top-2 flex flex-col items-center gap-2.5 print:hidden w-full max-w-2xl mx-auto z-30 px-3 py-2.5 bg-white/90 backdrop-blur-md rounded-2xl shadow-xl border border-white/50 mb-3">
+        {/* Multi-Kitchen Station Filter Tabs */}
+        {stationGroups.length > 1 && (
+          <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setSelectedDept('ALL')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                selectedDept === 'ALL'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}>
+              <Layers size={13} />
+              <span>{t("All Kitchens")} ({order.items?.length || 0})</span>
+            </button>
+            {stationGroups.map((grp) => {
+              const isSelected = selectedDept === grp.key || selectedDept === grp.name;
+              return (
+                <button
+                  key={grp.key}
+                  type="button"
+                  onClick={() => setSelectedDept(grp.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}>
+                  <ChefHat size={13} />
+                  <span>{grp.name}</span>
+                  {grp.location && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}>
+                      {grp.location}
+                    </span>
+                  )}
+                  <span>({grp.items.length})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Buttons Row */}
+        <div className="flex items-center justify-center gap-2.5 w-full flex-wrap">
+          {stationGroups.length > 1 && (
+            <button
+              onClick={handlePrintAllKitchens}
+              disabled={isPrintingAll}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer disabled:opacity-50">
+              <Printer size={15} />
+              <span>{isPrintingAll ? t("Printing All...") : t("Print All Kitchens (Split Slips)")}</span>
+            </button>
+          )}
+
+          <button
+            onClick={handlePrintCurrent}
+            className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+            <Printer size={15} />
+            <span>
+              {stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
+                ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}` 
+                : t("Print KOT")}
+            </span>
+          </button>
+
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+            <ArrowLeft size={15} />
+            <span>{t("Close")}</span>
+          </button>
+        </div>
       </div>
 
-      {/* KOT Preview */}
+      {/* KOT Receipt Preview */}
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-6 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-4 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
           fontFamily: "Arial, Helvetica, sans-serif",
           color: '#000',
@@ -106,12 +297,49 @@ const KOT = ({ order, onClose }) => {
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </div>
-            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>{t("KOT -")}{order.kotNumber || order.billNumber || 'PREVIEW'}</div>
+            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>
+              {(() => {
+                const raw = (order.kotNumber || order.billNumber || '').toString().trim();
+                if (!raw) return 'KOT PREVIEW';
+                if (raw.toUpperCase().includes('UPDATE')) return raw;
+                if (raw.toUpperCase().startsWith('CANCEL')) {
+                  const num = raw.replace(/^[A-Z]+-?/i, '');
+                  return num ? `CANCEL KOT No: ${num}` : raw;
+                }
+                const num = raw.replace(/^KOT-?/i, '').trim();
+                return num ? `KOT No: ${num}` : raw;
+              })()}
+            </div>
+
+            {/* Kitchen Station Header Badge on Slip */}
+            {(() => {
+              const stationToDisplay = activeStationGroup || (stationGroups.length === 1 && stationGroups[0].name !== 'Kitchen' ? stationGroups[0] : null);
+              if (!stationToDisplay && selectedDept === 'ALL') return null;
+              const title = stationToDisplay 
+                ? `${stationToDisplay.name.toUpperCase()}${stationToDisplay.location ? ` - ${stationToDisplay.location.toUpperCase()}` : ''}`
+                : selectedDept.toUpperCase();
+              return (
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  padding: '3px 10px',
+                  border: '1.5px solid #000',
+                  display: 'inline-block',
+                  marginTop: '3px',
+                  marginBottom: '3px',
+                  letterSpacing: '0.5px'
+                }}>
+                  [ {title} ]
+                </div>
+              );
+            })()}
+
             {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
               <div className="text-base font-bold text-gray-900" style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
                 {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
               </div>
             )}
+
             {(() => {
               const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
               if (bType === 'Delivery') {
@@ -152,9 +380,9 @@ const KOT = ({ order, onClose }) => {
 
           {/* Info - Left aligned */}
           <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left' }}>
-            {order.captainName && <div>{t("Assign to:")}{order.captainName}</div>}
-            {order.captainName && <div>{t("Captain:")}{order.captainName}</div>}
-            {!order.captainName && <div>{t("Biller:")}{order.cashierName || 'admin'}</div>}
+            {order.captainName && <div>{t("Assign to:")} {order.captainName}</div>}
+            {order.captainName && <div>{t("Captain:")} {order.captainName}</div>}
+            {!order.captainName && <div>{t("Biller:")} {order.cashierName || 'admin'}</div>}
           </div>
           
           <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
@@ -168,38 +396,40 @@ const KOT = ({ order, onClose }) => {
 
           {/* Items List */}
           <div className="mb-1" style={{ marginBottom: '4px' }}>
-            {order.items && order.items.length > 0 ?
-            order.items.map((item, idx) => {
-              const isCancelled = item.status === 'Cancelled' || item.isCancelled;
-              const isReduced = !isCancelled && (item.reducedQuantity > 0);
-              const cancelCount = item.cancelledQuantity || item.quantity || 1;
-              return (
-                <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
-                  <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
-                      {item.name || 'Unknown Item'}
-                      {isCancelled && <span className="text-[10px] ml-1 font-black text-red-600" style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
-                      {isReduced && <span className="text-[10px] ml-1 font-black text-red-500" style={{ fontSize: '10px', marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
-                    </div>
-                    <div className="text-center px-1 break-words text-xs" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: '11px', color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
-                      {item.specialNote ? item.specialNote : '-'}
-                    </div>
-                    <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
-                      {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
+            {displayedItems && displayedItems.length > 0 ? (
+              displayedItems.map((item, idx) => {
+                const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+                const isReduced = !isCancelled && (item.reducedQuantity > 0);
+                const cancelCount = item.cancelledQuantity || item.quantity || 1;
+                return (
+                  <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
+                    <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                      <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
+                        {item.name || 'Unknown Item'}
+                        {isCancelled && <span className="text-[10px] ml-1 font-black text-red-600" style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
+                        {isReduced && <span className="text-[10px] ml-1 font-black text-red-500" style={{ fontSize: '10px', marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
+                      </div>
+                      <div className="text-center px-1 break-words text-xs" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: '11px', color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
+                        {item.specialNote ? item.specialNote : '-'}
+                      </div>
+                      <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
+                        {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            }) :
-
-            <div className="text-center py-1" style={{ textAlign: 'center', padding: '4px 0' }}>{t("No items")}</div>
-            }
+                );
+              })
+            ) : (
+              <div className="text-center py-2 text-gray-500" style={{ textAlign: 'center', padding: '8px 0' }}>
+                {t("No items for this kitchen")}
+              </div>
+            )}
           </div>
           
         </div>
       </div>
-    </div>);
-
+    </div>
+  );
 };
 
 export default KOT;

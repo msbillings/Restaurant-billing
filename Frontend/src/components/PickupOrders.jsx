@@ -1,7 +1,8 @@
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from 'react';
-import { getBills, getBillById, deleteBill } from '../api/billing';
+import { getBills, getBillById, deleteBill, clearUnpaidBill } from '../api/billing';
 import Invoice from './Invoice';
+import PaymentModal from './PaymentModal';
 import ConfirmationModal from './ConfirmationModal';
 import {
   ShoppingBag,
@@ -15,7 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
@@ -36,6 +38,7 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, billId: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalBills: 0, totalPages: 1, currentPage: 1 });
+  const [clearModal, setClearModal] = useState({ isOpen: false, billId: null, total: 0, customerName: '', paymentMode: 'Cash', loading: false, error: '' });
   const itemsPerPage = 20;
 
   const fetchPickupOrders = async () => {
@@ -119,6 +122,35 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
     } catch (error) {
       console.error('Error deleting pickup order:', error);
       setToast({ message: error.response?.data?.message || 'Failed to delete order', type: 'error' });
+    }
+  };
+
+  const handleClearDueClick = (bill) => {
+    setClearModal({ isOpen: true, billId: bill._id, total: bill.total || 0, billNumber: bill.billNumber, tableNo: bill.tableNo, customerPhone: bill.customerPhone, customerName: bill.customerName || 'Customer', paymentMode: 'Cash', loading: false, error: '' });
+  };
+
+  const confirmClearDue = async (paymentData) => {
+    if (!clearModal.billId) return;
+    setClearModal((prev) => ({ ...prev, loading: true, error: '' }));
+    try {
+      const payload = {
+        paymentMode: paymentData.mode,
+        splitPayments: paymentData.splitPayments,
+        upiApp: paymentData.upiApp,
+        amountPaid: paymentData.amountPaid,
+        changeAmount: Math.max(0, (paymentData.amountPaid || 0) - clearModal.total)
+      };
+      await clearUnpaidBill(clearModal.billId, payload);
+      setOrders((prev) => prev.map((bill) =>
+        bill._id === clearModal.billId
+          ? { ...bill, status: 'Paid', paymentMode: paymentData.mode, splitPayments: paymentData.splitPayments, upiApp: paymentData.upiApp, amountPaid: paymentData.amountPaid, updatedAt: new Date().toISOString(), clearedAt: new Date().toISOString() }
+          : bill
+      ));
+      setClearModal({ isOpen: false, billId: null, total: 0, customerName: '', paymentMode: 'Cash', loading: false, error: '' });
+      setToast({ message: 'Due cleared successfully. Bill is now Paid.', type: 'success' });
+    } catch (error) {
+      console.error('Error clearing due:', error);
+      setClearModal((prev) => ({ ...prev, loading: false, error: error.response?.data?.message || 'Failed to clear due' }));
     }
   };
 
@@ -294,13 +326,9 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Pickup #")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Bill #")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Customer")}</th>
-                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">
-                  <div className="flex items-center gap-2">
-                    <span>{t("Date & Time")}</span>
-                    <span className="text-[10px] text-primary font-bold">{t("(Latest First)")}</span>
-                  </div>
-                </th>
-                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Payment Method")}</th>
+                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Date & Time")} <span className="text-[10px] text-primary font-bold">{t("(Latest)")}</span></th>
+                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Status")}</th>
+                <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider">{t("Payment")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider text-right">{t("Total")}</th>
                 <th className="p-3.5 font-bold text-text-muted border-b border-border text-xs uppercase tracking-wider text-center">{t("Action")}</th>
               </tr>
@@ -358,6 +386,17 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                         <span className="text-[10px] text-text-muted font-mono">{formatTime12(order.updatedAt || order.createdAt)}</span>
                       </div>
                     </td>
+                    {/* Status Badge */}
+                    <td className="px-3.5 py-3 whitespace-nowrap">
+                      <span className={`inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold border ${order.status === 'Paid'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : order.status === 'Unpaid'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-surface-hover text-text-muted border-border'
+                        }`}>
+                        {t(order.status || 'Paid')}
+                      </span>
+                    </td>
                     {/* Payment Method Badge */}
                     <td className="p-3.5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getPaymentColor(order.paymentMode || 'Cash')}`}>
@@ -388,6 +427,14 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                           title={t("View Invoice")}>
                           <Eye size={17} />
                         </button>
+                        {order.status === 'Unpaid' && (
+                          <button
+                            onClick={() => handleClearDueClick(order)}
+                            className="p-1 px-2 hover:bg-emerald-100 rounded-lg text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 transition-colors inline-flex items-center justify-center gap-1 touch-target cursor-pointer text-xs shadow-sm mx-1"
+                            title={t("Clear Due (Khata)")}>
+                            <CheckCircle size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteClick(order._id)}
                           className="p-2 hover:bg-red-500/10 rounded-xl text-red-500 transition-colors cursor-pointer"
@@ -435,6 +482,17 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                     <span>{t(order.paymentMode || 'Cash')}</span>
                   </span>
                 </div>
+                
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold border ${order.status === 'Paid'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : order.status === 'Unpaid'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-surface-hover text-text-muted border-border'
+                    }`}>
+                    {t(order.status || 'Paid')}
+                  </span>
+                </div>
 
                 {/* Mobile Customer Info */}
                 {(order.customerName || order.customerPhone) && (
@@ -469,6 +527,14 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
                     <Eye size={15} />
                     <span>{t("Invoice")}</span>
                   </button>
+                  {order.status === 'Unpaid' && (
+                    <button
+                      onClick={() => handleClearDueClick(order)}
+                      className="p-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl transition-colors cursor-pointer"
+                      title={t("Clear Due (Khata)")}>
+                      <CheckCircle size={16} />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteClick(order._id)}
                     className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl transition-colors cursor-pointer"
@@ -536,6 +602,20 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
         <Invoice
           bill={selectedBill}
           onClose={() => setSelectedBill(null)}
+        />
+      )}
+
+      {clearModal.isOpen && (
+        <PaymentModal
+          total={clearModal.total || 0}
+          customerName={clearModal.customerName}
+          customerPhone={clearModal.customerPhone}
+          billNumber={clearModal.billNumber}
+          tableNo={clearModal.tableNo}
+          isLoading={clearModal.loading}
+          onClose={() => setClearModal({ ...clearModal, isOpen: false })}
+          onComplete={confirmClearDue}
+          hideUnpaid={true}
         />
       )}
 
