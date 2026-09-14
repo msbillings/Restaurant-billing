@@ -52,20 +52,11 @@ jobs:
         working-directory: ./Desktop
         run: npm version ${{ github.ref_name }} --no-git-tag-version --allow-same-version
 
-      - name: 🚀 Build EXE
+      - name: 🚀 Build and Publish EXE
         working-directory: ./Desktop
-        run: npx electron-builder --win
-
-      - name: 📤 Upload EXE to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            Desktop/dist/*.exe
-            Desktop/dist/latest.yml
-            Desktop/dist/*.blockmap
+        run: npx electron-builder --win -p always
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ─── Android APK ──────────────────────────────────────────────────────────
   build-apk:
@@ -169,21 +160,11 @@ jobs:
         working-directory: ./Desktop
         run: npm version ${{ github.ref_name }} --no-git-tag-version --allow-same-version
 
-      - name: 🍏 Build DMG
+      - name: 🍏 Build and Publish DMG
         working-directory: ./Desktop
-        run: npx electron-builder --mac dmg
-
-      - name: 📤 Upload DMG to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            Desktop/dist/*.dmg
-            Desktop/dist/latest-mac.yml
-            Desktop/dist/*.blockmap
-            Desktop/dist/*.zip
+        run: npx electron-builder --mac dmg -p always
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ─── iOS IPA ─────────────────────────────────────────────────────────────
   build-ios:
