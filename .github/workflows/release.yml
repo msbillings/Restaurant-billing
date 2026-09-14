@@ -30,7 +30,7 @@ jobs:
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install
+        run: npm install || npm install || npm install
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -76,7 +76,7 @@ jobs:
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install || npm install
+        run: npm install || npm install || npm install
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -134,7 +134,7 @@ jobs:
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install
+        run: npm install || npm install || npm install
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -174,7 +174,7 @@ jobs:
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install
+        run: npm install || npm install || npm install
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
