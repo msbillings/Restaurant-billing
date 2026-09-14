@@ -1,6 +1,6 @@
 const https = require('https');
 
-const BASE_URL = 'https://msbillings-backend.onrender.com';
+const BASE_URL = 'https://msbillings-backend-x9qw.onrender.com';
 
 const baseRoutes = [
   '/api/menu',

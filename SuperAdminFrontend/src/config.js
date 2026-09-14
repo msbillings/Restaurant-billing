@@ -6,7 +6,7 @@ export const getApiBaseUrl = () => {
       return import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
     }
   }
-  return import.meta.env.VITE_API_URL || 'https://msbillings-backend.onrender.com/api';
+  return import.meta.env.VITE_API_URL || 'https://msbillings-backend-x9qw.onrender.com/api';
 };
 
 export const getBroadcastApiUrl = () => {
