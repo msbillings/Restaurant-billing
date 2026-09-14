@@ -266,10 +266,19 @@ export const processFeedbackMessagesForTenant = async (dbName, targetBillId = nu
       return { success: false, reason: 'no_review_link' };
     }
     
-    // Construct the short link (Hide dbName using Base64 encoding)
-    const frontendUrl = process.env.FRONTEND_URL || 'https://restaurant-billing-seven.vercel.app';
-    const encodedDbName = Buffer.from(dbName).toString('base64url');
-    const shortReviewLink = `${frontendUrl}/api/public/r/${encodedDbName}`;
+    // Construct the short link using TinyURL
+    let shortReviewLink = reviewLink;
+    try {
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(reviewLink)}`);
+      if (response.ok) {
+        const text = await response.text();
+        if (text && text.startsWith('http')) {
+          shortReviewLink = text.trim();
+        }
+      }
+    } catch (e) {
+      logFb(`Failed to shorten link with TinyURL: ${e.message}`);
+    }
 
     const delayMins = Number(settings.feedback_whatsapp_delay_minutes) || 0;
     const cutoffTime = new Date(Date.now() - delayMins * 60000);
