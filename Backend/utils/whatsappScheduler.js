@@ -266,19 +266,8 @@ export const processFeedbackMessagesForTenant = async (dbName, targetBillId = nu
       return { success: false, reason: 'no_review_link' };
     }
     
-    // Construct the short link using TinyURL
-    let shortReviewLink = reviewLink;
-    try {
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(reviewLink)}`);
-      if (response.ok) {
-        const text = await response.text();
-        if (text && text.startsWith('http')) {
-          shortReviewLink = text.trim();
-        }
-      }
-    } catch (e) {
-      logFb(`Failed to shorten link with TinyURL: ${e.message}`);
-    }
+    // We are passing the original long reviewLink directly to avoid third-party preview pages/ads
+    const shortReviewLink = reviewLink;
 
     const delayMins = Number(settings.feedback_whatsapp_delay_minutes) || 0;
     const cutoffTime = new Date(Date.now() - delayMins * 60000);
