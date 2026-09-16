@@ -651,12 +651,12 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   <label className="text-sm font-semibold text-text-main flex items-center gap-2">
                     {t("Default KOT Printer")}
                   </label>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center w-full min-w-0">
                     <select
                       value={settings.kotPrinter}
                       onChange={(e) => handleInputChange('kotPrinter', e.target.value)}
                       disabled={!isElectron && !isAndroidApp}
-                      className="flex-1 px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                      className="flex-1 min-w-0 truncate px-3 sm:px-4 py-2.5 sm:py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm disabled:opacity-50">
 
                       <option value="">{t("-- Select Printer --")}</option>
                       {systemPrinters.map((p) =>
@@ -667,7 +667,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       <button
                         type="button"
                         onClick={() => handleTestPrint('kotPrinter')}
-                        className="px-3 py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
                         title={t("Test Print KOT Printer")}>
                         <Printer size={15} />
                         <span>{t("Test")}</span>
@@ -679,12 +679,12 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   <label className="text-sm font-semibold text-text-main flex items-center gap-2">
                     {t("Default Billing Printer")}
                   </label>
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center w-full min-w-0">
                     <select
                       value={settings.billingPrinter}
                       onChange={(e) => handleInputChange('billingPrinter', e.target.value)}
                       disabled={!isElectron && !isAndroidApp}
-                      className="flex-1 px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                      className="flex-1 min-w-0 truncate px-3 sm:px-4 py-2.5 sm:py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm disabled:opacity-50">
 
                       <option value="">{t("-- Select Printer --")}</option>
                       {systemPrinters.map((p) =>
@@ -695,7 +695,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       <button
                         type="button"
                         onClick={() => handleTestPrint('billingPrinter')}
-                        className="px-3 py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
                         title={t("Test Print Billing Printer")}>
                         <Printer size={15} />
                         <span>{t("Test")}</span>

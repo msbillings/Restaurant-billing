@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
 import android.util.Base64;
@@ -189,14 +190,26 @@ public class BluetoothPrinterHelper {
             }
 
             // Determine target width: 384 for 58mm, 576 for 80mm
-            int targetWidth = paperWidthDots > 0 ? paperWidthDots : 384;
+            int fullWidth = paperWidthDots > 0 ? paperWidthDots : 384;
             
-            // Resize maintaining aspect ratio
-            int targetHeight = (int) ((float) original.getHeight() * ((float) targetWidth / original.getWidth()));
-            Bitmap scaledBitmap = Bitmap.createScaledBitmap(original, targetWidth, targetHeight, true);
+            // Safe printable width: leave 12 dots (1.5mm) margin on left and right
+            // so thermal printer mechanical roll shift NEVER cuts off text on right edge
+            int safeMargin = 12;
+            int printableWidth = fullWidth - (safeMargin * 2);
+            if (printableWidth <= 0) printableWidth = fullWidth;
+
+            // Resize original maintaining aspect ratio to fit within printableWidth
+            int targetHeight = (int) ((float) original.getHeight() * ((float) printableWidth / original.getWidth()));
+            Bitmap contentScaled = Bitmap.createScaledBitmap(original, printableWidth, targetHeight, true);
+
+            // Place onto a white canvas of exact fullWidth so printer receives perfectly aligned raster
+            Bitmap finalBitmap = Bitmap.createBitmap(fullWidth, targetHeight, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(finalBitmap);
+            canvas.drawColor(Color.WHITE);
+            canvas.drawBitmap(contentScaled, safeMargin, 0, null);
 
             // Generate ESC/POS raster bytes
-            byte[] rasterBytes = bitmapToEscPosRaster(scaledBitmap);
+            byte[] rasterBytes = bitmapToEscPosRaster(finalBitmap);
 
             BluetoothSocket socket = connectToDevice(address);
             if (socket == null) {
@@ -253,9 +266,11 @@ public class BluetoothPrinterHelper {
 
         // 1. ESC @ (Initialize)
         baos.write(new byte[]{0x1B, 0x40});
-        // 2. ESC a 1 (Center alignment)
-        baos.write(new byte[]{0x1B, 0x61, 0x01});
-        // 3. GS v 0 m xL xH yL yH
+        // 2. GS L 0 0 (Reset left margin to absolute zero)
+        baos.write(new byte[]{0x1D, 0x4C, 0x00, 0x00});
+        // 3. ESC a 0 (Left alignment so printer does not add unwanted hardware left indent)
+        baos.write(new byte[]{0x1B, 0x61, 0x00});
+        // 4. GS v 0 m xL xH yL yH
         baos.write(new byte[]{0x1D, 0x76, 0x30, 0x00, (byte) xL, (byte) xH, (byte) yL, (byte) yH});
 
         // 4. Pixel raster data

@@ -128,9 +128,67 @@ const KOT = ({ order, onClose }) => {
 
       window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
     } else if (window.AndroidBluetooth) {
-      let targetPrinter = activeStationGroup?.printer?.bluetoothAddress || activeStationGroup?.printer?.deviceName || settings.kotPrinter || '';
-      const match = targetPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-      const macAddress = match ? match[0] : null;
+      let macAddress = null;
+
+      // 1. From active station group printer
+      if (activeStationGroup?.printer) {
+        const raw = activeStationGroup.printer.bluetoothAddress || activeStationGroup.printer.deviceName || '';
+        const m = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        if (m) macAddress = m[0];
+      }
+
+      // 2. From configured KOT stations (printerConfigs or local cache)
+      if (!macAddress) {
+        try {
+          const allConfigs = (printerConfigs && printerConfigs.length > 0)
+            ? printerConfigs
+            : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          const kotStation = allConfigs.find(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general') && (p.connectionType === 'bluetooth' || (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)));
+          if (kotStation) {
+            const raw = kotStation.bluetoothAddress || kotStation.deviceName || kotStation.name || '';
+            const m = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+            if (m) macAddress = m[0];
+          }
+        } catch (_) {}
+      }
+
+      // 3. From settings.kotPrinter (state or fresh from localStorage)
+      if (!macAddress) {
+        let raw = settings.kotPrinter || '';
+        if (!raw) {
+          try {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            raw = s.kotPrinter || '';
+          } catch (_) {}
+        }
+        const m = (raw || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        if (m) macAddress = m[0];
+      }
+
+      // 4. Fallback to settings.billingPrinter (if shared single Bluetooth printer)
+      if (!macAddress) {
+        let raw = settings.billingPrinter || '';
+        if (!raw) {
+          try {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            raw = s.billingPrinter || '';
+          } catch (_) {}
+        }
+        const m = (raw || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        if (m) macAddress = m[0];
+      }
+
+      // 5. Fallback to ANY configured Bluetooth printer station
+      if (!macAddress) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          const anyStation = cached.find(p => p.isActive !== false && (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/));
+          if (anyStation) {
+            const m = (anyStation.bluetoothAddress || anyStation.deviceName).match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+            if (m) macAddress = m[0];
+          }
+        } catch (_) {}
+      }
 
       if (macAddress && window.AndroidBluetooth.printImage) {
         try {
@@ -188,8 +246,15 @@ const KOT = ({ order, onClose }) => {
         const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
         window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
       } else if (window.AndroidBluetooth) {
-        const chosenPrinter = grp.printer?.bluetoothAddress || grp.printer?.deviceName || settings.kotPrinter || '';
-        const match = chosenPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        let chosenPrinter = grp.printer?.bluetoothAddress || grp.printer?.deviceName || settings.kotPrinter || settings.billingPrinter || '';
+        let match = chosenPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        if (!match) {
+          try {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            const raw = s.kotPrinter || s.billingPrinter || '';
+            match = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+          } catch (_) {}
+        }
         const macAddress = match ? match[0] : null;
 
         if (macAddress && window.AndroidBluetooth.printImage) {
@@ -222,7 +287,7 @@ const KOT = ({ order, onClose }) => {
   const getFormatClasses = () => {
     switch (settings.printFormat) {
       case 'A4': return 'w-full max-w-[320px] print:max-w-full';
-      case '58mm': return 'w-[200px] print:w-full print:max-w-full print:m-0';
+      case '58mm': return 'w-[210px] print:w-full print:max-w-full print:m-0';
       case '80mm':
       default: return 'w-[280px] print:w-full print:max-w-full print:m-0';
     }
@@ -346,9 +411,164 @@ const KOT = ({ order, onClose }) => {
           maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
         }}>
         
-        <div style={{ padding: '0 8px', boxSizing: 'border-box' }}>
-          
-          {/* Header - Centered */}
+        {settings.printFormat === '58mm' ? (
+          /* 58mm Compact Clean KOT Slip Layout (Zomato Style) */
+          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontSize: '11px', lineHeight: '1.25', color: '#000' }}>
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '3px' }}>
+              <div style={{ fontSize: '10px' }}>
+                {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '1px' }}>
+                {(() => {
+                  const raw = (order.kotNumber || order.billNumber || '').toString().trim();
+                  if (!raw) return 'KOT PREVIEW';
+                  if (raw.toUpperCase().includes('UPDATE')) return raw;
+                  if (raw.toUpperCase().startsWith('CANCEL')) {
+                    const num = raw.replace(/^[A-Z]+-?/i, '');
+                    return num ? `CANCEL KOT No: ${num}` : raw;
+                  }
+                  const num = raw.replace(/^KOT-?/i, '').trim();
+                  return num ? `KOT No: ${num}` : raw;
+                })()}
+              </div>
+
+              {/* Station badge */}
+              {(() => {
+                const stationToDisplay = activeStationGroup || (stationGroups.length === 1 && stationGroups[0].name !== 'Kitchen' ? stationGroups[0] : null);
+                if (!stationToDisplay && selectedDept === 'ALL') return null;
+                const title = stationToDisplay 
+                  ? `${stationToDisplay.name.toUpperCase()}${stationToDisplay.location ? ` - ${stationToDisplay.location.toUpperCase()}` : ''}`
+                  : selectedDept.toUpperCase();
+                return (
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    padding: '2px 6px',
+                    border: '1px solid #000',
+                    display: 'inline-block',
+                    marginTop: '2px',
+                    marginBottom: '2px'
+                  }}>
+                    [ {title} ]
+                  </div>
+                );
+              })()}
+
+              {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
+                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                  {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
+                </div>
+              )}
+
+              {/* Order Type & Table */}
+              {(() => {
+                const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+                if (bType === 'Delivery') {
+                  const partner = (order.orderSource || '').trim() || 'DIRECT';
+                  return (
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#dc2626', marginTop: '1px' }}>
+                      DELIVERY: {partner.toUpperCase()} #{order.tableNo}
+                    </div>
+                  );
+                } else if (bType === 'Takeaway') {
+                  return (
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', marginTop: '1px' }}>
+                      TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
+                    </div>
+                  );
+                } else {
+                  return (
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '1px' }}>
+                      Dine In {order.tableNo ? `- Table ${order.tableNo}` : ''}
+                    </div>
+                  );
+                }
+              })()}
+              {order.customerName && (
+                <div style={{ fontSize: '10.5px', marginTop: '1px' }}>
+                  Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
+                </div>
+              )}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Info */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+              <span>{order.captainName ? `${t("Assign:")} ${order.captainName}` : `${t("Biller:")} ${order.cashierName || 'admin'}`}</span>
+              {order.captainName && <span>{t("Captain:")} {order.captainName}</span>}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Items List (Compact Zomato KOT style) */}
+            <div style={{ marginBottom: '4px' }}>
+              {displayedItems && displayedItems.length > 0 ? (
+                displayedItems.map((item, idx) => {
+                  const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+                  const isReduced = !isCancelled && (item.reducedQuantity > 0);
+                  const cancelCount = item.cancelledQuantity || item.quantity || 1;
+                  return (
+                    <div key={idx} style={{ marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e0e0e0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{
+                          fontWeight: 'bold',
+                          fontSize: '12.5px',
+                          lineHeight: '1.2',
+                          flex: 1,
+                          paddingRight: '6px',
+                          textAlign: 'left',
+                          wordBreak: 'break-word',
+                          textDecoration: isCancelled ? 'line-through' : 'none',
+                          color: isCancelled ? '#dc2626' : '#000'
+                        }}>
+                          {item.name || 'Unknown Item'}
+                          {isCancelled && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626' }}>({t("CANCELLED")})</span>}
+                          {isReduced && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#ef4444' }}>(-{item.reducedQuantity}x)</span>}
+                        </div>
+                        <div style={{
+                          fontWeight: '900',
+                          fontSize: '14px',
+                          flexShrink: 0,
+                          textAlign: 'right',
+                          textDecoration: isCancelled ? 'line-through' : 'none',
+                          color: isCancelled ? '#dc2626' : '#000'
+                        }}>
+                          {isCancelled ? `-${cancelCount}` : `x${item.quantity || 0}`}
+                        </div>
+                      </div>
+                      {item.specialNote && (
+                        <div style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#dc2626', textAlign: 'left', marginTop: '1.5px' }}>
+                          * {item.specialNote}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', padding: '6px 0', fontSize: '11px', color: '#666' }}>
+                  {t("No items for this kitchen")}
+                </div>
+              )}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Total Qty Count */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+              <span>{t("Total Items:")}</span>
+              <span>{displayedItems?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
+            </div>
+          </div>
+        ) : (
+          /* Existing 80mm and A4 layout - completely untouched! */
+          <div style={{ padding: '0 8px', boxSizing: 'border-box' }}>
+            
+            {/* Header - Centered */}
           <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
@@ -483,6 +703,7 @@ const KOT = ({ order, onClose }) => {
           </div>
           
         </div>
+        )}
       </div>
     </div>
   );

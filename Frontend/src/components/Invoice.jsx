@@ -583,7 +583,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const getFormatClasses = () => {
     switch (activeSettings.printFormat) {
       case 'A4': return 'w-full max-w-sm print:max-w-full';
-      case '58mm': return 'w-[200px] print:w-full print:max-w-full print:m-0';
+      case '58mm': return 'w-[210px] print:w-full print:max-w-full print:m-0';
       case '80mm':
       default: return 'w-[280px] print:w-full print:max-w-full print:m-0';
     }
@@ -958,9 +958,326 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined,
           overflow: 'visible',
           boxSizing: 'border-box'
-        }}>
+      }}>
         
-        <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '16px', boxSizing: 'border-box' }}>
+        {activeSettings.printFormat === '58mm' ? (
+          /* 58mm Compact Clean Receipt Layout (Zomato Style) */
+          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontSize: '11px', lineHeight: '1.25', color: '#000' }}>
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '3px' }}>
+              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]') && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '3px' }}>
+                  <img 
+                    src={activeSettings.logo} 
+                    alt="Logo" 
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    style={{ maxHeight: '38px', maxWidth: '110px', objectFit: 'contain' }} 
+                  />
+                </div>
+              )}
+              <div style={{ fontSize: '14px', fontWeight: 'bold', lineHeight: '1.1', textTransform: 'uppercase' }}>
+                {activeSettings.restaurantName || 'MSBILLINGS'}
+              </div>
+              <div style={{ fontSize: '10px', marginTop: '2px', lineHeight: '1.2' }}>
+                {(activeSettings.address || '').split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+                {activeSettings.gstin && <div>{t("GSTIN: ")}{activeSettings.gstin}</div>}
+                {activeSettings.phone && <div>{t("PH: ")}{activeSettings.phone}</div>}
+                {activeSettings.fssai && <div>{t("FSSAI: ")}{activeSettings.fssai}</div>}
+              </div>
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Bill Type / Invoice Title */}
+            <div style={{ fontSize: '12px', fontWeight: 'bold', textAlign: 'center', margin: '2px 0' }}>
+              {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Order Type & Table */}
+            {(() => {
+              const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+              let label = '';
+              if (bType === 'Delivery') {
+                const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
+                label = `DELIVERY: ${channel.toUpperCase()}${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else if (bType === 'Takeaway') {
+                label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else {
+                label = `Dine-In: ${bill.tableNo || 'Table'}`;
+              }
+              return (
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '2px' }}>
+                  {label}
+                </div>
+              );
+            })()}
+
+            {/* Date & Time */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', marginBottom: '1px' }}>
+              <span>{t('Date: ')}{new Date(billDateTime).toLocaleDateString('en-GB')}</span>
+              <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            </div>
+
+            {/* Cashier & Bill No */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', marginBottom: '1px' }}>
+              <span>{t('Cashier: ')}{bill.cashierName || 'admin'}</span>
+              <span style={{ fontWeight: 'bold' }}>{t('Bill No: ')}{bill.billNumber || 'PREVIEW'}</span>
+            </div>
+
+            {bill.captainName && (
+              <div style={{ fontSize: '10.5px' }}>{t('Assign: ')}{bill.captainName}</div>
+            )}
+            {bill.tokenNumber && (
+              <div style={{ fontWeight: 'bold', fontSize: '11px' }}>{t('Token: ')}{bill.tokenNumber}</div>
+            )}
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Items List (Compact Zomato 2-line layout) */}
+            <div style={{ marginBottom: '3px' }}>
+              {bill.items && bill.items.length > 0 ? (
+                bill.items.filter(item => !item.isCancelled).map((item, idx) => {
+                  const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                  if (activeQty <= 0) return null;
+                  return (
+                    <div key={idx} style={{ marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e0e0e0' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '11.5px', textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
+                        {item.name || 'Unknown Item'}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px', marginTop: '1.5px' }}>
+                        <span>[{Number(item.price || 0).toFixed(2)}] × {activeQty}</span>
+                        <span style={{ fontWeight: 'bold' }}>{(item.price * activeQty).toFixed(2)}</span>
+                      </div>
+                      {item.hsnCode && (
+                        <div style={{ fontSize: '9px', color: '#666' }}>HSN: {item.hsnCode}</div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', padding: '4px 0', fontSize: '11px' }}>{t("No items")}</div>
+              )}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Totals & Breakdown */}
+            <div style={{ fontSize: '10.5px', lineHeight: '1.3' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{t("Total Qty: ")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <span>{t("Sub Total:")}</span>
+                  <span style={{ fontWeight: 'bold' }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {bill.discount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                  <span>{t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}:</span>
+                  <span>-{(bill.discount || 0).toFixed(2)}</span>
+                </div>
+              )}
+
+              {(() => {
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+
+                let rate = totRate;
+                let taxRupees = 0;
+
+                if (bill.tax !== undefined && bill.tax !== null) {
+                  if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+                    rate = Number(bill.tax);
+                    taxRupees = taxable * rate / 100;
+                  } else {
+                    taxRupees = Number(bill.tax);
+                    rate = bill.taxRate || Math.round(taxRupees / Math.max(1, taxable) * 100) || totRate;
+                  }
+                } else if (totRate > 0) {
+                  rate = totRate;
+                  taxRupees = taxable * rate / 100;
+                }
+
+                if (taxRupees === 0 || rate === 0) return null;
+
+                const cEff = rate * (cRate / Math.max(1, totRate));
+                const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+                const sEff = rate * (sRate / Math.max(1, totRate));
+                const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+                const gEff = rate * (gRate / Math.max(1, totRate));
+                const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+
+                return (
+                  <>
+                    {cRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{t("CGST@")}{cEff.toFixed(1)}%:</span>
+                        <span>{cAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {sRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{t("SGST@")}{sEff.toFixed(1)}%:</span>
+                        <span>{sAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {gRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{t("GST@")}{gEff.toFixed(1)}%:</span>
+                        <span>{gAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {Number(bill.deliveryCharge || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{t("Delivery Charge:")}</span>
+                  <span>{Number(bill.deliveryCharge).toFixed(2)}</span>
+                </div>
+              )}
+              {Number(bill.containerCharge || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>{t("Container Charge:")}</span>
+                  <span>{Number(bill.containerCharge).toFixed(2)}</span>
+                </div>
+              )}
+
+              {(() => {
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+                let finalTotal = Number(bill.total);
+
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+                const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                  ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                  : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+                const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+                if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                  finalTotal = taxable + taxRupees + addCharges;
+                }
+                const roundedTotal = Math.round(finalTotal);
+                const roundOff = roundedTotal - finalTotal;
+                if (roundOff === 0) return null;
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{t("Round off:")}</span>
+                    <span>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Grand Total */}
+            {(() => {
+              let finalTotal = Number(bill.total);
+              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+              const disc = Number(bill.discount || 0);
+              const taxable = Math.max(0, sub - disc);
+              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+              const totRate = cRate + sRate + gRate;
+              const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+              const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+              if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                finalTotal = taxable + taxRupees + addCharges;
+              }
+              const roundedTotal = Math.round(finalTotal);
+
+              return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '15px', fontWeight: 'bold', margin: '2px 0' }}>
+                  <span>{t('Grand Total')}</span>
+                  <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
+                </div>
+              );
+            })()}
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+            {/* Payment Mode */}
+            {(() => {
+              const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
+              if (hasSplit) {
+                return (
+                  <div style={{ fontSize: '10.5px', textAlign: 'center', margin: '2px 0' }}>
+                    <div style={{ fontWeight: 'bold' }}>{t("PAID VIA MIXED")}</div>
+                    {Number(bill.splitPayments?.cash || 0) > 0 && <div>Cash: {currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</div>}
+                    {Number(bill.splitPayments?.upi || 0) > 0 && <div>UPI: {currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</div>}
+                    {Number(bill.splitPayments?.card || 0) > 0 && <div>Card: {currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</div>}
+                  </div>
+                );
+              } else if (bill.status === 'Unpaid') {
+                return <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', margin: '2px 0' }}>{t("UNPAID (KHATA BILL)")}</div>;
+              } else {
+                const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
+                const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
+                return (
+                  <div style={{ textAlign: 'center', fontSize: '11.5px', fontWeight: 'bold', margin: '2px 0' }}>
+                    {t("Paid via")} {bill.paymentMode || 'Cash'}{appSuffix}
+                  </div>
+                );
+              }
+            })()}
+
+            {/* QR Code (if enabled) */}
+            {activeSettings.enableQrPayment !== false && (() => {
+              const pa = (activeSettings.upiId || '').trim();
+              if (!pa) return null;
+              const isMixed = bill.paymentMode === 'Mixed';
+              const upiSplit = Number(bill.splitPayments?.upi || 0);
+              const am = (isMixed && upiSplit > 0) ? upiSplit.toFixed(2) : Number(bill.total || 0).toFixed(2);
+              if (Number(am) <= 0) return null;
+              const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
+              const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
+              const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
+              const tr = `INV${Date.now()}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+
+              return (
+                <div style={{ textAlign: 'center', margin: '5px 0' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{t("SCAN TO PAY VIA UPI")}</div>
+                  <div style={{ margin: '3px auto', display: 'inline-block' }}>
+                    <QRCodeSVG value={qrUri} size={84} level="M" includeMargin={false} />
+                  </div>
+                  <div style={{ fontSize: '9px' }}>{pa}</div>
+                </div>
+              );
+            })()}
+
+            {/* Footer Message */}
+            <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 'bold', marginTop: '5px', lineHeight: '1.3' }}>
+              {activeSettings.footerMessage || t("Thank You | Please visit Again")}
+            </div>
+          </div>
+        ) : (
+          /* Existing 80mm and A4 layout - completely untouched! */
+          <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '16px', boxSizing: 'border-box' }}>
           
           {/* Header */}
           <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
@@ -1350,6 +1667,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           </div>
           
         </div>
+        )}
       </div>
 
       {toast && (

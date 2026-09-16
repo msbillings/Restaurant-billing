@@ -874,7 +874,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           deviceName: found ? found.name : prev.deviceName
                         }));
                       }}
-                      className="w-full px-3.5 py-2.5 text-sm border border-indigo-200 rounded-xl bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none">
+                      className="w-full min-w-0 truncate px-3.5 py-2.5 text-xs sm:text-sm border border-indigo-200 rounded-xl bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none">
                       <option value="">{t("-- Select Paired Bluetooth Printer --")}</option>
                       {bluetoothDevices.map(d => (
                         <option key={d.address} value={d.address}>
