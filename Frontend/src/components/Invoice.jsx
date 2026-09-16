@@ -169,7 +169,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   };
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (window.electronAPI) {
       const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
@@ -178,6 +178,53 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
       } else {
         window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
+      }
+    } else if (window.AndroidBluetooth) {
+      let targetPrinter = activeSettings.billingPrinter || '';
+      let match = targetPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+      let macAddress = match ? match[0] : null;
+
+      // Check if a Receipt printer station is configured in Printer & Multi-Kitchen Routing
+      if (!macAddress) {
+        try {
+          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          const receiptStation = cached.find(c => c.isActive && c.type === 'receipt' && c.connectionType === 'bluetooth');
+          if (receiptStation) {
+            const rawMac = receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name;
+            const m = (rawMac || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+            if (m) macAddress = m[0];
+          }
+        } catch (_) {}
+      }
+
+      if (macAddress && window.AndroidBluetooth.printImage) {
+        try {
+          const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
+          if (receiptNode) {
+            const paperWidthDots = (activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
+            const canvas = await html2canvas(receiptNode, {
+              scale: 2,
+              backgroundColor: '#ffffff',
+              useCORS: true,
+              logging: false
+            });
+            const base64Png = canvas.toDataURL('image/png');
+            const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+            const res = JSON.parse(resStr || '{}');
+            if (res.success) {
+              return;
+            }
+            console.warn('[Print] Bluetooth print failed, fallback to system print:', res.error);
+          }
+        } catch (err) {
+          console.warn('[Print] Error capturing receipt for Bluetooth print:', err);
+        }
+      }
+
+      if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+        window.AndroidPrint.print();
+      } else {
+        window.print();
       }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();

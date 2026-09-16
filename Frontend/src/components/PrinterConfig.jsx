@@ -23,6 +23,23 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
 
+  // Bluetooth device discovery
+  const [bluetoothDevices, setBluetoothDevices] = useState([]);
+  const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
+
+  const loadBluetoothDevices = () => {
+    if (typeof window !== 'undefined' && window.AndroidBluetooth?.getPairedDevices) {
+      try {
+        const res = JSON.parse(window.AndroidBluetooth.getPairedDevices() || '{}');
+        if (res && res.success && Array.isArray(res.devices)) {
+          setBluetoothDevices(res.devices);
+        }
+      } catch (e) {
+        console.warn('Could not load Bluetooth devices:', e);
+      }
+    }
+  };
+
   // Search & Filter state inside modal
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState({});
@@ -37,6 +54,8 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     assignedCategories: [],
     assignedItems: [],
     ipAddress: '',
+    bluetoothAddress: '',
+    deviceName: '',
     port: 9100,
     connectionType: 'network',
     paperWidth: '80mm',
@@ -52,7 +71,11 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       const response = await axios.get(`${getApiUrl()}/printer-configs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setConfigs(response.data || []);
+      const configsList = response.data || [];
+      setConfigs(configsList);
+      try {
+        localStorage.setItem('msbillings_printer_configs', JSON.stringify(configsList));
+      } catch (_) {}
     } catch (error) {
       console.error('Error fetching printer configs', error);
     } finally {
@@ -96,6 +119,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   useEffect(() => {
     fetchConfigs();
     fetchMenuData();
+    loadBluetoothDevices();
   }, []);
 
   // Map other printers' assignments to identify duplicates
@@ -138,6 +162,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   }, [menuItems]);
 
   const openAddModal = () => {
+    loadBluetoothDevices();
     setFormData({
       name: '',
       type: 'kot',
@@ -147,6 +172,8 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       assignedCategories: [],
       assignedItems: [],
       ipAddress: '',
+      bluetoothAddress: '',
+      deviceName: '',
       port: 9100,
       connectionType: 'network',
       paperWidth: '80mm',
@@ -162,6 +189,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   };
 
   const openEditModal = (config) => {
+    loadBluetoothDevices();
     setFormData({
       name: config.name || '',
       type: config.type || 'kot',
@@ -171,6 +199,8 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       assignedCategories: config.assignedCategories || [],
       assignedItems: config.assignedItems || [],
       ipAddress: config.ipAddress || '',
+      bluetoothAddress: config.bluetoothAddress || (config.ipAddress && config.ipAddress.includes(':') ? config.ipAddress : ''),
+      deviceName: config.deviceName || '',
       port: config.port || 9100,
       connectionType: config.connectionType || 'network',
       paperWidth: config.paperWidth || '80mm',
@@ -288,15 +318,42 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   };
 
   const handleTestPrint = async (id) => {
+    const config = configs.find(c => c._id === id);
+    if (config && config.connectionType === 'bluetooth') {
+      const mac = config.bluetoothAddress || (config.name && config.name.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)?.[0]);
+      if (typeof window !== 'undefined' && window.AndroidBluetooth?.testPrint) {
+        if (!mac) {
+          alert(t("No Bluetooth address linked. Please click Edit and select your paired Bluetooth printer."));
+          return;
+        }
+        try {
+          const resStr = window.AndroidBluetooth.testPrint(mac);
+          const res = JSON.parse(resStr || '{}');
+          if (res.success) {
+            alert(t("Test receipt printed to Bluetooth printer successfully!"));
+          } else {
+            alert(t("Bluetooth test print failed: ") + (res.error || res.message));
+          }
+          return;
+        } catch (e) {
+          alert(t("Bluetooth print error: ") + e.message);
+          return;
+        }
+      } else {
+        alert(t("Bluetooth thermal printing is only supported in the Android Mobile/Tablet App."));
+        return;
+      }
+    }
+
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       await axios.post(`${getApiUrl()}/printer-configs/${id}/test`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('Test print sent successfully!');
+      alert(t("Test print sent successfully!"));
     } catch (error) {
       console.error('Error testing printer', error);
-      alert('Failed to connect to printer');
+      alert(t("Failed to connect to printer"));
     }
   };
 
@@ -402,6 +459,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                             </span>
                             {config.connectionType === 'network' && (
                               <span className="text-[11px] font-mono text-gray-500">{config.ipAddress}:{config.port || 9100}</span>
+                            )}
+                            {config.connectionType === 'bluetooth' && config.bluetoothAddress && (
+                              <span className="text-[11px] font-mono text-indigo-600 truncate max-w-[160px]">{config.bluetoothAddress}</span>
                             )}
                           </div>
                         </td>
@@ -528,6 +588,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           </div>
                           {config.connectionType === 'network' && (
                             <span className="font-mono text-gray-600 font-medium text-[11px] sm:text-xs">{config.ipAddress}:{config.port || 9100}</span>
+                          )}
+                          {config.connectionType === 'bluetooth' && config.bluetoothAddress && (
+                            <span className="font-mono text-indigo-700 font-medium text-[11px] sm:text-xs">{config.bluetoothAddress}</span>
                           )}
                           {config.paperWidth && (
                             <span className="text-[10px] text-gray-400 font-mono">{config.paperWidth}</span>
@@ -768,6 +831,77 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                         className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-mono font-medium"
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* Bluetooth Device Selection */}
+                {formData.connectionType === 'bluetooth' && (
+                  <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-indigo-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <Bluetooth size={14} className="text-indigo-600" />
+                        <span>{t("Select Paired Bluetooth Thermal Printer")}</span>
+                      </label>
+                      {typeof window !== 'undefined' && window.AndroidBluetooth && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsScanningBluetooth(true);
+                            if (typeof window.AndroidBluetooth.requestPermissions === 'function') {
+                              window.AndroidBluetooth.requestPermissions();
+                            }
+                            setTimeout(() => {
+                              loadBluetoothDevices();
+                              setIsScanningBluetooth(false);
+                            }, 700);
+                          }}
+                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-xs">
+                          <Bluetooth size={12} className={isScanningBluetooth ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+                          <span>{isScanningBluetooth ? t("Scanning...") : t("Scan Devices")}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <select
+                      name="bluetoothAddress"
+                      value={formData.bluetoothAddress || ''}
+                      onChange={(e) => {
+                        const selectedAddr = e.target.value;
+                        const found = bluetoothDevices.find(d => d.address === selectedAddr);
+                        setFormData(prev => ({
+                          ...prev,
+                          bluetoothAddress: selectedAddr,
+                          deviceName: found ? found.name : prev.deviceName
+                        }));
+                      }}
+                      className="w-full px-3.5 py-2.5 text-sm border border-indigo-200 rounded-xl bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none">
+                      <option value="">{t("-- Select Paired Bluetooth Printer --")}</option>
+                      {bluetoothDevices.map(d => (
+                        <option key={d.address} value={d.address}>
+                          {d.name} ({d.address})
+                        </option>
+                      ))}
+                      {formData.bluetoothAddress && !bluetoothDevices.some(d => d.address === formData.bluetoothAddress) && (
+                        <option value={formData.bluetoothAddress}>
+                          {formData.deviceName || 'Configured Device'} ({formData.bluetoothAddress})
+                        </option>
+                      )}
+                    </select>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        name="bluetoothAddress"
+                        placeholder={t("Or enter Bluetooth MAC manually (e.g. 66:22:BB:11:AA:00)")}
+                        value={formData.bluetoothAddress || ''}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-1.5 text-xs font-mono border border-indigo-200 rounded-lg bg-white"
+                      />
+                    </div>
+
+                    <p className="text-[11px] text-indigo-700">
+                      {t("Make sure your thermal printer is turned ON and paired under tablet Android Bluetooth Settings first.")}
+                    </p>
                   </div>
                 )}
 

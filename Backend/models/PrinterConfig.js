@@ -36,6 +36,14 @@ const printerConfigSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  bluetoothAddress: {
+    type: String,
+    trim: true
+  },
+  deviceName: {
+    type: String,
+    trim: true
+  },
   port: {
     type: Number,
     default: 9100

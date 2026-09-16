@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '../config.js';
 import api from '../api/axios';
 import { useLanguage } from '../context/LanguageContext';
-import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Unlock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2, X, ShieldAlert, Clock, MessageSquare, Star, Gift } from 'lucide-react';
+import { Save, Building, Phone, MapPin, Mail, FileText, Settings as SettingsIcon, User, Upload, Trash2, Image as ImageIcon, Lock, Unlock, Eye, EyeOff, Globe, Wifi, Server, RefreshCw, ShieldCheck, Loader2, X, ShieldAlert, Clock, MessageSquare, Star, Gift, Bluetooth, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { apiUpdateProfile } from '../api/auth';
@@ -80,6 +80,103 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [coordsUnlockPin, setCoordsUnlockPin] = useState('');
   const [coordsUnlockError, setCoordsUnlockError] = useState('');
   const [showCoordsUnlockPinVisibility, setShowCoordsUnlockPinVisibility] = useState(false);
+  const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
+
+  const isElectron = Boolean(typeof window !== 'undefined' && window.electronAPI);
+  const isAndroidApp = Boolean(
+    typeof window !== 'undefined' &&
+    (window.AndroidBluetooth || window.AndroidPrint || (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()))
+  );
+
+  const refreshPrinters = () => {
+    // 1. Desktop Electron App
+    if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.getPrinters) {
+      window.electronAPI.getPrinters().then((printers) => {
+        setSystemPrinters(printers || []);
+      }).catch((err) => console.error("Failed to load desktop printers:", err));
+      return;
+    }
+
+    // 2. Android APK (Bluetooth & Native System Print)
+    if (typeof window !== 'undefined' && window.AndroidBluetooth) {
+      try {
+        const rawRes = window.AndroidBluetooth.getPairedDevices();
+        const parsed = JSON.parse(rawRes || '{}');
+        const list = [
+          { name: "Android System Print (Default)", address: "system", isSystem: true }
+        ];
+        if (parsed && parsed.success && Array.isArray(parsed.devices)) {
+          parsed.devices.forEach(d => {
+            list.push({
+              name: `Bluetooth: ${d.name} (${d.address})`,
+              rawName: d.name,
+              address: d.address,
+              isBluetooth: true
+            });
+          });
+        } else if (parsed && parsed.error === 'PERMISSION_REQUIRED') {
+          if (typeof window.AndroidBluetooth.requestPermissions === 'function') {
+            window.AndroidBluetooth.requestPermissions();
+          }
+        }
+        setSystemPrinters(list);
+      } catch (err) {
+        console.warn("Could not parse paired Bluetooth devices:", err);
+      }
+      return;
+    }
+
+    // 3. Android APK fallback to System Print
+    if (typeof window !== 'undefined' && window.AndroidPrint) {
+      setSystemPrinters([
+        { name: "Android System Print (Default)", address: "system", isSystem: true }
+      ]);
+    }
+  };
+
+  const handleScanBluetooth = () => {
+    setIsScanningBluetooth(true);
+    if (typeof window !== 'undefined' && window.AndroidBluetooth) {
+      if (typeof window.AndroidBluetooth.hasPermission === 'function' && !window.AndroidBluetooth.hasPermission()) {
+        window.AndroidBluetooth.requestPermissions();
+      }
+    }
+    setTimeout(() => {
+      refreshPrinters();
+      setIsScanningBluetooth(false);
+      setToast({ message: t("Printers refreshed successfully!"), type: "success" });
+    }, 750);
+  };
+
+  const handleTestPrint = (targetField) => {
+    const selectedPrinter = settings[targetField];
+    if (!selectedPrinter) {
+      setToast({ message: t("Please select a printer first"), type: "warning" });
+      return;
+    }
+
+    const match = selectedPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+    const macAddress = match ? match[0] : null;
+
+    if (macAddress && typeof window !== 'undefined' && window.AndroidBluetooth?.testPrint) {
+      try {
+        setToast({ message: t("Sending test print to Bluetooth printer..."), type: "info" });
+        const resStr = window.AndroidBluetooth.testPrint(macAddress);
+        const res = JSON.parse(resStr || '{}');
+        if (res.success) {
+          setToast({ message: t("Test receipt printed successfully!"), type: "success" });
+        } else {
+          setToast({ message: t("Bluetooth print failed: ") + (res.error || res.message), type: "error" });
+        }
+      } catch (err) {
+        setToast({ message: t("Test print error: ") + err.message, type: "error" });
+      }
+    } else if (typeof window !== 'undefined' && window.AndroidPrint) {
+      window.AndroidPrint.print();
+    } else {
+      setToast({ message: t("Test print only available for Bluetooth devices or Desktop"), type: "warning" });
+    }
+  };
 
   useEffect(() => {
     // 1. Load settings from localStorage first for instant display
@@ -139,12 +236,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
         }
       }).catch(() => { });
 
-    // Load available printers if running in Desktop App
-    if (window.electronAPI && window.electronAPI.getPrinters) {
-      window.electronAPI.getPrinters().then((printers) => {
-        setSystemPrinters(printers || []);
-      }).catch((err) => console.error("Failed to load printers:", err));
-    }
+    // Load available printers (Desktop Electron or Android Bluetooth / System)
+    refreshPrinters();
   }, []);
 
   const handleSave = async () => {
@@ -522,7 +615,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               </div>
             </div>
 
-            {/* Desktop Printers */}
+            {/* Printers Configuration (Desktop & Android Bluetooth) */}
             <div className="bg-surface rounded-2xl p-4 border border-border shadow-lg">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -530,53 +623,101 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     <FileText className="text-primary" size={20} />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-text-main">{t("Desktop Printers")}<span className="text-sm font-normal text-primary">{t("(v1.4.5)")}</span></h2>
+                    <h2 className="text-xl font-bold text-text-main">
+                      {isAndroidApp ? t("Printers (Bluetooth & System)") : t("Desktop Printers")}
+                      <span className="text-sm font-normal text-primary"> {t("(v1.4.5)")}</span>
+                    </h2>
                     <p className="text-xs text-text-muted mt-0.5">{t("Configure auto-printing")}</p>
                   </div>
                 </div>
-                {!window.electronAPI &&
-                  <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-md">{t("WEB APP MODE")}
-
+                {isElectron ? (
+                  <span className="text-[10px] font-bold px-2 py-1 bg-blue-100 text-blue-700 rounded-md">
+                    {t("DESKTOP APP")}
                   </span>
-                }
+                ) : isAndroidApp ? (
+                  <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md flex items-center gap-1">
+                    <Bluetooth size={11} />
+                    {t("ANDROID APP")}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-md">
+                    {t("WEB APP MODE")}
+                  </span>
+                )}
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Default KOT Printer")}
-
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    {t("Default KOT Printer")}
                   </label>
-                  <select
-                    value={settings.kotPrinter}
-                    onChange={(e) => handleInputChange('kotPrinter', e.target.value)}
-                    disabled={!window.electronAPI}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={settings.kotPrinter}
+                      onChange={(e) => handleInputChange('kotPrinter', e.target.value)}
+                      disabled={!isElectron && !isAndroidApp}
+                      className="flex-1 px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
 
-                    <option value="">{t("-- Select Printer --")}</option>
-                    {systemPrinters.map((p) =>
-                      <option key={p.name} value={p.name}>{p.name}</option>
+                      <option value="">{t("-- Select Printer --")}</option>
+                      {systemPrinters.map((p) =>
+                        <option key={p.name} value={p.name}>{p.name}</option>
+                      )}
+                    </select>
+                    {isAndroidApp && settings.kotPrinter && settings.kotPrinter.includes('Bluetooth:') && (
+                      <button
+                        type="button"
+                        onClick={() => handleTestPrint('kotPrinter')}
+                        className="px-3 py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                        title={t("Test Print KOT Printer")}>
+                        <Printer size={15} />
+                        <span>{t("Test")}</span>
+                      </button>
                     )}
-                  </select>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Default Billing Printer")}
-
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    {t("Default Billing Printer")}
                   </label>
-                  <select
-                    value={settings.billingPrinter}
-                    onChange={(e) => handleInputChange('billingPrinter', e.target.value)}
-                    disabled={!window.electronAPI}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
+                  <div className="flex gap-2 items-center">
+                    <select
+                      value={settings.billingPrinter}
+                      onChange={(e) => handleInputChange('billingPrinter', e.target.value)}
+                      disabled={!isElectron && !isAndroidApp}
+                      className="flex-1 px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main disabled:opacity-50">
 
-                    <option value="">{t("-- Select Printer --")}</option>
-                    {systemPrinters.map((p) =>
-                      <option key={p.name} value={p.name}>{p.name}</option>
+                      <option value="">{t("-- Select Printer --")}</option>
+                      {systemPrinters.map((p) =>
+                        <option key={p.name} value={p.name}>{p.name}</option>
+                      )}
+                    </select>
+                    {isAndroidApp && settings.billingPrinter && settings.billingPrinter.includes('Bluetooth:') && (
+                      <button
+                        type="button"
+                        onClick={() => handleTestPrint('billingPrinter')}
+                        className="px-3 py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                        title={t("Test Print Billing Printer")}>
+                        <Printer size={15} />
+                        <span>{t("Test")}</span>
+                      </button>
                     )}
-                  </select>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">{t("Print Format (Receipt Layout)")}
 
+                {isAndroidApp && (
+                  <button
+                    type="button"
+                    onClick={handleScanBluetooth}
+                    disabled={isScanningBluetooth}
+                    className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-60">
+                    <Bluetooth size={16} className={isScanningBluetooth ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                    <span>{isScanningBluetooth ? t("Scanning Bluetooth Devices...") : t("Refresh / Scan Bluetooth Printers")}</span>
+                  </button>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    {t("Print Format (Receipt Layout)")}
                   </label>
                   <select
                     value={settings.printFormat || '80mm'}
@@ -599,18 +740,23 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       className="sr-only"
                       checked={settings.silentPrinting !== false}
                       onChange={(e) => handleInputChange('silentPrinting', e.target.checked)}
-                      disabled={!window.electronAPI} />
+                      disabled={!isElectron && !isAndroidApp} />
 
                     <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${settings.silentPrinting !== false ? 'bg-primary' : 'bg-gray-300'}`}>
                       <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${settings.silentPrinting !== false ? 'translate-x-5' : 'translate-x-0'}`} />
                     </div>
                   </label>
                 </div>
-                {!window.electronAPI &&
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">{t("Silent printing is only available in the Desktop App. In the web version, a print dialog will always appear.")}
-
+                {!isElectron && !isAndroidApp && (
+                  <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                    {t("Silent printing is only available in the Desktop App and Android Bluetooth mode. In the web version, a print dialog will always appear.")}
                   </p>
-                }
+                )}
+                {isAndroidApp && (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                    {t("Bluetooth thermal printers (58mm/80mm) print instantly & silently. Pair your printer in Android Bluetooth settings first, then click 'Refresh / Scan Bluetooth Printers'.")}
+                  </p>
+                )}
               </div>
             </div>
 

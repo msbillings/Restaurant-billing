@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2 } from 'lucide-react';
 import axios from 'axios';
 import { getApiUrl } from '../config';
+import html2canvas from 'html2canvas';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
@@ -113,7 +114,7 @@ const KOT = ({ order, onClose }) => {
   }, [order?.items, selectedDept, activeStationGroup]);
 
   // Print current active tab/kitchen
-  const handlePrintCurrent = () => {
+  const handlePrintCurrent = async () => {
     if (window.electronAPI) {
       const receiptNode = document.querySelector('#kot-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
@@ -126,6 +127,38 @@ const KOT = ({ order, onClose }) => {
       }
 
       window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
+    } else if (window.AndroidBluetooth) {
+      let targetPrinter = activeStationGroup?.printer?.bluetoothAddress || activeStationGroup?.printer?.deviceName || settings.kotPrinter || '';
+      const match = targetPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+      const macAddress = match ? match[0] : null;
+
+      if (macAddress && window.AndroidBluetooth.printImage) {
+        try {
+          const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
+          if (receiptNode) {
+            const paperWidthDots = (settings.printFormat === '58mm' || activeStationGroup?.printer?.paperWidth === '58mm') ? 384 : 576;
+            const canvas = await html2canvas(receiptNode, {
+              scale: 2,
+              backgroundColor: '#ffffff',
+              useCORS: true,
+              logging: false
+            });
+            const base64Png = canvas.toDataURL('image/png');
+            const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+            const res = JSON.parse(resStr || '{}');
+            if (res.success) return;
+            console.warn('[KOT] Direct Bluetooth print failed:', res.error);
+          }
+        } catch (e) {
+          console.warn('[KOT] Error capturing KOT for Bluetooth print:', e);
+        }
+      }
+
+      if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+        window.AndroidPrint.print();
+      } else {
+        window.print();
+      }
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {
@@ -154,6 +187,29 @@ const KOT = ({ order, onClose }) => {
 
         const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
         window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
+      } else if (window.AndroidBluetooth) {
+        const chosenPrinter = grp.printer?.bluetoothAddress || grp.printer?.deviceName || settings.kotPrinter || '';
+        const match = chosenPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        const macAddress = match ? match[0] : null;
+
+        if (macAddress && window.AndroidBluetooth.printImage) {
+          try {
+            const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
+            if (receiptNode) {
+              const paperWidthDots = (settings.printFormat === '58mm' || grp.printer?.paperWidth === '58mm') ? 384 : 576;
+              const canvas = await html2canvas(receiptNode, {
+                scale: 2,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false
+              });
+              const base64Png = canvas.toDataURL('image/png');
+              window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+            }
+          } catch (e) {
+            console.warn('[KOT] Multi-station Bluetooth print error:', e);
+          }
+        }
       } else {
         window.print();
       }
