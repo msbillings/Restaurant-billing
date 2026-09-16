@@ -4,12 +4,15 @@ import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2 } from 'lucide-react'
 import axios from 'axios';
 import { getApiUrl } from '../config';
 import html2canvas from 'html2canvas';
+import { getReceiptFontMetrics } from '../utils/receiptFonts';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
   const [settings, setSettings] = useState({
     restaurantName: 'msbillings'
   });
+  const fontMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat);
+  const receiptFont = settings.receiptFontFamily || "Arial, Helvetica, sans-serif";
   const [printerConfigs, setPrinterConfigs] = useState([]);
   const [selectedDept, setSelectedDept] = useState('ALL'); // 'ALL' or specific kitchen department
   const [isPrintingAll, setIsPrintingAll] = useState(false);
@@ -402,24 +405,24 @@ const KOT = ({ order, onClose }) => {
       <div
         className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-4 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
-          fontFamily: "Arial, Helvetica, sans-serif",
+          fontFamily: receiptFont,
           color: '#000',
           fontWeight: 'normal',
-          fontSize: '13px',
-          lineHeight: '1.3',
+          fontSize: fontMetrics.bodySize,
+          lineHeight: fontMetrics.lineHeight,
           width: settings.printFormat === 'A4' ? '100%' : undefined,
           maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
         }}>
         
         {settings.printFormat === '58mm' ? (
           /* 58mm Compact Clean KOT Slip Layout (Zomato Style) */
-          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontSize: '11px', lineHeight: '1.25', color: '#000' }}>
+          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '3px' }}>
-              <div style={{ fontSize: '10px' }}>
+              <div style={{ fontSize: fontMetrics.detailSize }}>
                 {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
               </div>
-              <div style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '1px' }}>
+              <div style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold', marginTop: '1px' }}>
                 {(() => {
                   const raw = (order.kotNumber || order.billNumber || '').toString().trim();
                   if (!raw) return 'KOT PREVIEW';
@@ -442,7 +445,7 @@ const KOT = ({ order, onClose }) => {
                   : selectedDept.toUpperCase();
                 return (
                   <div style={{
-                    fontSize: '11px',
+                    fontSize: fontMetrics.detailSize,
                     fontWeight: 'bold',
                     padding: '2px 6px',
                     border: '1px solid #000',
@@ -456,7 +459,7 @@ const KOT = ({ order, onClose }) => {
               })()}
 
               {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
-                <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>
                   {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
                 </div>
               )}
@@ -467,42 +470,46 @@ const KOT = ({ order, onClose }) => {
                 if (bType === 'Delivery') {
                   const partner = (order.orderSource || '').trim() || 'DIRECT';
                   return (
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#dc2626', marginTop: '1px' }}>
+                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', color: '#dc2626', marginTop: '1px' }}>
                       DELIVERY: {partner.toUpperCase()} #{order.tableNo}
                     </div>
                   );
                 } else if (bType === 'Takeaway') {
                   return (
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#2563eb', marginTop: '1px' }}>
+                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', color: '#2563eb', marginTop: '1px' }}>
                       TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
                     </div>
                   );
                 } else {
+                  let tNo = (order.tableNo || '').trim();
+                  if (tNo.toLowerCase().startsWith('table')) {
+                    tNo = tNo.substring(5).trim();
+                  }
                   return (
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '1px' }}>
-                      Dine In {order.tableNo ? `- Table ${order.tableNo}` : ''}
+                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', marginTop: '1px' }}>
+                      Dine In: {tNo ? `Table ${tNo}` : 'Table'}
                     </div>
                   );
                 }
               })()}
               {order.customerName && (
-                <div style={{ fontSize: '10.5px', marginTop: '1px' }}>
+                <div style={{ fontSize: fontMetrics.detailSize, marginTop: '1px' }}>
                   Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
                 </div>
               )}
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Info */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize }}>
               <span>{order.captainName ? `${t("Assign:")} ${order.captainName}` : `${t("Biller:")} ${order.cashierName || 'admin'}`}</span>
               {order.captainName && <span>{t("Captain:")} {order.captainName}</span>}
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Items List (Compact Zomato KOT style) */}
             <div style={{ marginBottom: '4px' }}>
@@ -516,7 +523,7 @@ const KOT = ({ order, onClose }) => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{
                           fontWeight: 'bold',
-                          fontSize: '12.5px',
+                          fontSize: fontMetrics.itemSize,
                           lineHeight: '1.2',
                           flex: 1,
                           paddingRight: '6px',
@@ -531,7 +538,7 @@ const KOT = ({ order, onClose }) => {
                         </div>
                         <div style={{
                           fontWeight: '900',
-                          fontSize: '14px',
+                          fontSize: fontMetrics.headingSize,
                           flexShrink: 0,
                           textAlign: 'right',
                           textDecoration: isCancelled ? 'line-through' : 'none',
@@ -541,7 +548,7 @@ const KOT = ({ order, onClose }) => {
                         </div>
                       </div>
                       {item.specialNote && (
-                        <div style={{ fontSize: '10.5px', fontWeight: 'bold', color: '#dc2626', textAlign: 'left', marginTop: '1.5px' }}>
+                        <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'bold', color: '#dc2626', textAlign: 'left', marginTop: '1.5px' }}>
                           * {item.specialNote}
                         </div>
                       )}
@@ -549,17 +556,17 @@ const KOT = ({ order, onClose }) => {
                   );
                 })
               ) : (
-                <div style={{ textAlign: 'center', padding: '6px 0', fontSize: '11px', color: '#666' }}>
+                <div style={{ textAlign: 'center', padding: '6px 0', fontSize: fontMetrics.detailSize, color: '#666' }}>
                   {t("No items for this kitchen")}
                 </div>
               )}
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Total Qty Count */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.bodySize, fontWeight: 'bold' }}>
               <span>{t("Total Items:")}</span>
               <span>{displayedItems?.reduce((acc, curr) => acc + (curr.quantity || 1), 0) || 0}</span>
             </div>
@@ -637,10 +644,14 @@ const KOT = ({ order, onClose }) => {
                   </div>
                 );
               } else {
+                let tNo = (order.tableNo || '').trim();
+                if (tNo.toLowerCase().startsWith('table')) {
+                  tNo = tNo.substring(5).trim();
+                }
                 return (
                   <>
                     <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>Dine In</div>
-                    {order.tableNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{order.tableNo}</div>}
+                    {tNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{tNo}</div>}
                   </>
                 );
               }

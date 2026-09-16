@@ -9,6 +9,8 @@ import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
 import CustomTimePicker from './common/CustomTimePicker';
+import { RECEIPT_FONT_STYLES, RECEIPT_FONT_SIZES } from '../utils/receiptFonts';
+import { Type, Check } from 'lucide-react';
 
 const formatFileSize = (bytes) => {
   if (!bytes || bytes <= 0) return '';
@@ -51,6 +53,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     gstRate: 5,
     logo: '',
     printFormat: '80mm',
+    receiptFontSize: 'medium',
+    receiptFontFamily: 'Arial, Helvetica, sans-serif',
     enableGeoFencing: false,
     geoFencingRadius: 50,
     latitude: '',
@@ -81,6 +85,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [coordsUnlockError, setCoordsUnlockError] = useState('');
   const [showCoordsUnlockPinVisibility, setShowCoordsUnlockPinVisibility] = useState(false);
   const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
+  const [showFontSizeModal, setShowFontSizeModal] = useState(false);
 
   const isElectron = Boolean(typeof window !== 'undefined' && window.electronAPI);
   const isAndroidApp = Boolean(
@@ -729,6 +734,57 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     <option value="A4">{t("A4 (Full Page Invoice)")}</option>
                   </select>
                 </div>
+
+                {/* Bill & KOT Text Size Customization (Matching reference modal) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                      <Type size={16} className="text-primary" />
+                      <span>{t("Bill & KOT Text Size")}</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowFontSizeModal(true)}
+                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                      <span>{t("Change Size")}</span>
+                    </button>
+                  </div>
+                  <div
+                    onClick={() => setShowFontSizeModal(true)}
+                    className="w-full px-4 py-3 border border-border rounded-xl bg-background text-text-main flex items-center justify-between cursor-pointer hover:border-primary transition">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm">
+                        {RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.label || t("Medium")}
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        ({t("Normal: ")}{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.normalPx}, {t("Heading: ")}{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.headingPx})
+                      </span>
+                    </div>
+                    <span className="text-xs text-text-muted">▼</span>
+                  </div>
+                </div>
+
+                {/* Bill & KOT Font Style Customization (15 Font Families) */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                    <Type size={16} className="text-primary" />
+                    <span>{t("Bill & KOT Font Style (15 Readable Styles)")}</span>
+                  </label>
+                  <select
+                    value={settings.receiptFontFamily || "Arial, Helvetica, sans-serif"}
+                    onChange={(e) => handleInputChange('receiptFontFamily', e.target.value)}
+                    className="w-full px-3.5 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm">
+                    {RECEIPT_FONT_STYLES.map((f) => (
+                      <option key={f.id} value={f.value} style={{ fontFamily: f.value }}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-text-muted">
+                    {t("Selected font applies cleanly across both 58mm & 80mm slips with high thermal legibility.")}
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between pt-2 border-t border-border mt-4">
                   <div className="space-y-0.5">
                     <label className="text-sm font-semibold text-text-main">{t("Silent Printing")}</label>
@@ -1832,6 +1888,65 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               <button type="button" disabled={saving} onClick={() => { setShowWhatsappSettingsModal(false); handleSave(); }} className="flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-70 cursor-pointer">
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}{t("Save & Close")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bill Text Size Modal (Matching user reference UI) */}
+      {showFontSizeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-3">
+              <h3 className="text-lg font-bold text-gray-900 tracking-tight">
+                {t("Bill Text Size")}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFontSizeModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-800 hover:bg-black text-white flex items-center justify-center transition cursor-pointer active:scale-95"
+                title={t("Close")}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Options List */}
+            <div className="py-2 divide-y divide-gray-100">
+              {RECEIPT_FONT_SIZES.map((opt) => {
+                const isSelected = (settings.receiptFontSize || 'medium') === opt.id;
+                return (
+                  <div
+                    key={opt.id}
+                    onClick={() => {
+                      handleInputChange('receiptFontSize', opt.id);
+                      setShowFontSizeModal(false);
+                      setToast({
+                        message: t(`Bill & KOT text size set to ${opt.label} (${opt.normalPx})`),
+                        type: 'success'
+                      });
+                    }}
+                    className={`flex items-center justify-between px-6 py-4 cursor-pointer transition-all ${
+                      isSelected ? 'bg-purple-50/80 text-purple-900 font-bold' : 'hover:bg-gray-50 text-gray-700 font-medium'
+                    }`}>
+                    <div className="flex flex-col">
+                      <span className="text-base">{opt.label}</span>
+                      <span className="text-xs text-gray-400 font-normal">
+                        {t("Normal:")} {opt.normalPx} ({opt.normalPt}) • {t("Heading:")} {opt.headingPx} ({opt.headingPt})
+                      </span>
+                    </div>
+                    {isSelected && (
+                      <Check size={20} className="text-purple-700 font-bold shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-4 bg-gray-50 text-center border-t border-gray-100">
+              <p className="text-xs text-gray-500">
+                {t("Applied immediately across all Bill & KOT thermal receipts (58mm & 80mm).")}
+              </p>
             </div>
           </div>
         </div>

@@ -290,9 +290,9 @@ public class BluetoothPrinterHelper {
                         if (alpha < 50) {
                             // white
                         } else {
-                            // Calculate luminance
+                            // Calculate luminance with 135 threshold for razor-sharp thermal print without ink bleeding
                             int luminance = (int) (0.299 * r + 0.587 * g + 0.114 * b);
-                            if (luminance < 190) { // Black dot threshold
+                            if (luminance < 135) { // Optimal dot threshold preventing ink leakage/smudging
                                 byteVal |= (0x80 >> bit);
                             }
                         }

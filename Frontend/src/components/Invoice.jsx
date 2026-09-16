@@ -8,6 +8,7 @@ import { sendWhatsAppBill } from '../api/whatsapp';
 import html2canvas from 'html2canvas';
 import api from '../api/axios';
 import { formatTime12 } from '../utils/timeFormat';
+import { getReceiptFontMetrics } from '../utils/receiptFonts';
 
 const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false }) => {
   const { t } = useLanguage();
@@ -167,6 +168,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     sgstRate: activeSettings.sgstRate !== undefined ? Number(activeSettings.sgstRate) : 2.5,
     gstRate: activeSettings.gstRate !== undefined ? Number(activeSettings.gstRate) : 5
   };
+  const fontMetrics = getReceiptFontMetrics(activeSettings.receiptFontSize || 'medium', activeSettings.printFormat);
+  const receiptFont = activeSettings.receiptFontFamily || "Arial, Helvetica, sans-serif";
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
 
   const handlePrint = async () => {
@@ -949,11 +952,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       <div
         className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 ${getFormatClasses()}`}
         style={{
-          fontFamily: "Arial, Helvetica, sans-serif",
+          fontFamily: receiptFont,
           color: '#000',
           fontWeight: 'normal',
-          fontSize: '13px',
-          lineHeight: '1.3',
+          fontSize: fontMetrics.bodySize,
+          lineHeight: fontMetrics.lineHeight,
           width: activeSettings.printFormat === 'A4' ? '100%' : undefined,
           maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined,
           overflow: 'visible',
@@ -962,7 +965,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         
         {activeSettings.printFormat === '58mm' ? (
           /* 58mm Compact Clean Receipt Layout (Zomato Style) */
-          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontSize: '11px', lineHeight: '1.25', color: '#000' }}>
+          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '3px' }}>
               {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]') && (
@@ -975,10 +978,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                   />
                 </div>
               )}
-              <div style={{ fontSize: '14px', fontWeight: 'bold', lineHeight: '1.1', textTransform: 'uppercase' }}>
+              <div style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
                 {activeSettings.restaurantName || 'MSBILLINGS'}
               </div>
-              <div style={{ fontSize: '10px', marginTop: '2px', lineHeight: '1.2' }}>
+              <div style={{ fontSize: fontMetrics.detailSize, marginTop: '2px', lineHeight: '1.25' }}>
                 {(activeSettings.address || '').split('\n').map((line, i) => (
                   <div key={i}>{line}</div>
                 ))}
@@ -989,15 +992,15 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Bill Type / Invoice Title */}
-            <div style={{ fontSize: '12px', fontWeight: 'bold', textAlign: 'center', margin: '2px 0' }}>
+            <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', textAlign: 'center', margin: '2px 0' }}>
               {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Order Type & Table */}
             {(() => {
@@ -1009,36 +1012,40 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               } else if (bType === 'Takeaway') {
                 label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
               } else {
-                label = `Dine-In: ${bill.tableNo || 'Table'}`;
+                let tNo = (bill.tableNo || '').trim();
+                if (tNo.toLowerCase().startsWith('table')) {
+                  tNo = tNo.substring(5).trim();
+                }
+                label = `Dine-In: ${tNo ? `Table ${tNo}` : 'Table'}`;
               }
               return (
-                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '2px' }}>
+                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
                   {label}
                 </div>
               );
             })()}
 
             {/* Date & Time */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', marginBottom: '1px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
               <span>{t('Date: ')}{new Date(billDateTime).toLocaleDateString('en-GB')}</span>
               <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
             </div>
 
             {/* Cashier & Bill No */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', marginBottom: '1px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
               <span>{t('Cashier: ')}{bill.cashierName || 'admin'}</span>
               <span style={{ fontWeight: 'bold' }}>{t('Bill No: ')}{bill.billNumber || 'PREVIEW'}</span>
             </div>
 
             {bill.captainName && (
-              <div style={{ fontSize: '10.5px' }}>{t('Assign: ')}{bill.captainName}</div>
+              <div style={{ fontSize: fontMetrics.detailSize }}>{t('Assign: ')}{bill.captainName}</div>
             )}
             {bill.tokenNumber && (
-              <div style={{ fontWeight: 'bold', fontSize: '11px' }}>{t('Token: ')}{bill.tokenNumber}</div>
+              <div style={{ fontWeight: 'bold', fontSize: fontMetrics.bodySize }}>{t('Token: ')}{bill.tokenNumber}</div>
             )}
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Items List (Compact Zomato 2-line layout) */}
             <div style={{ marginBottom: '3px' }}>
@@ -1048,30 +1055,30 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                   if (activeQty <= 0) return null;
                   return (
                     <div key={idx} style={{ marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e0e0e0' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '11.5px', textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: fontMetrics.itemSize, textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
                         {item.name || 'Unknown Item'}
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px', marginTop: '1.5px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.detailSize, marginTop: '1.5px' }}>
                         <span>[{Number(item.price || 0).toFixed(2)}] × {activeQty}</span>
                         <span style={{ fontWeight: 'bold' }}>{(item.price * activeQty).toFixed(2)}</span>
                       </div>
                       {item.hsnCode && (
-                        <div style={{ fontSize: '9px', color: '#666' }}>HSN: {item.hsnCode}</div>
+                        <div style={{ fontSize: '9.5px', color: '#666' }}>HSN: {item.hsnCode}</div>
                       )}
                     </div>
                   );
                 })
               ) : (
-                <div style={{ textAlign: 'center', padding: '4px 0', fontSize: '11px' }}>{t("No items")}</div>
+                <div style={{ textAlign: 'center', padding: '4px 0', fontSize: fontMetrics.detailSize }}>{t("No items")}</div>
               )}
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Totals & Breakdown */}
-            <div style={{ fontSize: '10.5px', lineHeight: '1.3' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: fontMetrics.detailSize, lineHeight: fontMetrics.lineHeight }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1px 0' }}>
                 <span>{t("Total Qty: ")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <span>{t("Sub Total:")}</span>
@@ -1080,7 +1087,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               </div>
 
               {bill.discount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', padding: '1px 0' }}>
                   <span>{t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}:</span>
                   <span>-{(bill.discount || 0).toFixed(2)}</span>
                 </div>
@@ -1124,19 +1131,19 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 return (
                   <>
                     {cRate > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                         <span>{t("CGST@")}{cEff.toFixed(1)}%:</span>
                         <span>{cAmt.toFixed(2)}</span>
                       </div>
                     )}
                     {sRate > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                         <span>{t("SGST@")}{sEff.toFixed(1)}%:</span>
                         <span>{sAmt.toFixed(2)}</span>
                       </div>
                     )}
                     {gRate > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                         <span>{t("GST@")}{gEff.toFixed(1)}%:</span>
                         <span>{gAmt.toFixed(2)}</span>
                       </div>
@@ -1146,13 +1153,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               })()}
 
               {Number(bill.deliveryCharge || 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                   <span>{t("Delivery Charge:")}</span>
                   <span>{Number(bill.deliveryCharge).toFixed(2)}</span>
                 </div>
               )}
               {Number(bill.containerCharge || 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                   <span>{t("Container Charge:")}</span>
                   <span>{Number(bill.containerCharge).toFixed(2)}</span>
                 </div>
@@ -1179,7 +1186,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 const roundOff = roundedTotal - finalTotal;
                 if (roundOff === 0) return null;
                 return (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
                     <span>{t("Round off:")}</span>
                     <span>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
                   </div>
@@ -1188,7 +1195,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             </div>
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Grand Total */}
             {(() => {
@@ -1210,7 +1217,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const roundedTotal = Math.round(finalTotal);
 
               return (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '15px', fontWeight: 'bold', margin: '2px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 'bold', margin: '3px 0' }}>
                   <span>{t('Grand Total')}</span>
                   <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                 </div>
@@ -1218,14 +1225,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             })()}
 
             {/* Dashed Separator */}
-            <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
 
             {/* Payment Mode */}
             {(() => {
               const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
               if (hasSplit) {
                 return (
-                  <div style={{ fontSize: '10.5px', textAlign: 'center', margin: '2px 0' }}>
+                  <div style={{ fontSize: fontMetrics.detailSize, textAlign: 'center', margin: '2px 0' }}>
                     <div style={{ fontWeight: 'bold' }}>{t("PAID VIA MIXED")}</div>
                     {Number(bill.splitPayments?.cash || 0) > 0 && <div>Cash: {currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</div>}
                     {Number(bill.splitPayments?.upi || 0) > 0 && <div>UPI: {currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</div>}
@@ -1233,12 +1240,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                   </div>
                 );
               } else if (bill.status === 'Unpaid') {
-                return <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', margin: '2px 0' }}>{t("UNPAID (KHATA BILL)")}</div>;
+                return <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.bodySize, margin: '2px 0' }}>{t("UNPAID (KHATA BILL)")}</div>;
               } else {
                 const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
                 const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
                 return (
-                  <div style={{ textAlign: 'center', fontSize: '11.5px', fontWeight: 'bold', margin: '2px 0' }}>
+                  <div style={{ textAlign: 'center', fontSize: fontMetrics.bodySize, fontWeight: 'bold', margin: '2px 0' }}>
                     {t("Paid via")} {bill.paymentMode || 'Cash'}{appSuffix}
                   </div>
                 );
