@@ -2,8 +2,10 @@ import { initAuthCreds, BufferJSON, proto } from '@whiskeysockets/baileys';
 
 const globalAuthCache = new Map();
 
-export const useMongoDBAuthState = async (WhatsAppAuthModel) => {
-  const modelKey = WhatsAppAuthModel?.modelName || 'WhatsAppAuth';
+export const useMongoDBAuthState = async (WhatsAppAuthModel, explicitTenantId = null) => {
+  const tenantDb = explicitTenantId || WhatsAppAuthModel?.db?.name || WhatsAppAuthModel?.collection?.conn?.name || 'default';
+  const modelKey = `${tenantDb}_${WhatsAppAuthModel?.modelName || 'WhatsAppAuth'}`;
+
   if (!globalAuthCache.has(modelKey)) {
     globalAuthCache.set(modelKey, new Map());
   }

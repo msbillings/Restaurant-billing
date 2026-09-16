@@ -5,25 +5,21 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
 
 export const resolveTenantInfo = async (req) => {
-  let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
+  let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.headers?.['X-Tenant-DB'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
   
-  if (!tenantId || tenantId === 'default') {
-    if (whatsappManager.instances.size === 1) {
-      tenantId = Array.from(whatsappManager.instances.keys())[0];
-    } else {
-      tenantId = 'default';
-    }
+  if (!tenantId || tenantId === 'undefined' || tenantId === 'null') {
+    tenantId = 'default';
   }
   
-  // High-speed fast path: If WhatsAppService already initialized in memory, return immediately (0ms)
-  if (whatsappManager.hasInstance(tenantId)) {
+  // High-speed fast path: If WhatsAppService already initialized in memory for this exact tenantId, return immediately (0ms)
+  if (tenantId !== 'default' && whatsappManager.hasInstance(tenantId)) {
     const existing = whatsappManager.getInstance(tenantId);
     if (existing.restaurantName) {
       return { tenantId, restaurantName: existing.restaurantName, whatsappService: existing };
     }
   }
 
-  let restaurantName = req.headers?.['x-restaurant-name'] || null;
+  let restaurantName = req.headers?.['x-restaurant-name'] || req.headers?.['X-Restaurant-Name'] || null;
   try {
     const models = req.models || (await getTenantModels(tenantId));
     if (models?.Setting) {
@@ -52,45 +48,47 @@ export const getStatus = async (req, res) => {
       return res.json(status);
     }
 
-    // 2. Cross-Device Sync: Check MongoDB persisted whatsapp_status
+    // 2. Cross-Device Sync: Check MongoDB persisted whatsapp_status ONLY for valid tenantId
     try {
-      const models = req.models || (await getTenantModels(tenantId));
-      if (models?.Setting) {
-        const dbStatusDoc = await models.Setting.findOne({ key: 'whatsapp_status' }).lean();
-        if (dbStatusDoc?.value?.status === 'CONNECTED' && dbStatusDoc?.value?.connectedNumber) {
-          const dbVal = dbStatusDoc.value;
-          const hasAuthCreds = models.WhatsAppAuth ? (await models.WhatsAppAuth.countDocuments({ id: 'creds' })) > 0 : false;
-          if (hasAuthCreds && status.status !== 'SCAN_QR') {
-            const dispName = dbVal.restaurantName || restaurantName || 'MS Billings POS';
-            const devName = dbVal.deviceName || `${dispName} Gateway`;
-            
-            // Auto-trigger background connection supervisor if socket dropped
-            if (whatsappService.status === 'DISCONNECTED') {
-              whatsappService.ensureConnection().catch(() => {});
-            }
+      if (tenantId && tenantId !== 'default') {
+        const models = req.models || (await getTenantModels(tenantId));
+        if (models?.Setting) {
+          const dbStatusDoc = await models.Setting.findOne({ key: 'whatsapp_status' }).lean();
+          if (dbStatusDoc?.value?.status === 'CONNECTED' && dbStatusDoc?.value?.connectedNumber) {
+            const dbVal = dbStatusDoc.value;
+            const hasAuthCreds = models.WhatsAppAuth ? (await models.WhatsAppAuth.countDocuments({ id: 'creds' })) > 0 : false;
+            if (hasAuthCreds && status.status !== 'SCAN_QR') {
+              const dispName = dbVal.restaurantName || restaurantName || 'MS Billings POS';
+              const devName = dbVal.deviceName || `${dispName} Gateway`;
+              
+              // Auto-trigger background connection supervisor if socket dropped
+              if (whatsappService.status === 'DISCONNECTED') {
+                whatsappService.ensureConnection().catch(() => {});
+              }
 
-            return res.json({
-              status: 'CONNECTED',
-              connectedNumber: dbVal.connectedNumber,
-              userName: dispName,
-              restaurantName: dispName,
-              platform: `${dispName} POS`,
-              deviceName: devName,
-              linkedAt: dbVal.linkedAt || new Date().toISOString(),
-              linkedDevices: [
-                {
-                  id: 'dev_1',
-                  name: devName,
-                  platform: `${dispName} Gateway`,
-                  status: 'Active',
-                  lastActive: 'Just now',
-                  phoneNumber: `+${dbVal.connectedNumber}`
-                }
-              ],
-              totalLinkedDevices: 1,
-              hasQr: false,
-              qr: null
-            });
+              return res.json({
+                status: 'CONNECTED',
+                connectedNumber: dbVal.connectedNumber,
+                userName: dispName,
+                restaurantName: dispName,
+                platform: `${dispName} POS`,
+                deviceName: devName,
+                linkedAt: dbVal.linkedAt || new Date().toISOString(),
+                linkedDevices: [
+                  {
+                    id: 'dev_1',
+                    name: devName,
+                    platform: `${dispName} Gateway`,
+                    status: 'Active',
+                    lastActive: 'Just now',
+                    phoneNumber: `+${dbVal.connectedNumber}`
+                  }
+                ],
+                totalLinkedDevices: 1,
+                hasQr: false,
+                qr: null
+              });
+            }
           }
         }
       }

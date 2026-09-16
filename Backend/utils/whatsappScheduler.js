@@ -17,8 +17,18 @@ const generateAutoDayBookWhatsAppMessage = async (databaseName) => {
     const Setting = models.Setting;
 
     const now = new Date();
-    const startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-    const endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    let startDate, endDate;
+    try {
+      const istStr = now.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
+      const [datePart] = istStr.split(',');
+      const [d, m, y] = datePart.trim().split('/');
+      const istDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      startDate = new Date(`${istDate}T00:00:00.000+05:30`);
+      endDate = new Date(`${istDate}T23:59:59.999+05:30`);
+    } catch (e) {
+      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    }
 
     const [allBills, expenses, settingsDoc] = await Promise.all([
       Bill.find({
@@ -501,26 +511,28 @@ export const startWhatsAppScheduler = () => {
       const now = new Date();
 
       // Build current IST time string "HH:MM" and today's IST date string
-      const hLocal = String(now.getHours()).padStart(2, '0');
-      const mLocal = String(now.getMinutes()).padStart(2, '0');
-      const timeLocal24 = `${hLocal}:${mLocal}`;
-
-      let timeIST24 = timeLocal24;
-      let todayDateStr = now.toISOString().split('T')[0];
+      let timeIST24 = '';
+      let todayDateStr = '';
       try {
-        const istStr = now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour12: false });
+        const istStr = now.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
         const parts = istStr.split(',');
         if (parts[1]) {
           const [h, m] = parts[1].trim().split(':');
           timeIST24 = `${(h || '').padStart(2, '0')}:${(m || '').padStart(2, '0')}`;
         }
-        const [mDate, dDate, yDate] = (parts[0] || '').trim().split('/');
+        const [dDate, mDate, yDate] = (parts[0] || '').trim().split('/');
         if (yDate && mDate && dDate) {
           todayDateStr = `${yDate}-${mDate.padStart(2, '0')}-${dDate.padStart(2, '0')}`;
         }
-      } catch (e) {}
+      } catch (e) {
+        // Fallback to local time if formatting fails
+        const hLocal = String(now.getHours()).padStart(2, '0');
+        const mLocal = String(now.getMinutes()).padStart(2, '0');
+        timeIST24 = `${hLocal}:${mLocal}`;
+        todayDateStr = now.toISOString().split('T')[0];
+      }
 
-      const validTimeStrings = new Set([timeLocal24, timeIST24]);
+      const validTimeStrings = new Set([timeIST24]);
 
       // Fetch all active tenant databases
       let tenantDatabases = [];

@@ -108,7 +108,7 @@ class WhatsAppService {
       const models = await getTenantModels(this.tenantId);
       const WhatsAppAuthModel = models.WhatsAppAuth;
       
-      this.authState = await useMongoDBAuthState(WhatsAppAuthModel);
+      this.authState = await useMongoDBAuthState(WhatsAppAuthModel, this.tenantId);
       const { state, saveCreds } = this.authState;
       let version;
       try {
@@ -216,12 +216,6 @@ class WhatsAppService {
                 ).catch(() => {});
               }
             }).catch(() => {});
-
-            setTimeout(() => {
-              this._initPromise = null;
-              this.isInitializing = false;
-              this.init();
-            }, 2000);
           } else if (isConflict) {
             // Code 440: WhatsApp server kicked us out due to a session conflict
             // (most commonly caused by WhatsApp Web being open simultaneously in a browser).

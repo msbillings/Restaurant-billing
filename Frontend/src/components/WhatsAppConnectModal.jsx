@@ -30,6 +30,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   // Refresh QR state
   const [refreshingQR, setRefreshingQR] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const hasAutoRefreshed = React.useRef(false);
 
   // Test Message State
   const [testPhone, setTestPhone] = useState('');
@@ -51,6 +52,11 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
           }
           setTestPhone(prev => (prev ? prev : num));
         }
+
+        if (res.status === 'DISCONNECTED' && !res.qr && !hasAutoRefreshed.current && !refreshingQR && !loggingOut) {
+          hasAutoRefreshed.current = true;
+          handleRefreshQR();
+        }
       }
     } catch (e) {
       console.warn('Could not fetch WhatsApp status:', e);
@@ -60,7 +66,10 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      hasAutoRefreshed.current = false;
+      return;
+    }
     fetchStatus();
 
     // Responsive polling while linking (1.5s), relaxed (10s) once solidly connected
@@ -157,6 +166,7 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
     try {
       await logoutWhatsApp();
       setActionMessage({ text: t('Disconnected successfully. Ready to re-link!'), type: 'info' });
+      hasAutoRefreshed.current = false;
       await fetchStatus();
     } catch (e) {
       setActionMessage({ text: t('Failed to disconnect'), type: 'error' });
