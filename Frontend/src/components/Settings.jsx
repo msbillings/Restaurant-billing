@@ -9,7 +9,7 @@ import { apiUpdateProfile } from '../api/auth';
 import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
 import CustomTimePicker from './common/CustomTimePicker';
-import { RECEIPT_FONT_STYLES, RECEIPT_FONT_SIZES } from '../utils/receiptFonts';
+import { RECEIPT_FONT_STYLES, RECEIPT_FONT_SIZES, findReceiptFont, getReceiptFontMetrics } from '../utils/receiptFonts';
 import { Type, Check } from 'lucide-react';
 
 const formatFileSize = (bytes) => {
@@ -86,6 +86,8 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [showCoordsUnlockPinVisibility, setShowCoordsUnlockPinVisibility] = useState(false);
   const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
   const [showFontSizeModal, setShowFontSizeModal] = useState(false);
+  const [showFontStyleModal, setShowFontStyleModal] = useState(false);
+  const [fontCategoryFilter, setFontCategoryFilter] = useState('All');
 
   const isElectron = Boolean(typeof window !== 'undefined' && window.electronAPI);
   const isAndroidApp = Boolean(
@@ -766,20 +768,50 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
 
                 {/* Bill & KOT Font Style Customization (15 Font Families) */}
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    <Type size={16} className="text-primary" />
-                    <span>{t("Bill & KOT Font Style (15 Readable Styles)")}</span>
-                  </label>
-                  <select
-                    value={settings.receiptFontFamily || "Arial, Helvetica, sans-serif"}
-                    onChange={(e) => handleInputChange('receiptFontFamily', e.target.value)}
-                    className="w-full px-3.5 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm">
-                    {RECEIPT_FONT_STYLES.map((f) => (
-                      <option key={f.id} value={f.value} style={{ fontFamily: f.value }}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                      <Type size={16} className="text-primary" />
+                      <span>{t("Bill & KOT Font Style (15 Readable Styles)")}</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowFontStyleModal(true)}
+                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer">
+                      <span>{t("Change Style")}</span>
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const currentFont = findReceiptFont(settings.receiptFontFamily);
+                    return (
+                      <div
+                        onClick={() => setShowFontStyleModal(true)}
+                        className="w-full px-4 py-3 border border-border rounded-xl bg-background text-text-main flex flex-col gap-2 cursor-pointer hover:border-primary transition shadow-sm hover:shadow-md group">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className="font-bold text-sm sm:text-base text-text-main truncate transition-colors group-hover:text-primary"
+                              style={{ fontFamily: currentFont.value, ...(currentFont.previewStyle || {}) }}>
+                              {currentFont.label}
+                            </span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase tracking-wider shrink-0">
+                              {currentFont.category}
+                            </span>
+                          </div>
+                          <span className="text-xs text-text-muted group-hover:text-primary transition shrink-0">▼</span>
+                        </div>
+
+                        {/* Live sample banner rendered in the actual selected font */}
+                        <div
+                          className="w-full px-3 py-2 rounded-lg bg-surface border border-border/70 text-xs sm:text-sm text-text-main flex items-center justify-between gap-2 overflow-hidden"
+                          style={{ fontFamily: currentFont.value, ...(currentFont.previewStyle || {}) }}>
+                          <span className="truncate">Sample: 1 x Chicken Biryani ₹250.00 • Subtotal ₹470.00</span>
+                          <span className="font-bold shrink-0 text-primary">TOTAL ₹470</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <p className="text-[11px] text-text-muted">
                     {t("Selected font applies cleanly across both 58mm & 80mm slips with high thermal legibility.")}
                   </p>
@@ -1558,101 +1590,130 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 <p className="text-[9px] text-gray-400 text-center mt-auto pt-2">Live preview based on your settings</p>
               </div>
             ) : (
-            <div className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm">
-              {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
-                <div className="flex justify-center mb-2">
-                  <img
-                    src={settings.logo}
-                    alt="Logo Preview"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    className="max-h-14 max-w-[140px] object-contain"
-                  />
-                </div>
-              }
-              <div className="text-center font-bold text-lg mb-2">{settings.restaurantName || 'Restaurant Name'}</div>
-              <div className="text-center text-sm text-gray-600 mb-4">
-                {settings.restaurantType}<br />
-                {settings.address && settings.address.split('\n').map((line, i) =>
-                  <div key={i}>{line}</div>
-                )}
-                {settings.phone && <>{t("Ph:")} {settings.phone}<br /></>}
-                {settings.gstin && <>{`GSTIN: ${settings.gstin}`}<br /></>}
-                {settings.fssai && `FSSAI: ${settings.fssai}`}
-              </div>
+              (() => {
+                const previewFont = findReceiptFont(settings.receiptFontFamily);
+                const previewMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat || '80mm');
+                return (
+                  <div
+                    className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm transition-all duration-150"
+                    style={{
+                      fontFamily: previewFont.value,
+                      ...(previewFont.previewStyle || {}),
+                      fontSize: previewMetrics.bodySize,
+                      lineHeight: previewMetrics.lineHeight
+                    }}>
+                    {/* Active Font & Size Badge in Receipt Preview */}
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 text-[10px] text-gray-400 font-sans select-none">
+                      <span className="font-semibold text-primary">{previewFont.shortName}</span>
+                      <span>{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.label || 'Medium'} ({previewMetrics.bodySize})</span>
+                    </div>
 
-              <div className="border-t border-b border-dashed py-2 my-2 text-center font-bold text-sm">
-                {t("RECEIPT")}
-              </div>
+                    {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
+                      <div className="flex justify-center mb-2">
+                        <img
+                          src={settings.logo}
+                          alt="Logo Preview"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          className="max-h-14 max-w-[140px] object-contain"
+                        />
+                      </div>
+                    }
+                    <div
+                      className="text-center font-bold mb-2 uppercase"
+                      style={{ fontSize: previewMetrics.headingSize, lineHeight: '1.2' }}>
+                      {settings.restaurantName || 'Restaurant Name'}
+                    </div>
+                    <div
+                      className="text-center text-gray-600 mb-4"
+                      style={{ fontSize: previewMetrics.detailSize, lineHeight: '1.25' }}>
+                      {settings.restaurantType}<br />
+                      {settings.address && settings.address.split('\n').map((line, i) =>
+                        <div key={i}>{line}</div>
+                      )}
+                      {settings.phone && <>{t("Ph:")} {settings.phone}<br /></>}
+                      {settings.gstin && <>{`GSTIN: ${settings.gstin}`}<br /></>}
+                      {settings.fssai && `FSSAI: ${settings.fssai}`}
+                    </div>
 
-              {/* Mock Items Details */}
-              <div className="text-xs my-3 space-y-1.5 font-mono">
-                <div className="flex justify-between font-bold border-b border-dashed pb-1 mb-1">
-                  <span>ITEM</span>
-                  <span>AMT</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>1 x Chicken Biryani</span>
-                  <span>250.00</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>2 x Sweet Corn Soup</span>
-                  <span>180.00</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>1 x Butter Naan</span>
-                  <span>40.00</span>
-                </div>
-                <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-medium">
-                  <span>Subtotal</span>
-                  <span>₹470.00</span>
-                </div>
-                {settings.enableCgst && (
-                  <div className="flex justify-between text-[11px] text-gray-600">
-                    <span>CGST ({settings.cgstRate || 0}%)</span>
-                    <span>₹{((470 * Number(settings.cgstRate || 0)) / 100).toFixed(2)}</span>
-                  </div>
-                )}
-                {settings.enableSgst && (
-                  <div className="flex justify-between text-[11px] text-gray-600">
-                    <span>SGST ({settings.sgstRate || 0}%)</span>
-                    <span>₹{((470 * Number(settings.sgstRate || 0)) / 100).toFixed(2)}</span>
-                  </div>
-                )}
-                {settings.enableGst && (
-                  <div className="flex justify-between text-[11px] text-gray-600">
-                    <span>GST ({settings.gstRate || 0}%)</span>
-                    <span>₹{((470 * Number(settings.gstRate || 0)) / 100).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-bold text-sm">
-                  <span>TOTAL</span>
-                  <span>₹{(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}</span>
-                </div>
-              </div>
+                    <div
+                      className="border-t border-b border-dashed py-2 my-2 text-center font-bold tracking-wider"
+                      style={{ fontSize: previewMetrics.subHeadingSize }}>
+                      {t("RECEIPT")}
+                    </div>
 
-              {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
-                <div className="border-t border-dashed pt-3 mt-3 text-center flex flex-col items-center">
-                  <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                    {t("SCAN TO PAY VIA UPI")}
-                  </div>
-                  <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm my-1 inline-block">
-                    <QRCodeSVG
-                      value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}&cu=INR&tn=Bill%20Payment`}
-                      size={96}
-                      level="M"
-                      includeMargin={true}
-                    />
-                  </div>
-                  <div className="text-[10px] font-bold text-gray-600 font-mono mt-0.5">
-                    {t("UPI ID:")} {settings.upiId.trim()}
-                  </div>
-                </div>
-              )}
+                    {/* Mock Items Details - Dynamically formatted with the chosen receipt font family */}
+                    <div className="my-3 space-y-1.5" style={{ fontSize: previewMetrics.itemSize }}>
+                      <div className="flex justify-between font-bold border-b border-dashed pb-1 mb-1">
+                        <span>ITEM</span>
+                        <span>AMT</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>1 x Chicken Biryani</span>
+                        <span>250.00</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>2 x Sweet Corn Soup</span>
+                        <span>180.00</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>1 x Butter Naan</span>
+                        <span>40.00</span>
+                      </div>
+                      <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-medium">
+                        <span>Subtotal</span>
+                        <span>₹470.00</span>
+                      </div>
+                      {settings.enableCgst && (
+                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
+                          <span>CGST ({settings.cgstRate || 0}%)</span>
+                          <span>₹{((470 * Number(settings.cgstRate || 0)) / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {settings.enableSgst && (
+                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
+                          <span>SGST ({settings.sgstRate || 0}%)</span>
+                          <span>₹{((470 * Number(settings.sgstRate || 0)) / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {settings.enableGst && (
+                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
+                          <span>GST ({settings.gstRate || 0}%)</span>
+                          <span>₹{((470 * Number(settings.gstRate || 0)) / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div
+                        className="flex justify-between border-t border-dashed pt-1 mt-1 font-bold"
+                        style={{ fontSize: previewMetrics.grandTotalSize }}>
+                        <span>TOTAL</span>
+                        <span>₹{(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}</span>
+                      </div>
+                    </div>
 
-              <div className="border-t border-dashed pt-3 mt-3 text-center text-xs font-medium">
-                {settings.footerMessage}
-              </div>
-            </div>
+                    {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
+                      <div className="border-t border-dashed pt-3 mt-3 text-center flex flex-col items-center">
+                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                          {t("SCAN TO PAY VIA UPI")}
+                        </div>
+                        <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm my-1 inline-block">
+                          <QRCodeSVG
+                            value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}&cu=INR&tn=Bill%20Payment`}
+                            size={96}
+                            level="M"
+                            includeMargin={true}
+                          />
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-600 font-mono mt-0.5">
+                          {t("UPI ID:")} {settings.upiId.trim()}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border-t border-dashed pt-3 mt-3 text-center text-xs font-medium">
+                      {settings.footerMessage}
+                    </div>
+                  </div>
+                );
+              })()
             )}
           </div>
         </div>
@@ -1948,6 +2009,141 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 {t("Applied immediately across all Bill & KOT thermal receipts (58mm & 80mm).")}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bill & KOT Font Style Modal (Responsive bottom-sheet on mobile, centered modal on desktop) */}
+      {showFontStyleModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200 border border-gray-150 flex flex-col max-h-[90vh] sm:max-h-[85vh]">
+            
+            {/* Mobile swipe/grab indicator pill */}
+            <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
+              <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+            </div>
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 pt-3 sm:pt-5 pb-3 border-b border-gray-100 shrink-0">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+                  <Type size={20} className="text-primary" />
+                  <span>{t("Bill & KOT Font Style")}</span>
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {t("Select typography for thermal receipts & KOT orders")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFontStyleModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-800 hover:bg-black text-white flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0"
+                title={t("Close")}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="px-5 py-2.5 bg-gray-50/80 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+              {['All', 'Sans-Serif', 'Serif', 'Monospace', 'Display'].map((cat) => {
+                const count = cat === 'All' 
+                  ? RECEIPT_FONT_STYLES.length 
+                  : RECEIPT_FONT_STYLES.filter(f => f.category === cat).length;
+                const isActive = fontCategoryFilter === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setFontCategoryFilter(cat)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+                      isActive
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'bg-white text-gray-600 hover:bg-gray-200/70 border border-gray-200'
+                    }`}>
+                    {cat} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Font Cards List */}
+            <div className="p-3 sm:p-4 space-y-2.5 overflow-y-auto flex-1">
+              {RECEIPT_FONT_STYLES
+                .filter(f => fontCategoryFilter === 'All' || f.category === fontCategoryFilter)
+                .map((font) => {
+                  const currentFont = findReceiptFont(settings.receiptFontFamily);
+                  const isSelected = currentFont.id === font.id || settings.receiptFontFamily === font.value;
+
+                  return (
+                    <div
+                      key={font.id}
+                      onClick={() => {
+                        handleInputChange('receiptFontFamily', font.value);
+                        setToast({
+                          message: t(`Font style updated to ${font.shortName}`),
+                          type: 'success'
+                        });
+                      }}
+                      className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col gap-1.5 ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm'
+                          : 'border-gray-200 hover:border-primary/40 bg-white hover:bg-gray-50/80'
+                      }`}>
+                      
+                      {/* Top row: Font Name + Category Badge + Radio/Check */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="font-bold text-sm sm:text-base text-gray-900 truncate"
+                            style={{ fontFamily: font.value, ...(font.previewStyle || {}) }}>
+                            {font.label}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 uppercase tracking-wider shrink-0">
+                            {font.category}
+                          </span>
+                        </div>
+
+                        <div className="shrink-0 flex items-center">
+                          {isSelected ? (
+                            <div className="w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center">
+                              <Check size={14} className="stroke-[3]" />
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full border-2 border-gray-300" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Live Receipt Sample Row */}
+                      <div
+                        className="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-150 text-xs sm:text-sm text-gray-800 flex items-center justify-between gap-2 overflow-hidden"
+                        style={{ fontFamily: font.value, ...(font.previewStyle || {}) }}>
+                        <span className="truncate">1 x Chicken Biryani ₹250.00 • Subtotal ₹470</span>
+                        <span className="font-bold shrink-0 text-primary">TOTAL ₹470</span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 sm:p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-900 truncate">
+                  {t("Selected:")} <span className="text-primary font-bold">{findReceiptFont(settings.receiptFontFamily).label}</span>
+                </p>
+                <p className="text-[11px] text-gray-500 truncate hidden sm:block">
+                  {t("Applied immediately across all Bill & KOT thermal receipts (58mm & 80mm).")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFontStyleModal(false)}
+                className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs sm:text-sm transition cursor-pointer active:scale-95 shadow-md shadow-primary/20 shrink-0">
+                {t("Done")}
+              </button>
+            </div>
+
           </div>
         </div>
       )}

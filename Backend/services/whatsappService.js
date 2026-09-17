@@ -671,8 +671,13 @@ Thank you for visiting!`;
 
         try {
           await this.ensureConnection(true);
-          // Wait a moment for socket to fully stabilize after reinit
-          await new Promise(r => setTimeout(r, 1500));
+          // Wait for socket to fully stabilize and open (up to 8 seconds)
+          let waitTime = 0;
+          while (!isSocketOpen(this.sock) && waitTime < 8000) {
+            await new Promise(r => setTimeout(r, 400));
+            waitTime += 400;
+          }
+
           if (this.sock && isSocketOpen(this.sock)) {
             const retryTimeoutMs = isImage ? 40000 : 50000;
             console.log(`[sendBillMedia] Retry attempt | retryTimeoutMs=${retryTimeoutMs}...`);
@@ -682,12 +687,22 @@ Thank you for visiting!`;
             ]);
             console.log(`[sendBillMedia] ✅ Retry succeeded! messageID=${retryResult?.key?.id || 'N/A'}`);
             return retryResult;
+          } else if (caption) {
+            console.warn('[sendBillMedia] Socket not open for media retry — attempting fallback text bill send...');
+            return await this.sendMessage(rawPhone, caption);
           } else {
             throw new Error('WhatsApp socket not ready after reconnect. Please try again in a few seconds.');
           }
         } catch (retryErr) {
           console.error(`[sendBillMedia] ❌ Retry FAILED: ${retryErr?.message}`);
-          console.error(`[sendBillMedia] Retry stack:`, retryErr?.stack);
+          if (caption) {
+            console.warn('[sendBillMedia] Media retry errored — attempting fallback text bill send...');
+            try {
+              return await this.sendMessage(rawPhone, caption);
+            } catch (fallbackErr) {
+              console.error('[sendBillMedia] Text fallback also failed:', fallbackErr?.message);
+            }
+          }
           throw retryErr;
         }
       }

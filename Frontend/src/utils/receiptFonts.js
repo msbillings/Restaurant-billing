@@ -1,22 +1,147 @@
 // Shared Font Styles and Metrics for Thermal Receipts (58mm & 80mm)
 
 export const RECEIPT_FONT_STYLES = [
-  { id: 'arial', label: 'Arial (Clean & Modern) - Default', value: 'Arial, Helvetica, sans-serif' },
-  { id: 'times', label: 'Times New Roman (Classic High-Contrast) - Default Serif', value: "'Times New Roman', Times, serif" },
-  { id: 'roboto', label: 'Roboto (Clear Modern Sans)', value: "'Roboto', sans-serif" },
-  { id: 'inter', label: 'Inter (Crisp Digital & Thermal)', value: "'Inter', sans-serif" },
-  { id: 'verdana', label: 'Verdana (Wide Spacing - Very Easy to Read)', value: "'Verdana', Geneva, sans-serif" },
-  { id: 'trebuchet', label: 'Trebuchet MS (Distinct Open Letters)', value: "'Trebuchet MS', sans-serif" },
-  { id: 'tahoma', label: 'Tahoma (Compact & Sharp)', value: "'Tahoma', sans-serif" },
-  { id: 'georgia', label: 'Georgia (Warm Readable Serif)', value: "'Georgia', serif" },
-  { id: 'courier', label: 'Courier New (Classic Receipt Typewriter)', value: "'Courier New', Courier, monospace" },
-  { id: 'lucida', label: 'Lucida Console (Fixed-Pitch Dot Clarity)', value: "'Lucida Console', Monaco, monospace" },
-  { id: 'segoe', label: 'Segoe UI (System Standard)', value: "'Segoe UI', Tahoma, sans-serif" },
-  { id: 'century', label: 'Century Gothic (Geometric & Open)', value: "'Century Gothic', sans-serif" },
-  { id: 'impact', label: 'Impact (Heavy Bold Readability)', value: "'Impact', Charcoal, sans-serif" },
-  { id: 'franklin', label: 'Franklin Gothic (Strong Bold Heading)', value: "'Franklin Gothic Medium', Arial, sans-serif" },
-  { id: 'mono', label: 'Clean Monospace (Thermal Standard)', value: 'monospace' }
+  {
+    id: 'arial',
+    label: 'Arial (Clean & Modern) - Default',
+    shortName: 'Arial',
+    category: 'Sans-Serif',
+    value: "Arial, 'Arimo', Helvetica, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'times',
+    label: 'Times New Roman (Classic High-Contrast) - Default Serif',
+    shortName: 'Times New Roman',
+    category: 'Serif',
+    value: "'Times New Roman', 'Tinos', Times, 'Lora', serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Times New Roman', 'Tinos', Times, 'Lora', serif" }
+  },
+  {
+    id: 'roboto',
+    label: 'Roboto (Clear Modern Sans)',
+    shortName: 'Roboto',
+    category: 'Sans-Serif',
+    value: "'Roboto', sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'inter',
+    label: 'Inter (Crisp Digital & Thermal)',
+    shortName: 'Inter',
+    category: 'Sans-Serif',
+    value: "'Inter', sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'verdana',
+    label: 'Verdana (Wide Spacing - Very Easy to Read)',
+    shortName: 'Verdana',
+    category: 'Sans-Serif',
+    value: "'Verdana', Geneva, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { letterSpacing: '0.02em' }
+  },
+  {
+    id: 'trebuchet',
+    label: 'Trebuchet MS (Distinct Open Letters)',
+    shortName: 'Trebuchet MS',
+    category: 'Sans-Serif',
+    value: "'Trebuchet MS', 'Segoe UI', sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'tahoma',
+    label: 'Tahoma (Compact & Sharp)',
+    shortName: 'Tahoma',
+    category: 'Sans-Serif',
+    value: "'Tahoma', Geneva, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'georgia',
+    label: 'Georgia (Warm Readable Serif)',
+    shortName: 'Georgia',
+    category: 'Serif',
+    value: "'Georgia', 'Lora', serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Georgia', 'Lora', serif" }
+  },
+  {
+    id: 'courier',
+    label: 'Courier New (Classic Receipt Typewriter)',
+    shortName: 'Courier New',
+    category: 'Monospace',
+    value: "'Courier New', 'Courier Prime', Courier, monospace",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Courier New', 'Courier Prime', Courier, monospace" }
+  },
+  {
+    id: 'lucida',
+    label: 'Lucida Console (Fixed-Pitch Dot Clarity)',
+    shortName: 'Lucida Console',
+    category: 'Monospace',
+    value: "'Lucida Console', 'Roboto Mono', Monaco, monospace",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Lucida Console', 'Roboto Mono', Monaco, monospace" }
+  },
+  {
+    id: 'segoe',
+    label: 'Segoe UI (System Standard)',
+    shortName: 'Segoe UI',
+    category: 'Sans-Serif',
+    value: "'Segoe UI', 'Inter', Tahoma, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'century',
+    label: 'Century Gothic (Geometric & Open)',
+    shortName: 'Century Gothic',
+    category: 'Sans-Serif',
+    value: "'Century Gothic', 'Outfit', sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
+  },
+  {
+    id: 'impact',
+    label: 'Impact (Heavy Bold Readability)',
+    shortName: 'Impact',
+    category: 'Display',
+    value: "'Impact', 'Oswald', Charcoal, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Impact', 'Oswald', Charcoal, sans-serif", fontWeight: '700', letterSpacing: '0.04em' }
+  },
+  {
+    id: 'franklin',
+    label: 'Franklin Gothic (Strong Bold Heading)',
+    shortName: 'Franklin Gothic',
+    category: 'Sans-Serif',
+    value: "'Franklin Gothic Medium', 'Arial Black', Arial, sans-serif",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontWeight: '600' }
+  },
+  {
+    id: 'mono',
+    label: 'Clean Monospace (Thermal Standard)',
+    shortName: 'Clean Monospace',
+    category: 'Monospace',
+    value: "'Space Mono', 'Roboto Mono', monospace",
+    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
+    previewStyle: { fontFamily: "'Space Mono', 'Roboto Mono', monospace" }
+  }
 ];
+
+export const findReceiptFont = (fontValOrId) => {
+  if (!fontValOrId) return RECEIPT_FONT_STYLES[0];
+  const cleaned = String(fontValOrId).trim().toLowerCase();
+  return RECEIPT_FONT_STYLES.find(f => 
+    f.id === cleaned || 
+    f.value.toLowerCase() === cleaned || 
+    f.shortName.toLowerCase() === cleaned ||
+    cleaned.includes(f.id) ||
+    cleaned.includes(f.shortName.toLowerCase())
+  ) || RECEIPT_FONT_STYLES[0];
+};
 
 export const RECEIPT_FONT_SIZES = [
   { id: 'small', label: 'Small', normalPt: '8–9 pt', headingPt: '11 pt', normalPx: '12px', headingPx: '16px' },

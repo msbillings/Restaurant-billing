@@ -44,12 +44,14 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
   const fetchPickupOrders = async () => {
     setLoading(true);
     try {
+      const isUnpaid = paymentFilter === 'Unpaid' || paymentFilter === 'Due / Credit';
       const data = await getBills({
         page: currentPage,
         limit: itemsPerPage,
         search: searchTerm,
         billType: 'Takeaway',
         paymentMode: paymentFilter !== 'all' ? paymentFilter : undefined,
+        status: isUnpaid ? 'Unpaid' : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined
       });
@@ -160,12 +162,21 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
       case 'Card': return 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300';
       case 'UPI': return 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300';
       case 'Due / Credit': return 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300';
+      case 'Unpaid': return 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300';
       default: return 'bg-gray-100 text-gray-800 dark:bg-zinc-800 dark:text-zinc-300';
     }
   };
 
-  // Orders are strictly filtered and paginated by backend API
-  const filteredOrders = orders;
+  // Orders are filtered and paginated by backend API with client fallback
+  const filteredOrders = orders.filter((order) => {
+    if (paymentFilter === 'Unpaid') {
+      return order.status === 'Unpaid';
+    }
+    if (paymentFilter === 'Due / Credit') {
+      return order.status === 'Unpaid' || order.paymentMode === 'Due' || order.paymentMode === 'Credit' || order.paymentMode === 'Due / Credit';
+    }
+    return true;
+  });
 
   return (
     <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-y-auto custom-scrollbar w-full">
@@ -239,35 +250,59 @@ const PickupOrders = ({ onNavigate, onGoBack }) => {
             )}
           </div>
 
-          {/* Payment Method Filter Dropdown (Replaced wrong platform filter) */}
+          {/* Payment Method / Status Filter Dropdown */}
           <div className="relative shrink-0">
             <button
+              type="button"
               onClick={() => setShowPaymentFilter(!showPaymentFilter)}
-              className="flex items-center gap-2 pl-3 pr-7 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm font-bold text-text-main cursor-pointer hover:bg-surface-hover transition-colors">
-              <Filter size={15} className="text-primary" />
+              className={`flex items-center gap-2 pl-3 pr-7 py-2 bg-background border rounded-xl text-xs sm:text-sm font-bold cursor-pointer hover:bg-surface-hover transition-colors ${
+                paymentFilter === 'Unpaid'
+                  ? 'border-rose-300 text-rose-600 dark:border-rose-800 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20'
+                  : 'border-border text-text-main'
+              }`}>
+              <Filter size={15} className={paymentFilter === 'Unpaid' ? 'text-rose-500' : 'text-primary'} />
               <span>{t(paymentFilter === 'all' ? 'All Payments' : paymentFilter)}</span>
               <ChevronDown size={14} className={`absolute right-2.5 transition-transform ${showPaymentFilter ? 'rotate-180' : ''}`} />
             </button>
             
             {showPaymentFilter && (
-              <div className="absolute top-full right-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-20 min-w-[140px]">
-                {['all', 'Cash', 'Card', 'UPI', 'Due / Credit', 'Other'].map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => {
-                      setPaymentFilter(mode);
-                      setCurrentPage(1);
-                      setShowPaymentFilter(false);
-                    }}
-                    className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      paymentFilter === mode
-                        ? 'bg-primary text-white shadow-xs'
-                        : 'text-text-main hover:bg-surface-hover'
-                    }`}>
-                    {t(mode === 'all' ? 'All Payments' : mode)}
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* Backdrop to dismiss dropdown when tapping outside on mobile/desktop */}
+                <div
+                  className="fixed inset-0 z-20 bg-transparent"
+                  onClick={() => setShowPaymentFilter(false)}
+                />
+                <div className="absolute top-full right-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-30 min-w-[150px] max-w-[calc(100vw-32px)]">
+                  {['all', 'Unpaid', 'Cash', 'Card', 'UPI', 'Due / Credit', 'Other'].map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setPaymentFilter(mode);
+                        setCurrentPage(1);
+                        setShowPaymentFilter(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
+                        paymentFilter === mode
+                          ? mode === 'Unpaid'
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'bg-primary text-white shadow-xs'
+                          : mode === 'Unpaid'
+                            ? 'text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30'
+                            : 'text-text-main hover:bg-surface-hover'
+                      }`}>
+                      <span>{mode === 'all' ? t('All Payments') : t(mode)}</span>
+                      {mode === 'Unpaid' && (
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                          paymentFilter === 'Unpaid' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                        }`}>
+                          {t('Due')}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
 

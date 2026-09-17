@@ -1,6 +1,6 @@
 import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { getExpenses, addExpense, deleteExpense, updateExpense } from '../api/expenses';
-import { Wallet, Plus, Trash2, Calendar, IndianRupee, Tag, Clock, CreditCard, Pencil } from 'lucide-react';
+import { Wallet, Plus, Trash2, Calendar, IndianRupee, Tag, Clock, CreditCard, Pencil, Loader2 } from 'lucide-react';
 import Toast from './Toast';
 import BackButton from './common/BackButton';
 
@@ -14,6 +14,7 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null); // null = add mode, obj = edit mode
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const getISTTime = () => {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60000;
@@ -96,12 +97,14 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
 
   const handleAddExpense = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!formData.amount || !formData.description) {
       setToast({ message: 'Amount and Description are required', type: 'error' });
       return;
     }
 
     try {
+      setIsSubmitting(true);
       if (editingExpense) {
         // Edit mode
         await updateExpense(editingExpense._id, { ...formData, amount: Number(formData.amount) });
@@ -118,6 +121,8 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
       fetchExpensesData();
     } catch (err) {
       setToast({ message: editingExpense ? 'Failed to update expense' : 'Failed to add expense', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -596,14 +601,23 @@ const Expenses = ({ onNavigate, onGoBack }) => {const { t } = useLanguage();
             <div className="shrink-0 flex items-center justify-end gap-2.5 px-4 sm:px-5 py-3 border-t border-border bg-surface">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleCloseModal}
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-text-muted hover:bg-surface-hover transition-colors cursor-pointer">{t("Cancel")}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-text-muted hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-50">{t("Cancel")}
               </button>
               <button
                 type="submit"
                 form="expense-form"
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-red-500 text-white hover:bg-red-600 hover:shadow-md hover:shadow-red-500/20 transition-all cursor-pointer">
-                {editingExpense ? t('Update Expense') : t('Save Expense')}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-red-500 text-white hover:bg-red-600 hover:shadow-md hover:shadow-red-500/20 transition-all cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin shrink-0" />
+                    <span>{editingExpense ? t('Updating Expense...') : t('Saving Expense...')}</span>
+                  </>
+                ) : (
+                  <span>{editingExpense ? t('Update Expense') : t('Save Expense')}</span>
+                )}
               </button>
             </div>
           </div>

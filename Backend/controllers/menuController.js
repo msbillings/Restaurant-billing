@@ -4,6 +4,7 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import { translateMenuItem } from '../services/translationService.js';
 import { emitNotification } from '../utils/notificationHelper.js';
 import { emitSocketEvent } from '../utils/socket.js';
+import { uploadImage } from '../utils/cloudinary.js';
 
 export const getAllMenuItems = async (req, res) => {
   try {
@@ -61,6 +62,20 @@ export const addMenuItem = async (req, res) => {
 
     // Check if item with this name already exists in this tenant to prevent duplicates
     const cleanName = (req.body.name || '').trim();
+
+    // Auto-upload Base64 image to Cloudinary (dedicated tenant folder)
+    if (req.body.image && typeof req.body.image === 'string' && req.body.image.startsWith('data:image/')) {
+      try {
+        const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || req?.user?.db || 'default';
+        const uploadRes = await uploadImage(req.body.image, {
+          folder: `msbillings/${tenantDb}/menus`,
+          publicId: `${cleanName}_${Date.now()}`
+        });
+        req.body.image = uploadRes.url;
+      } catch (imgErr) {
+        console.warn('[MenuController] Cloudinary upload warning, saving without image failure:', imgErr.message);
+      }
+    }
     const existing = await Menu.findOne({
       name: { $regex: new RegExp(`^${cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
     });
@@ -141,6 +156,21 @@ export const updateMenuItem = async (req, res) => {
 
     const nameChanged = updateData.name !== undefined && updateData.name !== existingItem.name;
     const descChanged = updateData.description !== undefined && updateData.description !== existingItem.description;
+
+    // Auto-upload Base64 image to Cloudinary (dedicated tenant folder) on update
+    if (updateData.image && typeof updateData.image === 'string' && updateData.image.startsWith('data:image/')) {
+      try {
+        const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || req?.user?.db || 'default';
+        const targetName = updateData.name || existingItem.name;
+        const uploadRes = await uploadImage(updateData.image, {
+          folder: `msbillings/${tenantDb}/menus`,
+          publicId: `${targetName}_${Date.now()}`
+        });
+        updateData.image = uploadRes.url;
+      } catch (imgErr) {
+        console.warn('[MenuController] Cloudinary update upload warning:', imgErr.message);
+      }
+    }
 
     const updatedItem = await Menu.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('category', 'name');
     emitSocketEvent(req, 'menuUpdated', { action: 'update', item: updatedItem });

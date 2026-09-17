@@ -410,7 +410,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto" key={`analytics-view-${animKey}`}>
+    <div className="min-h-full h-full bg-[#09090b] text-gray-100 p-1.5 sm:p-2.5 md:p-3 overflow-y-auto overflow-x-hidden w-full max-w-full" key={`analytics-view-${animKey}`}>
       {/* Analytics Dynamic Styles & Keyframe Animations */}
       <style>{`
         .glass-card {
@@ -448,21 +448,21 @@ const Analytics = ({ onNavigate, onGoBack }) => {
         }
       `}</style>
 
-      <div className="space-y-3 sm:space-y-4">
+      <div className="space-y-3 sm:space-y-4 w-full max-w-full min-w-0">
         {/* Period Selector */}
-        <div className="glass-card p-2.5 sm:p-3.5 animate-card-entry" style={{ animationDelay: '0ms' }}>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
+        <div className="glass-card p-2 sm:p-3 md:p-3.5 animate-card-entry overflow-hidden" style={{ animationDelay: '0ms' }}>
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3">
             {/* Left Controls: Back + Period Tabs + Date Selector */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <BackButton onClick={onGoBack} className="shrink-0" />
-                <div className="flex-1 sm:flex-initial flex items-center gap-0.5 bg-[#1e1e24] rounded-lg p-1 border border-white/10">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+              <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+                <BackButton onClick={onGoBack} className="shrink-0 !px-2.5 !py-1 sm:!px-2.5 sm:!py-1.5 !text-xs" />
+                <div className="flex-1 sm:flex-initial flex items-center gap-0.5 bg-[#1e1e24] rounded-lg p-1 border border-white/10 shrink-0">
                   <button
                     onClick={() => {
                       setViewMode('month');
                       setDays(null);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
+                    className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'month' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -473,7 +473,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                       setViewMode('days');
                       setDays(7);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
+                    className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'days' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -484,7 +484,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                       setViewMode('day');
                       setDays(null);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
+                    className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'day' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -495,7 +495,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                       setViewMode('custom');
                       setDays(null);
                     }}
-                    className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all text-center cursor-pointer ${
+                    className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1.5 rounded-md text-[11px] sm:text-xs font-medium transition-all text-center cursor-pointer ${
                       viewMode === 'custom' ?
                       'bg-[#f97316] text-white shadow-md font-bold' :
                       'text-gray-400 hover:text-white hover:bg-white/5'}`
@@ -505,9 +505,9 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               </div>
               
               {viewMode === 'month' ? (
-                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
+                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-2.5 py-1.5 border border-white/10 text-xs w-full sm:w-auto shrink-0">
                   <div className="flex items-center gap-2">
-                    <Calendar size={13} className="text-[#f97316]" />
+                    <Calendar size={13} className="text-[#f97316] shrink-0" />
                     <select
                       value={`${selectedYear}-${selectedMonth}`}
                       onChange={(e) => {
@@ -525,7 +525,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   </div>
                 </div>
               ) : viewMode === 'days' ? (
-                <div className="flex items-center gap-1 bg-[#1e1e24] rounded-lg p-1 border border-white/10 w-full sm:w-auto">
+                <div className="flex items-center gap-1 bg-[#1e1e24] rounded-lg p-1 border border-white/10 w-full sm:w-auto shrink-0">
                   {[7, 30].map((d) => (
                     <button
                       key={d}
@@ -540,9 +540,9 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   ))}
                 </div>
               ) : viewMode === 'custom' ? (
-                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
-                  <div className="flex items-center gap-2 w-full">
-                    <Calendar size={13} className="text-[#f97316]" />
+                <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-[#1e1e24] rounded-lg px-2.5 py-1.5 border border-white/10 text-xs w-full sm:w-auto shrink-0">
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <Calendar size={13} className="text-[#f97316] shrink-0" />
                     <input
                       type="date"
                       value={customStart}
@@ -559,8 +559,8 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                           setCustomEnd(val);
                         }
                       }}
-                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
-                    <span className="text-gray-400">to</span>
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-[100px] sm:w-[110px] [color-scheme:dark]" />
+                    <span className="text-gray-400 text-xs">to</span>
                     <input
                       type="date"
                       value={customEnd}
@@ -575,13 +575,13 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                         }
                         setCustomEnd(val);
                       }}
-                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-[100px] sm:w-[110px] [color-scheme:dark]" />
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-3 py-1.5 border border-white/10 text-xs w-full sm:w-auto">
-                  <div className="flex items-center gap-2 w-full">
-                    <Calendar size={13} className="text-[#f97316]" />
+                <div className="flex items-center justify-between sm:justify-start gap-2 bg-[#1e1e24] rounded-lg px-2.5 py-1.5 border border-white/10 text-xs w-full sm:w-auto shrink-0">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Calendar size={13} className="text-[#f97316] shrink-0" />
                     <input
                       type="date"
                       value={selectedDate}
@@ -595,25 +595,25 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                         }
                         setSelectedDate(val);
                       }}
-                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-full [color-scheme:dark]" />
+                      className="bg-transparent font-medium text-white focus:outline-none cursor-pointer text-xs w-[110px] [color-scheme:dark]" />
                   </div>
                 </div>
               )}
             </div>
             
-            {/* Action Buttons: 4 equal-width columns on mobile, auto on tablet/desktop */}
-            <div className="grid grid-cols-4 gap-1.5 w-full sm:flex sm:items-center sm:gap-2 sm:w-auto shrink-0">
+            {/* Action Buttons: 4 equal-width columns on mobile, auto and left-aligned on tablet, right-aligned on desktop */}
+            <div className="grid grid-cols-4 gap-1.5 w-full sm:flex sm:items-center sm:justify-start lg:justify-end sm:gap-2 sm:w-auto shrink-0">
               <button
                 onClick={handleDownloadReport}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 rounded-xl transition-all text-white shadow-sm font-bold text-xs cursor-pointer"
+                className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 bg-[#22c55e] hover:bg-[#16a34a] active:scale-95 rounded-xl transition-all text-white shadow-sm font-bold text-[11px] sm:text-xs cursor-pointer shrink-0 whitespace-nowrap"
                 title={t("Download Excel Report")}>
-                <FileSpreadsheet size={14} />
+                <FileSpreadsheet size={13} className="shrink-0" />
                 <span>{t("Report")}</span>
               </button>
               <button
                 onClick={() => handleShareWhatsAppReport()}
                 disabled={sendingWhatsApp}
-                className={`flex items-center justify-center gap-2 px-2.5 py-2 sm:px-3.5 sm:py-2 rounded-xl transition-all font-bold text-xs cursor-pointer relative overflow-hidden ${
+                className={`flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all font-bold text-[11px] sm:text-xs cursor-pointer relative overflow-hidden shrink-0 whitespace-nowrap ${
                   sendingWhatsApp
                     ? 'bg-gradient-to-r from-[#25D366]/25 via-[#10B981]/40 to-[#25D366]/25 border border-[#25D366] text-[#25D366] animate-wa-pulse-ring shadow-[0_0_25px_rgba(37,211,102,0.5)] cursor-wait ring-2 ring-[#25D366]/60'
                     : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-sm active:scale-95'
@@ -645,14 +645,14 @@ const Analytics = ({ onNavigate, onGoBack }) => {
               </button>
               <button
                 onClick={fetchAnalytics}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-[#1e1e24] hover:bg-white/10 active:scale-95 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-xs cursor-pointer">
-                <RefreshCw size={14} className={loading ? 'animate-spin text-[#f97316]' : ''} />
+                className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 bg-[#1e1e24] hover:bg-white/10 active:scale-95 rounded-xl border border-white/10 transition-all text-white shadow-sm font-bold text-[11px] sm:text-xs cursor-pointer shrink-0 whitespace-nowrap">
+                <RefreshCw size={13} className={`shrink-0 ${loading ? 'animate-spin text-[#f97316]' : ''}`} />
                 <span>{t("Refresh")}</span>
               </button>
               <button
                 onClick={() => fetchFraudAnalysis()}
-                className="flex items-center justify-center gap-1.5 px-2.5 py-2 sm:px-3.5 sm:py-2 bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-xs cursor-pointer">
-                <ShieldAlert size={14} />
+                className="flex items-center justify-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-2 bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 rounded-xl border border-red-500/20 transition-all font-bold text-[11px] sm:text-xs cursor-pointer shrink-0 whitespace-nowrap">
+                <ShieldAlert size={13} className="shrink-0" />
                 <span>{t("Auditor")}</span>
               </button>
             </div>
@@ -660,108 +660,101 @@ const Analytics = ({ onNavigate, onGoBack }) => {
         </div>
 
         {/* Summary Cards with Staggered Entrance & Animated Counter */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 sm:gap-3.5">
+        <div className="grid grid-cols-6 lg:grid-cols-5 gap-2 sm:gap-2.5 md:gap-3.5">
           {/* Total Bills */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '50ms' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
-                <Receipt size={16} />
+          <div className="glass-card p-2.5 sm:p-3 md:p-3.5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-3 sm:col-span-2 lg:col-span-1 animate-card-entry shadow-sm min-w-0" style={{ animationDelay: '50ms' }}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.15)] shrink-0">
+                <Receipt size={15} />
               </div>
             </div>
-            <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Bills")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate">{t("Total Bills")}</p>
+              <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white leading-tight truncate">
                 <AnimatedNumber value={summary.period.bills} />
               </p>
             </div>
           </div>
 
           {/* Total Orders */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '100ms' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.15)]">
-                <ShoppingBag size={16} />
+          <div className="glass-card p-2.5 sm:p-3 md:p-3.5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-3 sm:col-span-2 lg:col-span-1 animate-card-entry shadow-sm min-w-0" style={{ animationDelay: '100ms' }}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.15)] shrink-0">
+                <ShoppingBag size={15} />
               </div>
             </div>
-            <div className="space-y-0.5">
-              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Total Orders")}</p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate">{t("Total Orders")}</p>
+              <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white leading-tight truncate">
                 <AnimatedNumber value={summary.period.orders} />
               </p>
             </div>
           </div>
 
-
           {/* Period Revenue */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry shadow-sm" style={{ animationDelay: '200ms' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="w-8 h-8 rounded-lg bg-[#f97316]/10 flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)]">
-                <DollarSign size={16} />
+          <div className="glass-card p-2.5 sm:p-3 md:p-3.5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-6 sm:col-span-2 lg:col-span-1 animate-card-entry shadow-sm min-w-0" style={{ animationDelay: '200ms' }}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#f97316]/10 flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)] shrink-0">
+                <DollarSign size={15} />
               </div>
             </div>
-            <div className="space-y-0.5">
+            <div className="space-y-0.5 min-w-0">
               <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate" title={`${getPeriodLabel()} ${t("Revenue")}`}>
                 {getPeriodLabel()} {t("Revenue")}
               </p>
-              <p className="text-base sm:text-xl font-bold text-white leading-tight">
+              <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white leading-tight truncate">
                 <AnimatedNumber value={summary.period.revenue} isCurrency={true} />
               </p>
             </div>
           </div>
 
           {/* Delivery Orders */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-2 md:col-span-1 animate-card-entry shadow-sm" style={{ animationDelay: '250ms' }}>
+          <div className="glass-card p-2.5 sm:p-3 md:p-3.5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-6 sm:col-span-3 lg:col-span-1 animate-card-entry shadow-sm min-w-0" style={{ animationDelay: '250ms' }}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 sm:block">
-                <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0 sm:mb-1.5 text-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.15)]">
-                  <Truck size={16} />
+              <div className="flex items-center gap-2.5 sm:gap-2">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center shrink-0 text-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.15)]">
+                  <Truck size={15} />
                 </div>
-                <div>
-                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Delivery Orders")}</p>
-                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate">{t("Delivery Orders")}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white leading-tight">
                     <AnimatedNumber value={summary.period.deliveryOrders || 0} />
                   </p>
                 </div>
               </div>
-              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">
-                <AnimatedNumber value={summary.period.deliveryOrders || 0} />
-              </p>
             </div>
           </div>
 
           {/* Pick Up Orders */}
-          <div className="glass-card p-3 sm:p-4 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-2 md:col-span-1 animate-card-entry shadow-sm" style={{ animationDelay: '250ms' }}>
+          <div className="glass-card p-2.5 sm:p-3 md:p-3.5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 col-span-6 sm:col-span-3 lg:col-span-1 animate-card-entry shadow-sm min-w-0" style={{ animationDelay: '250ms' }}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 sm:block">
-                <div className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0 sm:mb-1.5 text-pink-500 shadow-[0_0_12px_rgba(236,72,153,0.15)]">
-                  <ShoppingBag size={16} />
+              <div className="flex items-center gap-2.5 sm:gap-2">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pink-500/10 flex items-center justify-center shrink-0 text-pink-500 shadow-[0_0_12px_rgba(236,72,153,0.15)]">
+                  <ShoppingBag size={15} />
                 </div>
-                <div>
-                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{t("Pick Up Orders")}</p>
-                  <p className="text-base sm:text-xl font-bold text-white leading-tight sm:hidden">
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-gray-400 uppercase tracking-wide truncate">{t("Pick Up Orders")}</p>
+                  <p className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-white leading-tight">
                     <AnimatedNumber value={summary.period.pickupOrders || 0} />
                   </p>
                 </div>
               </div>
-              <p className="hidden sm:block text-base sm:text-xl font-bold text-white leading-tight">
-                <AnimatedNumber value={summary.period.pickupOrders || 0} />
-              </p>
             </div>
           </div>
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-5 min-w-0">
           {/* Daily Revenue Chart */}
-          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300 animate-card-entry" style={{ animationDelay: '300ms' }}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)]">
-                  <BarChart3 size={20} />
+          <div className="glass-card p-3 sm:p-4 md:p-5 lg:p-6 hover:border-white/20 transition-all duration-300 animate-card-entry min-w-0 overflow-hidden" style={{ animationDelay: '300ms' }}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_15px_rgba(249,115,22,0.15)] shrink-0">
+                  <BarChart3 size={18} />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">{t("Daily Revenue & Orders")}</h2>
-                  <p className="text-xs text-gray-400">
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold text-white truncate">{t("Daily Revenue & Orders")}</h2>
+                  <p className="text-[11px] sm:text-xs text-gray-400 truncate">
                     {getPeriodLabel()}
                   </p>
                 </div>
@@ -769,11 +762,11 @@ const Analytics = ({ onNavigate, onGoBack }) => {
             </div>
             
             {dailyRevenue && dailyRevenue.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4 min-w-0">
                 {/* Professional Animated Chart */}
-                <div className="h-64 w-full" key={`chart-container-${animKey}`}>
+                <div className="h-56 sm:h-64 w-full min-w-0 overflow-hidden" key={`chart-container-${animKey}`}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={dailyRevenue} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <BarChart data={dailyRevenue} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                       <defs>
                         <linearGradient id="barOrangeGradient" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#fb923c" stopOpacity={1}/>
@@ -786,20 +779,23 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                           const d = new Date(val);
                           return `${d.getDate()}/${d.getMonth() + 1}`;
                         }}
-                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        tick={{ fontSize: 10, fill: '#8b8d97' }}
                         axisLine={false}
                         tickLine={false}
                         dy={10}
+                        interval="preserveStartEnd"
+                        minTickGap={10}
                       />
                       <YAxis
                         tickFormatter={(val) => {
                           if (val >= 1000) return `₹${(val / 1000).toFixed(1)}k`;
                           return `₹${val}`;
                         }}
-                        tick={{ fontSize: 11, fill: '#8b8d97' }}
+                        tick={{ fontSize: 10, fill: '#8b8d97' }}
                         axisLine={false}
                         tickLine={false}
-                        dx={-10}
+                        dx={-5}
+                        width={45}
                       />
                       <Tooltip
                         cursor={{ fill: 'rgba(255,255,255,0.04)' }}
@@ -807,10 +803,10 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload;
                             return (
-                              <div className="bg-[#18181b] border border-white/15 shadow-2xl rounded-xl p-3 z-50 animate-in zoom-in-95 duration-100">
-                                <p className="font-bold text-gray-200 mb-1">{formatDate(data._id)}</p>
-                                <p className="text-[#f97316] font-extrabold text-lg">{formatCurrency(data.revenue)}</p>
-                                <p className="text-xs text-gray-400 mt-1 font-medium">
+                              <div className="bg-[#18181b] border border-white/15 shadow-2xl rounded-xl p-2.5 sm:p-3 z-50 animate-in zoom-in-95 duration-100">
+                                <p className="font-bold text-gray-200 mb-1 text-xs sm:text-sm">{formatDate(data._id)}</p>
+                                <p className="text-[#f97316] font-extrabold text-sm sm:text-lg">{formatCurrency(data.revenue)}</p>
+                                <p className="text-[11px] sm:text-xs text-gray-400 mt-1 font-medium">
                                   {t("Orders:")} {data.orders} {t("• Bills:")} {data.bills}
                                 </p>
                               </div>
@@ -841,33 +837,34 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                 </div>
                 
                 {/* Daily Breakdown Table */}
-                <div className="mt-6 border border-white/10 rounded-xl overflow-hidden shadow-sm">
-                  <div className="bg-[#1e1e24] px-4 py-3 border-b border-white/10">
-                    <h3 className="font-bold text-white text-sm">{t("Daily Breakdown")}</h3>
+                <div className="mt-4 sm:mt-6 border border-white/10 rounded-xl overflow-hidden shadow-sm">
+                  <div className="bg-[#1e1e24] px-3 sm:px-4 py-2 sm:py-2.5 border-b border-white/10 flex items-center justify-between">
+                    <h3 className="font-bold text-white text-xs sm:text-sm">{t("Daily Breakdown")}</h3>
+                    <span className="text-[10px] sm:text-xs text-gray-400 font-mono">{dailyRevenue.length} {t("days")}</span>
                   </div>
-                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                    <table className="w-full text-left">
-                      <thead className="bg-[#1e1e24] sticky top-0">
+                  <div className="max-h-56 sm:max-h-64 overflow-y-auto overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left min-w-[280px]">
+                      <thead className="bg-[#1e1e24] sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Date")}</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Revenue")}</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Bills")}</th>
-                          <th className="text-right px-4 py-2 text-xs font-bold text-gray-400 uppercase">{t("Orders")}</th>
+                          <th className="px-2.5 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-gray-400 uppercase">{t("Date")}</th>
+                          <th className="text-right px-2.5 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-gray-400 uppercase">{t("Revenue")}</th>
+                          <th className="text-right px-2.5 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-gray-400 uppercase">{t("Bills")}</th>
+                          <th className="text-right px-2.5 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-gray-400 uppercase">{t("Orders")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {dailyRevenue.map((day, index) => (
                           <tr key={index} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                            <td className="px-4 py-2 text-sm font-medium text-white">
+                            <td className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white whitespace-nowrap">
                               {formatDate(day._id)}
                             </td>
-                            <td className="px-4 py-2 text-sm font-bold text-white text-right">
+                            <td className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-bold text-white text-right whitespace-nowrap">
                               {formatCurrency(day.revenue)}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-400 text-right">
+                            <td className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm text-gray-400 text-right whitespace-nowrap">
                               {day.bills}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-400 text-right">
+                            <td className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm text-gray-400 text-right whitespace-nowrap">
                               {day.orders}
                             </td>
                           </tr>
@@ -877,22 +874,22 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">{t("Total Revenue")}</p>
-                    <p className="text-lg font-bold text-white">
+                <div className="grid grid-cols-3 gap-1 pt-3 sm:pt-4 border-t border-white/10 text-center">
+                  <div className="min-w-0 px-1">
+                    <p className="text-[10px] sm:text-xs text-gray-400 truncate">{t("Total Revenue")}</p>
+                    <p className="text-xs sm:text-sm md:text-base lg:text-lg font-bold text-white truncate">
                       <AnimatedNumber value={dailyRevenue.reduce((sum, d) => sum + d.revenue, 0)} isCurrency={true} />
                     </p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">{t("Total Bills")}</p>
-                    <p className="text-lg font-bold text-white">
+                  <div className="min-w-0 px-1">
+                    <p className="text-[10px] sm:text-xs text-gray-400 truncate">{t("Total Bills")}</p>
+                    <p className="text-xs sm:text-sm md:text-base lg:text-lg font-bold text-white truncate">
                       <AnimatedNumber value={dailyRevenue.reduce((sum, d) => sum + d.bills, 0)} />
                     </p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">{t("Avg Daily")}</p>
-                    <p className="text-lg font-bold text-white">
+                  <div className="min-w-0 px-1">
+                    <p className="text-[10px] sm:text-xs text-gray-400 truncate">{t("Avg Daily")}</p>
+                    <p className="text-xs sm:text-sm md:text-base lg:text-lg font-bold text-white truncate">
                       <AnimatedNumber 
                         value={dailyRevenue.length > 0 ? dailyRevenue.reduce((sum, d) => sum + d.revenue, 0) / dailyRevenue.length : 0} 
                         isCurrency={true} 
@@ -902,22 +899,22 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-64 text-gray-400">
-                <p>{t("No revenue data for the selected period")}</p>
+              <div className="flex items-center justify-center h-56 sm:h-64 text-gray-400">
+                <p className="text-xs sm:text-sm">{t("No revenue data for the selected period")}</p>
               </div>
             )}
           </div>
 
           {/* Payment Mode Breakdown with Animated Range Bars */}
-          <div className="glass-card p-6 hover:border-white/20 transition-all duration-300 animate-card-entry" style={{ animationDelay: '350ms' }}>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)]">
-                  <CreditCard size={20} />
+          <div className="glass-card p-3 sm:p-4 md:p-5 lg:p-6 hover:border-white/20 transition-all duration-300 animate-card-entry min-w-0 overflow-hidden" style={{ animationDelay: '350ms' }}>
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.15)] shrink-0">
+                  <CreditCard size={18} />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">{t("Payment Methods")}</h2>
-                  <p className="text-xs text-gray-400">
+                <div className="min-w-0">
+                  <h2 className="text-sm sm:text-base md:text-lg font-bold text-white truncate">{t("Payment Methods")}</h2>
+                  <p className="text-[11px] sm:text-xs text-gray-400 truncate">
                     {getPeriodLabel()}
                   </p>
                 </div>
@@ -925,7 +922,7 @@ const Analytics = ({ onNavigate, onGoBack }) => {
             </div>
             
             {paymentModeStats && paymentModeStats.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2.5 sm:space-y-3 min-w-0">
                 {paymentModeStats.map((stat, index) => {
                   const totalRevenue = paymentModeStats.reduce((sum, s) => sum + s.revenue, 0);
                   const percentage = totalRevenue > 0 ? (stat.revenue / totalRevenue) * 100 : 0;
@@ -934,28 +931,28 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   return (
                     <div 
                       key={stat._id || index} 
-                      className="space-y-2 p-3 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/5 hover:border-white/15 transition-all duration-300 shadow-sm"
+                      className="space-y-1.5 sm:space-y-2 p-2.5 sm:p-3 bg-white/[0.04] hover:bg-white/[0.07] rounded-xl border border-white/5 hover:border-white/15 transition-all duration-300 shadow-sm min-w-0"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-9 h-9 bg-gradient-to-br ${modeInfo.gradient} rounded-xl flex items-center justify-center text-white shadow-md`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                          <div className={`w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9 bg-gradient-to-br ${modeInfo.gradient} rounded-lg sm:rounded-xl flex items-center justify-center text-white shadow-md shrink-0`}>
                             {modeInfo.icon}
                           </div>
-                          <div>
-                            <p className="font-bold text-white text-sm">{stat._id || 'Unknown'}</p>
-                            <p className="text-xs text-gray-400">{stat.count} {t("txns")}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-white text-xs sm:text-sm truncate">{stat._id || 'Unknown'}</p>
+                            <p className="text-[10px] sm:text-xs text-gray-400">{stat.count} {t("txns")}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-white text-base">
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-white text-xs sm:text-sm md:text-base">
                             <AnimatedNumber value={stat.revenue} isCurrency={true} />
                           </p>
-                          <p className="text-xs text-gray-400 font-mono">{percentage.toFixed(1)}%</p>
+                          <p className="text-[10px] sm:text-xs text-gray-400 font-mono">{percentage.toFixed(1)}%</p>
                         </div>
                       </div>
 
                       {/* Animated Range Progress Bar with Shimmer Effect */}
-                      <div className="w-full bg-white/10 rounded-full h-2.5 overflow-hidden shadow-inner p-[1px] relative">
+                      <div className="w-full bg-white/10 rounded-full h-2 sm:h-2.5 overflow-hidden shadow-inner p-[1px] relative">
                         <div
                           className={`h-full rounded-full bg-gradient-to-r ${modeInfo.gradient} transition-all duration-1000 ease-out shadow-sm relative overflow-hidden`}
                           style={{ 
@@ -970,10 +967,10 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   );
                 })}
 
-                <div className="pt-4 border-t border-white/10 mt-4 space-y-3">
+                <div className="pt-3 sm:pt-4 border-t border-white/10 mt-3 sm:mt-4 space-y-2.5 sm:space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-bold text-gray-400">{t("Total")}</p>
-                    <p className="text-lg font-bold text-white">
+                    <p className="text-xs sm:text-sm font-bold text-gray-400">{t("Total")}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-bold text-white">
                       <AnimatedNumber 
                         value={paymentModeStats.reduce((sum, s) => sum + s.revenue, 0)} 
                         isCurrency={true} 
@@ -1001,42 +998,42 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                     }));
 
                     return (
-                      <div className="pt-3 border-t border-white/10 space-y-3">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-[#3b82f6]/10 rounded-xl p-2.5 border border-[#3b82f6]/20 shadow-sm">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Most Popular")}</p>
-                            <p className="text-xs font-bold text-white">{mostPopularByCount._id}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{mostPopularByCount.count} {t("txns")}</p>
+                      <div className="pt-2.5 sm:pt-3 border-t border-white/10 space-y-2.5 sm:space-y-3">
+                        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                          <div className="bg-[#3b82f6]/10 rounded-xl p-2 sm:p-2.5 border border-[#3b82f6]/20 shadow-sm min-w-0">
+                            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{t("Most Popular")}</p>
+                            <p className="text-xs sm:text-sm font-bold text-white truncate">{mostPopularByCount._id}</p>
+                            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5">{mostPopularByCount.count} {t("txns")}</p>
                           </div>
-                          <div className="bg-[#22c55e]/10 rounded-xl p-2.5 border border-[#22c55e]/20 shadow-sm">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Top Revenue")}</p>
-                            <p className="text-xs font-bold text-white">{mostRevenue._id}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{formatCurrency(mostRevenue.revenue)}</p>
+                          <div className="bg-[#22c55e]/10 rounded-xl p-2 sm:p-2.5 border border-[#22c55e]/20 shadow-sm min-w-0">
+                            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{t("Top Revenue")}</p>
+                            <p className="text-xs sm:text-sm font-bold text-white truncate">{mostRevenue._id}</p>
+                            <p className="text-[9px] sm:text-[10px] text-gray-400 mt-0.5 truncate">{formatCurrency(mostRevenue.revenue)}</p>
                           </div>
-                          <div className="bg-[#f97316]/10 rounded-xl p-2.5 border border-[#f97316]/20 shadow-sm">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Avg Transaction")}</p>
-                            <p className="text-xs font-bold text-white">{formatCurrency(avgTransactionValue)}</p>
+                          <div className="bg-[#f97316]/10 rounded-xl p-2 sm:p-2.5 border border-[#f97316]/20 shadow-sm min-w-0">
+                            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{t("Avg Transaction")}</p>
+                            <p className="text-xs sm:text-sm font-bold text-white truncate">{formatCurrency(avgTransactionValue)}</p>
                           </div>
-                          <div className="bg-[#8b5cf6]/10 rounded-xl p-2.5 border border-[#8b5cf6]/20 shadow-sm">
-                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Total Transactions")}</p>
-                            <p className="text-xs font-bold text-white">{totalTransactions}</p>
+                          <div className="bg-[#8b5cf6]/10 rounded-xl p-2 sm:p-2.5 border border-[#8b5cf6]/20 shadow-sm min-w-0">
+                            <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{t("Total Transactions")}</p>
+                            <p className="text-xs sm:text-sm font-bold text-white truncate">{totalTransactions}</p>
                           </div>
                         </div>
-                        <div className="bg-white/5 rounded-xl p-2.5 border border-white/5">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{t("Revenue Share")}</p>
-                          <div className="space-y-1.5">
+                        <div className="bg-white/5 rounded-xl p-2 sm:p-2.5 border border-white/5">
+                          <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{t("Revenue Share")}</p>
+                          <div className="space-y-1 sm:space-y-1.5">
                             {revenueShare.map((item, idx) => (
-                              <div key={idx} className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400">{item.method}</span>
-                                <span className="text-xs font-bold text-white">{item.share}%</span>
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className="text-[11px] sm:text-xs text-gray-400 truncate">{item.method}</span>
+                                <span className="text-[11px] sm:text-xs font-bold text-white shrink-0">{item.share}%</span>
                               </div>
                             ))}
                           </div>
                         </div>
-                        <div className="bg-yellow-500/10 rounded-xl p-2.5 border border-yellow-500/20 shadow-sm">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">{t("Least Used")}</p>
-                          <p className="text-xs font-bold text-white">{leastUsed._id}</p>
-                          <p className="text-[10px] text-gray-500 mt-0.5">
+                        <div className="bg-yellow-500/10 rounded-xl p-2 sm:p-2.5 border border-yellow-500/20 shadow-sm min-w-0">
+                          <p className="text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5 truncate">{t("Least Used")}</p>
+                          <p className="text-xs sm:text-sm font-bold text-white truncate">{leastUsed._id}</p>
+                          <p className="text-[9px] sm:text-[10px] text-gray-500 mt-0.5 truncate">
                             {leastUsed._id === 'Mixed' ? t("Split payment transactions") : t("Consider promoting this method")}
                           </p>
                         </div>
@@ -1046,96 +1043,96 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-center h-64 text-gray-400">
-                <p>{t("No payment data for the selected period")}</p>
+              <div className="flex items-center justify-center h-56 sm:h-64 text-gray-400">
+                <p className="text-xs sm:text-sm">{t("No payment data for the selected period")}</p>
               </div>
             )}
           </div>
         </div>
 
         {/* Additional Stats with Staggered Entrance */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '400ms' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
-                <Calendar size={20} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3 md:gap-4 min-w-0">
+          <div className="glass-card p-3 sm:p-4 md:p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry min-w-0" style={{ animationDelay: '400ms' }}>
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.15)] shrink-0">
+                <Calendar size={18} />
               </div>
-              <h3 className="font-bold text-white text-sm">{t("Period Summary")}</h3>
+              <h3 className="font-bold text-white text-xs sm:text-sm truncate">{t("Period Summary")}</h3>
             </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
-                <span className="font-bold text-white text-base">
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.bills} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
-                <span className="font-bold text-white text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.orders} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
-                <span className="font-bold text-white text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.averageBill} isCurrency={true} />
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '450ms' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-[#22c55e]/10 rounded-xl flex items-center justify-center text-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.15)]">
-                <TrendingUp size={20} />
+          <div className="glass-card p-3 sm:p-4 md:p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry min-w-0" style={{ animationDelay: '450ms' }}>
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#22c55e]/10 rounded-xl flex items-center justify-center text-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.15)] shrink-0">
+                <TrendingUp size={18} />
               </div>
-              <h3 className="font-bold text-white text-sm">{t("Discounts & Tax")}</h3>
+              <h3 className="font-bold text-white text-xs sm:text-sm truncate">{t("Discounts & Tax")}</h3>
             </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Discount")}</span>
-                <span className="font-bold text-white text-base">
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Discount")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.discount} isCurrency={true} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Tax")}</span>
-                <span className="font-bold text-white text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Total Tax")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.tax} isCurrency={true} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Net Revenue")}</span>
-                <span className="font-bold text-[#22c55e] text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Net Revenue")}</span>
+                <span className="font-bold text-[#22c55e] text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.period.netRevenue !== undefined ? summary.period.netRevenue : Math.max(0, (summary.period.revenue || 0) - (summary.period.tax || 0))} isCurrency={true} />
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="glass-card p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry" style={{ animationDelay: '500ms' }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)]">
-                <Receipt size={20} />
+          <div className="glass-card p-3 sm:p-4 md:p-5 hover:border-white/20 hover:-translate-y-1 transition-all duration-300 animate-card-entry min-w-0" style={{ animationDelay: '500ms' }}>
+            <div className="flex items-center gap-2.5 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-[#f97316]/10 rounded-xl flex items-center justify-center text-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.15)] shrink-0">
+                <Receipt size={18} />
               </div>
-              <h3 className="font-bold text-white text-sm">{t("Today's Performance")}</h3>
+              <h3 className="font-bold text-white text-xs sm:text-sm truncate">{t("Today's Performance")}</h3>
             </div>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
-                <span className="font-bold text-white text-base">
+            <div className="space-y-2 sm:space-y-3">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Bills")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.today.bills} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2 border-b border-white/10">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
-                <span className="font-bold text-white text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2 border-b border-white/10">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Orders")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.today.orders} />
                 </span>
               </div>
-              <div className="flex justify-between items-center py-2">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
-                <span className="font-bold text-white text-base">
+              <div className="flex justify-between items-center py-1.5 sm:py-2">
+                <span className="text-[10px] sm:text-xs font-semibold text-gray-400 uppercase tracking-wide">{t("Avg Bill")}</span>
+                <span className="font-bold text-white text-sm sm:text-base font-mono">
                   <AnimatedNumber value={summary.today.averageBill} isCurrency={true} />
                 </span>
               </div>
@@ -1154,19 +1151,18 @@ const Analytics = ({ onNavigate, onGoBack }) => {
 
       {/* Fraud Analysis Modal */}
       {showFraudModal && (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-[#141418] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-white/10 flex justify-between items-center bg-red-500/10">
+            <div className="p-3.5 sm:p-5 border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 bg-red-500/10">
               <div>
-                <h2 className="text-xl font-bold text-red-500 flex items-center gap-2">
-                  <ShieldAlert className="w-6 h-6" />{t("AI Silent Auditor")}
-
-              </h2>
-                <p className="text-sm text-red-500/80 mt-1">{t("Analyzing last")} {fraudDays} {t("days of billing activity for fraud & anomalies.")}</p>
+                <h2 className="text-base sm:text-xl font-bold text-red-500 flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />{t("AI Silent Auditor")}
+                </h2>
+                <p className="text-xs sm:text-sm text-red-500/80 mt-0.5 sm:mt-1">{t("Analyzing last")} {fraudDays} {t("days of billing activity for fraud & anomalies.")}</p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 w-full sm:w-auto">
                 <select 
-                  className="bg-[#09090b] border border-red-500/30 text-red-500 rounded-lg px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-red-500"
+                  className="bg-[#09090b] border border-red-500/30 text-red-500 rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium focus:outline-none focus:border-red-500 cursor-pointer"
                   value={fraudDays}
                   onChange={(e) => fetchFraudAnalysis(parseInt(e.target.value))}
                 >
@@ -1176,59 +1172,59 @@ const Analytics = ({ onNavigate, onGoBack }) => {
                   <option value={180} className="bg-[#09090b] text-red-500">{t("Last 6 Months")}</option>
                   <option value={365} className="bg-[#09090b] text-red-500">{t("Last 1 Year")}</option>
                 </select>
-                <button onClick={() => setShowFraudModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 transition">
-                  <X size={20} />
+                <button onClick={() => setShowFraudModal(false)} className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-gray-400 transition cursor-pointer">
+                  <X size={18} />
                 </button>
               </div>
             </div>
             
-            <div className="p-6 overflow-y-auto flex-1">
+            <div className="p-3.5 sm:p-6 overflow-y-auto flex-1">
               {fraudLoading ? (
-                <div className="flex flex-col items-center justify-center py-20">
+                <div className="flex flex-col items-center justify-center py-12 sm:py-20">
                   <div className="relative">
-                    <ShieldAlert className="w-16 h-16 text-red-500 animate-pulse" />
-                    <RefreshCw className="w-6 h-6 text-red-500 animate-spin absolute -bottom-2 -right-2 bg-[#141418] rounded-full" />
+                    <ShieldAlert className="w-12 h-12 sm:w-16 sm:h-16 text-red-500 animate-pulse" />
+                    <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-red-500 animate-spin absolute -bottom-1 -right-1 sm:-bottom-2 sm:-right-2 bg-[#141418] rounded-full" />
                   </div>
-                  <p className="mt-6 text-white font-bold text-lg">{t("Scanning Database...")}</p>
-                  <p className="text-gray-400 mt-2 text-sm">{t("Looking for cancelled bills, unusual discounts, and staff patterns.")}</p>
+                  <p className="mt-4 sm:mt-6 text-white font-bold text-base sm:text-lg">{t("Scanning Database...")}</p>
+                  <p className="text-gray-400 mt-1 sm:mt-2 text-xs sm:text-sm text-center">{t("Looking for cancelled bills, unusual discounts, and staff patterns.")}</p>
                 </div>
               ) : fraudData ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 text-center">
-                      <p className="text-gray-400 text-sm uppercase font-bold mb-1">{t("Bills Analyzed")}</p>
-                      <p className="text-3xl font-black text-white">{fraudData.totalAnalyzed}</p>
+                <div className="space-y-4 sm:space-y-6">
+                  <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3 sm:p-4 text-center">
+                      <p className="text-gray-400 text-xs sm:text-sm uppercase font-bold mb-1">{t("Bills Analyzed")}</p>
+                      <p className="text-xl sm:text-3xl font-black text-white">{fraudData.totalAnalyzed}</p>
                     </div>
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
-                      <p className="text-red-500 text-sm uppercase font-bold mb-1">{t("Anomalies Detected")}</p>
-                      <p className="text-3xl font-black text-red-500">{fraudData.alerts?.length || 0}</p>
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 sm:p-4 text-center">
+                      <p className="text-red-500 text-xs sm:text-sm uppercase font-bold mb-1">{t("Anomalies Detected")}</p>
+                      <p className="text-xl sm:text-3xl font-black text-red-500">{fraudData.alerts?.length || 0}</p>
                     </div>
                   </div>
                   {fraudData.alerts?.length > 0 ? (
-                    <div className="space-y-3">
-                      <h3 className="font-bold text-white text-lg mb-4 border-b border-white/10 pb-2">{t("Detailed Alerts")}</h3>
+                    <div className="space-y-2.5 sm:space-y-3">
+                      <h3 className="font-bold text-white text-base sm:text-lg mb-2 sm:mb-4 border-b border-white/10 pb-2">{t("Detailed Alerts")}</h3>
                       {fraudData.alerts.map((alert, i) => (
-                        <div key={i} className={`p-4 rounded-xl border flex gap-4 ${
+                        <div key={i} className={`p-3 sm:p-4 rounded-xl border flex gap-3 sm:gap-4 ${
                           alert.severity === 'Critical' ? 'bg-red-500/10 border-red-500/30' :
                           alert.severity === 'High' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10'}`}>
-                          <div className={`mt-1 ${
+                          <div className={`mt-0.5 sm:mt-1 shrink-0 ${
                             alert.severity === 'Critical' ? 'text-red-500' :
                             alert.severity === 'High' ? 'text-orange-500' : 'text-gray-400'}`}>
-                            {alert.type === 'Staff Anomaly' ? <UserX size={24} /> : <AlertTriangle size={24} />}
+                            {alert.type === 'Staff Anomaly' ? <UserX size={20} /> : <AlertTriangle size={20} />}
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-bold text-white">{alert.type}</h4>
-                              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                              <h4 className="font-bold text-white text-xs sm:text-sm">{alert.type}</h4>
+                              <span className={`text-[9px] sm:text-[10px] uppercase font-bold px-1.5 sm:px-2 py-0.5 rounded-full ${
                                 alert.severity === 'Critical' ? 'bg-red-500 text-white' :
                                 alert.severity === 'High' ? 'bg-orange-500 text-white' : 'bg-gray-600 text-white'}`}>
                                 {alert.severity}
                               </span>
                             </div>
-                            <p className="text-gray-400 text-sm">{alert.details}</p>
-                            <div className="mt-2 flex gap-4 text-xs font-mono text-gray-500">
-                              {alert.tableNo && <span>{t("Table:")}{alert.tableNo}</span>}
-                              {alert.billNumber && <span>{t("Bill:")}{alert.billNumber}</span>}
+                            <p className="text-gray-400 text-xs sm:text-sm">{alert.details}</p>
+                            <div className="mt-1.5 sm:mt-2 flex flex-wrap gap-2 sm:gap-4 text-[11px] sm:text-xs font-mono text-gray-500">
+                              {alert.tableNo && <span>{t("Table:")} {alert.tableNo}</span>}
+                              {alert.billNumber && <span>{t("Bill:")} {alert.billNumber}</span>}
                               <span>{new Date(alert.date).toLocaleString()}</span>
                             </div>
                           </div>

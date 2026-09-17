@@ -55,7 +55,7 @@ export const getBills = async (req, res) => {
     // Payment mode filter
     if (paymentMode && paymentMode !== 'all' && paymentMode !== 'All') {
       const pMode = paymentMode.trim();
-      if (pMode === 'Unpaid') {
+      if (pMode === 'Unpaid' || pMode === 'Due / Credit' || pMode === 'Due' || pMode === 'Credit') {
         query.status = 'Unpaid';
       } else {
         query.paymentMode = pMode;

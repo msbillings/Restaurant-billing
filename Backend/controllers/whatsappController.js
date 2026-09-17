@@ -213,21 +213,61 @@ export const sendBill = async (req, res) => {
       return res.status(400).json({ error: 'WhatsApp bot is not connected. Please scan QR or pair your phone in Settings.' });
     }
 
-    if (imageBase64 || pdfBase64 || documentBase64) {
-      console.log(`[WhatsApp sendBill] Sending MEDIA to ${phone}...`);
-      await whatsappService.sendBillMedia(phone, {
-        imageBase64,
-        pdfBase64,
-        documentBase64,
-        mimetype,
-        caption: billText,
-        fileName
-      });
-      console.log(`[WhatsApp sendBill] ✅ Media sent successfully to ${phone}`);
-    } else {
-      console.log(`[WhatsApp sendBill] Sending TEXT to ${phone}...`);
-      await whatsappService.sendMessage(phone, billText);
-      console.log(`[WhatsApp sendBill] ✅ Text sent successfully to ${phone}`);
+    try {
+      if (imageBase64 || pdfBase64 || documentBase64) {
+        console.log(`[WhatsApp sendBill] Sending MEDIA to ${phone}...`);
+        await whatsappService.sendBillMedia(phone, {
+          imageBase64,
+          pdfBase64,
+          documentBase64,
+          mimetype,
+          caption: billText,
+          fileName
+        });
+        console.log(`[WhatsApp sendBill] ✅ Media sent successfully to ${phone}`);
+      } else {
+        console.log(`[WhatsApp sendBill] Sending TEXT to ${phone}...`);
+        await whatsappService.sendMessage(phone, billText);
+        console.log(`[WhatsApp sendBill] ✅ Text sent successfully to ${phone}`);
+      }
+    } catch (sendErr) {
+      // If local socket send failed (e.g. Baileys conflict with 24/7 Render cloud gateway),
+      // seamlessly forward the bill send request to the Render Cloud Gateway!
+      const isCloud = process.env.RENDER || process.env.VERCEL;
+      if (!isCloud) {
+        console.warn(`[WhatsApp sendBill] Local send failed (${sendErr.message}). Fallback to 24/7 Cloud Gateway...`);
+        try {
+          const cloudUrl = 'https://msbillings-backend-x9qw.onrender.com/api/whatsapp/send-bill';
+          const cloudRes = await fetch(cloudUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-tenant-db': tenantId,
+              ...(req.headers['authorization'] ? { 'authorization': req.headers['authorization'] } : {})
+            },
+            body: JSON.stringify(req.body)
+          });
+          const cloudData = await cloudRes.json();
+          if (cloudRes.ok && cloudData?.success) {
+            console.log('[WhatsApp sendBill] ✅ Cloud Gateway fallback succeeded!');
+            // Mark bill as sent in DB
+            if (BillModel && (billId || billNumber)) {
+              try {
+                const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
+                  ? { _id: billId }
+                  : { billNumber: billNumber || billId };
+                await BillModel.updateOne(updateQuery, {
+                  $set: { whatsappSent: true, whatsappSentAt: new Date() }
+                });
+              } catch (e) {}
+            }
+            return res.json({ success: true, message: 'e-Bill sent successfully via Cloud Gateway!' });
+          }
+        } catch (cloudErr) {
+          console.warn('[WhatsApp sendBill] Cloud gateway fallback error:', cloudErr.message);
+        }
+      }
+      throw sendErr;
     }
 
     // --- Mark bill as sent in DB ---

@@ -129,7 +129,10 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const [isViewMode, setIsViewMode] = useState(false);
   const [isCategoryViewMode, setIsCategoryViewMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [descFilter, setDescFilter] = useState('all'); // 'all' | 'hasDesc' | 'disabled'
+  const [descFilter, setDescFilter] = useState('all'); // 'all' | 'hasDesc' | 'noDesc'
+  const [foodTypeFilter, setFoodTypeFilter] = useState('all'); // 'all' | 'veg' | 'non-veg'
+  const [isSubmittingItem, setIsSubmittingItem] = useState(false);
+  const [isSubmittingCategory, setIsSubmittingCategory] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, itemId: null, categoryId: null });
   const [toast, setToast] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
@@ -302,10 +305,14 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (isSubmittingItem) return;
+
     if (!validateItemForm()) {
       setToast({ message: 'Please fix validation errors', type: 'error' });
       return;
     }
+
+    setIsSubmittingItem(true);
 
     try {
       let finalCategory = formData.category;
@@ -323,6 +330,7 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         } catch (catError) {
           console.error('Error creating custom category:', catError);
           setToast({ message: 'Failed to create new category', type: 'error' });
+          setIsSubmittingItem(false);
           return;
         }
       }
@@ -388,6 +396,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
       }
 
       setToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setIsSubmittingItem(false);
     }
   };
 
@@ -597,10 +607,14 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
 
+    if (isSubmittingCategory) return;
+
     if (!validateCategoryForm()) {
       setToast({ message: 'Please fix validation errors', type: 'error' });
       return;
     }
+
+    setIsSubmittingCategory(true);
 
     try {
       console.log('Submitting category:', categoryFormData);
@@ -638,6 +652,8 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
       }
 
       setToast({ message: errorMessage, type: 'error' });
+    } finally {
+      setIsSubmittingCategory(false);
     }
   };
 
@@ -653,7 +669,12 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
       descFilter === 'all' ||
       (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') ||
       (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
-    return matchesSearch && matchesDesc;
+    const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+    const matchesFoodType =
+      foodTypeFilter === 'all' ||
+      (foodTypeFilter === 'veg' && itemType === 'veg') ||
+      (foodTypeFilter === 'non-veg' && itemType !== 'veg');
+    return matchesSearch && matchesDesc && matchesFoodType;
   }).sort((a, b) => {
     switch (sortBy) {
       case 'latest':
@@ -946,19 +967,55 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
         {activeTab === 'items' && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[10px] md:text-xs font-bold text-text-muted uppercase tracking-wider shrink-0">{t("Filter")}:</span>
+            
+            {/* All */}
             <button
-              onClick={() => { setDescFilter('all'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border ${
-                descFilter === 'all'
+              type="button"
+              onClick={() => { setFoodTypeFilter('all'); setDescFilter('all'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border cursor-pointer ${
+                foodTypeFilter === 'all' && descFilter === 'all'
                   ? 'bg-primary text-white border-primary shadow-xs'
                   : 'bg-surface border-border text-text-muted hover:border-primary hover:text-primary'
               }`}
             >
               {t("All")}
             </button>
+
+            {/* Veg Pill */}
             <button
-              onClick={() => { setDescFilter('hasDesc'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 ${
+              type="button"
+              onClick={() => { setFoodTypeFilter(prev => prev === 'veg' ? 'all' : 'veg'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                foodTypeFilter === 'veg'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                  : 'bg-surface border-border text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${foodTypeFilter === 'veg' ? 'bg-white' : 'bg-emerald-500'}`} />
+              {t("Veg")}
+            </button>
+
+            {/* Non-Veg Pill */}
+            <button
+              type="button"
+              onClick={() => { setFoodTypeFilter(prev => prev === 'non-veg' ? 'all' : 'non-veg'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+                foodTypeFilter === 'non-veg'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                  : 'bg-surface border-border text-rose-700 hover:border-rose-500 hover:bg-rose-50/60 dark:hover:bg-rose-950/30'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${foodTypeFilter === 'non-veg' ? 'bg-white' : 'bg-rose-500'}`} />
+              {t("Non-Veg")}
+            </button>
+
+            <span className="w-px h-3.5 bg-border mx-0.5 hidden sm:inline-block shrink-0" />
+
+            {/* Has Description */}
+            <button
+              type="button"
+              onClick={() => { setDescFilter(prev => prev === 'hasDesc' ? 'all' : 'hasDesc'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 cursor-pointer ${
                 descFilter === 'hasDesc'
                   ? 'bg-blue-500 text-white border-blue-500 shadow-xs'
                   : 'bg-surface border-border text-text-muted hover:border-blue-400 hover:text-blue-600'
@@ -967,9 +1024,12 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
               {t("Has Description")}
             </button>
+
+            {/* No Description */}
             <button
-              onClick={() => { setDescFilter('noDesc'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 ${
+              type="button"
+              onClick={() => { setDescFilter(prev => prev === 'noDesc' ? 'all' : 'noDesc'); setCurrentPage(1); }}
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border flex items-center gap-1 cursor-pointer ${
                 descFilter === 'noDesc'
                   ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
                   : 'bg-surface border-border text-text-muted hover:border-orange-400 hover:text-orange-600'
@@ -978,8 +1038,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
               {t("No Description")}
             </button>
-            {descFilter !== 'all' && (
-              <span className="text-[10px] md:text-xs text-text-muted font-medium ml-1">
+
+            {(descFilter !== 'all' || foodTypeFilter !== 'all') && (
+              <span className="text-[10px] md:text-xs text-text-muted font-medium ml-1 shrink-0">
                 ({filteredItems.length} {t("items")})
               </span>
             )}
@@ -2061,9 +2122,17 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
               <div className="pt-3">
                 <button
                   type="submit"
-                  className="w-full bg-primary text-white py-2.5 rounded-xl font-bold hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20 text-xs sm:text-sm cursor-pointer"
+                  disabled={isSubmittingItem}
+                  className="w-full bg-primary text-white py-2.5 rounded-xl font-bold hover:bg-primary-hover transition-all shadow-lg shadow-primary/20 text-xs sm:text-sm cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {currentItem ? t('Update Item') : t('Create Item')}
+                  {isSubmittingItem ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin shrink-0" />
+                      <span>{currentItem ? t('Updating Item...') : t('Creating Item...')}</span>
+                    </>
+                  ) : (
+                    <span>{currentItem ? t('Update Item') : t('Create Item')}</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -2132,9 +2201,17 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             <div className="pt-4">
                   <button
                 type="submit"
-                className="w-full bg-secondary text-white py-3 rounded-xl font-bold hover:bg-accent transition-colors shadow-lg shadow-secondary/20">
+                disabled={isSubmittingCategory}
+                className="w-full bg-secondary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-secondary/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer">
                 
-                    {currentCategory ? 'Update Category' : 'Create Category'}
+                    {isSubmittingCategory ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin shrink-0" />
+                        <span>{currentCategory ? t('Updating Category...') : t('Creating Category...')}</span>
+                      </>
+                    ) : (
+                      <span>{currentCategory ? t('Update Category') : t('Create Category')}</span>
+                    )}
                   </button>
                 </div>
             }

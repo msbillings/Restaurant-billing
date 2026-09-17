@@ -11,6 +11,7 @@ import { emitSocketEvent } from '../utils/socket.js';
 import { clearPublicMenuCache } from '../routes/publicRoutes.js';
 import cache from '../utils/cache.js';
 import { invalidateSnapshotCache } from './orderController.js';
+import { uploadImage } from '../utils/cloudinary.js';
 
 export let isSettingUpDB = false;
 
@@ -243,18 +244,30 @@ export const updateRestaurantInfo = async (req, res) => {
 
     let mergedSettings = null;
     if (settingsToSave) {
-      // Validate logo if provided
+      // Validate and upload logo to Cloudinary if provided
       if (settingsToSave.logo && settingsToSave.logo !== '[logo_stored]') {
         if (typeof settingsToSave.logo === 'string') {
-          const isAllowedType = settingsToSave.logo.startsWith('data:image/png;base64,') ||
-                                settingsToSave.logo.startsWith('data:image/jpeg;base64,') ||
-                                settingsToSave.logo.startsWith('data:image/jpg;base64,');
-          if (!isAllowedType) {
-            return res.status(400).json({ message: 'Invalid logo format. Only PNG and JPG/JPEG images are allowed.' });
-          }
-          // Base64 limit corresponding to 2MB binary (2 * 1024 * 1024 * 1.37 ≈ 2.87MB)
-          if (settingsToSave.logo.length > 2.87 * 1024 * 1024) {
-            return res.status(400).json({ message: 'Logo file size exceeds 2MB limit.' });
+          const isBase64 = settingsToSave.logo.startsWith('data:image/');
+          const isUrl = /^https?:\/\//i.test(settingsToSave.logo);
+
+          if (isBase64) {
+            // Base64 limit corresponding to 2MB binary (2 * 1024 * 1024 * 1.37 ≈ 2.87MB)
+            if (settingsToSave.logo.length > 2.87 * 1024 * 1024) {
+              return res.status(400).json({ message: 'Logo file size exceeds 2MB limit.' });
+            }
+
+            try {
+              const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || req?.user?.db || 'default';
+              const uploadRes = await uploadImage(settingsToSave.logo, {
+                folder: `msbillings/${tenantDb}/logo`,
+                publicId: `restaurant_logo_${Date.now()}`
+              });
+              settingsToSave.logo = uploadRes.url;
+            } catch (logoErr) {
+              console.warn('[ConfigController] Cloudinary logo upload warning:', logoErr.message);
+            }
+          } else if (!isUrl) {
+            return res.status(400).json({ message: 'Invalid logo format. Only PNG, JPG/JPEG images or URLs are allowed.' });
           }
         }
       }

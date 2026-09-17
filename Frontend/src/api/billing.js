@@ -167,6 +167,7 @@ export const getBills = async (pageOrOptions = 1, limit = 50, search = '', billT
     if (opts.excludeBillType) params.append('excludeBillType', opts.excludeBillType);
     if (opts.orderSource) params.append('orderSource', opts.orderSource);
     if (opts.paymentMode) params.append('paymentMode', opts.paymentMode);
+    if (opts.status) params.append('status', opts.status);
     if (opts.startDate) params.append('startDate', opts.startDate);
     if (opts.endDate) params.append('endDate', opts.endDate);
   } else {

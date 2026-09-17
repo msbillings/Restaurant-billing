@@ -48,12 +48,15 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
     }
     setHasError(false);
     try {
+      const isUnpaid = platformFilter === 'Unpaid';
       const data = await getBills({
         page: currentPage,
         limit: itemsPerPage,
         search: searchTerm,
         billType: 'Delivery',
-        orderSource: platformFilter !== 'all' ? platformFilter : undefined,
+        orderSource: platformFilter !== 'all' && !isUnpaid ? platformFilter : undefined,
+        status: isUnpaid ? 'Unpaid' : undefined,
+        paymentMode: isUnpaid ? 'Unpaid' : undefined,
         startDate: startDate || undefined,
         endDate: endDate || undefined
       });
@@ -171,8 +174,13 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
     }
   };
 
-  // Orders are strictly filtered and paginated by backend API
-  const filteredOrders = orders;
+  // Orders are filtered and paginated by backend API with client fallback
+  const filteredOrders = orders.filter((order) => {
+    if (platformFilter === 'Unpaid') {
+      return order.status === 'Unpaid';
+    }
+    return true;
+  });
 
   return (
     <div className="h-full flex flex-col bg-background p-1.5 sm:p-2.5 md:p-3 overflow-y-auto custom-scrollbar w-full">
@@ -189,7 +197,7 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
           </div>
         </div>
         
-        {/* Same-row Controls: Search + Start/End Dates + Platform Filter + Refresh */}
+        {/* Same-row Controls: Search + Start/End Dates + Platform/Unpaid Filter + Refresh */}
         <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 sm:gap-2.5 w-full lg:w-auto lg:flex-1 lg:justify-end">
           {/* Dynamic Search Box */}
           <div className="relative flex-1 min-w-[170px] max-w-full">
@@ -246,13 +254,17 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
             )}
           </div>
 
-          {/* Platform Filter Dropdown */}
+          {/* Platform / Status Filter Dropdown */}
           <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setShowPlatformFilter(!showPlatformFilter)}
-              className="flex items-center gap-2 pl-3 pr-7 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm font-bold text-text-main cursor-pointer hover:bg-surface-hover transition-colors">
-              <Filter size={15} className="text-primary" />
+              className={`flex items-center gap-2 pl-3 pr-7 py-2 bg-background border rounded-xl text-xs sm:text-sm font-bold cursor-pointer hover:bg-surface-hover transition-colors ${
+                platformFilter === 'Unpaid'
+                  ? 'border-rose-300 text-rose-600 dark:border-rose-800 dark:text-rose-400 bg-rose-50/50 dark:bg-rose-950/20'
+                  : 'border-border text-text-main'
+              }`}>
+              <Filter size={15} className={platformFilter === 'Unpaid' ? 'text-rose-500' : 'text-primary'} />
               <span>{t(platformFilter === 'all' ? 'All' : platformFilter)}</span>
               <ChevronDown size={14} className={`absolute right-2.5 transition-transform ${showPlatformFilter ? 'rotate-180' : ''}`} />
             </button>
@@ -264,8 +276,8 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
                   className="fixed inset-0 z-20 bg-transparent"
                   onClick={() => setShowPlatformFilter(false)}
                 />
-                <div className="absolute top-full left-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-30 min-w-[140px] max-w-[calc(100vw-32px)]">
-                  {['all', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) => (
+                <div className="absolute top-full left-0 mt-1.5 bg-surface border border-border rounded-2xl shadow-xl p-1.5 z-30 min-w-[150px] max-w-[calc(100vw-32px)]">
+                  {['all', 'Unpaid', 'Swiggy', 'Zomato', 'Direct', 'Other'].map((platform) => (
                     <button
                       key={platform}
                       type="button"
@@ -274,12 +286,23 @@ const DeliveryOrders = ({ onNavigate, onGoBack }) => {
                         setCurrentPage(1);
                         setShowPlatformFilter(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between ${
                         platformFilter === platform
-                          ? 'bg-primary text-white shadow-xs'
-                          : 'text-text-main hover:bg-surface-hover'
+                          ? platform === 'Unpaid'
+                            ? 'bg-rose-500 text-white shadow-xs'
+                            : 'bg-primary text-white shadow-xs'
+                          : platform === 'Unpaid'
+                            ? 'text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30'
+                            : 'text-text-main hover:bg-surface-hover'
                       }`}>
-                      {t(platform === 'all' ? 'All' : platform)}
+                      <span>{platform === 'all' ? t('All') : t(platform)}</span>
+                      {platform === 'Unpaid' && (
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                          platformFilter === 'Unpaid' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                        }`}>
+                          {t('Due')}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
