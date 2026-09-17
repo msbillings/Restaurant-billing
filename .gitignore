@@ -1,5 +1,7 @@
 node_modules/
 dist/
+Desktop/dist/
+builds/
 .env
 .env.*
 !.env.example
@@ -25,4 +27,35 @@ Backend/auth_info_baileys/
 auth_info_baileys/
 firebase-service-account.json
 Backend/firebase-service-account.json
+
+# ==========================================
+# Excel Spreadsheets & Import Files (Local Only)
+# ==========================================
+excel_sheets/
+*.xlsx
+*.csv
+
+# ==========================================
+# Local Scripts & Build Helpers (Local Only)
+# ==========================================
+scripts/
+create_*.js
+print_*.js
+print_*.py
+remove_sparkles.js
+test_render_api.js
+test_superadmin.js
+Backend/test_time.js
+Backend/scripts/generate_150_excel.js
+
+# ==========================================
+# Heavy PDFs, Scratch & Test Media
+# ==========================================
+*.pdf
+scratch/
 scratch_img/
+__pycache__/
+*.pyc
+bw_*.jpg
+*.bin
+diff.txt
