@@ -29,13 +29,25 @@ export const getAllClients = async (req, res) => {
 export const updateLicense = async (req, res) => {
   try {
     const { id } = req.params;
-    const { licenseKey, validUntil, resetHardware } = req.body;
+    const { licenseKey, validUntil, resetHardware, cluster } = req.body;
 
     const client = await Client.findById(id);
     if (!client) return res.status(404).json({ message: 'Client not found' });
 
     if (licenseKey) {
       client.licenseKey = licenseKey;
+    }
+    if (cluster) {
+      const newCluster = cluster.toLowerCase().trim();
+      if (client.cluster !== newCluster) {
+        const clusterCount = await Client.countDocuments({ cluster: newCluster });
+        if (clusterCount >= 10) {
+          return res.status(400).json({ 
+            message: `Cannot move client: Cluster ${newCluster.toUpperCase()} has reached its maximum capacity of 10 restaurants.` 
+          });
+        }
+        client.cluster = newCluster;
+      }
     }
     
     if (resetHardware) {
@@ -68,7 +80,16 @@ export const updateLicense = async (req, res) => {
 // Create a new client and generate a license
 export const createClient = async (req, res) => {
   try {
-    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts } = req.body;
+    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts, cluster } = req.body;
+
+    // Enforce 10 restaurants per cluster limit
+    const targetCluster = (cluster || 'cluster0').toLowerCase().trim();
+    const clusterCount = await Client.countDocuments({ cluster: targetCluster });
+    if (clusterCount >= 10) {
+      return res.status(400).json({ 
+        message: `Cannot create client: Cluster ${targetCluster.toUpperCase()} has reached its maximum capacity of 10 restaurants. Please select an available cluster.` 
+      });
+    }
 
     const existingClient = await Client.findOne({ email });
     if (existingClient) {
@@ -84,7 +105,8 @@ export const createClient = async (req, res) => {
       email,
       plainTextPassword: password,
       licenseKey,
-      staffAccounts: staffAccounts || []
+      staffAccounts: staffAccounts || [],
+      cluster: cluster || 'cluster1'
     });
 
     const savedClient = await newClient.save();

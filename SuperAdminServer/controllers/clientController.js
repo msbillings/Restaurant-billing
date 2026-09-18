@@ -4,6 +4,7 @@ import Broadcast from '../models/Broadcast.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import { getTenantDb } from '../utils/clusterManager.js';
 
 // Utility to provision/sync the admin user & staff directly into the tenant's MongoDB database
 export const provisionTenantUsers = async (client, plainPassword) => {
@@ -18,7 +19,7 @@ export const provisionTenantUsers = async (client, plainPassword) => {
     if (!passwordToUse) return;
 
     const hashedPassword = await bcrypt.hash(passwordToUse, 10);
-    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const tenantDb = await getTenantDb(client.cluster, client.databaseName);
     const usersCol = tenantDb.collection('users');
 
     // 1. Provision Admin by Email (e.g. cakepanda@gmail.com)
@@ -130,6 +131,20 @@ export const updateLicense = async (req, res) => {
     if (licenseKey) {
       client.licenseKey = licenseKey;
     }
+    let clusterChanged = false;
+    if (req.body.cluster) {
+      const newCluster = req.body.cluster.toLowerCase().trim();
+      if (client.cluster !== newCluster) {
+        const clusterCount = await Client.countDocuments({ cluster: newCluster });
+        if (clusterCount >= 10) {
+          return res.status(400).json({ 
+            message: `Cannot move client: Cluster ${newCluster.toUpperCase()} has reached its maximum capacity of 10 restaurants.` 
+          });
+        }
+        client.cluster = newCluster;
+        clusterChanged = true;
+      }
+    }
     
     // Reset hardware ID if requested (allows them to install on a new computer)
     if (resetHardware) {
@@ -137,6 +152,10 @@ export const updateLicense = async (req, res) => {
     }
     
     await client.save();
+
+    if (clusterChanged) {
+      await provisionTenantUsers(client, client.plainTextPassword);
+    }
 
     // Update License Document
     const license = await License.findOne({ client: id });
@@ -234,7 +253,16 @@ export const updateLicense = async (req, res) => {
 // Create a new client and generate a license
 export const createClient = async (req, res) => {
   try {
-    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts } = req.body;
+    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts, cluster } = req.body;
+
+    // Enforce 10 restaurants per cluster limit
+    const targetCluster = (cluster || 'cluster0').toLowerCase().trim();
+    const clusterCount = await Client.countDocuments({ cluster: targetCluster });
+    if (clusterCount >= 10) {
+      return res.status(400).json({ 
+        message: `Cannot create client: Cluster ${targetCluster.toUpperCase()} has reached its maximum capacity of 10 restaurants. Please select an available cluster.` 
+      });
+    }
 
     // Check if email exists
     const existingClient = await Client.findOne({ email });
@@ -270,6 +298,7 @@ export const createClient = async (req, res) => {
       email,
       plainTextPassword: password, // For admin visibility/support
       databaseName,
+      cluster: (cluster || 'cluster0').toLowerCase().trim(),
       licenseKey,
       staffAccounts: staff
     });
@@ -670,7 +699,7 @@ export const addStaffAccount = async (req, res) => {
 
     // Sync to tenant MongoDB database
     const hashedPassword = await bcrypt.hash(newStaffItem.plainTextPassword, 10);
-    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const tenantDb = await getTenantDb(client.cluster, client.databaseName);
     const usersCol = tenantDb.collection('users');
 
     await usersCol.updateOne(
@@ -748,7 +777,7 @@ export const updateStaffAccount = async (req, res) => {
 
     // Sync to tenant MongoDB database
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+    const tenantDb = await getTenantDb(client.cluster, client.databaseName);
     const usersCol = tenantDb.collection('users');
 
     // If username changed, delete the old username entry from tenant DB
@@ -820,7 +849,7 @@ export const deleteStaffAccount = async (req, res) => {
 
     // Delete from tenant MongoDB database if databaseName exists
     if (client.databaseName) {
-      const tenantDb = mongoose.connection.useDb(client.databaseName, { useCache: true });
+      const tenantDb = await getTenantDb(client.cluster, client.databaseName);
       const usersCol = tenantDb.collection('users');
       await usersCol.deleteOne({ username: targetUsername });
     }

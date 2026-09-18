@@ -391,7 +391,7 @@ function App() {
     setSubmittingBroadcastReply(prev => ({ ...prev, [n.id]: true }));
     try {
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
-      const tenantDb = localStorage.getItem('resto_db_name') || 'client_demo_db';
+      const tenantDb = localStorage.getItem('resto_db_name') || 'client_test3_db';
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       const senderName = userData.username || userRole;
       const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';

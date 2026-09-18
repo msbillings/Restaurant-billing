@@ -274,8 +274,10 @@ app.get('/api/health', (req, res) => {
 
 
 // Database Connection
-// SECURITY: Do not default to a production database. Use an isolated temp DB.
-let MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0';
+let MONGO_URI = process.env.MONGO_URI;
+if (!MONGO_URI) {
+  console.error('[FATAL] MONGO_URI environment variable is missing. Please define MONGO_URI in your .env file or hosting environment.');
+}
 
 // Read client-config.json if it exists to override the database name dynamically
 // If APP_USER_DATA_PATH is provided (via Electron), use it. Otherwise fallback to process.cwd()
@@ -285,13 +287,18 @@ try {
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (config.databaseName) {
-      const parts = MONGO_URI.split('?');
-      const connectionPart = parts[0];
-      const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
-      const lastSlashIndex = connectionPart.lastIndexOf('/');
-      const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + config.databaseName;
-      MONGO_URI = newConnectionPart + queryPart;
-      console.log(`Using client-specific database: ${config.databaseName}`);
+      const clusterKey = (config.cluster || 'cluster0').toLowerCase().trim();
+      const envKey = `MONGO_URI_${clusterKey.toUpperCase()}`;
+      const activeBaseUri = clusterKey === 'cluster0' ? MONGO_URI : (process.env[envKey] || MONGO_URI);
+      if (activeBaseUri) {
+        const parts = activeBaseUri.split('?');
+        const connectionPart = parts[0];
+        const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
+        const lastSlashIndex = connectionPart.lastIndexOf('/');
+        const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + config.databaseName;
+        MONGO_URI = newConnectionPart + queryPart;
+        console.log(`Using client-specific database: ${config.databaseName} on ${clusterKey}`);
+      }
     }
   }
 } catch (error) {

@@ -44,6 +44,16 @@ execSync(`${npmCmd} run build`, {
 console.log('Copying Backend...');
 copySync(backendSrc, desktopBackend, ['node_modules', '.git', 'auth_info_baileys', 'reports', 'uploads', 'dist', 'logs']);
 
+// Explicitly ensure .env is bundled for packaged Desktop builds (.exe / .dmg)
+const envSrc = path.join(backendSrc, '.env');
+const envDest = path.join(desktopBackend, '.env');
+if (fs.existsSync(envSrc)) {
+  fs.copyFileSync(envSrc, envDest);
+  console.log('[Desktop Build] Successfully bundled .env into desktop backend package.');
+} else {
+  console.warn('[Desktop Build] WARNING: Backend/.env not found! Make sure .env exists on your build machine.');
+}
+
 // Copy Frontend
 console.log('Copying Frontend...');
 copySync(frontendDist, desktopFrontend);

@@ -15,7 +15,7 @@ const LicenseScreen = ({ onValidLicense }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const [showSettings, setShowSettings] = useState(false);
   const [serverIp, setServerIp] = useState('');
   const [superadminIp, setSuperadminIp] = useState('');
@@ -43,10 +43,10 @@ const LicenseScreen = ({ onValidLicense }) => {
 
     if (cleanServer) localStorage.setItem('resto_server_ip', cleanServer);
     else localStorage.removeItem('resto_server_ip');
-    
+
     if (cleanSuper) localStorage.setItem('resto_superadmin_ip', cleanSuper);
     else localStorage.removeItem('resto_superadmin_ip');
-    
+
     setShowSettings(false);
     window.location.reload();
   };
@@ -179,8 +179,8 @@ const LicenseScreen = ({ onValidLicense }) => {
               'X-Tenant-DB': data.databaseName || localStorage.getItem('resto_db_name') || ''
             },
             body: JSON.stringify({ licenseExpiry: data.validUntil })
-          }).catch(() => {});
-        } catch (e) {}
+          }).catch(() => { });
+        } catch (e) { }
 
         onValidLicense();
       } else {
@@ -197,7 +197,7 @@ const LicenseScreen = ({ onValidLicense }) => {
   const handleQuickDemo = () => {
     localStorage.setItem('resto_license', 'MSBILL-DEMO-TEAM-2026');
     localStorage.setItem('resto_license_expiry', '2126-12-31T23:59:59.000Z');
-    localStorage.setItem('resto_db_name', 'client_demo_db');
+    localStorage.setItem('resto_db_name', 'client_test3_db');
     onValidLicense();
   };
 
@@ -209,7 +209,7 @@ const LicenseScreen = ({ onValidLicense }) => {
 
         {/* Logo Header */}
         <div className="text-center mb-4 sm:mb-8 relative">
-          <button 
+          <button
             type="button"
             onClick={() => setShowSettings(true)}
             className="absolute top-0 right-0 p-2 text-white/50 hover:text-white transition-colors z-30"
@@ -217,10 +217,10 @@ const LicenseScreen = ({ onValidLicense }) => {
           >
             <Settings size={20} />
           </button>
-          
+
           <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 mb-3 sm:mb-6 shadow-2xl rounded-full relative mt-2 sm:mt-4">
             <img src={logoImg} alt="MS Billing Logo" className="w-full h-full object-cover rounded-full shadow-[0_0_20px_rgba(255,100,0,0.4)] border-2 border-orange-500/50 z-10 relative" />
-            
+
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-white mb-1 sm:mb-2 tracking-tight drop-shadow-lg">{t("msbillings")}</h1>
           <p className="text-gray-300 font-bold uppercase tracking-widest text-xs sm:text-sm">{t("Software Activation")}</p>
@@ -228,7 +228,7 @@ const LicenseScreen = ({ onValidLicense }) => {
 
         {/* Activation Form (Premium Glassmorphism) */}
         <div className="bg-white/10 backdrop-blur-xl p-4 sm:p-8 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative overflow-hidden w-full max-w-full" style={{ borderRadius: '20px' }}>
-          
+
           <div className="relative z-10">
             <p className="text-center text-[11px] sm:text-sm text-gray-300 mb-4 sm:mb-8 font-medium">{t("Please enter your registered Email and Password to activate your terminal.")}</p>
 
@@ -264,7 +264,7 @@ const LicenseScreen = ({ onValidLicense }) => {
                     className="w-full py-3 sm:py-4 px-4 pl-11 sm:pl-12 pr-12 border border-white/20 bg-white/5 text-white text-sm sm:text-base placeholder:text-gray-400 focus:outline-none focus:border-white focus:bg-white/10 transition-all duration-300"
                     style={{ borderRadius: '12px' }}
                     required />
-                  
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -281,8 +281,8 @@ const LicenseScreen = ({ onValidLicense }) => {
                     <p>{error}</p>
                   </div>
                   {error.toLowerCase().includes('failed to fetch') && (
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => setShowSettings(true)}
                       className="px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-black self-start transition-all shadow-md flex items-center gap-1.5 active:scale-95"
                     >
@@ -297,7 +297,7 @@ const LicenseScreen = ({ onValidLicense }) => {
                 disabled={loading || !email.trim() || !password.trim()}
                 className="w-full py-3 sm:py-4 px-6 font-black text-white bg-orange-500 hover:bg-orange-600 transition-all duration-300 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm sm:text-base"
                 style={{ borderRadius: '12px' }}>
-                
+
                 {loading ?
                   <>
                     <Loader2 size={18} className="animate-spin" />
@@ -326,23 +326,23 @@ const LicenseScreen = ({ onValidLicense }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Settings Modal */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
           <div className="bg-gray-900 border border-white/10 p-6 shadow-2xl w-full max-w-sm relative" style={{ borderRadius: '24px' }}>
-            <button 
+            <button
               onClick={() => setShowSettings(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
             >
               <X size={24} />
             </button>
-            
+
             <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <Settings size={20} className="text-orange-500" />
               Network Settings
             </h2>
-            
+
             <div className="space-y-4 mb-6">
               <div>
                 <label className="text-sm font-bold text-gray-300 block mb-2">
@@ -357,7 +357,7 @@ const LicenseScreen = ({ onValidLicense }) => {
                   style={{ borderRadius: '12px' }}
                 />
               </div>
-              
+
               <div>
                 <label className="text-sm font-bold text-gray-300 block mb-2">
                   Superadmin IP
@@ -371,12 +371,12 @@ const LicenseScreen = ({ onValidLicense }) => {
                   style={{ borderRadius: '12px' }}
                 />
               </div>
-              
+
               <p className="text-xs text-gray-400">
                 If the app fails to connect from a mobile device on the same WiFi, enter your PC's local IP address here.
               </p>
             </div>
-            
+
             <button
               onClick={handleSaveSettings}
               className="w-full py-3 px-4 font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"

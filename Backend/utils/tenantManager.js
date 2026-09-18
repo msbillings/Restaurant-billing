@@ -34,6 +34,93 @@ import CampaignDefault from '../models/Campaign.js';
 
 const tenantModelsCache = new Map();
 
+// Map of clusterName -> mongoose.Connection (e.g. 'cluster1' -> Connection, 'cluster2' -> Connection)
+const clusterConnections = new Map();
+const clusterInitPromises = new Map();
+
+// Dynamic in-memory map: databaseName -> clusterName (e.g. 'client_test2_db' -> 'cluster1')
+const tenantClusterCache = new Map();
+
+export const getClusterConnection = async (clusterName = 'cluster0') => {
+  const normalized = (clusterName || 'cluster0').toLowerCase().trim();
+  if (normalized === 'cluster0' || normalized === 'primary' || normalized === 'default') {
+    return mongoose.connection;
+  }
+
+  if (clusterConnections.has(normalized)) {
+    const conn = clusterConnections.get(normalized);
+    if (conn && conn.readyState === 1) return conn;
+  }
+
+  if (clusterInitPromises.has(normalized)) {
+    return clusterInitPromises.get(normalized);
+  }
+
+  const envKey = `MONGO_URI_${normalized.toUpperCase()}`;
+  const uri = process.env[envKey];
+
+  if (!uri) {
+    console.warn(`[tenantManager] No environment variable found for ${normalized} (${envKey}). Falling back to primary cluster.`);
+    return mongoose.connection;
+  }
+
+  const initPromise = (async () => {
+    try {
+      const conn = mongoose.createConnection(uri, {
+        maxPoolSize: 20,
+        serverSelectionTimeoutMS: 10000
+      });
+      await conn.asPromise();
+      console.log(`[tenantManager] Connected to ${normalized} pool successfully`);
+      clusterConnections.set(normalized, conn);
+      return conn;
+    } catch (err) {
+      console.error(`[tenantManager] Failed to connect to ${normalized} pool:`, err.message);
+      clusterInitPromises.delete(normalized);
+      return mongoose.connection;
+    }
+  })();
+
+  clusterInitPromises.set(normalized, initPromise);
+  return initPromise;
+};
+
+// Backward compatibility alias for cluster1
+export const getCluster1Connection = () => getClusterConnection('cluster1');
+
+export const registerTenantCluster = (databaseName, clusterName) => {
+  if (databaseName) {
+    tenantClusterCache.set(databaseName, (clusterName || 'cluster0').toLowerCase().trim());
+  }
+};
+
+const resolveClusterConnection = async (databaseName) => {
+  if (!databaseName || databaseName === 'mscurechain' || databaseName === 'default') {
+    return mongoose.connection;
+  }
+  // 1. Check in-memory dynamic cache first for fast 0ms resolution
+  if (tenantClusterCache.has(databaseName)) {
+    const clusterName = tenantClusterCache.get(databaseName);
+    return await getClusterConnection(clusterName);
+  }
+  // 2. Query master registry (mscurechain.clients)
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const clientDoc = await mongoose.connection.db?.collection('clients')?.findOne(
+        { databaseName },
+        { projection: { cluster: 1 } }
+      );
+      const clusterName = (clientDoc?.cluster || 'cluster0').toLowerCase().trim();
+      tenantClusterCache.set(databaseName, clusterName);
+      return await getClusterConnection(clusterName);
+    }
+  } catch (e) {
+    console.warn(`[tenantManager] Error resolving cluster for ${databaseName}:`, e.message);
+  }
+
+  return mongoose.connection;
+};
+
 export const getTenantModels = async (databaseName) => {
   // If databaseName is empty or 'default', route to the primary connected database (e.g. mscurechain)
   if (!databaseName || databaseName === 'undefined' || databaseName === 'null' || databaseName === 'default') {
@@ -52,12 +139,24 @@ export const getTenantModels = async (databaseName) => {
     }
   }
 
-  if (mongoose.connection.readyState === 1 && tenantModelsCache.has(databaseName)) {
+  if (tenantModelsCache.has(databaseName)) {
     return tenantModelsCache.get(databaseName);
   }
 
-  // Switch to tenant DB instantly using existing connection pool (0ms delay)
-  const conn = mongoose.connection.useDb(databaseName, { useCache: true });
+  // Resolve target cluster connection pool (Cluster 0 or Cluster 1)
+  const targetClusterConn = await resolveClusterConnection(databaseName);
+  if (targetClusterConn && targetClusterConn.readyState !== 1) {
+    if (targetClusterConn.readyState === 2) {
+      await new Promise((resolve) => {
+        if (targetClusterConn.readyState === 1) return resolve();
+        targetClusterConn.once('open', resolve);
+        setTimeout(resolve, 5000);
+      });
+    }
+  }
+
+  // Switch to tenant DB instantly using target cluster connection pool (0ms delay)
+  const conn = targetClusterConn.useDb(databaseName, { useCache: true });
 
   // Compile models on this tenant connection if not already compiled
   const Menu = conn.models.Menu || conn.model('Menu', MenuDefault.schema);

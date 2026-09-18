@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import { Fingerprint, Lock, Mail, Shield, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { startAuthentication } from '@simplewebauthn/browser';
@@ -10,15 +10,8 @@ const Login = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [bioLoading, setBioLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [isBiometricSupported] = useState(() => typeof window !== 'undefined' && !!window.PublicKeyCredential);
   const [showPassword, setShowPassword] = useState(false);
-
-  useEffect(() => {
-    // Check if the browser supports WebAuthn
-    if (window.PublicKeyCredential) {
-      setIsBiometricSupported(true);
-    }
-  }, []);
 
   const handlePasswordLogin = async (e) => {
     e.preventDefault();

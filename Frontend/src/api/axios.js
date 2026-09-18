@@ -77,7 +77,7 @@ api.interceptors.request.use(
       try {
         const userObj = JSON.parse(localStorage.getItem('user') || '{}');
         tenantDb = userObj.db || userObj.tenantDb;
-      } catch (e) {}
+      } catch (e) { }
     }
     if (tenantDb) {
       config.headers['X-Tenant-DB'] = tenantDb;
@@ -95,7 +95,7 @@ authApi.interceptors.request.use(
       try {
         const userObj = JSON.parse(localStorage.getItem('user') || '{}');
         tenantDb = userObj.db || userObj.tenantDb;
-      } catch (e) {}
+      } catch (e) { }
     }
     if (tenantDb) {
       config.headers['X-Tenant-DB'] = tenantDb;
@@ -114,9 +114,9 @@ api.interceptors.response.use(
     // Check if we are on the public customer QR menu page.
     // This page is public and requires NO authentication — never force-logout from here.
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-    const isPublicOrderPage = window.location.pathname === '/order' || 
-                              window.location.pathname.startsWith('/order/') ||
-                              (searchParams.has('table') && searchParams.has('tenant'));
+    const isPublicOrderPage = window.location.pathname === '/order' ||
+      window.location.pathname.startsWith('/order/') ||
+      (searchParams.has('table') && searchParams.has('tenant'));
 
     // Handle 401 (Unauthorized) - Session invalid/expired -> Logout immediately
     if (error.response?.status === 401) {
@@ -125,11 +125,11 @@ api.interceptors.response.use(
       // 2. The user is on the public /order page (QR customer menu — no auth needed)
       // 3. The error is an action/PIN/password verification error (e.g. deleting a bill or security checks)
       const errorMsg = String(error.response?.data?.message || error.message || '').toLowerCase();
-      const isVerificationError = errorMsg.includes('password') || 
-                                   errorMsg.includes('pin') || 
-                                   errorMsg.includes('incorrect') || 
-                                   errorMsg.includes('authorized') ||
-                                   originalRequest.url?.includes('/bills/');
+      const isVerificationError = errorMsg.includes('password') ||
+        errorMsg.includes('pin') ||
+        errorMsg.includes('incorrect') ||
+        errorMsg.includes('authorized') ||
+        originalRequest.url?.includes('/bills/');
 
       if (!originalRequest.url?.includes('/auth/login') && !isPublicOrderPage && !isVerificationError) {
         console.warn('401 Unauthorized - Logging out user');
@@ -206,7 +206,7 @@ api.interceptors.response.use(
     const currentBase = originalRequest?.baseURL || '';
     const isLanDeviceIp = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/i.test(currentBase);
     const isWhatsAppEndpoint = originalRequest?.url?.includes('/whatsapp/');
-    
+
     if (isNetworkOrTimeout && isLanDeviceIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
       originalRequest._fallbackToCloud = true;
       originalRequest.baseURL = 'https://msbillings-backend-x9qw.onrender.com/api';

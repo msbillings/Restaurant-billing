@@ -25,6 +25,10 @@ const clientSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  cluster: {
+    type: String,
+    default: 'cluster0'
+  },
   staffAccounts: {
     type: [
       {

@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import { Shield, CheckCircle, CreditCard, UtensilsCrossed } from 'lucide-react';
+import { getApiBaseUrl } from './config';
+
+const API_BASE_URL = getApiBaseUrl();
 
 const Checkout = () => {
   const [formData, setFormData] = useState({ restaurantName: '', email: '' });
@@ -71,7 +74,7 @@ const Checkout = () => {
             if (verifyRes.data.success) {
               setSuccess(true);
             }
-          } catch (error) {
+          } catch {
             alert('Payment verification failed!');
           }
         },

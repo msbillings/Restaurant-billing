@@ -179,7 +179,7 @@ const NotificationCenter = ({ onNavigate, onGoBack, userRole = 'Admin' }) => {
     setIsSubmittingReply(true);
     try {
       const SUPERADMIN_API_URL = getSuperadminApiUrl();
-      const tenantDb = localStorage.getItem('resto_db_name') || 'client_demo_db';
+      const tenantDb = localStorage.getItem('resto_db_name') || 'client_test3_db';
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       const senderName = user.username || userRole;
       const shopName = localStorage.getItem('restaurant_name') || tenantDb || 'Restaurant';

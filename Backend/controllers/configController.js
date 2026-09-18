@@ -36,19 +36,33 @@ export const setupDatabase = async (req, res) => {
       const models = await getTenantModels(databaseName);
       User = models.User;
     } else {
-      // 1. Write config for local desktop POS app
+      // 1. Determine cluster for this client
+      let clientCluster = req.body.cluster || 'cluster0';
+      try {
+        const clientDoc = await ClientDefault.findOne({ databaseName }).select('cluster').lean();
+        if (clientDoc && clientDoc.cluster) clientCluster = clientDoc.cluster;
+      } catch (e) {}
+
+      // Write config for local desktop POS app
       const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
       const configPath = path.join(configDir, 'client-config.json');
-      fs.writeFileSync(configPath, JSON.stringify({ databaseName }), 'utf8');
+      fs.writeFileSync(configPath, JSON.stringify({ databaseName, cluster: clientCluster }), 'utf8');
 
       // 2. Disconnect existing mongoose
       await mongoose.disconnect();
 
-      // 3. Generate new URI
-      const baseUri = process.env.MONGO_URI || 'mongodb+srv://mscurechain_db_user:wnZRZ7iCrAkpcQ2j@cluster0.taof1ae.mongodb.net/mscurechain?appName=Cluster0';
+      // 3. Generate new URI using appropriate cluster
+      const clusterKey = (clientCluster || 'cluster0').toLowerCase().trim();
+      const envKey = `MONGO_URI_${clusterKey.toUpperCase()}`;
+      const baseUri = clusterKey === 'cluster0' ? process.env.MONGO_URI : (process.env[envKey] || process.env.MONGO_URI);
+
+      if (!baseUri) {
+        throw new Error(`Database URI for ${clusterKey} is not configured in environment variables`);
+      }
+
       const parts = baseUri.split('?');
       const connectionPart = parts[0];
       const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
@@ -64,7 +78,7 @@ export const setupDatabase = async (req, res) => {
         maxPoolSize: 10,
         minPoolSize: 1,
       });
-      console.log(`Switched to new client database: ${databaseName}`);
+      console.log(`Switched to new client database: ${databaseName} on ${clusterKey}`);
     }
 
     // 5. Seed initial users if the database is empty
@@ -330,22 +344,28 @@ export const syncUsersFromSuperAdmin = async (req, res) => {
       }
     }
 
-    // Sync staff accounts if provided
+    // Sync staff accounts: only update passwords of existing staff
+    // If tenant DB is completely new/empty (0 users), seed initial staff.
+    // NEVER resurrect accounts that were deleted by the restaurant admin!
     if (staffAccounts && Array.isArray(staffAccounts)) {
+      const userCount = await User.countDocuments();
       for (const staff of staffAccounts) {
-        const staffUser = await User.findOne({ username: staff.username });
+        if (!staff.username) continue;
+        const escaped = staff.username.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const staffUser = await User.findOne({
+          username: { $regex: new RegExp(`^${escaped}$`, 'i') }
+        });
         if (staffUser) {
-          // If staff already exists, update password
-          const newPass = staff.plainTextPassword || staff.password || plainTextPassword;
+          const newPass = staff.plainTextPassword || staff.password;
           if (newPass) {
             staffUser.password = newPass;
             await staffUser.save();
           }
-        } else {
-          // If staff was newly created in SuperAdmin, create them locally too
+        } else if (userCount === 0) {
+          // Only seed initial staff if the restaurant has ZERO users
           const newPass = staff.plainTextPassword || staff.password || plainTextPassword || '123456';
           const newUser = new User({
-            username: staff.username,
+            username: staff.username.trim(),
             password: newPass,
             role: staff.role || 'Cashier',
             activeSessions: []
