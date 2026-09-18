@@ -7,6 +7,7 @@ import UserDefault from '../models/User.js';
 import SettingDefault from '../models/Setting.js';
 import FloorDefault from '../models/Floor.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import { getTenantModels } from '../utils/tenantManager.js';
 import { emitSocketEvent } from '../utils/socket.js';
 import { clearPublicMenuCache } from '../routes/publicRoutes.js';
 import cache from '../utils/cache.js';
