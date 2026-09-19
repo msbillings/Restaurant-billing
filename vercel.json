@@ -1,11 +1,11 @@
 {
-  "buildCommand": "cd Frontend && npm install && npm run build",
-  "outputDirectory": "Frontend/dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
+    "buildCommand":  "if [ -d Frontend ]; then cd Frontend; fi \u0026\u0026 npm install \u0026\u0026 npm run build",
+    "outputDirectory":  "Frontend/dist",
+    "framework":  "vite",
+    "rewrites":  [
+                     {
+                         "source":  "/(.*)",
+                         "destination":  "/index.html"
+                     }
+                 ]
 }
