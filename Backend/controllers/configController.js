@@ -29,58 +29,29 @@ export const setupDatabase = async (req, res) => {
     // If running in cloud environment (Render, Vercel, or production), do NOT disconnect global database!
     // Instead, initialize tenant pool for this database. (Desktop app provides APP_USER_DATA_PATH, so it is never cloud)
     const isDesktop = !!process.env.APP_USER_DATA_PATH;
-    const isCloud = !isDesktop && (process.env.VERCEL || process.env.VERCEL_ENV || process.env.RENDER || process.env.NODE_ENV === 'production' || process.env.MONGO_URI?.includes('mongodb+srv'));
 
-    let User = UserDefault;
-    if (isCloud) {
-      console.log(`[Cloud Mode] Initializing tenant connection for: ${databaseName}`);
-      const models = await getTenantModels(databaseName);
-      User = models.User;
-    } else {
-      // 1. Determine cluster for this client
-      let clientCluster = req.body.cluster || 'cluster0';
+    // 1. Determine cluster for this client (for config saving on Desktop)
+    let clientCluster = req.body.cluster || 'cluster0';
+    if (isDesktop) {
       try {
-        const clientDoc = await ClientDefault.findOne({ databaseName }).select('cluster').lean();
+        const clientDoc = await mongoose.connection.db?.collection('clients')?.findOne({ databaseName }, { projection: { cluster: 1 } });
         if (clientDoc && clientDoc.cluster) clientCluster = clientDoc.cluster;
       } catch (e) {}
 
-      // Write config for local desktop POS app
+      // Write config for local desktop POS app so it remembers the DB on restart
       const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
       if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true });
       }
       const configPath = path.join(configDir, 'client-config.json');
       fs.writeFileSync(configPath, JSON.stringify({ databaseName, cluster: clientCluster }), 'utf8');
-
-      // 2. Disconnect existing mongoose
-      await mongoose.disconnect();
-
-      // 3. Generate new URI using appropriate cluster
-      const clusterKey = (clientCluster || 'cluster0').toLowerCase().trim();
-      const envKey = `MONGO_URI_${clusterKey.toUpperCase()}`;
-      const baseUri = clusterKey === 'cluster0' ? process.env.MONGO_URI : (process.env[envKey] || process.env.MONGO_URI);
-
-      if (!baseUri) {
-        throw new Error(`Database URI for ${clusterKey} is not configured in environment variables`);
-      }
-
-      const parts = baseUri.split('?');
-      const connectionPart = parts[0];
-      const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
-
-      const lastSlashIndex = connectionPart.lastIndexOf('/');
-      const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + databaseName;
-      const newUri = newConnectionPart + queryPart;
-
-      // 4. Reconnect
-      await mongoose.connect(newUri, {
-        serverSelectionTimeoutMS: 30000,
-        socketTimeoutMS: 45000,
-        maxPoolSize: 10,
-        minPoolSize: 1,
-      });
-      console.log(`Switched to new client database: ${databaseName} on ${clusterKey}`);
+      console.log(`[Desktop] Saved client-config.json for ${databaseName} on ${clientCluster}`);
     }
+
+    // 2. Initialize tenant pool for this database (unified for both Cloud and Desktop)
+    console.log(`[Setup] Initializing tenant connection for: ${databaseName}`);
+    const models = await getTenantModels(databaseName);
+    let User = models.User;
 
     // 5. Seed initial users if the database is empty
     const userCount = await User.countDocuments();

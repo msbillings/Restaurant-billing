@@ -131,6 +131,7 @@ const LicenseScreen = ({ onValidLicense }) => {
           }
         } catch (localErr) {
           console.warn('Local backend login attempt failed:', localErr);
+          lastError = 'Server Error: Unable to connect to the backend server. Please check if the server is running.';
         }
       }
 

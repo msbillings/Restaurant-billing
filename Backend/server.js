@@ -279,30 +279,23 @@ if (!MONGO_URI) {
   console.error('[FATAL] MONGO_URI environment variable is missing. Please define MONGO_URI in your .env file or hosting environment.');
 }
 
-// Read client-config.json if it exists to override the database name dynamically
-// If APP_USER_DATA_PATH is provided (via Electron), use it. Otherwise fallback to process.cwd()
+// Read client-config.json if it exists (Desktop EXE only: APP_USER_DATA_PATH is set by Electron).
+// We read ONLY the databaseName here — the cluster is NOT trusted from this file anymore.
+// After connectDB(), buildTenantClusterMap() will auto-detect the correct cluster from the
+// master registry (mscurechain.clients) across all .env-configured clusters.
+let desktopTenantDb = null;
 try {
   const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
   const configPath = path.join(configDir, 'client-config.json');
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     if (config.databaseName) {
-      const clusterKey = (config.cluster || 'cluster0').toLowerCase().trim();
-      const envKey = `MONGO_URI_${clusterKey.toUpperCase()}`;
-      const activeBaseUri = clusterKey === 'cluster0' ? MONGO_URI : (process.env[envKey] || MONGO_URI);
-      if (activeBaseUri) {
-        const parts = activeBaseUri.split('?');
-        const connectionPart = parts[0];
-        const queryPart = parts.length > 1 ? `?${parts[1]}` : '';
-        const lastSlashIndex = connectionPart.lastIndexOf('/');
-        const newConnectionPart = connectionPart.substring(0, lastSlashIndex) + '/' + config.databaseName;
-        MONGO_URI = newConnectionPart + queryPart;
-        console.log(`Using client-specific database: ${config.databaseName} on ${clusterKey}`);
-      }
+      desktopTenantDb = config.databaseName;
+      console.log(`[Desktop] Tenant DB: ${desktopTenantDb} — cluster will be auto-detected from master registry`);
     }
   }
 } catch (error) {
-  console.error('Failed to parse client-config.json, using default database', error);
+  console.error('Failed to parse client-config.json:', error);
 }
 
 // Connection state
@@ -407,6 +400,7 @@ import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
 import { startWhatsAppScheduler } from './utils/whatsappScheduler.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
+import { buildTenantClusterMap } from './utils/tenantManager.js';
 
 app.use('/api/menu', menuRoutes);
 app.use('/api/bills', billRoutes);
@@ -541,7 +535,10 @@ if (!isServerless) {
 // Connection will be established on first request via middleware
 if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) {
   // In serverless, connect on module load but don't block
-  connectDB().catch((err) => {
+  connectDB().then(() => {
+    // Pre-load tenant→cluster map so all requests resolve correctly
+    buildTenantClusterMap().catch(e => console.warn('[tenantManager] buildTenantClusterMap (serverless):', e.message));
+  }).catch((err) => {
     console.error('Initial connection attempt failed (will retry on request):', err.message);
   });
 }
@@ -594,7 +591,33 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
     }
   });
 
-  connectDB().then(() => {
+  connectDB().then(async () => {
+    // Auto-detect tenant→cluster mappings from master registry
+    // This runs non-blocking — server starts immediately, cache warms in background
+    buildTenantClusterMap().catch(e => console.warn('[tenantManager] buildTenantClusterMap:', e.message));
+
+    // For Desktop EXE: register the known tenant DB so the first request resolves instantly
+    // The correct cluster will be determined by buildTenantClusterMap() or resolveClusterConnection()
+    if (desktopTenantDb) {
+      // After map is built, write correct cluster back to client-config.json for fast future startups
+      buildTenantClusterMap().then(async () => {
+        try {
+          // Re-query the master registry directly for the desktop tenant
+          const clientDoc = await mongoose.connection.db
+            ?.collection('clients')
+            ?.findOne({ databaseName: desktopTenantDb }, { projection: { cluster: 1 } })
+            .catch(() => null);
+          const correctCluster = (clientDoc?.cluster || 'cluster0').toLowerCase().trim();
+          const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
+          const configPath = path.join(configDir, 'client-config.json');
+          fs.writeFileSync(configPath, JSON.stringify({ databaseName: desktopTenantDb, cluster: correctCluster }), 'utf8');
+          console.log(`[Desktop] ✅ Wrote correct cluster '${correctCluster}' for '${desktopTenantDb}' to client-config.json`);
+        } catch (e) {
+          console.warn('[Desktop] Could not update client-config.json cluster:', e.message);
+        }
+      }).catch(() => {});
+    }
+
     startListening();
   }).catch((err) => {
     console.error('Failed to start server:', err);

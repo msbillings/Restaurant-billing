@@ -44,6 +44,13 @@ jobs:
         working-directory: ./Desktop
         run: npm install
 
+      - name: 📝 Create Backend .env File
+        working-directory: ./Backend
+        run: |
+          Set-Content -Path .env -Value $env:BACKEND_ENV_SECRET
+        env:
+          BACKEND_ENV_SECRET: ${{ secrets.BACKEND_ENV_FILE }}
+
       - name: 🔄 Run Desktop Prebuild
         working-directory: ./Desktop
         run: npm run prebuild
@@ -151,6 +158,12 @@ jobs:
       - name: 📦 Install Desktop Dependencies
         working-directory: ./Desktop
         run: npm install
+
+      - name: 📝 Create Backend .env File
+        working-directory: ./Backend
+        run: echo "$BACKEND_ENV_SECRET" > .env
+        env:
+          BACKEND_ENV_SECRET: ${{ secrets.BACKEND_ENV_FILE }}
 
       - name: 🔄 Run Desktop Prebuild
         working-directory: ./Desktop

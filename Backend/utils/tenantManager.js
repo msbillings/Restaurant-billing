@@ -41,6 +41,29 @@ const clusterInitPromises = new Map();
 // Dynamic in-memory map: databaseName -> clusterName (e.g. 'client_test2_db' -> 'cluster1')
 const tenantClusterCache = new Map();
 
+/**
+ * Reads all MONGO_URI* keys from process.env dynamically.
+ * Returns an array of { name, uri } for every configured cluster.
+ * e.g. [{ name:'cluster0', uri:'...' }, { name:'cluster1', uri:'...' }, ...]
+ * No cluster names are hardcoded — driven entirely by .env.
+ */
+const getAllClusterEnvs = () => {
+  const clusters = [];
+  // cluster0 is always MONGO_URI (the master/default)
+  if (process.env.MONGO_URI) {
+    clusters.push({ name: 'cluster0', uri: process.env.MONGO_URI });
+  }
+  // cluster1..N come from MONGO_URI_CLUSTER1, MONGO_URI_CLUSTER2, ...
+  Object.keys(process.env)
+    .filter(k => /^MONGO_URI_CLUSTER(\d+)$/.test(k))
+    .sort() // cluster1 before cluster2, etc.
+    .forEach(k => {
+      const num = k.match(/^MONGO_URI_CLUSTER(\d+)$/)[1];
+      clusters.push({ name: `cluster${num}`, uri: process.env[k] });
+    });
+  return clusters;
+};
+
 export const getClusterConnection = async (clusterName = 'cluster0') => {
   const normalized = (clusterName || 'cluster0').toLowerCase().trim();
   if (normalized === 'cluster0' || normalized === 'primary' || normalized === 'default') {
@@ -94,30 +117,127 @@ export const registerTenantCluster = (databaseName, clusterName) => {
   }
 };
 
+/**
+ * Pre-loads ALL tenant → cluster mappings from the master registry (mscurechain.clients).
+ * Call this once after connectDB() succeeds.
+ * After this runs, resolveClusterConnection() resolves in 0ms from cache for all known tenants.
+ * Cluster names come 100% from .env — nothing is hardcoded.
+ */
+export const buildTenantClusterMap = async () => {
+  try {
+    // Wait for default (cluster0/mscurechain) connection to be ready
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve) => {
+        if (mongoose.connection.readyState === 1) return resolve();
+        mongoose.connection.once('open', resolve);
+        setTimeout(resolve, 8000);
+      });
+    }
+
+    // Primary registry: mscurechain.clients on cluster0 holds ALL tenant registrations
+    const clients = await mongoose.connection.db
+      ?.collection('clients')
+      ?.find({}, { projection: { databaseName: 1, cluster: 1 } })
+      .toArray()
+      .catch(() => []);
+
+    let count = 0;
+    for (const client of (clients || [])) {
+      if (client.databaseName && !tenantClusterCache.has(client.databaseName)) {
+        tenantClusterCache.set(
+          client.databaseName,
+          (client.cluster || 'cluster0').toLowerCase().trim()
+        );
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      console.log(`[tenantManager] ✅ Pre-loaded ${count} tenant→cluster mappings from master registry`);
+    } else {
+      console.log('[tenantManager] No tenant registrations found in master registry (or already cached)');
+    }
+  } catch (e) {
+    console.warn('[tenantManager] buildTenantClusterMap error:', e.message);
+  }
+};
+
 const resolveClusterConnection = async (databaseName) => {
   if (!databaseName || databaseName === 'mscurechain' || databaseName === 'default') {
     return mongoose.connection;
   }
-  // 1. Check in-memory dynamic cache first for fast 0ms resolution
+
+  // Step 1: Check in-memory cache — 0ms, fastest path
   if (tenantClusterCache.has(databaseName)) {
     const clusterName = tenantClusterCache.get(databaseName);
     return await getClusterConnection(clusterName);
   }
-  // 2. Query master registry (mscurechain.clients)
+
+  // Step 2: Query master registry (mscurechain.clients on cluster0)
+  // This is the authoritative source — all tenants are registered here with their cluster
   try {
     if (mongoose.connection.readyState === 1) {
       const clientDoc = await mongoose.connection.db?.collection('clients')?.findOne(
         { databaseName },
         { projection: { cluster: 1 } }
       );
-      const clusterName = (clientDoc?.cluster || 'cluster0').toLowerCase().trim();
-      tenantClusterCache.set(databaseName, clusterName);
-      return await getClusterConnection(clusterName);
+      if (clientDoc) {
+        const clusterName = (clientDoc.cluster || 'cluster0').toLowerCase().trim();
+        console.log(`[tenantManager] Resolved ${databaseName} → ${clusterName} from master registry`);
+        tenantClusterCache.set(databaseName, clusterName);
+        return await getClusterConnection(clusterName);
+      }
     }
   } catch (e) {
-    console.warn(`[tenantManager] Error resolving cluster for ${databaseName}:`, e.message);
+    console.warn(`[tenantManager] Master registry lookup failed for ${databaseName}:`, e.message);
   }
 
+  // Step 3: Scan ALL cluster registries dynamically from .env
+  // Tries each cluster's own default DB for a clients collection record
+  // This handles cases where the master registry doesn't have the entry yet
+  const allClusters = getAllClusterEnvs();
+  for (const { name: clusterName, uri } of allClusters) {
+    if (clusterName === 'cluster0') continue; // already checked above
+    try {
+      const conn = await getClusterConnection(clusterName);
+      if (!conn || conn.readyState !== 1) continue;
+      // Extract the default DB name from the cluster URI (e.g. msbillings_2)
+      const defaultDbName = uri.split('/').pop()?.split('?')[0]?.trim();
+      if (!defaultDbName) continue;
+      const db = conn.useDb(defaultDbName, { useCache: true });
+      const clientDoc = await db.collection('clients').findOne(
+        { databaseName },
+        { projection: { cluster: 1 } }
+      ).catch(() => null);
+      if (clientDoc) {
+        const resolvedCluster = (clientDoc.cluster || clusterName).toLowerCase().trim();
+        console.log(`[tenantManager] Resolved ${databaseName} → ${resolvedCluster} from ${clusterName} registry`);
+        tenantClusterCache.set(databaseName, resolvedCluster);
+        return await getClusterConnection(resolvedCluster);
+      }
+    } catch (e) {
+      // Skip unreachable clusters silently
+    }
+  }
+
+  // Step 4: Last resort — physically check which cluster has this DB via listDatabases()
+  // This works even if the tenant is not registered in any clients collection
+  for (const { name: clusterName } of allClusters) {
+    try {
+      const conn = await getClusterConnection(clusterName);
+      if (!conn || conn.readyState !== 1) continue;
+      const dbList = await conn.db?.admin()?.listDatabases({ nameOnly: true }).catch(() => null);
+      if (dbList?.databases?.some(db => db.name === databaseName)) {
+        console.log(`[tenantManager] Auto-detected ${databaseName} physically on ${clusterName} via listDatabases`);
+        tenantClusterCache.set(databaseName, clusterName);
+        return conn;
+      }
+    } catch (e) {
+      // Skip
+    }
+  }
+
+  console.warn(`[tenantManager] Could not resolve cluster for '${databaseName}' — falling back to primary`);
   return mongoose.connection;
 };
 
@@ -157,6 +277,7 @@ export const getTenantModels = async (databaseName) => {
 
   // Switch to tenant DB instantly using target cluster connection pool (0ms delay)
   const conn = targetClusterConn.useDb(databaseName, { useCache: true });
+  console.log(`[tenantManager] useDb called for ${databaseName}, readyState: ${conn.readyState}`);
 
   // Compile models on this tenant connection if not already compiled
   const Menu = conn.models.Menu || conn.model('Menu', MenuDefault.schema);

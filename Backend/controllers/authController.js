@@ -16,8 +16,12 @@ export const login = async (req, res) => {
       return handleTenantError(err, res);
     }
 
-    // The database name comes from the resolved tenant connection
-    const databaseName = req.models?.connection?.name || req.headers['x-tenant-db'] || '';
+    // The database name comes from the tenant middleware (req.tenantDb is set from JWT or X-Tenant-DB header)
+    // Fall back to the actual MongoDB connection's db name, then the header
+    const databaseName = req.tenantDb
+      || req.models?.connection?.db?.databaseName
+      || req.headers['x-tenant-db']
+      || '';
     const licenseKey = req.headers['x-license-key'] || '';
 
     const cleanUsername = (username || '').trim();
