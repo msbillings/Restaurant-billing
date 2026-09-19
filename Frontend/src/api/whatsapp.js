@@ -15,8 +15,8 @@ export const sendWhatsAppMessage = async (phone, message) => {
   return response.data;
 };
 
-export const sendWhatsAppBill = async (phone, billText, imageBase64 = null, pdfBase64 = null, fileName = null, documentBase64 = null, mimetype = null, billId = null, billNumber = null) => {
-  const response = await api.post('/whatsapp/send-bill', { phone, billText, imageBase64, pdfBase64, fileName, documentBase64, mimetype, billId, billNumber });
+export const sendWhatsAppBill = async (phone, billText, imageBase64 = null, pdfBase64 = null, fileName = null, documentBase64 = null, mimetype = null, billId = null, billNumber = null, forceResend = false) => {
+  const response = await api.post('/whatsapp/send-bill', { phone, billText, imageBase64, pdfBase64, fileName, documentBase64, mimetype, billId, billNumber, forceResend });
   return response.data;
 };
 

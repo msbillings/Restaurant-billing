@@ -52,6 +52,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     enableGst: false,
     gstRate: 5,
     logo: '',
+    showLogo: true,
     printFormat: '80mm',
     receiptFontSize: 'medium',
     receiptFontFamily: 'Arial, Helvetica, sans-serif',
@@ -711,6 +712,30 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   </div>
                 </div>
 
+                {!isElectron && !isAndroidApp && (
+                  <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
+                    <div className="flex items-start gap-2 text-amber-900 font-bold">
+                      <Printer size={16} className="text-amber-600 mt-0.5 shrink-0" />
+                      <span>{t("Web App Mode (Localhost / Browser):")}</span>
+                    </div>
+                    <p className="text-amber-800 leading-relaxed text-[12px]">
+                      {t("Direct thermal receipt & KOT printers (such as Wi-Fi/LAN network printers like FosiFlow) print directly over TCP socket via ")}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (onNavigate) onNavigate('bill-print');
+                          else window.location.href = '/bill-print';
+                        }}
+                        className="font-bold underline text-primary hover:text-primary/80 cursor-pointer inline-flex items-center gap-0.5">
+                        {t("Printer & Multi-Kitchen Routing")} &rarr;
+                      </button>
+                    </p>
+                    <p className="text-amber-700/80 text-[11px]">
+                      {t("Note: Installed Windows OS USB printers (e.g. POS80) and background silent printing require the MS Billings Desktop App (run Desktop/ app). In Web App Mode, the browser uses direct network socket printing.")}
+                    </p>
+                  </div>
+                )}
+
                 {isAndroidApp && (
                   <button
                     type="button"
@@ -940,6 +965,29 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                             max 2MB • PNG/JPG
                           </span>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Show Logo On/Off Toggle */}
+                    {Boolean(settings.logo && settings.logo !== '[logo_stored]') && (
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                        <div className="space-y-0.5">
+                          <label className="text-sm font-semibold text-text-main flex items-center gap-2">
+                            <ImageIcon size={14} />{t("Show Logo on Bills")}
+                          </label>
+                          <p className="text-xs text-text-muted">{t("Toggle to show or hide the logo on printed bills & WhatsApp e-bill")}</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={settings.showLogo !== false}
+                            onChange={(e) => handleInputChange('showLogo', e.target.checked)}
+                          />
+                          <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${settings.showLogo !== false ? 'bg-primary' : 'bg-gray-300'}`}>
+                            <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${settings.showLogo !== false ? 'translate-x-5' : 'translate-x-0'}`} />
+                          </div>
+                        </label>
                       </div>
                     )}
                   </div>
@@ -1608,7 +1656,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       <span>{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.label || 'Medium'} ({previewMetrics.bodySize})</span>
                     </div>
 
-                    {Boolean(settings.logo && settings.logo !== '[logo_stored]') &&
+                    {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false) &&
                       <div className="flex justify-center mb-2">
                         <img
                           src={settings.logo}

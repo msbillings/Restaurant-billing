@@ -821,6 +821,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
         <Invoice
           bill={selectedBill}
           onClose={() => setSelectedBill(null)}
+          isHistoryView={true}
         />
       )}
 

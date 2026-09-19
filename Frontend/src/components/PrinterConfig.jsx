@@ -5,7 +5,7 @@ import axios from 'axios';
 import { 
   ArrowLeft, Printer, Save, CheckCircle, Network, Usb, Bluetooth, 
   ReceiptText, ChefHat, Plus, Trash2, Edit, X, Search, Check, 
-  AlertTriangle, Layers, Utensils, MapPin, ChevronDown, ChevronUp
+  AlertTriangle, Layers, Utensils, MapPin, ChevronDown, ChevronUp, RefreshCw, Loader2
 } from 'lucide-react';
 import BackButton from './common/BackButton';
 
@@ -13,6 +13,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [testingId, setTestingId] = useState(null);
 
   // Categories & Menu Items & Floors from DB
   const [categories, setCategories] = useState([]);
@@ -26,17 +27,134 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   // Bluetooth device discovery
   const [bluetoothDevices, setBluetoothDevices] = useState([]);
   const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
+  const [btAvailable, setBtAvailable] = useState(null); // null=unchecked, true=available, false=unavailable
 
-  const loadBluetoothDevices = () => {
-    if (typeof window !== 'undefined' && window.AndroidBluetooth?.getPairedDevices) {
+  // Network status
+  const [networkStatus, setNetworkStatus] = useState(null); // null=unchecked, {connected,interfaces}
+
+  // USB Port Auto-Detector discovery
+  const [usbPorts, setUsbPorts] = useState([]);
+  const [isScanningUsb, setIsScanningUsb] = useState(false);
+
+  // Network Printer Auto-Detector discovery
+  const [networkPrinters, setNetworkPrinters] = useState([]);
+  const [isScanningNetwork, setIsScanningNetwork] = useState(false);
+
+  const scanUsbPorts = async () => {
+    setIsScanningUsb(true);
+    try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const res = await axios.get(`${getApiUrl()}/printer-configs/usb-ports`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data && res.data.success && Array.isArray(res.data.ports)) {
+        setUsbPorts(res.data.ports);
+        if (res.data.ports.length > 0) {
+          // Auto-select only if nothing is currently chosen (new config)
+          setFormData(prev => {
+            if (!prev.usbPort) {
+              const recommended = res.data.ports.find(p => p.isThermalLikely) || res.data.ports[0];
+              return {
+                ...prev,
+                usbPort: recommended.port,
+                deviceName: recommended.description || recommended.printerName || prev.deviceName
+              };
+            }
+            // Also: if the previously selected port no longer appears in the live scan, clear it
+            const stillConnected = res.data.ports.some(p => p.port === prev.usbPort);
+            if (!stillConnected) {
+              return { ...prev, usbPort: '', deviceName: '' };
+            }
+            return prev;
+          });
+        } else {
+          // No ports found — clear any stale selection
+          setUsbPorts([]);
+          setFormData(prev => ({ ...prev, usbPort: '', deviceName: '' }));
+        }
+      }
+    } catch (err) {
+      console.warn('Could not scan USB ports:', err);
+    } finally {
+      setIsScanningUsb(false);
+    }
+
+  };
+
+  const scanNetworkPrinters = async () => {
+    setIsScanningNetwork(true);
+    try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Step 1: Check if network is physically connected first
       try {
+        const statusRes = await axios.get(`${getApiUrl()}/printer-configs/network-status`, { headers });
+        if (statusRes.data) {
+          setNetworkStatus({ connected: statusRes.data.connected, interfaces: statusRes.data.interfaces || [] });
+          if (!statusRes.data.connected) {
+            // No LAN/WiFi — stop here, show warning
+            setNetworkPrinters([]);
+            return;
+          }
+        }
+      } catch (_) {}
+
+      // Step 2: Scan subnet for thermal printers on port 9100
+      const res = await axios.get(`${getApiUrl()}/printer-configs/network-printers`, { headers });
+      if (res.data && res.data.success && Array.isArray(res.data.printers)) {
+        setNetworkPrinters(res.data.printers);
+        setNetworkStatus(prev => prev ? { ...prev, _scanned: true } : { connected: true, interfaces: [], _scanned: true });
+        // Auto-select if exactly one printer is found
+        if (res.data.printers.length === 1) {
+          const found = res.data.printers[0];
+          setFormData(prev => ({
+            ...prev,
+            ipAddress: found.ip,
+            port: found.port
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('Could not scan network printers:', err);
+    } finally {
+      setIsScanningNetwork(false);
+    }
+  };
+
+  const loadBluetoothDevices = async () => {
+    setIsScanningBluetooth(true);
+    try {
+      // On Android WebView app: use the native bridge
+      if (typeof window !== 'undefined' && window.AndroidBluetooth?.getPairedDevices) {
+        if (typeof window.AndroidBluetooth.requestPermissions === 'function') {
+          window.AndroidBluetooth.requestPermissions();
+        }
+        await new Promise(r => setTimeout(r, 600));
         const res = JSON.parse(window.AndroidBluetooth.getPairedDevices() || '{}');
         if (res && res.success && Array.isArray(res.devices)) {
           setBluetoothDevices(res.devices);
+          setBtAvailable(true);
         }
-      } catch (e) {
-        console.warn('Could not load Bluetooth devices:', e);
+        return;
       }
+
+      // On desktop (Windows / Linux): call backend scanner
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const res = await axios.get(`${getApiUrl()}/printer-configs/bluetooth-devices`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data) {
+        setBtAvailable(res.data.btAvailable !== false);
+        if (Array.isArray(res.data.devices)) {
+          setBluetoothDevices(res.data.devices);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not scan Bluetooth devices:', err);
+      setBtAvailable(false);
+    } finally {
+      setIsScanningBluetooth(false);
     }
   };
 
@@ -56,6 +174,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     ipAddress: '',
     bluetoothAddress: '',
     deviceName: '',
+    usbPort: '',
     port: 9100,
     connectionType: 'network',
     paperWidth: '80mm',
@@ -163,6 +282,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
   const openAddModal = () => {
     loadBluetoothDevices();
+    scanUsbPorts();
     setFormData({
       name: '',
       type: 'kot',
@@ -174,6 +294,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       ipAddress: '',
       bluetoothAddress: '',
       deviceName: '',
+      usbPort: '',
       port: 9100,
       connectionType: 'network',
       paperWidth: '80mm',
@@ -190,6 +311,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
   const openEditModal = (config) => {
     loadBluetoothDevices();
+    scanUsbPorts();
     setFormData({
       name: config.name || '',
       type: config.type || 'kot',
@@ -201,6 +323,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       ipAddress: config.ipAddress || '',
       bluetoothAddress: config.bluetoothAddress || (config.ipAddress && config.ipAddress.includes(':') ? config.ipAddress : ''),
       deviceName: config.deviceName || '',
+      usbPort: config.usbPort || '',
       port: config.port || 9100,
       connectionType: config.connectionType || 'network',
       paperWidth: config.paperWidth || '80mm',
@@ -226,6 +349,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    if (name === 'connectionType' && value === 'usb') {
+      scanUsbPorts();
+    }
   };
 
   // Toggle Category Selection
@@ -318,12 +444,14 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   };
 
   const handleTestPrint = async (id) => {
+    setTestingId(id);
     const config = configs.find(c => c._id === id);
     if (config && config.connectionType === 'bluetooth') {
       const mac = config.bluetoothAddress || (config.name && config.name.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)?.[0]);
       if (typeof window !== 'undefined' && window.AndroidBluetooth?.testPrint) {
         if (!mac) {
           alert(t("No Bluetooth address linked. Please click Edit and select your paired Bluetooth printer."));
+          setTestingId(null);
           return;
         }
         try {
@@ -334,13 +462,16 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
           } else {
             alert(t("Bluetooth test print failed: ") + (res.error || res.message));
           }
+          setTestingId(null);
           return;
         } catch (e) {
           alert(t("Bluetooth print error: ") + e.message);
+          setTestingId(null);
           return;
         }
       } else {
         alert(t("Bluetooth thermal printing is only supported in the Android Mobile/Tablet App."));
+        setTestingId(null);
         return;
       }
     }
@@ -353,7 +484,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       alert(t("Test print sent successfully!"));
     } catch (error) {
       console.error('Error testing printer', error);
-      alert(t("Failed to connect to printer"));
+      const errMsg = error.response?.data?.message || t("Failed to connect to printer");
+      alert(t("Print Error: ") + errMsg);
+    } finally {
+      setTestingId(null);
     }
   };
 
@@ -411,6 +545,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                 ) : (
                   configs.map((config) => {
                     const isKot = config.type === 'kot';
+                    const isBoth = config.type === 'both';
                     const isItemMode = config.assignmentMode === 'item';
                     const cats = config.assignedCategories || [];
                     const items = config.assignedItems || [];
@@ -440,13 +575,15 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <span className={`inline-flex items-center px-2.5 py-1 text-xs font-bold rounded-lg border ${
-                            config.type === 'kot' 
-                              ? 'bg-orange-50 text-orange-700 border-orange-200' 
-                              : config.type === 'receipt' 
-                                ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                                : 'bg-gray-100 text-gray-700 border-gray-200'
+                            config.type === 'both'
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : config.type === 'kot' 
+                                ? 'bg-orange-50 text-orange-700 border-orange-200' 
+                                : config.type === 'receipt' 
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                  : 'bg-gray-100 text-gray-700 border-gray-200'
                           }`}>
-                            {config.type === 'receipt' ? 'Receipt (Bill)' : config.type === 'kot' ? 'KOT (Kitchen)' : 'General'}
+                            {config.type === 'both' ? 'Both (Bill & KOT)' : config.type === 'receipt' ? 'Receipt (Bill)' : config.type === 'kot' ? 'KOT (Kitchen)' : 'General'}
                           </span>
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
@@ -460,15 +597,18 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                             {config.connectionType === 'network' && (
                               <span className="text-[11px] font-mono text-gray-500">{config.ipAddress}:{config.port || 9100}</span>
                             )}
+                            {config.connectionType === 'usb' && (
+                              <span className="text-[11px] font-mono text-emerald-600 font-semibold">{config.usbPort || config.deviceName || 'USB Port'}</span>
+                            )}
                             {config.connectionType === 'bluetooth' && config.bluetoothAddress && (
                               <span className="text-[11px] font-mono text-indigo-600 truncate max-w-[160px]">{config.bluetoothAddress}</span>
                             )}
                           </div>
                         </td>
                         <td className="px-5 py-3.5 min-w-[240px]">
-                          {!isKot ? (
+                          {config.type === 'receipt' ? (
                             <span className="text-xs text-gray-400 font-medium">All Bills & Receipts</span>
-                          ) : isItemMode ? (
+                          ) : isItemMode && items.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-1.5 max-w-md">
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md border border-indigo-200 shrink-0">
                                 <Utensils size={11} />
@@ -495,7 +635,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                             </div>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-600 text-xs font-medium rounded border border-gray-200">
-                              {config.assignTo || 'All Kitchen Items'}
+                              {isBoth ? 'All Bills & Kitchen Items' : (config.assignTo || 'All Kitchen Items')}
                             </span>
                           )}
                         </td>
@@ -503,9 +643,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleTestPrint(config._id)}
-                              className="p-1.5 rounded-lg text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all cursor-pointer"
+                              disabled={testingId === config._id}
+                              className={`p-1.5 rounded-lg transition-all ${testingId === config._id ? 'text-blue-600 bg-blue-50 opacity-70 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer'}`}
                               title={t("Send Test Receipt")}>
-                              <Printer size={16} />
+                              {testingId === config._id ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />}
                             </button>
                             <button
                               onClick={() => openEditModal(config)}
@@ -541,6 +682,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {configs.map((config) => {
                   const isKot = config.type === 'kot';
+                  const isBoth = config.type === 'both';
                   const isItemMode = config.assignmentMode === 'item';
                   const cats = config.assignedCategories || [];
                   const items = config.assignedItems || [];
@@ -567,13 +709,15 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                               </span>
                             )}
                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${
-                              config.type === 'kot' 
-                                ? 'bg-orange-50 text-orange-700 border-orange-200' 
-                                : config.type === 'receipt' 
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                                  : 'bg-gray-100 text-gray-700 border-gray-200'
+                              config.type === 'both'
+                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                : config.type === 'kot' 
+                                  ? 'bg-orange-50 text-orange-700 border-orange-200' 
+                                  : config.type === 'receipt' 
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                    : 'bg-gray-100 text-gray-700 border-gray-200'
                             }`}>
-                              {config.type === 'receipt' ? 'Receipt' : config.type === 'kot' ? 'KOT' : 'General'}
+                              {config.type === 'both' ? 'Both (Bill & KOT)' : config.type === 'receipt' ? 'Receipt' : config.type === 'kot' ? 'KOT' : 'General'}
                             </span>
                           </div>
                         </div>
@@ -589,6 +733,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           {config.connectionType === 'network' && (
                             <span className="font-mono text-gray-600 font-medium text-[11px] sm:text-xs">{config.ipAddress}:{config.port || 9100}</span>
                           )}
+                          {config.connectionType === 'usb' && (
+                            <span className="font-mono text-emerald-700 font-bold text-[11px] sm:text-xs">{config.usbPort || config.deviceName || 'USB'}</span>
+                          )}
                           {config.connectionType === 'bluetooth' && config.bluetoothAddress && (
                             <span className="font-mono text-indigo-700 font-medium text-[11px] sm:text-xs">{config.bluetoothAddress}</span>
                           )}
@@ -601,16 +748,16 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                             <span>{t("Assigned Routing")}:</span>
-                            {isKot && (
+                            {(isKot || isBoth) && (
                               <span className="font-bold text-gray-700 normal-case">
                                 {isItemMode ? t("Item-Based") : t("Category-Based")}
                               </span>
                             )}
                           </div>
 
-                          {!isKot ? (
+                          {config.type === 'receipt' ? (
                             <span className="text-xs text-gray-400 font-medium">{t("All Bills & Receipts")}</span>
-                          ) : isItemMode ? (
+                          ) : isItemMode && items.length > 0 ? (
                             <div className="space-y-1.5">
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-md border border-indigo-200">
                                 <Utensils size={10} />
@@ -643,7 +790,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                             </div>
                           ) : (
                             <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-medium rounded border border-gray-200">
-                              {config.assignTo || 'All Kitchen Items'}
+                              {isBoth ? t("All Bills & Kitchen Items") : (config.assignTo || t("All Kitchen Items"))}
                             </span>
                           )}
                         </div>
@@ -653,10 +800,11 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                         <button
                           onClick={() => handleTestPrint(config._id)}
-                          className="flex-1 py-2 px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95"
+                          disabled={testingId === config._id}
+                          className={`flex-1 py-2 px-2.5 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors ${testingId === config._id ? 'bg-blue-100 text-blue-800 opacity-70 cursor-not-allowed' : 'bg-blue-50 hover:bg-blue-100 text-blue-700 cursor-pointer active:scale-95'}`}
                         >
-                          <Printer size={14} />
-                          <span>{t("Test Print")}</span>
+                          {testingId === config._id ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+                          <span>{testingId === config._id ? t("Testing...") : t("Test Print")}</span>
                         </button>
                         <button
                           onClick={() => openEditModal(config)}
@@ -734,12 +882,13 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           onChange={handleInputChange}
                           className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium bg-white appearance-none pr-9 cursor-pointer">
                           <option value="">{t("-- Select Floor (Optional) --")}</option>
+                          <option value="all">{t("Both / All Floors")}</option>
                           {floors.map((flr, idx) => (
                             <option key={flr._id || flr.id || idx} value={flr.name}>
                               {flr.name}
                             </option>
                           ))}
-                          {formData.location && !floors.some(f => f.name?.toLowerCase() === formData.location.toLowerCase()) && (
+                          {formData.location && formData.location !== 'all' && !floors.some(f => f.name?.toLowerCase() === formData.location.toLowerCase()) && (
                             <option value={formData.location}>{formData.location}</option>
                           )}
                         </select>
@@ -771,6 +920,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium bg-white">
                       <option value="kot">{t("KOT (Kitchen Order Ticket)")}</option>
                       <option value="receipt">{t("Receipt (Cashier Bill)")}</option>
+                      <option value="both">{t("Both (Bill Receipt & KOT)")}</option>
                       <option value="general">{t("General Reports")}</option>
                     </select>
                   </div>
@@ -805,89 +955,255 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
                 {/* Network IP & Port */}
                 {formData.connectionType === 'network' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                    <div className="sm:col-span-2">
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                        {t("Thermal Printer IP Address")}
+                  <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200 space-y-3">
+                    {/* Scan header */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="text-xs font-bold text-blue-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <Network size={14} className="text-blue-600" />
+                        <span>{t("Auto-Detected Network / WiFi Printer IP")}</span>
                       </label>
-                      <input
-                        type="text"
-                        name="ipAddress"
-                        placeholder="e.g. 192.168.1.100"
-                        value={formData.ipAddress}
-                        onChange={handleInputChange}
-                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-mono font-medium"
-                      />
+                      <button
+                        type="button"
+                        onClick={scanNetworkPrinters}
+                        disabled={isScanningNetwork}
+                        className="text-xs font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-blue-300 shadow-xs transition-all">
+                        <RefreshCw size={12} className={isScanningNetwork ? "animate-spin text-blue-600" : "text-blue-600"} />
+                        <span>{isScanningNetwork ? t("Scanning Network...") : t("Scan Network Printers")}</span>
+                      </button>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                        {t("Port")}
-                      </label>
-                      <input
-                        type="number"
-                        name="port"
-                        value={formData.port}
-                        onChange={handleInputChange}
-                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-mono font-medium"
-                      />
+
+                    {/* Discovered printers dropdown */}
+                    {networkStatus && !networkStatus.connected && !isScanningNetwork && (
+                      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-red-300 bg-red-50 text-[12px] text-red-800 font-semibold">
+                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                        <span>{t("Network not connected. No active LAN or WiFi interface detected on this machine. Please connect a network cable or join a WiFi network.")}</span>
+                      </div>
+                    )}
+
+                    {networkStatus && networkStatus.connected && !isScanningNetwork && networkPrinters.length === 0 && networkStatus._scanned && (
+                      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-orange-300 bg-orange-50 text-[12px] text-orange-800 font-semibold">
+                        <AlertTriangle size={14} className="text-orange-500 shrink-0" />
+                        <span>{t("Network connected but no thermal printer found on port 9100. Make sure printer is ON, on same network, and check its IP settings.")}</span>
+                      </div>
+                    )}
+
+                    {(networkPrinters.length > 0 || isScanningNetwork) && (
+                      <div className="relative">
+                        <select
+                          value={formData.ipAddress}
+                          onChange={(e) => {
+                            const selected = networkPrinters.find(p => p.ip === e.target.value);
+                            setFormData(prev => ({
+                              ...prev,
+                              ipAddress: e.target.value,
+                              port: selected?.port
+                            }));
+                          }}
+                          className="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-blue-300 rounded-xl bg-white font-mono font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none pr-9 cursor-pointer">
+                          <option value="">{t("-- Select Detected Printer IP --")}</option>
+                          {networkPrinters.map((p, i) => (
+                            <option key={i} value={p.ip}>
+                              {p.ip}:{p.port} — Thermal Printer Detected
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={15} className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" />
+                      </div>
+                    )}
+
+                    {networkPrinters.length === 1 && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold">
+                        <CheckCircle size={13} className="text-emerald-600" />
+                        {t("1 printer auto-detected and selected: ")} <span className="font-mono">{networkPrinters[0].ip}</span>
+                      </div>
+                    )}
+
+                    {/* Manual IP + Port row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                          {t("IP Address")}
+                        </label>
+                        <input
+                          type="text"
+                          name="ipAddress"
+                          placeholder="e.g. 192.168.1.100"
+                          value={formData.ipAddress}
+                          onChange={handleInputChange}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-mono font-medium"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1">
+                          {t("Port")}
+                        </label>
+                        <input
+                          type="number"
+                          name="port"
+                          value={formData.port}
+                          onChange={handleInputChange}
+                          className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none font-mono font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {networkStatus && networkStatus.connected && networkStatus.interfaces && networkStatus.interfaces.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {networkStatus.interfaces.map((iface, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold rounded-md border border-emerald-200">
+                            <CheckCircle size={10} className="text-emerald-600" />
+                            {iface.name}: {iface.address}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="p-2.5 bg-blue-100/60 rounded-lg border border-blue-200/80 text-[11px] text-blue-900 flex items-start gap-2">
+                      <CheckCircle size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                      <span>
+                        {t("LAN / WiFi: Scans your local network for printers on port 9100. If only one is found, it is auto-selected. For multiple printers, choose from the dropdown or enter the IP manually.")}
+                      </span>
                     </div>
                   </div>
                 )}
 
+                {/* USB Port Auto-Detector & Selector */}
+                {formData.connectionType === 'usb' && (
+                  <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="block text-xs font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <Usb size={14} className="text-emerald-600" />
+                        <span>{t("Auto-Detected USB / Virtual COM Port")}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={scanUsbPorts}
+                        disabled={isScanningUsb}
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-emerald-300 shadow-xs transition-all">
+                        <RefreshCw size={12} className={isScanningUsb ? "animate-spin text-emerald-600" : "text-emerald-600"} />
+                        <span>{isScanningUsb ? t("Scanning Ports...") : t("Scan USB Ports")}</span>
+                      </button>
+                    </div>
+
+                    {/* USB port dropdown — only shown when live ports are available */}
+                    {usbPorts.length > 0 ? (
+                      <select
+                        name="usbPort"
+                        value={formData.usbPort || ''}
+                        onChange={(e) => {
+                          const selectedPort = e.target.value;
+                          const matched = usbPorts.find(p => p.port === selectedPort);
+                          setFormData(prev => ({
+                            ...prev,
+                            usbPort: selectedPort,
+                            deviceName: matched?.description || matched?.printerName || prev.deviceName
+                          }));
+                        }}
+                        className="w-full min-w-0 truncate px-3.5 py-2.5 text-xs sm:text-sm border border-emerald-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-mono">
+                        <option value="">{t("-- Select Attached USB / Virtual COM Port --")}</option>
+                        {usbPorts.map(p => (
+                          <option key={p.port} value={p.port}>
+                            {p.displayName || p.port} {p.isThermalLikely ? `★ [Thermal Printer]` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : !isScanningUsb && (
+                      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-orange-300 bg-orange-50 text-[12px] text-orange-800 font-semibold">
+                        <AlertTriangle size={14} className="text-orange-500 shrink-0" />
+                        <span>{t("No USB printer currently connected. Please plug in your USB cable and click Scan USB Ports.")}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        name="usbPort"
+                        placeholder={t("Or enter port manually (e.g. USB001, USB009, COM3)")}
+                        value={formData.usbPort || ''}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-1.5 text-xs font-mono border border-emerald-200 rounded-lg bg-white"
+                      />
+                    </div>
+
+                    <div className="p-2.5 bg-emerald-100/60 rounded-lg border border-emerald-200/80 text-[11px] text-emerald-900 flex items-start gap-2">
+                      <CheckCircle size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <span>
+                        {t("Driverless Plug & Play: MS Billings automatically detects your printer hardware (e.g. KPC307, Epson, POS80) and streams raw ESC/POS binary directly to the USB cable without needing Windows or Mac drivers installed.")}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+
                 {/* Bluetooth Device Selection */}
                 {formData.connectionType === 'bluetooth' && (
                   <div className="bg-indigo-50/70 p-4 rounded-xl border border-indigo-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-indigo-950 uppercase tracking-wide flex items-center gap-1.5">
+                    {/* Header + Scan button */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="text-xs font-bold text-indigo-950 uppercase tracking-wide flex items-center gap-1.5">
                         <Bluetooth size={14} className="text-indigo-600" />
-                        <span>{t("Select Paired Bluetooth Thermal Printer")}</span>
+                        <span>{t("Auto-Detected Bluetooth Thermal Printer")}</span>
                       </label>
-                      {typeof window !== 'undefined' && window.AndroidBluetooth && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsScanningBluetooth(true);
-                            if (typeof window.AndroidBluetooth.requestPermissions === 'function') {
-                              window.AndroidBluetooth.requestPermissions();
-                            }
-                            setTimeout(() => {
-                              loadBluetoothDevices();
-                              setIsScanningBluetooth(false);
-                            }, 700);
-                          }}
-                          className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-indigo-200 shadow-xs">
-                          <Bluetooth size={12} className={isScanningBluetooth ? "animate-spin text-indigo-600" : "text-indigo-600"} />
-                          <span>{isScanningBluetooth ? t("Scanning...") : t("Scan Devices")}</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={loadBluetoothDevices}
+                        disabled={isScanningBluetooth}
+                        className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-indigo-300 shadow-xs transition-all">
+                        <RefreshCw size={12} className={isScanningBluetooth ? "animate-spin text-indigo-600" : "text-indigo-600"} />
+                        <span>{isScanningBluetooth ? t("Scanning Bluetooth...") : t("Scan Bluetooth Devices")}</span>
+                      </button>
                     </div>
 
-                    <select
-                      name="bluetoothAddress"
-                      value={formData.bluetoothAddress || ''}
-                      onChange={(e) => {
-                        const selectedAddr = e.target.value;
-                        const found = bluetoothDevices.find(d => d.address === selectedAddr);
-                        setFormData(prev => ({
-                          ...prev,
-                          bluetoothAddress: selectedAddr,
-                          deviceName: found ? found.name : prev.deviceName
-                        }));
-                      }}
-                      className="w-full min-w-0 truncate px-3.5 py-2.5 text-xs sm:text-sm border border-indigo-200 rounded-xl bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none">
-                      <option value="">{t("-- Select Paired Bluetooth Printer --")}</option>
-                      {bluetoothDevices.map(d => (
-                        <option key={d.address} value={d.address}>
-                          {d.name} ({d.address})
-                        </option>
-                      ))}
-                      {formData.bluetoothAddress && !bluetoothDevices.some(d => d.address === formData.bluetoothAddress) && (
-                        <option value={formData.bluetoothAddress}>
-                          {formData.deviceName || 'Configured Device'} ({formData.bluetoothAddress})
-                        </option>
-                      )}
-                    </select>
+                    {/* Bluetooth not available */}
+                    {btAvailable === false && !isScanningBluetooth && (
+                      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-red-300 bg-red-50 text-[12px] text-red-800 font-semibold">
+                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                        <span>{t("Bluetooth is not available or not enabled on this device. Please turn ON Bluetooth and try again.")}</span>
+                      </div>
+                    )}
 
+                    {/* Bluetooth available but no paired devices */}
+                    {btAvailable === true && !isScanningBluetooth && bluetoothDevices.length === 0 && (
+                      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-orange-300 bg-orange-50 text-[12px] text-orange-800 font-semibold">
+                        <AlertTriangle size={14} className="text-orange-500 shrink-0" />
+                        <span>{t("Bluetooth is available but no paired devices were found. Please pair your thermal printer in your system Bluetooth settings first, then scan again.")}</span>
+                      </div>
+                    )}
+
+                    {/* Devices dropdown — shown only when devices are available */}
+                    {bluetoothDevices.length > 0 && (
+                      <div className="relative">
+                        <select
+                          name="bluetoothAddress"
+                          value={formData.bluetoothAddress || ''}
+                          onChange={(e) => {
+                            const selectedAddr = e.target.value;
+                            const found = bluetoothDevices.find(d => d.address === selectedAddr);
+                            setFormData(prev => ({
+                              ...prev,
+                              bluetoothAddress: selectedAddr,
+                              deviceName: found ? found.name : prev.deviceName
+                            }));
+                          }}
+                          className="w-full min-w-0 truncate px-3.5 py-2.5 text-xs sm:text-sm border border-indigo-300 rounded-xl bg-white font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none appearance-none pr-9 cursor-pointer">
+                          <option value="">{t("-- Select Paired Bluetooth Printer --")}</option>
+                          {/* Thermal printers first */}
+                          {bluetoothDevices.filter(d => d.isThermal).map(d => (
+                            <option key={d.address || d.name} value={d.address}>
+                              ★ {d.name}{d.address ? ` (${d.address})` : ''} — Thermal Printer
+                            </option>
+                          ))}
+                          {bluetoothDevices.filter(d => !d.isThermal).map(d => (
+                            <option key={d.address || d.name} value={d.address}>
+                              {d.name}{d.address ? ` (${d.address})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={15} className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" />
+                      </div>
+                    )}
+
+                    {/* Manual MAC input */}
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
@@ -899,14 +1215,18 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       />
                     </div>
 
-                    <p className="text-[11px] text-indigo-700">
-                      {t("Make sure your thermal printer is turned ON and paired under tablet Android Bluetooth Settings first.")}
-                    </p>
+                    <div className="p-2.5 bg-indigo-100/60 rounded-lg border border-indigo-200/80 text-[11px] text-indigo-900 flex items-start gap-2">
+                      <Bluetooth size={13} className="text-indigo-600 shrink-0 mt-0.5" />
+                      <span>
+                        {t("Windows/Linux: Scans currently paired Bluetooth devices from system hardware. Android App: Scans paired devices from Android Bluetooth settings. Make sure printer is ON and paired before scanning.")}
+                      </span>
+                    </div>
                   </div>
                 )}
 
+
                 {/* KOT ROUTING CONFIGURATION */}
-                {formData.type === 'kot' && (
+                {(formData.type === 'kot' || formData.type === 'both') && (
                   <div className="p-4 bg-gradient-to-b from-gray-50 to-white rounded-xl border border-gray-200 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200">
                       <div>
@@ -1147,7 +1467,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                 )}
 
                 {/* Receipt Header / Footer configuration */}
-                {formData.type === 'receipt' && (
+                {(formData.type === 'receipt' || formData.type === 'both') && (
                   <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
                     <div>
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">{t("Bill Header Text")}</label>

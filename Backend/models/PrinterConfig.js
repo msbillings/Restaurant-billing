@@ -8,7 +8,7 @@ const printerConfigSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['receipt', 'kot', 'general'],
+    enum: ['receipt', 'kot', 'general', 'both'],
     required: true
   },
   assignTo: {
@@ -42,6 +42,10 @@ const printerConfigSchema = new mongoose.Schema({
   },
   deviceName: {
     type: String,
+    trim: true
+  },
+  usbPort: {
+    type: String, // e.g. "USB009", "USB001", "COM3"
     trim: true
   },
   port: {

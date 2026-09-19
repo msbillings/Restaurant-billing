@@ -3,6 +3,7 @@ import whatsappManager from '../services/whatsappService.js';
 import { getTenantModels } from '../utils/tenantManager.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
+import { uploadImage } from '../utils/cloudinary.js';
 
 export const resolveTenantInfo = async (req) => {
   let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.headers?.['X-Tenant-DB'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
@@ -158,7 +159,7 @@ export const sendMessage = async (req, res) => {
 
 export const sendBill = async (req, res) => {
   try {
-    const { phone, billText, imageBase64, pdfBase64, documentBase64, mimetype, fileName, billId, billNumber } = req.body;
+    const { phone, billText, imageBase64, pdfBase64, documentBase64, mimetype, fileName, billId, billNumber, forceResend } = req.body;
     if (!phone) {
       return res.status(400).json({ error: 'Destination phone number is required.' });
     }
@@ -167,11 +168,12 @@ export const sendBill = async (req, res) => {
     const imgKB  = imageBase64    ? Math.round(imageBase64.length    * 0.75 / 1024) : 0;
     const pdfKB  = pdfBase64      ? Math.round(pdfBase64.length      * 0.75 / 1024) : 0;
     const docKB  = documentBase64 ? Math.round(documentBase64.length * 0.75 / 1024) : 0;
-    console.log(`[WhatsApp sendBill] ▶ phone=${phone} | imageKB=${imgKB} | pdfKB=${pdfKB} | docKB=${docKB} | hasText=${!!billText} | billId=${billId || 'none'} | billNumber=${billNumber || 'none'}`);
+    console.log(`[WhatsApp sendBill] ▶ phone=${phone} | imageKB=${imgKB} | pdfKB=${pdfKB} | docKB=${docKB} | hasText=${!!billText} | billId=${billId || 'none'} | billNumber=${billNumber || 'none'} | forceResend=${!!forceResend}`);
 
     const { tenantId, whatsappService } = await resolveTenantInfo(req);
 
     // --- Prevent duplicate WhatsApp sends for the same bill ---
+    // Skip duplicate check if user explicitly requested a resend (e.g. customer didn't receive it)
     let models = null;
     try {
       models = req.models || (await getTenantModels(tenantId));
@@ -179,7 +181,7 @@ export const sendBill = async (req, res) => {
 
     const BillModel = (models && models.Bill) || getTenantModel(req, 'Bill', BillDefault);
 
-    if (BillModel && (billId || billNumber)) {
+    if (!forceResend && BillModel && (billId || billNumber)) {
       try {
         const query = billId && mongoose.Types.ObjectId.isValid(billId)
           ? { _id: billId }
@@ -208,28 +210,46 @@ export const sendBill = async (req, res) => {
     const svcStatus    = whatsappService.getStatus();
     console.log(`[WhatsApp sendBill] Socket readyState AFTER  ensureConnection: ${wsStateAfter} | service.status: ${whatsappService.status} | connected: ${svcStatus.status}`);
 
-    if (svcStatus.status !== 'CONNECTED' && !whatsappService.connectedNumber) {
-      console.error(`[WhatsApp sendBill] ❌ Not connected — aborting send. tenantId=${tenantId}`);
-      return res.status(400).json({ error: 'WhatsApp bot is not connected. Please scan QR or pair your phone in Settings.' });
+    if (svcStatus.status !== 'CONNECTED' || !whatsappService.connectedNumber) {
+      console.error(`[WhatsApp sendBill] ❌ Bot not connected (status=${svcStatus.status}) — aborting send. tenantId=${tenantId}`);
+      return res.status(400).json({ success: false, error: 'WhatsApp bot is not connected. Please scan QR or pair your phone in Settings.' });
+    }
+
+    if (!imageBase64 && !pdfBase64 && !documentBase64) {
+      console.error(`[WhatsApp sendBill] ❌ No receipt photo image provided — aborting. Bill image is mandatory. tenantId=${tenantId}`);
+      return res.status(400).json({ error: 'Receipt photo image is mandatory for sending WhatsApp e-Bill.' });
+    }
+
+    let imageUrl = null;
+    if (imageBase64 && typeof imageBase64 === 'string' && imageBase64.startsWith('data:image/')) {
+      try {
+        console.log(`[WhatsApp sendBill] ⚡ Uploading receipt image to Cloudinary for fast WhatsApp delivery...`);
+        const cloudRes = await uploadImage(imageBase64, {
+          folder: `msbillings/${tenantId}/receipts`,
+          publicId: `bill_${billNumber || Date.now()}`,
+          maxWidth: 900
+        });
+        if (cloudRes && cloudRes.url) {
+          imageUrl = cloudRes.url;
+          console.log(`[WhatsApp sendBill] ✅ Cloudinary receipt image URL: ${imageUrl}`);
+        }
+      } catch (cErr) {
+        console.warn(`[WhatsApp sendBill] Cloudinary upload warning (fallback to base64 buffer):`, cErr.message);
+      }
     }
 
     try {
-      if (imageBase64 || pdfBase64 || documentBase64) {
-        console.log(`[WhatsApp sendBill] Sending MEDIA to ${phone}...`);
-        await whatsappService.sendBillMedia(phone, {
-          imageBase64,
-          pdfBase64,
-          documentBase64,
-          mimetype,
-          caption: billText,
-          fileName
-        });
-        console.log(`[WhatsApp sendBill] ✅ Media sent successfully to ${phone}`);
-      } else {
-        console.log(`[WhatsApp sendBill] Sending TEXT to ${phone}...`);
-        await whatsappService.sendMessage(phone, billText);
-        console.log(`[WhatsApp sendBill] ✅ Text sent successfully to ${phone}`);
-      }
+      console.log(`[WhatsApp sendBill] Sending MEDIA (Receipt Photo) to ${phone}... (hasCloudUrl=${!!imageUrl})`);
+      await whatsappService.sendBillMedia(phone, {
+        imageBase64,
+        imageUrl,
+        pdfBase64,
+        documentBase64,
+        mimetype,
+        caption: billText,
+        fileName
+      });
+      console.log(`[WhatsApp sendBill] ✅ Receipt photo & media sent successfully to ${phone}`);
     } catch (sendErr) {
       // If local socket send failed (e.g. Baileys conflict with 24/7 Render cloud gateway),
       // seamlessly forward the bill send request to the Render Cloud Gateway!

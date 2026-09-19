@@ -10,7 +10,7 @@ import api from '../api/axios';
 import { formatTime12 } from '../utils/timeFormat';
 import { getReceiptFontMetrics } from '../utils/receiptFonts';
 
-const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false }) => {
+const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
   const { t } = useLanguage();
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
   const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
@@ -68,8 +68,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
+
   // ─── Duplicate WhatsApp Send Prevention ──────────────────────────────────────
   const billIdentifier = bill?.billNumber || bill?._id;
+  // IMPORTANT: Only consider a bill "already sent" if THIS session sent it
+  // (via sessionStorage or whatsappBillSentIds). Do NOT use bill?.whatsappSent
+  // from the DB — it may be stale/wrong and would block legitimate resends.
   const [isAlreadySent, setIsAlreadySent] = useState(() => {
     if (!billIdentifier) return false;
     try {
@@ -77,7 +81,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       if (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') return true;
       if (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true') return true;
       if (whatsappBillSentIds && (whatsappBillSentIds.has(billIdentifier) || (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) || (bill?._id && whatsappBillSentIds.has(bill._id)))) return true;
-      if (bill?.whatsappSent) return true;
+      // NOTE: bill?.whatsappSent (DB flag) intentionally NOT used here — stale DB state
+      // should NOT block the user from sending. Only in-session confirms count.
     } catch (e) {}
     return false;
   });
@@ -91,11 +96,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) ||
         (bill?._id && whatsappBillSentIds.has(bill._id))
       );
-      if (sentInSession || sentInSet || bill?.whatsappSent) {
+      // Only update from session-based confirms, not DB flag
+      if (sentInSession || sentInSet) {
         setIsAlreadySent(true);
       }
     } catch (e) {}
-  }, [bill?.billNumber, bill?._id, bill?.whatsappSent, whatsappBillSentIds]);
+  }, [bill?.billNumber, bill?._id, whatsappBillSentIds]);
   // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -160,6 +166,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     ...billRest,
     logo: effectiveLogo
   };
+
+  // For bills viewed from history (isHistoryView=true), check if the bill explicitly has showLogo saved.
+  // If so, use it exactly as it was when the bill was generated/settled.
+  // Otherwise fallback to the active settings toggle.
+  const shouldShowLogo = bill?.showLogo !== undefined 
+    ? bill.showLogo 
+    : (activeSettings.showLogo !== false);
   const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
     enableCgst: activeSettings.enableCgst !== false,
     enableSgst: activeSettings.enableSgst !== false,
@@ -171,8 +184,23 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const fontMetrics = getReceiptFontMetrics(activeSettings.receiptFontSize || 'medium', activeSettings.printFormat);
   const receiptFont = activeSettings.receiptFontFamily || "Arial, Helvetica, sans-serif";
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
+  const activeNetworkReceiptPrinter = (() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+      return cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general') && c.connectionType === 'network' && c.ipAddress) || null;
+    } catch (_) {
+      return null;
+    }
+  })();
 
-  const handlePrint = async () => {
+  const handlePrint = async (forceBrowserPrint = false) => {
+    // 1. Explicit request to use standard browser print (e.g. Save to PDF)
+    if (forceBrowserPrint === true) {
+      window.print();
+      return;
+    }
+
+    // 2. Desktop Electron App
     if (window.electronAPI) {
       const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
       const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
@@ -182,7 +210,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       } else {
         window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
       }
-    } else if (window.AndroidBluetooth) {
+      return;
+    }
+
+    // 3. Android APK (Bluetooth)
+    if (window.AndroidBluetooth) {
       let targetPrinter = activeSettings.billingPrinter || '';
       let match = targetPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
       let macAddress = match ? match[0] : null;
@@ -229,11 +261,47 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       } else {
         window.print();
       }
-    } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
-      window.AndroidPrint.print();
-    } else {
-      window.print();
+      return;
     }
+
+    // 4. Android System Print
+    if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+      window.AndroidPrint.print();
+      return;
+    }
+
+    // 5. Direct Network Thermal Receipt Printer (TCP ESC/POS via Node.js Backend, e.g. FosiFlow)
+    try {
+      const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+      const networkReceiptPrinter = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && c.connectionType === 'network' && c.ipAddress);
+
+      if (networkReceiptPrinter) {
+        setToast({ message: `🖨️ ${t("Sending bill to")} ${networkReceiptPrinter.name} (${networkReceiptPrinter.ipAddress})...`, type: 'info' });
+        const billPayload = {
+          ...bill,
+          restaurantDetails: activeSettings
+        };
+        const response = await api.post('/printer-configs/print-bill', {
+          bill: billPayload,
+          billId: bill?._id,
+          printerId: networkReceiptPrinter._id
+        });
+
+        if (response.data && response.data.success) {
+          setToast({ message: `✅ ${t("Bill printed to")} ${networkReceiptPrinter.name}!`, type: 'success' });
+          return;
+        } else {
+          setToast({ message: response.data?.message || `Failed to print to ${networkReceiptPrinter.name}`, type: 'warning' });
+        }
+      }
+    } catch (netErr) {
+      console.warn('[Print] Network receipt print error, falling back to browser print:', netErr);
+      const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
+      setToast({ message: `⚠️ ${errMsg}. ${t("Opening browser print...")}`, type: 'warning' });
+    }
+
+    // 6. Default Fallback: Browser Native Print Dialog
+    window.print();
   };
 
   const generateEBillWhatsAppText = (overrideName = null) => {
@@ -374,11 +442,9 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       `_${footerMessage}_`;
   };
 
-  const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null) => {
-    if (isAlreadySent) {
-      setToast({ message: t("This bill has already been sent to customer via WhatsApp"), type: 'info' });
-      return;
-    }
+  const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null, forceResend = false) => {
+    // Note: isAlreadySent guard removed — user can click Resend (↺) button which
+    // resets isAlreadySent to false before calling this function.
 
     const numToSend = (targetPhone !== null ? targetPhone : (whatsappPhone || bill?.customerPhone || '')).trim();
     let cleanPhone = numToSend.replace(/[^0-9]/g, '');
@@ -405,7 +471,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     // High-resolution receipt image capture
     let imageBase64 = null;
     try {
-      const receiptElement = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
+      const receiptElement = document.querySelector('#invoice-print-area .receipt-print');
       console.log('[eBill] Receipt element found:', !!receiptElement, receiptElement);
       if (receiptElement) {
         const canvas = await Promise.race([
@@ -492,13 +558,20 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           const approxKB = Math.round(imageBase64.length * 0.75 / 1024);
           console.log(`[eBill] Image base64 size: ~${approxKB} KB`);
         } else {
-          console.warn('[eBill] html2canvas returned null/timed-out canvas — fallback to text');
+          console.warn('[eBill] html2canvas returned null/timed-out canvas');
         }
       } else {
         console.warn('[eBill] .receipt-print element NOT found in DOM');
       }
     } catch (captureErr) {
-      console.error('[eBill] Receipt image capture error (fallback to text):', captureErr);
+      console.error('[eBill] Receipt image capture error:', captureErr);
+    }
+
+    if (!imageBase64) {
+      console.warn('[eBill] ❌ Receipt image capture failed — ABORTING send to guarantee bill photo requirement.');
+      setToast({ message: t('Receipt photo capture failed. WhatsApp e-Bill requires bill receipt image.'), type: 'error' });
+      setSendingAutomated(false);
+      return;
     }
 
     try {
@@ -513,7 +586,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           null,
           null,
           bill?._id || null,
-          bill?.billNumber || null
+          bill?.billNumber || null,
+          forceResend  // bypass duplicate-check on backend if user explicitly resends
         ),
         new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 45000))
       ]);
@@ -535,15 +609,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
     } catch (err) {
       if (err?.response?.status === 409 || err?.response?.data?.alreadySent) {
-        setIsAlreadySent(true);
-        if (bill?.billNumber) {
-          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) {}
-        }
-        if (bill?._id) {
-          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) {}
-        }
-        setToast({ message: t("This bill has already been sent to customer via WhatsApp"), type: 'info' });
+        // 409 means DB says it was sent before — but user says customer didn't receive it.
+        // DO NOT silently mark as sent. Show a warning and let user resend.
+        setToast({
+          message: t("System shows bill was sent before, but customer may not have received it. Click WhatsApp e-Bill again to resend."),
+          type: 'warning'
+        });
         setShowWhatsAppModal(false);
+        setSendingAutomated(false);
         return;
       }
       console.error('[eBill] ❌ WhatsApp send FAILED:', err?.message);
@@ -577,9 +650,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       autoSendTriggeredRef.current = true;
       console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill with original receipt image for ${cleanPhone}...`);
       // Start auto-send without cancelable cleanup timer so re-renders cannot abort it
+      // Increased delay to 1500ms to allow Invoice fade-in animation to complete 
+      // smoothly before html2canvas blocks the main thread.
       setTimeout(() => {
         handleSendWhatsAppBill(targetPhone, custName || undefined);
-      }, 350);
+      }, 1500);
     }
   }, [autoSendWhatsApp, isAlreadySent, whatsappPhone, bill?.customerPhone, bill?.billNumber]);
 
@@ -632,9 +707,33 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           </button>
         }
         {isAlreadySent ? (
-          <div className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700/90 text-white rounded-xl shadow-md font-bold text-xs sm:text-sm select-none border border-emerald-600/60" title={t("e-Bill already sent via WhatsApp")}>
-            <span className="text-white text-sm font-black leading-none">✓</span>
-            <span>{t("WhatsApp Sent")}</span>
+          <div className="flex items-center bg-emerald-700/90 rounded-xl shadow-md overflow-hidden border border-emerald-600/60">
+            <div
+              className="flex items-center gap-1.5 px-3.5 py-2 text-white font-bold text-xs sm:text-sm select-none"
+              title={t("e-Bill sent via WhatsApp this session")}
+            >
+              <span className="text-white text-sm font-black leading-none">✓</span>
+              <span>{t("WhatsApp Sent")}</span>
+            </div>
+            <button
+              onClick={() => {
+                // Allow resend — customer may not have received it
+                setIsAlreadySent(false);
+                if (bill?.billNumber) {
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill.billNumber}`); } catch (e) {}
+                }
+                if (bill?._id) {
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill._id}`); } catch (e) {}
+                }
+                setToast({ message: t("Ready to resend. Click WhatsApp e-Bill to send again."), type: 'info' });
+              }}
+              className="px-2 py-2 text-emerald-200 hover:text-white hover:bg-emerald-600 border-l border-emerald-600/60 transition-colors cursor-pointer"
+              title={t("Resend — customer didn't receive it?")}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4" />
+              </svg>
+            </button>
           </div>
         ) : (
           <div className="flex items-center bg-[#25D366] rounded-xl shadow-md overflow-hidden">
@@ -672,12 +771,23 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             </button>
           </div>
         )}
-        <button
-          onClick={handlePrint}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-white text-gray-900 rounded-xl hover:bg-gray-100 transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
-          <Printer size={16} />
-          <span>{t("Print Bill")}</span>
-        </button>
+        <div className="flex items-center bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+          <button
+            onClick={() => handlePrint(false)}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-gray-900 font-bold text-xs sm:text-sm hover:bg-gray-100 transition-all active:scale-95 cursor-pointer"
+            title={activeNetworkReceiptPrinter ? `${t("Print directly to")} ${activeNetworkReceiptPrinter.name} (${activeNetworkReceiptPrinter.ipAddress})` : t("Print Bill")}>
+            <Printer size={16} className={activeNetworkReceiptPrinter ? "text-emerald-600" : "text-gray-900"} />
+            <span>{activeNetworkReceiptPrinter ? `${t("Print")} (${activeNetworkReceiptPrinter.name})` : t("Print Bill")}</span>
+          </button>
+          {activeNetworkReceiptPrinter && (
+            <button
+              onClick={() => handlePrint(true)}
+              className="px-2.5 py-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 border-l border-gray-200 transition-colors cursor-pointer text-[11px] font-bold"
+              title={t("Open browser print dialog (PDF / Office Printer)")}>
+              PDF
+            </button>
+          )}
+        </div>
         <button
           onClick={onClose}
           className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-gray-900 rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
@@ -968,7 +1078,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '3px' }}>
-              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]') && (
+              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '3px' }}>
                   <img 
                     src={activeSettings.logo} 
@@ -1288,7 +1398,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           
           {/* Header */}
           <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
-            {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]') &&
+            {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) &&
               <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
                 <img 
                   src={activeSettings.logo} 

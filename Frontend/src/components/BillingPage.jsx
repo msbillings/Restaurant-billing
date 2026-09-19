@@ -4,6 +4,7 @@ import MenuGrid from './MenuGrid';
 import TableDropdown from './TableDropdown';
 import BillSummary from './BillSummary';
 import PaymentModal from './PaymentModal';
+import PaymentSuccessScreen from './PaymentSuccessScreen';
 import KOT from './KOT';
 import Toast from './Toast';
 import { getActiveOrder, saveOrder, generateBill, settleBill, apiGenerateKOT, apiReopenOrder, apiCancelOrder, apiTransferTable, getOpenOrders, getDailyStats } from '../api/billing';
@@ -17,6 +18,10 @@ import CancelOrderModal from './CancelOrderModal';
 import TransferTableModal from './TransferTableModal';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
+import html2canvas from 'html2canvas';
+import { QRCodeSVG } from 'qrcode.react';
+// Pre-load canvas-confetti so it's ready instantly when payment succeeds (no cold-start lag)
+import 'canvas-confetti';
 
 // Animated count-up component for Sales Badge
 const AnimatedSalesCount = ({ value, duration = 1500 }) => {
@@ -445,6 +450,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // 'save' | 'hold' | 'print' | 'kot' | 'edit' | 'cancel' | 'settle'
+  const [showSuccessScreen, setShowSuccessScreen] = useState(false);
+  const [successPaymentData, setSuccessPaymentData] = useState(null); // { paymentData, billData }
+  const [offscreenBill, setOffscreenBill] = useState(null);
 
   // ─── WhatsApp Auto-Send Toggle & Status ──────────────────────────────────────
   // Toggle persisted across sessions in localStorage so it stays active
@@ -488,6 +496,198 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     } catch {}
     return false;
   };
+
+  const markBillAlreadySent = (id) => {
+    if (!id) return;
+    try {
+      whatsappBillSentIds.current.add(id);
+      sessionStorage.setItem(`ms_wa_sent_${id}`, 'true');
+    } catch {}
+  };
+
+  const buildWhatsAppBillText = (bill, s = {}) => {
+    const restName = s.restaurantName || 'MS Billings Restaurant';
+    const billNo = bill.billNumber || bill.confirmedBillNumber || '---';
+    const customerName = bill.customerName || '';
+    const customerPhone = bill.customerPhone || '';
+    const bType = bill.billType || 'Dine-In';
+
+    const settledAt = bill.settledAt ? new Date(bill.settledAt) : new Date();
+    const dateStr = settledAt.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const timeStr = settledAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }).toUpperCase();
+
+    let tableInfo = bill.tableNo || bType;
+    if (bType === 'Dine-In') tableInfo = `Dine-In (${bill.tableNo || 'Table'})`;
+
+    let itemsList = '';
+    let totalQty = 0;
+    if (Array.isArray(bill.items)) {
+      itemsList = bill.items.map(item => {
+        const qty = item.quantity || 1;
+        const price = (item.price || 0) * qty;
+        totalQty += qty;
+        return `• ${item.name || 'Item'} x${qty} - ₹${Number(price).toFixed(2)}`;
+      }).join('\n');
+    }
+
+    const subtotal = Number(bill.subtotal || 0).toFixed(2);
+    const total = Number(bill.total || 0).toFixed(2);
+    let discount = bill.discount > 0 ? `\n• *Discount:* -₹${Number(bill.discount).toFixed(2)}` : '';
+
+    let paymentInfo = bill.paymentMode || 'Cash';
+    if (bill.paymentMode === 'Mixed' && bill.splitPayments) {
+      const parts = [];
+      if (bill.splitPayments.cash > 0) parts.push(`Cash: ₹${bill.splitPayments.cash}`);
+      if (bill.splitPayments.upi > 0) parts.push(`UPI: ₹${bill.splitPayments.upi}`);
+      if (bill.splitPayments.card > 0) parts.push(`Card: ₹${bill.splitPayments.card}`);
+      if (parts.length > 0) paymentInfo = `Mixed (${parts.join(', ')})`;
+    }
+
+    const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+    let header = '';
+    let footerMessage = s.footerMessage;
+
+    if (bType === 'Delivery') {
+      header = customerName
+        ? `🛵 Dear *${customerName}*, thank you for ordering delivery with us!\n🧾 *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛵 *HOME DELIVERY E-BILL* 🛵\n🏠 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR YOUR DELIVERY ORDER! ENJOY YOUR MEAL ***';
+    } else if (bType === 'Takeaway') {
+      header = customerName
+        ? `🛍️ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛍️ *TAKEAWAY E-BILL RECEIPT* 🛍️\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR ORDERING TAKEAWAY! VISIT AGAIN ***';
+    } else {
+      header = customerName
+        ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\n🏨 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU! VISIT AGAIN ***';
+    }
+
+    return `${header}\n${READ_MORE}\n` +
+      (s.address ? `📍 ${s.address.split('\n')[0]}\n` : '') +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `*Bill No:* #${billNo}\n` +
+      `*Date & Time:* ${dateStr}, ${timeStr}\n` +
+      `*Order Type:* ${tableInfo}\n` +
+      (customerName ? `*Customer:* ${customerName}\n` : '') +
+      (customerPhone ? `*Phone:* ${customerPhone}\n` : '') +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🛒 *ITEMS ORDERED (${totalQty} Qty):*\n` +
+      `${itemsList}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `• *Subtotal:* ₹${subtotal}` +
+      discount +
+      `\n• *GRAND TOTAL:* *₹${total}*\n` +
+      `• *Payment Mode:* ${paymentInfo}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `_${footerMessage}_`;
+  };
+
+  const triggerInstantWhatsAppAutoSend = async (bill) => {
+    if (!bill || !bill.customerPhone) return;
+    let cleanPhone = bill.customerPhone.trim().replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+      cleanPhone = '91' + cleanPhone.slice(1);
+    } else if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+    if (cleanPhone.length < 10) return;
+
+    const billNo = bill.billNumber || bill.confirmedBillNumber;
+    if (isBillAlreadySent(billNo)) return;
+    markBillAlreadySent(billNo);
+
+    const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+    const billText = buildWhatsAppBillText(bill, s);
+
+    // Mount offscreen bill for canvas capture
+    setOffscreenBill(bill);
+
+    // Yield frames so React mounts DOM element and loads images
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await new Promise(r => setTimeout(r, 150));
+
+    let imageBase64 = null;
+    try {
+      const el = document.getElementById('wa-offscreen-receipt');
+      if (el) {
+        // Wait for images inside el (like logo) to finish loading
+        const imgs = Array.from(el.querySelectorAll('img'));
+        await Promise.all(imgs.map(img => {
+          if (img.complete) return Promise.resolve();
+          return new Promise(res => { img.onload = res; img.onerror = res; });
+        }));
+
+        const canvas = await Promise.race([
+          html2canvas(el, {
+            scale: 2.0,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 420,
+            windowHeight: Math.max(1200, (el.scrollHeight || 800) + 400),
+            onclone: (clonedDoc) => {
+              const cel = clonedDoc.getElementById('wa-offscreen-receipt');
+              if (cel) {
+                cel.style.position = 'static';
+                cel.style.opacity = '1';
+                cel.style.left = '0';
+                cel.style.top = '0';
+                cel.style.visibility = 'visible';
+                cel.style.width = '360px';
+                cel.style.backgroundColor = '#ffffff';
+              }
+            }
+          }),
+          new Promise(r => setTimeout(() => r(null), 5000))
+        ]);
+        if (canvas) {
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+          console.log(`[Instant WhatsApp Auto-Send] Captured receipt image (~${Math.round(imageBase64.length * 0.75 / 1024)} KB)`);
+        }
+      }
+    } catch (err) {
+      console.warn('[Instant WhatsApp Auto-Send] Receipt capture error:', err);
+    }
+
+    // CRITICAL MANDATE: Never send WhatsApp e-bill without receipt photo image!
+    if (!imageBase64) {
+      console.warn('[Instant WhatsApp Auto-Send] ❌ Receipt image capture returned null — ABORTING send to guarantee photo image requirement.');
+      return;
+    }
+
+    console.log(`[Instant WhatsApp Auto-Send] Launching background dispatch to +${cleanPhone} for Bill #${billNo}...`);
+
+    sendWhatsAppBill(
+      cleanPhone,
+      billText,
+      imageBase64,
+      null,
+      `Bill_${billNo || 'Receipt'}.jpg`,
+      null,
+      null,
+      bill._id || null,
+      billNo || null
+    ).then(res => {
+      if (res && res.success) {
+        markBillAlreadySent(billNo);
+        console.log(`[Instant WhatsApp Auto-Send] ✅ Receipt Image & Message delivered to +${cleanPhone} successfully!`);
+        setToast({ message: `e-Bill & Receipt Image sent to +${cleanPhone} via WhatsApp! ✓`, type: 'success' });
+      } else {
+        console.warn(`[Instant WhatsApp Auto-Send] ⚠️ API returned error:`, res?.error);
+        setToast({ message: `WhatsApp send failed: ${res?.error || 'Bot not connected'}`, type: 'error' });
+      }
+    }).catch(err => {
+      const errMsg = err?.response?.data?.error || err?.message || 'WhatsApp send failed';
+      console.warn('[Instant WhatsApp Auto-Send] ❌ Dispatch error:', errMsg);
+      setToast({ message: `WhatsApp e-Bill failed: ${errMsg}`, type: 'error' });
+    });
+  };
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Safety guard: Automatically reset actionLoading state after 10s so UI buttons never stay permanently frozen in "Saving..."
@@ -501,7 +701,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       return () => clearTimeout(timer);
     }
   }, [actionLoading]);
+
   const newlyGeneratedTables = useRef(new Set());
+  const newlyGeneratedTablesDate = useRef('');
+
   // Tracks the last time user manually edited the cart (add/remove/qty change)
   // Background fetches are suppressed for 8s after any local edit to prevent
   // the 3s poll or socket orderUpdated from reverting local-first cart state.
@@ -528,34 +731,65 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const generateSequentialOrderNo = (type) => {
     const prefix = type === 'Delivery' || type === 'DEL-NEW' ? 'DEL-' : 'TAK-';
-    const existingTableNos = new Set();
+    const todayStr = new Date().toDateString();
 
+    // Reset newly generated table cache if a new day has started
+    if (newlyGeneratedTablesDate.current !== todayStr) {
+      newlyGeneratedTablesDate.current = todayStr;
+      if (newlyGeneratedTables.current) {
+        newlyGeneratedTables.current.clear();
+      }
+    }
+
+    // Build the active order number set from currently open/billed orders only.
+    // Cancelled orders are intentionally excluded so their numbers can be reused.
+    const activeOrderNos = new Set();
     if (openOrdersList && Array.isArray(openOrdersList)) {
       openOrdersList.forEach((o) => {
-        if (o.tableNo && o.tableNo.startsWith(prefix)) {
-          existingTableNos.add(o.tableNo);
+        if (!o.tableNo || !o.tableNo.startsWith(prefix)) return;
+        const orderDate = o.createdAt
+          ? new Date(o.createdAt).toDateString()
+          : (o.updatedAt ? new Date(o.updatedAt).toDateString() : todayStr);
+        // Only include Open / Billed (active) orders from today
+        if (orderDate === todayStr && (o.status === 'Open' || o.status === 'Billed')) {
+          activeOrderNos.add(o.tableNo);
         }
       });
     }
 
-    if (dailyStats?.recentBills && Array.isArray(dailyStats.recentBills)) {
-      dailyStats.recentBills.forEach((b) => {
-        if (b.tableNo && b.tableNo.startsWith(prefix)) {
-          existingTableNos.add(b.tableNo);
+    // Build settled order number set from all of today's bills (these numbers must NOT be reused)
+    const settledOrderNos = new Set();
+    if (dailyStats?.todayTableNos && Array.isArray(dailyStats.todayTableNos)) {
+      dailyStats.todayTableNos.forEach((tNo) => {
+        if (tNo && tNo.startsWith(prefix)) {
+          settledOrderNos.add(tNo);
         }
       });
     }
 
+    // Clean up newlyGeneratedTables: remove any entry that is neither in active orders
+    // nor in settled orders (i.e. it was cancelled — don't keep it, allow reuse)
     if (newlyGeneratedTables.current) {
       newlyGeneratedTables.current.forEach((tNo) => {
-        if (tNo && tNo.startsWith(prefix)) {
-          existingTableNos.add(tNo);
+        if (!tNo || !tNo.startsWith(prefix)) return;
+        const isActive = activeOrderNos.has(tNo);
+        const isSettled = settledOrderNos.has(tNo);
+        if (!isActive && !isSettled) {
+          // This number was generated locally but the order was cancelled → remove it so it can be reused
+          newlyGeneratedTables.current.delete(tNo);
         }
       });
     }
 
+    // The "highest used number" is the max across active orders, settled orders and any still-valid locally generated ones
     let maxNum = 0;
-    existingTableNos.forEach((tNo) => {
+    const countedNos = new Set([...activeOrderNos, ...settledOrderNos]);
+    if (newlyGeneratedTables.current) {
+      newlyGeneratedTables.current.forEach((tNo) => {
+        if (tNo && tNo.startsWith(prefix)) countedNos.add(tNo);
+      });
+    }
+    countedNos.forEach((tNo) => {
       const numPart = tNo.replace(prefix, '').trim();
       const num = parseInt(numPart, 10);
       if (!isNaN(num) && num < 10000 && num > maxNum) {
@@ -1946,7 +2180,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           cgst: cAmt,
           sgst: sAmt,
           igst: gAmt
-        }
+        },
+        showLogo: (() => {
+          try {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            return s.showLogo !== false;
+          } catch(e) { return true; }
+        })()
       };
 
       const targetId = (orderId && !orderId.startsWith('offline_')) ? orderId : 'new';
@@ -2080,6 +2320,38 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const optimisticBillNumber = billNumber || `MS${Date.now().toString().slice(-4)}`;
 
+    const optimisticBill = {
+      items: cart || [],
+      status: paymentData.mode === 'Unpaid' ? 'Unpaid' : 'Paid',
+      paymentMode: paymentData.mode === 'Unpaid' ? undefined : paymentData.mode,
+      splitPayments: paymentData.splitPayments,
+      amountPaid: paymentData.amountPaid,
+      upiApp: paymentData.upiApp,
+      billNumber: optimisticBillNumber,
+      tableNo: tableToUse,
+      subtotal,
+      tax: taxVal,
+      discount: discountAmount,
+      total,
+      billType,
+      orderSource: billType === 'Delivery' ? orderSource : undefined,
+      customerName: customerName || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerName || ''),
+      customerPhone: customerPhone || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerPhone || ''),
+      deliveryCharge,
+      containerCharge,
+      restaurantDetails: s,
+      showLogo: s.showLogo !== false,
+      settledAt: new Date(),
+      createdAt: new Date()
+    };
+
+    // ⚡ INSTANT 0ms RESPONSE: Show Payment Success Screen IMMEDIATELY on click!
+    setShowPayment(false);
+    setOrderStatus(optimisticBill.status);
+    hasPendingLocalChanges.current = false;
+    setSuccessPaymentData({ paymentData, billData: optimisticBill });
+    setShowSuccessScreen(true);
+
     // Build full settlement payload for server
     const settlementPayload = {
       tableNo: tableToUse,
@@ -2094,8 +2366,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       discountName: discount.name || discount.offerName || '',
       billType,
       orderSource: billType === 'Delivery' ? orderSource : undefined,
-      customerPhone: customerPhone || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerPhone || ''),
-      customerName: customerName || (openOrdersList?.find(o => isTableMatching(o.tableNo, tableToUse))?.customerName || ''),
+      customerPhone: optimisticBill.customerPhone,
+      customerName: optimisticBill.customerName,
       deliveryCharge: parseFloat(deliveryCharge || 0),
       containerCharge: parseFloat(containerCharge || 0),
       restaurantDetails: restDetailsNoLogo,
@@ -2103,11 +2375,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       status: paymentData.mode === 'Unpaid' ? 'Unpaid' : undefined,
       splitPayments: paymentData.splitPayments,
       amountPaid: paymentData.amountPaid,
-      upiApp: paymentData.upiApp
+      upiApp: paymentData.upiApp,
+      showLogo: (() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          return s.showLogo !== false;
+        } catch(e) { return true; }
+      })()
     };
 
     try {
-      // ⚡ Direct dynamic execution - pure server response time
+      // ⚡ Direct dynamic execution - pure server response time in background
       const settledOrder = await settleBill(orderId || 'new', settlementPayload);
       const confirmedBillNumber = settledOrder?.billNumber || optimisticBillNumber;
       if (confirmedBillNumber) {
@@ -2115,6 +2393,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
 
       const confirmedBill = {
+        ...optimisticBill,
         ...(settledOrder || {}),
         items: (cart && cart.length > 0) ? cart : (settledOrder?.items || []),
         status: paymentData.mode === 'Unpaid' ? 'Unpaid' : 'Paid',
@@ -2130,8 +2409,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         total,
         billType,
         orderSource: billType === 'Delivery' ? orderSource : undefined,
-        customerName: customerName || settledOrder?.customerName || '',
-        customerPhone: customerPhone || settledOrder?.customerPhone || '',
+        customerName: customerName || settledOrder?.customerName || optimisticBill.customerName,
+        customerPhone: customerPhone || settledOrder?.customerPhone || optimisticBill.customerPhone,
         deliveryCharge,
         containerCharge,
         restaurantDetails: {
@@ -2142,17 +2421,19 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         createdAt: settledOrder?.createdAt || new Date()
       };
 
-      setShowPayment(false);
-      setOrderStatus(confirmedBill.status);
-      hasPendingLocalChanges.current = false;
-      // ⚡ Prepare Auto-send WhatsApp e-Bill with original receipt image via <Invoice>
-      const alreadySent = Boolean(settledOrder?.whatsappSent || (confirmedBillNumber && isBillAlreadySent(confirmedBillNumber)));
-      const shouldAutoSend = Boolean(autoWhatsappEnabled && !alreadySent);
-      setAutoSendWhatsAppToInvoice(shouldAutoSend);
-
       isViewingInvoiceRef.current = true;
       setCompletedBill(confirmedBill);
-      setShowInvoice(true);
+      setSuccessPaymentData({ paymentData, billData: confirmedBill });
+
+      // Instant Auto-send WhatsApp e-Bill (Fires in background immediately when Settle is clicked)
+      const alreadySent = Boolean(settledOrder?.whatsappSent || (confirmedBillNumber && isBillAlreadySent(confirmedBillNumber)));
+      const phoneToSend = (confirmedBill.customerPhone || settledOrder?.customerPhone || '').trim();
+      const shouldAutoSend = Boolean(autoWhatsappEnabled && !alreadySent && phoneToSend.length >= 10);
+      if (shouldAutoSend) {
+        setTimeout(() => triggerInstantWhatsAppAutoSend(confirmedBill), 0);
+      }
+      setAutoSendWhatsAppToInvoice(false);
+
       try {
         sessionStorage.setItem('ms_invoice_open', 'true');
         sessionStorage.setItem('ms_completed_bill', JSON.stringify(confirmedBill));
@@ -2183,10 +2464,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       showToast(t('billSettled'), 'success');
     } catch (error) {
       console.error('Error settling bill:', error);
-      showToast(
-        `⚠️ Payment recorded locally but server sync failed. Tap to retry: ${error.response?.data?.message || error.message}`,
-        'error'
-      );
+      showToast(`${t('failedToSettleBill')}: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
       setActionLoading(null);
     }
@@ -2854,8 +3132,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           isLoading={loading || actionLoading === 'settle'}
           onClose={() => setShowPayment(false)}
           onComplete={handleSettleBill} />
-
       }
+
+      {/* Payment Success Celebration Screen */}
+      {showSuccessScreen && successPaymentData && (
+        <PaymentSuccessScreen
+          billData={successPaymentData.billData}
+          paymentData={successPaymentData.paymentData}
+          onDone={() => {
+            setShowSuccessScreen(false);
+            setSuccessPaymentData(null);
+            setShowInvoice(true);
+            try {
+              sessionStorage.setItem('ms_invoice_open', 'true');
+              sessionStorage.setItem('ms_completed_bill', JSON.stringify(successPaymentData.billData));
+            } catch (e) {}
+          }}
+        />
+      )}
 
       {showInvoice && (() => {
         const billToShow = completedBill || {
@@ -3063,8 +3357,152 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         </div>
       )}
 
-    </div>);
+      {/* Offscreen Thermal Receipt for Instant WhatsApp Image Capture */}
+      {offscreenBill && (
+        <div
+          id="wa-offscreen-receipt"
+          style={{
+            position: 'fixed',
+            left: '0',
+            top: '0',
+            width: '360px',
+            backgroundColor: '#ffffff',
+            color: '#000000',
+            padding: '16px 14px 24px 14px',
+            fontFamily: 'monospace, sans-serif',
+            fontSize: '12px',
+            lineHeight: '1.4',
+            boxSizing: 'border-box',
+            zIndex: -1,
+            opacity: 0.001,
+            pointerEvents: 'none'
+          }}
+        >
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            {(() => {
+              const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+              return Boolean(s.logo && s.logo !== '[logo_stored]') ? (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
+                  <img src={s.logo} alt="Logo" style={{ maxHeight: '45px', maxWidth: '140px', objectFit: 'contain' }} />
+                </div>
+              ) : null;
+            })()}
+            <div style={{ fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+              {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').restaurantName || 'ANAND\'S RESTAURANT'}
+            </div>
+            <div style={{ fontSize: '11px', marginTop: '2px', color: '#333' }}>
+              {(JSON.parse(localStorage.getItem('restaurantSettings') || '{}').address || '').split('\n').map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+              {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').gstin && (
+                <div>GSTIN: {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').gstin}</div>
+              )}
+              {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').phone && (
+                <div>PH: {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').phone}</div>
+              )}
+              {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').fssai && (
+                <div>FSSAI: {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').fssai}</div>
+              )}
+            </div>
+          </div>
 
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          {/* Title */}
+          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+            {offscreenBill.status === 'Unpaid' ? 'Unpaid (Khata)' : 'Tax Invoice'}
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          {/* Type & Table */}
+          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '4px' }}>
+            {offscreenBill.billType === 'Delivery'
+              ? `Delivery: ${offscreenBill.tableNo || 'DEL'}`
+              : offscreenBill.billType === 'Takeaway'
+              ? `Takeaway: ${offscreenBill.tableNo || 'TAK'}`
+              : `Dine-In: ${offscreenBill.tableNo || 'Table'}`}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+            <span>Date: {new Date(offscreenBill.settledAt || Date.now()).toLocaleDateString('en-GB')}</span>
+            <span>{new Date(offscreenBill.settledAt || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '6px' }}>
+            <span>Cashier: {offscreenBill.cashier || (JSON.parse(localStorage.getItem('user') || '{}')?.name) || 'admin'}</span>
+            <span style={{ fontWeight: 'bold' }}>Bill No.: #{offscreenBill.billNumber || offscreenBill.confirmedBillNumber || '---'}</span>
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          {/* Table Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '11px', marginBottom: '4px' }}>
+            <span style={{ flex: 1 }}>Item</span>
+            <span style={{ width: '40px', textAlign: 'center' }}>Qty.</span>
+            <span style={{ width: '55px', textAlign: 'right' }}>Price</span>
+            <span style={{ width: '60px', textAlign: 'right' }}>Amount</span>
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }}></div>
+
+          {/* Items */}
+          {Array.isArray(offscreenBill.items) && offscreenBill.items.map((item, idx) => {
+            const qty = item.quantity || 1;
+            const price = item.price || 0;
+            const amt = price * qty;
+            return (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', margin: '3px 0' }}>
+                <span style={{ flex: 1, paddingRight: '4px', wordBreak: 'break-word' }}>{item.name}</span>
+                <span style={{ width: '40px', textAlign: 'center' }}>{qty}</span>
+                <span style={{ width: '55px', textAlign: 'right' }}>{Number(price).toFixed(2)}</span>
+                <span style={{ width: '60px', textAlign: 'right', fontWeight: 'bold' }}>{Number(amt).toFixed(2)}</span>
+              </div>
+            );
+          })}
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          {/* Totals */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold' }}>
+            <span>Total Qty: {Array.isArray(offscreenBill.items) ? offscreenBill.items.reduce((sum, i) => sum + (i.quantity || 1), 0) : 0}</span>
+            <span>Sub Total: ₹{Number(offscreenBill.subtotal || 0).toFixed(2)}</span>
+          </div>
+
+          <div style={{ borderTop: '2px solid #000', margin: '8px 0' }}></div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 'bold' }}>
+            <span>Grand Total</span>
+            <span>₹{Number(offscreenBill.total || 0).toFixed(2)}</span>
+          </div>
+
+          <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }}></div>
+
+          <div style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold' }}>
+            Paid via {offscreenBill.paymentMode || 'Cash'}
+          </div>
+
+          {/* QR Code */}
+          {(() => {
+            const upi = JSON.parse(localStorage.getItem('restaurantSettings') || '{}').upiId;
+            return upi ? (
+              <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 'bold' }}>SCAN TO PAY VIA UPI</div>
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+                  <QRCodeSVG value={`upi://pay?pa=${upi}&pn=${encodeURIComponent(JSON.parse(localStorage.getItem('restaurantSettings') || '{}').restaurantName || 'MS Billings')}&am=${offscreenBill.total}`} size={110} />
+                </div>
+                <div style={{ fontSize: '10px', fontWeight: 'bold' }}>UPI ID: {upi}</div>
+              </div>
+            ) : null;
+          })()}
+
+          <div style={{ textAlign: 'center', fontSize: '11px', fontWeight: 'bold', marginTop: '12px' }}>
+            {JSON.parse(localStorage.getItem('restaurantSettings') || '{}').footerMessage || '*** THANK YOU! VISIT AGAIN ***'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
-
+ 
 export default BillingPage;

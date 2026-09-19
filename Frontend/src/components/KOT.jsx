@@ -38,7 +38,7 @@ const KOT = ({ order, onClose }) => {
       return [];
     }
 
-    const activePrinters = printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general'));
+    const activePrinters = printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
 
     const map = new Map();
 
@@ -146,7 +146,7 @@ const KOT = ({ order, onClose }) => {
           const allConfigs = (printerConfigs && printerConfigs.length > 0)
             ? printerConfigs
             : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          const kotStation = allConfigs.find(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general') && (p.connectionType === 'bluetooth' || (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)));
+          const kotStation = allConfigs.find(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both') && (p.connectionType === 'bluetooth' || (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)));
           if (kotStation) {
             const raw = kotStation.bluetoothAddress || kotStation.deviceName || kotStation.name || '';
             const m = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
@@ -223,6 +223,43 @@ const KOT = ({ order, onClose }) => {
     } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
       window.AndroidPrint.print();
     } else {
+      // Direct Backend KOT Printer (TCP ESC/POS or USB RAW via Node.js Backend)
+      try {
+        const cached = (printerConfigs && printerConfigs.length > 0)
+          ? printerConfigs
+          : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+        
+        let targetBackendPrinter = null;
+        if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb')) {
+          targetBackendPrinter = activeStationGroup.printer;
+        } else {
+          targetBackendPrinter = cached.find(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb'));
+        }
+
+        if (targetBackendPrinter) {
+          const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+          const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
+          const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
+          const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+
+          const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
+            bill: order,
+            items: itemsToPrint,
+            kotNumber: kotNo,
+            queueNumber: qNo,
+            printerId: targetBackendPrinter._id
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (response.data && response.data.success) {
+            return;
+          }
+        }
+      } catch (netErr) {
+        console.warn('[KOT] Network thermal print failed, falling back to browser print:', netErr);
+      }
+
       window.print();
     }
   };
@@ -277,6 +314,24 @@ const KOT = ({ order, onClose }) => {
           } catch (e) {
             console.warn('[KOT] Multi-station Bluetooth print error:', e);
           }
+        }
+      } else if (grp.printer && (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb')) {
+        try {
+          const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+          const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
+          const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+          await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
+            bill: order,
+            items: grp.items,
+            kotNumber: kotNo,
+            queueNumber: qNo,
+            printerId: grp.printer._id
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+        } catch (netErr) {
+          console.warn('[KOT] Multi-station network print error:', netErr);
+          window.print();
         }
       } else {
         window.print();
@@ -458,38 +513,41 @@ const KOT = ({ order, onClose }) => {
                 );
               })()}
 
-              {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
-                <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>
-                  {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
-                </div>
-              )}
-
-              {/* Order Type & Table */}
+              {/* Single Row: Queue No & Order Type */}
               {(() => {
                 const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+                const partner = (order.orderSource || '').trim();
+                const typeText = bType === 'Delivery' ? `DELIVERY${partner ? `: ${partner.toUpperCase()}` : ''}` : (bType === 'Takeaway' ? 'TAKEAWAY' : 'Dine In');
+                const typeColor = bType === 'Delivery' ? '#dc2626' : (bType === 'Takeaway' ? '#2563eb' : '#000');
+                const qNo = order.queueNumber || order.tokenNo || '1';
+
+                return (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: fontMetrics.subHeadingSize,
+                    fontWeight: 'bold',
+                    marginTop: '2px',
+                    marginBottom: '2px'
+                  }}>
+                    <span>{t("Queue No:")} #{qNo}</span>
+                    <span style={{ color: typeColor }}>{typeText}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Table No Centered */}
+              {(() => {
+                const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+                let tNo = (order.tableNo || '').trim();
                 if (bType === 'Delivery') {
-                  const partner = (order.orderSource || '').trim() || 'DIRECT';
-                  return (
-                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', color: '#dc2626', marginTop: '1px' }}>
-                      DELIVERY: {partner.toUpperCase()} #{order.tableNo}
-                    </div>
-                  );
+                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo || 'DEL'}</div>;
                 } else if (bType === 'Takeaway') {
-                  return (
-                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', color: '#2563eb', marginTop: '1px' }}>
-                      TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
-                    </div>
-                  );
+                  return order.tableNo ? <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo}</div> : null;
                 } else {
-                  let tNo = (order.tableNo || '').trim();
-                  if (tNo.toLowerCase().startsWith('table')) {
-                    tNo = tNo.substring(5).trim();
-                  }
-                  return (
-                    <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', marginTop: '1px' }}>
-                      Dine In: {tNo ? `Table ${tNo}` : 'Table'}
-                    </div>
-                  );
+                  const cleanT = tNo.replace(/^Table\s*/i, '');
+                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
                 }
               })()}
               {order.customerName && (
@@ -617,47 +675,48 @@ const KOT = ({ order, onClose }) => {
               );
             })()}
 
-            {order.kotNumber && !order.kotNumber.toUpperCase().includes('UPDATE') && (
-              <div className="text-base font-bold text-gray-900" style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827' }}>
-                {t("Queue No:")} #{order.queueNumber || order.tokenNo || '1'}
-              </div>
-            )}
-
+            {/* Single Row: Queue Number and Dine In / Delivery / Takeaway */}
             {(() => {
               const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+              const partner = (order.orderSource || '').trim();
+              const typeText = bType === 'Delivery' 
+                ? `DELIVERY${partner ? `: ${partner.toUpperCase()}` : ''}`
+                : (bType === 'Takeaway' ? 'TAKEAWAY' : 'Dine In');
+              const typeColor = bType === 'Delivery' ? '#dc2626' : (bType === 'Takeaway' ? '#2563eb' : '#111827');
+              const qNo = order.queueNumber || order.tokenNo || '1';
+
+              return (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: fontMetrics.subHeadingSize,
+                  fontWeight: 'bold',
+                  marginTop: '3px',
+                  marginBottom: '3px'
+                }}>
+                  <span>{t("Queue No:")} #{qNo}</span>
+                  <span style={{ color: typeColor }}>{typeText}</span>
+                </div>
+              );
+            })()}
+
+            {/* Table Number Line (Centered) */}
+            {(() => {
+              const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+              let tNo = (order.tableNo || '').trim();
               if (bType === 'Delivery') {
-                const partner = (order.orderSource || '').trim() || 'DIRECT';
-                return (
-                  <>
-                    <div className="text-lg font-black text-red-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626' }}>
-                      DELIVERY: {partner.toUpperCase()}
-                    </div>
-                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>
-                      Order #{order.tableNo}
-                    </div>
-                  </>
-                );
+                return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo || 'DEL'}</div>;
               } else if (bType === 'Takeaway') {
-                return (
-                  <div className="text-lg font-black text-blue-600 tracking-wider uppercase" style={{ fontSize: '18px', fontWeight: '900', color: '#2563eb' }}>
-                    TAKEAWAY {order.tableNo ? `(${order.tableNo})` : ''}
-                  </div>
-                );
+                return order.tableNo ? <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo}</div> : null;
               } else {
-                let tNo = (order.tableNo || '').trim();
-                if (tNo.toLowerCase().startsWith('table')) {
-                  tNo = tNo.substring(5).trim();
-                }
-                return (
-                  <>
-                    <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>Dine In</div>
-                    {tNo && <div className="text-base font-bold" style={{ fontSize: '16px', fontWeight: 'bold' }}>{t("Table No: ")}{tNo}</div>}
-                  </>
-                );
+                const cleanT = tNo.replace(/^Table\s*/i, '');
+                return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
               }
             })()}
+
             {order.customerName && (
-              <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>
+              <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'bold', marginTop: '2px' }}>
                 Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
               </div>
             )}
@@ -666,10 +725,9 @@ const KOT = ({ order, onClose }) => {
           <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
 
           {/* Info - Left aligned */}
-          <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left' }}>
+          <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left', fontSize: fontMetrics.detailSize, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>{t("Biller:")} {order.cashierName || order.billerName || 'admin'}</div>
             {order.captainName && <div>{t("Assign to:")} {order.captainName}</div>}
-            {order.captainName && <div>{t("Captain:")} {order.captainName}</div>}
-            {!order.captainName && <div>{t("Biller:")} {order.cashierName || 'admin'}</div>}
           </div>
           
           <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>

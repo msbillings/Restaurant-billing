@@ -273,7 +273,8 @@ export const saveOrder = async (req, res) => {
       tax,
       deliveryCharge,
       containerCharge,
-      restaurantDetails
+      restaurantDetails,
+      showLogo
     } = req.body;
 
     // Validate required fields
@@ -413,6 +414,9 @@ export const saveOrder = async (req, res) => {
 
       if (!order.restaurantDetails || !order.restaurantDetails.restaurantName) {
         order.restaurantDetails = await getRestaurantSnapshot(req, restaurantDetails);
+      }
+      if (showLogo !== undefined) {
+        order.showLogo = showLogo;
       }
 
       // Preserve printedQuantity and cancellation status for existing items
@@ -731,6 +735,7 @@ export const saveOrder = async (req, res) => {
         tableNo,
         items: sanitizedItems,
         restaurantDetails: restSnapshot,
+        showLogo: showLogo !== undefined ? showLogo : true,
         subtotal,
         discount: calculatedDiscount,
         discountType: dType,
@@ -804,7 +809,7 @@ export const generateBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { items, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, billType } = req.body;
+    const { items, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, billType, showLogo } = req.body;
 
     let order = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -828,6 +833,7 @@ export const generateBill = async (req, res) => {
         items: items || [],
         billType: billType || 'Dine-In',
         restaurantDetails: restSnapshot,
+        showLogo: showLogo !== undefined ? showLogo : true,
         status: 'Open'
       });
     }
@@ -845,6 +851,9 @@ export const generateBill = async (req, res) => {
     }
     if (!order.restaurantDetails || !order.restaurantDetails.restaurantName) {
       order.restaurantDetails = await getRestaurantSnapshot(req, restaurantDetails);
+    }
+    if (showLogo !== undefined) {
+      order.showLogo = showLogo;
     }
     const isExistingBilled = !!(order.billNumber || order.status === 'Billed');
     const prevSubtotal = order.subtotal || 0;
@@ -1010,7 +1019,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, showLogo } = req.body;
 
     let order = null;
     if (id && id !== 'new' && mongoose.Types.ObjectId.isValid(id)) {
@@ -1035,6 +1044,7 @@ export const settleBill = async (req, res) => {
           billType: req.body.billType || 'Takeaway',
           status: 'Open',
           restaurantDetails: restSnapshot,
+          showLogo: showLogo !== undefined ? showLogo : true,
           billedAt: new Date(),
           settledAt: new Date()
         });
@@ -1073,6 +1083,7 @@ export const settleBill = async (req, res) => {
 
     if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
     if (containerCharge !== undefined) order.containerCharge = Number(containerCharge) || 0;
+    if (showLogo !== undefined) order.showLogo = showLogo;
 
     // Apply optional pricing/discount adjustments if sent directly
     if (discount !== undefined) order.discount = Number(discount) || 0;

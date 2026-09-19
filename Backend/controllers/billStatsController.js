@@ -50,7 +50,8 @@ export const getDailyStats = async (req, res) => {
       timelineRes,
       uniquePhonesRes,
       noPhoneBillsRes,
-      billedOrdersCountRes
+      billedOrdersCountRes,
+      todayTableNosRes
     ] = await Promise.allSettled([
       // 1. Paid Stats
       Bill.aggregate([
@@ -171,7 +172,15 @@ export const getDailyStats = async (req, res) => {
         $or: [{ customerPhone: { $exists: false } }, { customerPhone: null }, { customerPhone: '' }]
       }),
       // 14. Billed status count
-      Bill.countDocuments({ status: 'Billed' })
+      Bill.countDocuments({ status: 'Billed' }),
+      // 15. Today's Table Numbers
+      Bill.find({
+        $or: [
+          { createdAt: { $gte: today, $lt: tomorrow } },
+          { clearedAt: { $gte: today, $lt: tomorrow } },
+          { updatedAt: { $gte: today, $lt: tomorrow } }
+        ]
+      }).select('tableNo').lean()
     ]);
 
     const paidStats = paidStatsRes.status === 'fulfilled' ? paidStatsRes.value : [];
@@ -188,6 +197,7 @@ export const getDailyStats = async (req, res) => {
     const uniquePhones = uniquePhonesRes.status === 'fulfilled' ? uniquePhonesRes.value : [];
     const noPhoneBills = noPhoneBillsRes.status === 'fulfilled' ? noPhoneBillsRes.value : 0;
     const billedCount = billedOrdersCountRes.status === 'fulfilled' ? billedOrdersCountRes.value : 0;
+    const todayTableNos = todayTableNosRes.status === 'fulfilled' ? todayTableNosRes.value.map(b => b.tableNo).filter(Boolean) : [];
 
     // Accurate customer count: distinct phone numbers + anonymous bills
     const totalCustomers = (Array.isArray(uniquePhones) ? uniquePhones.length : 0) + (Number(noPhoneBills) || 0);
@@ -280,7 +290,8 @@ export const getDailyStats = async (req, res) => {
       openKOTs: openKOTs || [],
       cancelledOrders: cancelledOrders || [],
       editedOrders: editedOrders || [],
-      hourlySales: salesTimeline
+      hourlySales: salesTimeline,
+      todayTableNos: todayTableNos || []
     };
     
     res.json(response);
@@ -306,7 +317,8 @@ export const getDailyStats = async (req, res) => {
       openKOTs: [],
       cancelledOrders: [],
       editedOrders: [],
-      hourlySales: []
+      hourlySales: [],
+      todayTableNos: []
     };
     
     res.status(200).json(defaultResponse);

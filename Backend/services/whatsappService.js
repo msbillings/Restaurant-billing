@@ -566,7 +566,7 @@ Thank you for visiting!`;
     return this.sendMessage(rawPhone, text);
   }
 
-  async sendBillMedia(rawPhone, { imageBase64, pdfBase64, documentBase64, mimetype, caption, fileName }) {
+  async sendBillMedia(rawPhone, { imageBase64, imageUrl, pdfBase64, documentBase64, mimetype, caption, fileName }) {
     let cleanPhone = (rawPhone || '').replace(/[^0-9]/g, '');
     if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
 
@@ -574,7 +574,7 @@ Thank you for visiting!`;
       throw new Error('Invalid destination phone number.');
     }
 
-    console.log(`[sendBillMedia] ▶ Starting for phone=${cleanPhone} | hasImage=${!!imageBase64} | hasPdf=${!!pdfBase64} | hasDoc=${!!documentBase64}`);
+    console.log(`[sendBillMedia] ▶ Starting for phone=${cleanPhone} | hasImageUrl=${!!imageUrl} | hasImageB64=${!!imageBase64} | hasPdf=${!!pdfBase64}`);
 
     await this.ensureConnection();
 
@@ -597,7 +597,7 @@ Thank you for visiting!`;
     console.log(`[sendBillMedia] Sending to JID: ${jid}`);
 
     let messagePayload = {};
-    const isImage = Boolean(imageBase64);
+    const isImage = Boolean(imageUrl || imageBase64);
     if (pdfBase64 || (documentBase64 && (mimetype?.includes('pdf') || fileName?.endsWith('.pdf')))) {
       const rawB64 = (pdfBase64 || documentBase64).replace(/^data:application\/pdf;base64,/, '').trim();
       const buffer = Buffer.from(rawB64, 'base64');
@@ -608,10 +608,17 @@ Thank you for visiting!`;
         fileName: fileName || 'eBill.pdf',
         caption: caption || ''
       };
+    } else if (imageUrl) {
+      console.log(`[sendBillMedia] Payload type=CLOUDINARY_IMAGE_URL | url=${imageUrl}`);
+      messagePayload = {
+        image: { url: imageUrl },
+        mimetype: mimetype || 'image/jpeg',
+        caption: caption || ''
+      };
     } else if (imageBase64) {
       const rawB64 = imageBase64.replace(/^data:image\/\w+;base64,/, '').trim();
       const buffer = Buffer.from(rawB64, 'base64');
-      console.log(`[sendBillMedia] Payload type=IMAGE | bufferKB=${Math.round(buffer.length / 1024)}`);
+      console.log(`[sendBillMedia] Payload type=IMAGE_BUFFER | bufferKB=${Math.round(buffer.length / 1024)}`);
       messagePayload = {
         image: buffer,
         mimetype: mimetype || 'image/jpeg',

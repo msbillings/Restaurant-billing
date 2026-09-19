@@ -263,6 +263,10 @@ const billSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  showLogo: {
+    type: Boolean,
+    default: true
+  },
   restaurantDetails: {
     type: mongoose.Schema.Types.Mixed,
     default: null
