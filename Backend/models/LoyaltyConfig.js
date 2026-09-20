@@ -5,6 +5,21 @@ const itemBonusRuleSchema = new mongoose.Schema({
   bonusPoints: { type: Number, required: true, min: 0 }
 }, { _id: false });
 
+const tierSchema = new mongoose.Schema({
+  name: { type: String, required: true }, // 'Silver', 'Gold', 'Platinum VIP'
+  minVisits: { type: Number, default: 0 },
+  minSpend: { type: Number, default: 0 },
+  pointMultiplier: { type: Number, default: 1.0 }, // e.g. 1.25x for Gold, 1.5x for Platinum VIP
+  perks: { type: String, default: '' },
+  color: { type: String, default: '#94a3b8' }
+}, { _id: false });
+
+const milestoneRewardSchema = new mongoose.Schema({
+  visitNumber: { type: Number, required: true }, // e.g. 5th visit, 10th visit
+  rewardPoints: { type: Number, default: 50 },
+  rewardDescription: { type: String, default: '' }
+}, { _id: false });
+
 const loyaltyConfigSchema = new mongoose.Schema({
   enabled: {
     type: Boolean,
@@ -41,6 +56,21 @@ const loyaltyConfigSchema = new mongoose.Schema({
     type: Number,
     default: 365
   },
+  // Automatically expire inactive points/wallet balances
+  autoExpiryEnabled: {
+    type: Boolean,
+    default: true
+  },
+  // Days before expiration to send pre-expiry warning WhatsApp alert (e.g. 7 days before)
+  expiryWarningDays: {
+    type: Number,
+    default: 7
+  },
+  // Send WhatsApp notification before points expire
+  expiryWarningNotify: {
+    type: Boolean,
+    default: true
+  },
   // Bonus points on first visit
   welcomeBonus: {
     type: Number,
@@ -65,6 +95,28 @@ const loyaltyConfigSchema = new mongoose.Schema({
   attachImageToReceipt: {
     type: Boolean,
     default: true
+  },
+  // Reelo-grade 3-Tier VIP Club
+  tiers: {
+    type: [tierSchema],
+    default: [
+      { name: 'Silver', minVisits: 0, minSpend: 0, pointMultiplier: 1.0, perks: 'Standard 1x Points Earning', color: '#94a3b8' },
+      { name: 'Gold', minVisits: 5, minSpend: 5000, pointMultiplier: 1.25, perks: '1.25x Points + Priority Booking', color: '#f59e0b' },
+      { name: 'Platinum VIP', minVisits: 15, minSpend: 15000, pointMultiplier: 1.5, perks: '1.5x Points + Complimentary Dessert + Chef Greeting', color: '#10b981' }
+    ]
+  },
+  // Milestone visit rewards
+  milestoneRewards: {
+    type: [milestoneRewardSchema],
+    default: [
+      { visitNumber: 5, rewardPoints: 50, rewardDescription: '5th Visit Club Bonus' },
+      { visitNumber: 10, rewardPoints: 100, rewardDescription: '10th Milestone Celebration Treat' }
+    ]
+  },
+  // Date string of last completed automatic expiry audit (YYYY-MM-DD)
+  lastExpiryAuditDate: {
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true

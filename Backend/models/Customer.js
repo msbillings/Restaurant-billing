@@ -43,6 +43,19 @@ const customerSchema = new mongoose.Schema({
     enum: ['Dine-In', 'Delivery', 'Takeaway', 'Pick Up', ''],
     default: 'Dine-In'
   },
+  tier: {
+    type: String,
+    enum: ['Silver', 'Gold', 'Platinum VIP'],
+    default: 'Silver'
+  },
+  pointsExpiryDate: {
+    type: Date,
+    default: null
+  },
+  expiryWarningSent: {
+    type: Boolean,
+    default: false
+  },
   feedbackWhatsAppSent: {
     type: Boolean,
     default: false

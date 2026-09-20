@@ -36,11 +36,16 @@ export const updateConfig = async (req, res) => {
       minBillAmount,
       maxRedemptionPercent,
       walletExpiry,
+      autoExpiryEnabled,
+      expiryWarningDays,
+      expiryWarningNotify,
       welcomeBonus,
       itemBonusRules,
       whatsappNotify,
       loyaltyImageUrl,
-      attachImageToReceipt
+      attachImageToReceipt,
+      tiers,
+      milestoneRewards
     } = req.body;
 
     let config = await LoyaltyConfig.findOne();
@@ -56,10 +61,15 @@ export const updateConfig = async (req, res) => {
     if (minBillAmount !== undefined) config.minBillAmount = Number(minBillAmount);
     if (maxRedemptionPercent !== undefined) config.maxRedemptionPercent = Number(maxRedemptionPercent);
     if (walletExpiry !== undefined) config.walletExpiry = Number(walletExpiry);
+    if (autoExpiryEnabled !== undefined) config.autoExpiryEnabled = autoExpiryEnabled;
+    if (expiryWarningDays !== undefined) config.expiryWarningDays = Number(expiryWarningDays);
+    if (expiryWarningNotify !== undefined) config.expiryWarningNotify = expiryWarningNotify;
     if (welcomeBonus !== undefined) config.welcomeBonus = Number(welcomeBonus);
     if (itemBonusRules !== undefined) config.itemBonusRules = itemBonusRules;
     if (whatsappNotify !== undefined) config.whatsappNotify = whatsappNotify;
     if (attachImageToReceipt !== undefined) config.attachImageToReceipt = attachImageToReceipt;
+    if (tiers !== undefined) config.tiers = tiers;
+    if (milestoneRewards !== undefined) config.milestoneRewards = milestoneRewards;
 
     if (loyaltyImageUrl !== undefined) {
       if (loyaltyImageUrl && loyaltyImageUrl.startsWith('data:image/')) {
@@ -489,8 +499,21 @@ export const sendLoyaltyCampaign = async (req, res) => {
       const customerPoints = customer.points || 0;
       const customerWallet = Number(customer.walletBalance || 0).toFixed(0);
       const customerVisits = customer.totalVisits || 0;
-      const customerSpend = Number(customer.totalSpend || 0).toLocaleString('en-IN');
-      const membershipTier = customer.isVIP ? 'Elite Tier' : (customerVisits >= 10 ? 'Gold Tier' : 'Silver Tier');
+      const rawSpend = Number(customer.totalSpend || 0);
+      const customerSpend = rawSpend.toLocaleString('en-IN');
+
+      // Resolve dynamic 3-tier VIP club membership: 'Silver', 'Gold', or 'Platinum VIP'
+      const platTier = (loyaltyConfig?.tiers || []).find(t => t.name === 'Platinum VIP') || { minVisits: 15, minSpend: 15000 };
+      const goldTier = (loyaltyConfig?.tiers || []).find(t => t.name === 'Gold') || { minVisits: 5, minSpend: 5000 };
+
+      let membershipTier = 'Silver';
+      if (customer.tier === 'Platinum VIP' || customerVisits >= platTier.minVisits || rawSpend >= platTier.minSpend || customer.isVIP) {
+        membershipTier = 'Platinum VIP';
+      } else if (customer.tier === 'Gold' || customerVisits >= goldTier.minVisits || rawSpend >= goldTier.minSpend) {
+        membershipTier = 'Gold';
+      } else {
+        membershipTier = 'Silver';
+      }
 
       // WhatsApp Read More spacer (4001 zero-width LRM characters like DayBook, Analytics & E-Bill)
       const READ_MORE = String.fromCharCode(8206).repeat(4001);
@@ -571,6 +594,224 @@ export const sendLoyaltyCampaign = async (req, res) => {
   } catch (error) {
     console.error('Error executing loyalty campaign:', error);
     res.status(500).json({ message: error.message || 'Failed to send campaign.' });
+  }
+};
+
+// @desc    Get loyalty expiration statistics and upcoming expiring customer balances
+// @route   GET /api/loyalty/expiry/stats
+// @access  Private (Admin)
+export const getExpiryStats = async (req, res) => {
+  try {
+    const Customer = getTenantModel(req, 'Customer', CustomerDefault);
+    const LoyaltyConfig = getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault);
+
+    const config = await LoyaltyConfig.findOne().lean();
+    const walletExpiryDays = Number(config?.walletExpiry || 365);
+    const warningDays = Number(config?.expiryWarningDays || 7);
+    const autoExpiryEnabled = config?.autoExpiryEnabled !== false;
+
+    const customersWithBalance = await Customer.find({
+      $or: [{ points: { $gt: 0 } }, { walletBalance: { $gt: 0 } }]
+    }).lean();
+
+    const now = Date.now();
+    let expiringSoonCount = 0;
+    let expiredCount = 0;
+    let healthyCount = 0;
+    const expiringSoonList = [];
+    const expiredList = [];
+
+    const tierStats = { Silver: 0, Gold: 0, 'Platinum VIP': 0 };
+
+    for (const c of customersWithBalance) {
+      const lastActivity = new Date(c.lastVisit || c.updatedAt || c.createdAt || now).getTime();
+      const expiryTimestamp = lastActivity + walletExpiryDays * 86400000;
+      const daysRemaining = Math.ceil((expiryTimestamp - now) / 86400000);
+
+      const customerTier = c.tier || (c.isVIP ? 'Platinum VIP' : ((c.totalVisits || 0) >= 5 ? 'Gold' : 'Silver'));
+      tierStats[customerTier] = (tierStats[customerTier] || 0) + 1;
+
+      if (daysRemaining <= 0) {
+        expiredCount++;
+        expiredList.push({
+          id: c._id,
+          name: c.name || 'Valued Customer',
+          phone: c.phone,
+          points: c.points || 0,
+          walletBalance: c.walletBalance || 0,
+          tier: customerTier,
+          daysOverdue: Math.abs(daysRemaining),
+          lastVisit: c.lastVisit
+        });
+      } else if (daysRemaining <= warningDays) {
+        expiringSoonCount++;
+        expiringSoonList.push({
+          id: c._id,
+          name: c.name || 'Valued Customer',
+          phone: c.phone,
+          points: c.points || 0,
+          walletBalance: c.walletBalance || 0,
+          tier: customerTier,
+          daysRemaining,
+          warningSent: Boolean(c.expiryWarningSent),
+          lastVisit: c.lastVisit
+        });
+      } else {
+        healthyCount++;
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      config: {
+        autoExpiryEnabled,
+        walletExpiryDays,
+        warningDays,
+        expiryWarningNotify: config?.expiryWarningNotify !== false
+      },
+      stats: {
+        totalWithBalance: customersWithBalance.length,
+        expiringSoonCount,
+        expiredCount,
+        healthyCount,
+        tierStats
+      },
+      expiringSoonList: expiringSoonList.slice(0, 50),
+      expiredList: expiredList.slice(0, 50)
+    });
+  } catch (error) {
+    console.error('Error fetching loyalty expiry stats:', error);
+    res.status(500).json({ message: 'Server error fetching expiry stats.' });
+  }
+};
+
+// @desc    Execute expiry check: send warning alerts & archive/reset expired points
+// @route   POST /api/loyalty/expiry/audit
+// @access  Private (Admin)
+export const runLoyaltyExpiryAudit = async (req, res) => {
+  try {
+    const Customer = getTenantModel(req, 'Customer', CustomerDefault);
+    const LoyaltyConfig = getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault);
+
+    const config = await LoyaltyConfig.findOne().lean();
+    const walletExpiryDays = Number(config?.walletExpiry || 365);
+    const warningDays = Number(config?.expiryWarningDays || 7);
+    const autoExpiryEnabled = config?.autoExpiryEnabled !== false;
+    const expiryWarningNotify = config?.expiryWarningNotify !== false;
+
+    const { whatsappService, restaurantName } = await resolveTenantInfo(req);
+    const restName = restaurantName || "our restaurant";
+
+    const customersWithBalance = await Customer.find({
+      $or: [{ points: { $gt: 0 } }, { walletBalance: { $gt: 0 } }]
+    });
+
+    const now = Date.now();
+    let warningsSent = 0;
+    let expiredResetCount = 0;
+    let healthyCount = 0;
+    const actionsTaken = [];
+
+    const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+    for (const customer of customersWithBalance) {
+      const cleanPhone = (customer.phone || '').replace(/\D/g, '').slice(-10);
+      const lastActivity = new Date(customer.lastVisit || customer.updatedAt || customer.createdAt || now).getTime();
+      const expiryTimestamp = lastActivity + walletExpiryDays * 86400000;
+      const daysRemaining = Math.ceil((expiryTimestamp - now) / 86400000);
+      customer.pointsExpiryDate = new Date(expiryTimestamp);
+
+      // Auto update customer tier based on loyalty config tiers
+      const visits = customer.totalVisits || 0;
+      const spend = customer.totalSpend || 0;
+      if (customer.isVIP || visits >= 15 || spend >= 15000) {
+        customer.tier = 'Platinum VIP';
+      } else if (visits >= 5 || spend >= 5000) {
+        customer.tier = 'Gold';
+      } else {
+        customer.tier = 'Silver';
+      }
+
+      // 1. Check for Pre-Expiry Warning (e.g. 7 days or less remaining)
+      if (daysRemaining > 0 && daysRemaining <= warningDays) {
+        if (!customer.expiryWarningSent && expiryWarningNotify && cleanPhone.length >= 10) {
+          const customerName = (customer.name && customer.name !== 'Guest') ? customer.name : 'Valued Customer';
+          const warningMsg =
+`⏰ *LOYALTY POINTS EXPIRATION ALERT* ⏰
+🏨 *${restName.toUpperCase()}* | *ACTION REQUIRED*
+${READ_MORE}
+━━━━━━━━━━━━━━━━━━━━
+Dear *${customerName}*,
+
+You have active loyalty rewards at *${restName}* that are scheduled to expire soon!
+
+⭐ *Available Points:* *${customer.points} Points*
+💰 *Wallet Value:* *₹${Number(customer.walletBalance || 0).toFixed(0)}*
+⏳ *Time Remaining:* *Only ${daysRemaining} Day${daysRemaining > 1 ? 's' : ''} Left!*
+
+Don't let your rewards go to waste! Visit us this week or order online to redeem your points on delicious food before they reset. 🍽️
+
+━━━━━━━━━━━━━━━━━━━━
+🥂 _We look forward to serving you again at ${restName}!_`;
+
+          try {
+            if (whatsappService && (whatsappService.status === 'CONNECTED' || Boolean(whatsappService.sock?.user?.id))) {
+              await whatsappService.sendMessage(cleanPhone, warningMsg);
+              customer.expiryWarningSent = true;
+              warningsSent++;
+              actionsTaken.push({
+                phone: cleanPhone,
+                name: customerName,
+                action: 'WARNING_DISPATCHED',
+                daysRemaining
+              });
+            }
+          } catch (waErr) {
+            console.warn(`[Expiry Audit] Warning WhatsApp dispatch failed for +91${cleanPhone}:`, waErr.message);
+          }
+        }
+      }
+
+      // 2. Check for Expired Accounts (0 or negative days remaining)
+      if (daysRemaining <= 0) {
+        if (autoExpiryEnabled) {
+          const pointsCleared = customer.points;
+          const walletCleared = customer.walletBalance;
+
+          customer.points = 0;
+          customer.walletBalance = 0;
+          customer.expiryWarningSent = false;
+          expiredResetCount++;
+
+          actionsTaken.push({
+            phone: cleanPhone,
+            name: customer.name || 'Valued Customer',
+            action: 'POINTS_EXPIRED_RESET',
+            pointsCleared,
+            walletCleared
+          });
+        }
+      } else if (daysRemaining > warningDays) {
+        healthyCount++;
+      }
+
+      await customer.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Loyalty expiry audit finished. ${warningsSent} warning alerts sent, ${expiredResetCount} inactive accounts reset.`,
+      stats: {
+        totalEvaluated: customersWithBalance.length,
+        warningsSent,
+        expiredResetCount,
+        healthyCount
+      },
+      actionsTaken
+    });
+  } catch (error) {
+    console.error('Error executing loyalty expiry audit:', error);
+    res.status(500).json({ message: error.message || 'Server error running expiry audit.' });
   }
 };
 

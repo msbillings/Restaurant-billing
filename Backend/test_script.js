@@ -94,7 +94,7 @@ async function runEndToEndLoyaltyTestDynamic() {
     // Verify & update customer points in DB
     const updatedCustomer = await models.Customer.findOneAndUpdate(
       { phone: CUSTOMER_PHONE },
-      { $set: { points: POINTS, walletBalance: WALLET_BALANCE, isVIP: true } },
+      { $set: { points: POINTS, walletBalance: WALLET_BALANCE, isVIP: true, tier: 'Platinum VIP' } },
       { returnDocument: 'after' }
     );
 
@@ -190,8 +190,55 @@ Simply mention your mobile number or show this VIP Card upon billing to instantl
     console.error('   ❌ Exception during campaign dispatch:', err.message);
   }
 
+  // STEP 6: Test Real-Time Points Expiry Dashboard Stats Endpoint
+  console.log(`\n📊 STEP 6: Testing GET /api/loyalty/expiry/stats (Expiry Analytics)...`);
+  try {
+    const statsRes = await fetch(`${BASE_URL}/api/loyalty/expiry/stats`, { headers });
+    const statsData = await statsRes.json();
+    console.log('   HTTP Status:', statsRes.status);
+    if (statsRes.ok && statsData.success) {
+      console.log('   ✅ Expiry Stats Response:');
+      console.log(`      Config: Auto-Expiry: ${statsData.config.autoExpiryEnabled} | Validity: ${statsData.config.walletExpiryDays}d | Warning: ${statsData.config.warningDays}d`);
+      console.log(`      Accounts with Balance: ${statsData.stats.totalWithBalance}`);
+      console.log(`      Expiring Soon (<=${statsData.config.warningDays}d): ${statsData.stats.expiringSoonCount}`);
+      console.log(`      Expired (> ${statsData.config.walletExpiryDays}d): ${statsData.stats.expiredCount}`);
+      console.log(`      Healthy: ${statsData.stats.healthyCount}`);
+      console.log(`      VIP Tier Breakdown:`, statsData.stats.tierStats);
+    } else {
+      console.error('   ❌ Failed to fetch expiry stats:', statsData);
+    }
+  } catch (err) {
+    console.error('   ❌ Error contacting /api/loyalty/expiry/stats:', err.message);
+  }
+
+  // STEP 7: Test Real-Time Points Expiry Audit & Warning Dispatch
+  console.log(`\n⚡ STEP 7: Testing POST /api/loyalty/expiry/audit (Audit & Advance Alerts Engine)...`);
+  try {
+    const auditRes = await fetch(`${BASE_URL}/api/loyalty/expiry/audit`, {
+      method: 'POST',
+      headers
+    });
+    const auditData = await auditRes.json();
+    console.log('   HTTP Status:', auditRes.status);
+    console.log('   Audit Result Message:', auditData.message);
+    if (auditRes.ok && auditData.success) {
+      console.log(`   ✅ Audit Completed:`);
+      console.log(`      Evaluated: ${auditData.stats.totalEvaluated}`);
+      console.log(`      Advance Warnings Sent: ${auditData.stats.warningsSent}`);
+      console.log(`      Expired Reset: ${auditData.stats.expiredResetCount}`);
+      console.log(`      Healthy Accounts: ${auditData.stats.healthyCount}`);
+      if (auditData.actionsTaken?.length > 0) {
+        console.log(`      Actions Taken (${auditData.actionsTaken.length}):`, auditData.actionsTaken);
+      }
+    } else {
+      console.error('   ❌ Failed to run expiry audit:', auditData);
+    }
+  } catch (err) {
+    console.error('   ❌ Error executing /api/loyalty/expiry/audit:', err.message);
+  }
+
   console.log('\n================================================================');
-  console.log('🏁 END-TO-END 100% DYNAMIC LOYALTY TEST COMPLETED');
+  console.log('🏁 END-TO-END 100% DYNAMIC LOYALTY & EXPIRY TEST COMPLETED');
   console.log('================================================================\n');
 }
 

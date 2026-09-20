@@ -1,6 +1,6 @@
 import { getApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
 import {
@@ -27,12 +27,20 @@ import {
   Eye,
   RefreshCw,
   Play,
-  Check
+  Check,
+  Clock,
+  ShieldAlert,
+  Crown,
+  Zap,
+  Calendar,
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 import { getMenuItems } from '../api/menu';
 
 const LoyaltyProgram = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
+  const textareaRef = useRef(null);
   const [enabled, setEnabled] = useState(true);
   const [loyaltyMode, setLoyaltyMode] = useState('spend'); // 'spend' | 'item' | 'both'
   const [conversionRate, setConversionRate] = useState('100'); // Rs 100 = 1 Point
@@ -43,6 +51,36 @@ const LoyaltyProgram = ({ onNavigate, onGoBack }) => {
   const [welcomeBonus, setWelcomeBonus] = useState('0');
   const [whatsappNotify, setWhatsappNotify] = useState(true);
   const [itemBonusRules, setItemBonusRules] = useState([]);
+
+  // Reelo-grade Expiry & VIP Club State
+  const [autoExpiryEnabled, setAutoExpiryEnabled] = useState(true);
+  const [expiryWarningDays, setExpiryWarningDays] = useState('7');
+  const [expiryWarningNotify, setExpiryWarningNotify] = useState(true);
+  const [tiers, setTiers] = useState([
+    { name: 'Silver', minVisits: 0, minSpend: 0, pointMultiplier: 1.0, perks: 'Standard 1x Points Earning', color: '#94a3b8' },
+    { name: 'Gold', minVisits: 5, minSpend: 5000, pointMultiplier: 1.25, perks: '1.25x Points + Priority Booking', color: '#f59e0b' },
+    { name: 'Platinum VIP', minVisits: 15, minSpend: 15000, pointMultiplier: 1.5, perks: '1.5x Points + Complimentary Dessert + Chef Greeting', color: '#10b981' }
+  ]);
+  const [milestoneRewards, setMilestoneRewards] = useState([
+    { visitNumber: 5, rewardPoints: 50, rewardDescription: '5th Visit Club Bonus' },
+    { visitNumber: 10, rewardPoints: 100, rewardDescription: '10th Milestone Celebration Treat' }
+  ]);
+
+  // Expiry Dashboard Stats & Audit State
+  const [expiryStats, setExpiryStats] = useState({
+    totalWithBalance: 0,
+    expiringSoonCount: 0,
+    expiredCount: 0,
+    healthyCount: 0,
+    tierStats: { Silver: 0, Gold: 0, 'Platinum VIP': 0 }
+  });
+  const [expiringSoonList, setExpiringSoonList] = useState([]);
+  const [expiredList, setExpiredList] = useState([]);
+  const [expiryStatsLoading, setExpiryStatsLoading] = useState(false);
+  const [runningAudit, setRunningAudit] = useState(false);
+  const [auditResult, setAuditResult] = useState(null);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [viewExpiryType, setViewExpiryType] = useState(null); // 'expiring' | 'expired' | null
 
   // New item rule input state
   const [newItemName, setNewItemName] = useState('');
@@ -110,12 +148,34 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
           setItemBonusRules(Array.isArray(config.itemBonusRules) ? config.itemBonusRules : []);
           setLoyaltyImageUrl(config.loyaltyImageUrl || '');
           setAttachImageToReceipt(config.attachImageToReceipt !== false);
+
+          setAutoExpiryEnabled(config.autoExpiryEnabled !== false);
+          setExpiryWarningDays(String(config.expiryWarningDays ?? '7'));
+          setExpiryWarningNotify(config.expiryWarningNotify !== false);
+          if (Array.isArray(config.tiers) && config.tiers.length > 0) {
+            setTiers(config.tiers);
+          }
+          if (Array.isArray(config.milestoneRewards) && config.milestoneRewards.length > 0) {
+            setMilestoneRewards(config.milestoneRewards);
+          }
         }
 
         // Fetch stats
         const statsRes = await axios.get(`${getApiUrl()}/loyalty/stats`, { headers });
         if (statsRes.data) {
           setStats(statsRes.data);
+        }
+
+        // Fetch Expiry Dashboard breakdown
+        try {
+          const expRes = await axios.get(`${getApiUrl()}/loyalty/expiry/stats`, { headers });
+          if (expRes.data && expRes.data.success) {
+            setExpiryStats(expRes.data.stats || {});
+            if (expRes.data.expiringSoonList) setExpiringSoonList(expRes.data.expiringSoonList);
+            if (expRes.data.expiredList) setExpiredList(expRes.data.expiredList);
+          }
+        } catch (expErr) {
+          console.warn('Could not fetch loyalty expiry stats:', expErr);
         }
 
         // Fetch WhatsApp Gateway status
@@ -307,6 +367,72 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
     setItemBonusRules(itemBonusRules.filter((_, idx) => idx !== indexToRemove));
   };
 
+  const fetchExpiryStats = async () => {
+    try {
+      setExpiryStatsLoading(true);
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const res = await axios.get(`${getApiUrl()}/loyalty/expiry/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data && res.data.success) {
+        setExpiryStats(res.data.stats || {});
+        if (res.data.expiringSoonList) setExpiringSoonList(res.data.expiringSoonList);
+        if (res.data.expiredList) setExpiredList(res.data.expiredList);
+      }
+    } catch (err) {
+      console.warn('Error refreshing expiry stats:', err);
+    } finally {
+      setExpiryStatsLoading(false);
+    }
+  };
+
+  const handleRunExpiryAudit = async () => {
+    try {
+      setRunningAudit(true);
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const res = await axios.post(`${getApiUrl()}/loyalty/expiry/audit`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data && res.data.success) {
+        setAuditResult(res.data);
+        setShowAuditModal(true);
+        fetchExpiryStats();
+      }
+    } catch (err) {
+      console.error('Error running expiry audit:', err);
+      alert(err.response?.data?.message || err.message || 'Failed to execute expiry audit.');
+    } finally {
+      setRunningAudit(false);
+    }
+  };
+
+  const handleInsertTag = (tag) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setCampaignTemplate(prev => `${prev} ${tag}`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? campaignTemplate.length;
+    const end = textarea.selectionEnd ?? campaignTemplate.length;
+    const text = campaignTemplate;
+    const before = text.substring(0, start);
+    const after = text.substring(end, text.length);
+
+    const spacerBefore = (before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n')) ? ' ' : '';
+    const spacerAfter = (after.length > 0 && !after.startsWith(' ') && !after.startsWith('\n')) ? ' ' : '';
+
+    const insertion = `${spacerBefore}${tag}${spacerAfter}`;
+    const newText = `${before}${insertion}${after}`;
+    setCampaignTemplate(newText);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + insertion.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 10);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
@@ -320,16 +446,22 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
         minBillAmount: Math.max(0, Number(minBillAmount) || 0),
         maxRedemptionPercent: Math.min(100, Math.max(1, Number(maxRedemptionPercent) || 100)),
         walletExpiry: Math.max(1, Number(walletExpiry) || 365),
+        autoExpiryEnabled,
+        expiryWarningDays: Math.max(1, Number(expiryWarningDays) || 7),
+        expiryWarningNotify,
         welcomeBonus: Math.max(0, Number(welcomeBonus) || 0),
         itemBonusRules,
         whatsappNotify,
         loyaltyImageUrl,
-        attachImageToReceipt
+        attachImageToReceipt,
+        tiers,
+        milestoneRewards
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+      fetchExpiryStats();
     } catch (err) {
       console.error('Error saving loyalty configuration:', err);
       const errMsg = err.response?.data?.message || err.message || 'Failed to save configuration.';
@@ -622,13 +754,49 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
           </div>
         )}
 
-        {/* Section 4: Redemption & Wallet Settings */}
-        <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-3">
-          <h2 className="text-sm sm:text-base font-bold text-text-main flex items-center gap-2">
-            <Wallet className="text-emerald-500" size={18} />
-            <span>{t("Redemption & Checkout Rules")}</span>
-          </h2>
+        {/* Section 4: Redemption & Automated Inactivity Expiry Engine */}
+        <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                <Wallet size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-text-main flex items-center gap-2 flex-wrap">
+                  <span>{t("Redemption Rules & Automated Expiry Engine")}</span>
+                  <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                    {t("Reelo Parity")}
+                  </span>
+                </h2>
+                <p className="text-xs text-text-muted">
+                  {t("Configure conversion rates, wallet caps, and automated point expiry with advance WhatsApp alerts")}
+                </p>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRunExpiryAudit}
+                disabled={runningAudit}
+                className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                {runningAudit ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>{t("Auditing Accounts...")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap size={13} />
+                    <span>{t("⚡ Run Expiry Audit Now")}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Standard Redemption Rates */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <div className="bg-background p-3.5 rounded-xl border border-border">
               <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-1.5">
@@ -646,13 +814,13 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                 />
               </div>
               <p className="text-[11px] text-text-muted mt-1.5">
-                {t("Converted to customer's wallet balance upon earning")}
+                {t("Direct wallet cash credit on bill payment")}
               </p>
             </div>
 
             <div className="bg-background p-3.5 rounded-xl border border-border">
               <label className="text-xs font-bold text-text-muted uppercase tracking-wider block mb-1.5">
-                {t("Max Wallet Redemption %")}
+                {t("Max Bill Redemption %")}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -666,7 +834,7 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                 <span className="font-bold text-xs sm:text-sm text-text-main">% {t("of bill total")}</span>
               </div>
               <p className="text-[11px] text-text-muted mt-1.5">
-                {t("e.g. 50% = Customer can pay max half the bill using wallet")}
+                {t("Limits wallet discount per order (e.g. 50% max)")}
               </p>
             </div>
 
@@ -685,28 +853,298 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                 <span className="font-bold text-xs sm:text-sm text-primary">{t("Bonus Points")}</span>
               </div>
               <p className="text-[11px] text-text-muted mt-1.5">
-                {t("Automatically credited when a new customer visits first time")}
+                {t("Credited instantly on customer's first bill")}
               </p>
             </div>
           </div>
 
-          <div className="bg-background p-3.5 rounded-xl border border-border flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <Gift size={16} className="text-primary shrink-0" />
-              <div>
-                <span className="font-bold text-xs sm:text-sm text-text-main">{t("Wallet Expiry Duration")}</span>
-                <p className="text-xs text-text-muted">{t("Wallet balance resets if customer is inactive for this long")}</p>
+          {/* Automated Inactivity Expiry & Warning Engine Settings */}
+          <div className="bg-background/70 p-3.5 rounded-xl border border-border space-y-3.5">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Clock size={18} className="text-orange-500" />
+                <div>
+                  <h3 className="font-bold text-xs sm:text-sm text-text-main">{t("Automated Points Expiry & Pre-Expiry Warnings")}</h3>
+                  <p className="text-[11px] text-text-muted">{t("Keep liability under control by resetting dormant points and nudging customers back")}</p>
+                </div>
+              </div>
+              <label className="flex items-center cursor-pointer gap-2 bg-surface px-3 py-1.5 rounded-xl border border-border shadow-2xs">
+                <span className="text-xs font-bold text-text-main">{autoExpiryEnabled ? t("Auto-Expiry Active") : t("Never Expire")}</span>
+                <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoExpiryEnabled ? 'bg-orange-500' : 'bg-surface-hover border border-border'}`}>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={autoExpiryEnabled}
+                    onChange={(e) => setAutoExpiryEnabled(e.target.checked)}
+                  />
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${autoExpiryEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+                </div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="bg-surface p-3 rounded-xl border border-border flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-bold text-text-main block">{t("Inactivity Validity Period")}</span>
+                  <p className="text-[11px] text-text-muted">{t("Points reset if no order placed for this many days")}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min="30"
+                    value={walletExpiry}
+                    onChange={(e) => setWalletExpiry(e.target.value)}
+                    className="w-20 px-2.5 py-1 bg-background border border-border rounded-lg font-bold text-center text-xs sm:text-sm text-text-main focus:border-primary focus:outline-none"
+                  />
+                  <span className="text-xs text-text-muted font-semibold">{t("days")}</span>
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 rounded-xl border border-border flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-text-main">{t("Advance WhatsApp Alert Notice")}</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={expiryWarningNotify}
+                        onChange={(e) => setExpiryWarningNotify(e.target.checked)}
+                      />
+                      <div className={`w-7 h-4 rounded-full transition-colors ${expiryWarningNotify ? 'bg-emerald-500' : 'bg-border'}`}>
+                        <div className={`w-3 h-3 rounded-full bg-white transition-transform ${expiryWarningNotify ? 'translate-x-3.5' : 'translate-x-0.5'} mt-0.5`} />
+                      </div>
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-text-muted">{t("Sends urgent 'Points Expiring Soon' alert via WhatsApp")}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={expiryWarningDays}
+                    onChange={(e) => setExpiryWarningDays(e.target.value)}
+                    className="w-16 px-2 py-1 bg-background border border-border rounded-lg font-bold text-center text-xs sm:text-sm text-text-main focus:border-primary focus:outline-none"
+                  />
+                  <span className="text-xs text-text-muted font-semibold">{t("days before")}</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                value={walletExpiry}
-                onChange={(e) => setWalletExpiry(e.target.value)}
-                className="w-20 px-3 py-1.5 bg-surface border border-border rounded-xl font-bold text-center text-xs sm:text-sm text-text-main focus:border-primary focus:outline-none"
-              />
-              <span className="text-xs sm:text-sm font-bold text-text-main">{t("days")}</span>
+
+            {/* Live Expiry Status Bar */}
+            <div className="bg-surface p-3 rounded-xl border border-border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-text-main flex items-center gap-1.5">
+                  <ShieldAlert size={14} className="text-primary" />
+                  {t("Real-Time Points Expiry Dashboard")}
+                </span>
+                <button
+                  type="button"
+                  onClick={fetchExpiryStats}
+                  className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw size={11} className={expiryStatsLoading ? "animate-spin" : ""} />
+                  <span>{t("Refresh")}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div
+                  onClick={() => expiringSoonList.length > 0 && setViewExpiryType('expiring')}
+                  className={`p-2.5 rounded-lg border text-center transition-all ${
+                    expiringSoonList.length > 0 ? 'bg-amber-500/10 border-amber-500/30 cursor-pointer hover:border-amber-500' : 'bg-background border-border'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">{t("Expiring Soon (7d)")}</div>
+                  <div className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                    {expiryStats.expiringSoonCount || 0}
+                  </div>
+                  {expiringSoonList.length > 0 && <span className="text-[9px] text-amber-600 underline font-semibold block">{t("View Details")}</span>}
+                </div>
+
+                <div
+                  onClick={() => expiredList.length > 0 && setViewExpiryType('expired')}
+                  className={`p-2.5 rounded-lg border text-center transition-all ${
+                    expiredList.length > 0 ? 'bg-rose-500/10 border-rose-500/30 cursor-pointer hover:border-rose-500' : 'bg-background border-border'
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase text-rose-600 dark:text-rose-400">{t("Overdue / Expired")}</div>
+                  <div className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                    {expiryStats.expiredCount || 0}
+                  </div>
+                  {expiredList.length > 0 && <span className="text-[9px] text-rose-600 underline font-semibold block">{t("View Details")}</span>}
+                </div>
+
+                <div className="p-2.5 rounded-lg border bg-emerald-500/10 border-emerald-500/30 text-center">
+                  <div className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">{t("Healthy & Active")}</div>
+                  <div className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    {expiryStats.healthyCount || 0}
+                  </div>
+                  <span className="text-[9px] text-emerald-600 font-semibold block">{t("Normal validity")}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4.5: Reelo-Grade 3-Tier VIP Club Management */}
+        <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shrink-0">
+                <Crown size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-text-main flex items-center gap-2 flex-wrap">
+                  <span>{t("Multi-Tier VIP Loyalty Club")}</span>
+                  <span className="bg-amber-500/10 text-amber-600 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                    {t("Reelo Alternative")}
+                  </span>
+                </h2>
+                <p className="text-xs text-text-muted">
+                  {t("Automate VIP progression with Silver, Gold, and Platinum status to incentivize repeat visits and higher spend")}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs font-bold text-text-muted bg-background px-3 py-1.5 rounded-xl border border-border">
+              <span>{t("Active Members:")}</span>
+              <span className="text-slate-400">🥈 {expiryStats.tierStats?.Silver || 0}</span>
+              <span className="text-amber-500">🥇 {expiryStats.tierStats?.Gold || 0}</span>
+              <span className="text-emerald-500">👑 {expiryStats.tierStats?.['Platinum VIP'] || 0}</span>
+            </div>
+          </div>
+
+          {/* 3 Tier Config Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            {tiers.map((tier, idx) => {
+              const tierIcons = [
+                <Award key="silver" size={20} className="text-slate-400" />,
+                <Crown key="gold" size={20} className="text-amber-500" />,
+                <Sparkles key="platinum" size={20} className="text-emerald-500" />
+              ];
+              const borderStyles = [
+                'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20',
+                'border-amber-400/50 bg-amber-50/40 dark:bg-amber-950/20',
+                'border-emerald-400/50 bg-emerald-50/40 dark:bg-emerald-950/20'
+              ];
+
+              return (
+                <div key={idx} className={`p-4 rounded-2xl border-2 space-y-3 ${borderStyles[idx] || 'border-border'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-xl bg-surface border border-border shadow-2xs">
+                        {tierIcons[idx] || <Award size={18} />}
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm text-text-main">{tier.name}</h3>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                          {idx === 0 ? t("Entry Level") : idx === 1 ? t("Regular Diners") : t("Elite VIP")}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-black px-2.5 py-1 rounded-xl bg-surface border border-border shadow-2xs text-primary">
+                      {tier.pointMultiplier}x {t("Multiplier")}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between bg-surface p-2 rounded-xl border border-border">
+                      <span className="text-text-muted font-bold">{t("Min Visits:")}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={tier.minVisits}
+                        onChange={(e) => {
+                          const updated = [...tiers];
+                          updated[idx] = { ...updated[idx], minVisits: Number(e.target.value) || 0 };
+                          setTiers(updated);
+                        }}
+                        className="w-16 px-2 py-0.5 bg-background border border-border rounded-lg font-bold text-center text-text-main"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between bg-surface p-2 rounded-xl border border-border">
+                      <span className="text-text-muted font-bold">{t("Min Spend:")}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-bold text-text-muted">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tier.minSpend}
+                          onChange={(e) => {
+                            const updated = [...tiers];
+                            updated[idx] = { ...updated[idx], minSpend: Number(e.target.value) || 0 };
+                            setTiers(updated);
+                          }}
+                          className="w-20 px-2 py-0.5 bg-background border border-border rounded-lg font-bold text-center text-text-main"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-surface p-2 rounded-xl border border-border">
+                      <span className="text-text-muted font-bold">{t("Point Earning:")}</span>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="1.0"
+                          max="3.0"
+                          value={tier.pointMultiplier}
+                          onChange={(e) => {
+                            const updated = [...tiers];
+                            updated[idx] = { ...updated[idx], pointMultiplier: Number(e.target.value) || 1.0 };
+                            setTiers(updated);
+                          }}
+                          className="w-16 px-2 py-0.5 bg-background border border-border rounded-lg font-bold text-center text-text-main"
+                        />
+                        <span className="font-bold text-text-muted">x</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-text-muted block mb-1">{t("Perks & Description")}</label>
+                      <input
+                        type="text"
+                        value={tier.perks}
+                        onChange={(e) => {
+                          const updated = [...tiers];
+                          updated[idx] = { ...updated[idx], perks: e.target.value };
+                          setTiers(updated);
+                        }}
+                        placeholder="e.g. Priority table reservation"
+                        className="w-full px-2.5 py-1.5 bg-surface border border-border rounded-xl text-xs text-text-main"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Milestone Rewards Strip */}
+          <div className="bg-background p-3 rounded-xl border border-border space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-text-main flex items-center gap-1.5">
+                <Gift size={14} className="text-amber-500" />
+                {t("Visit Milestone Bonus Rewards")}
+              </span>
+              <span className="text-[11px] text-text-muted">{t("Surprise bonus points upon reaching visit count")}</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {milestoneRewards.map((m, mIdx) => (
+                <div key={mIdx} className="bg-surface p-2.5 rounded-xl border border-border flex items-center justify-between gap-2">
+                  <div>
+                    <span className="font-black text-xs text-text-main">{m.visitNumber}th Visit Milestone</span>
+                    <p className="text-[11px] text-text-muted">{m.rewardDescription || 'Celebration Reward'}</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-lg text-xs font-black">
+                    +{m.rewardPoints} pts
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1087,23 +1525,24 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] text-text-muted font-bold">{t("Insert Tag:")}</span>
                     {[
-                      { tag: '{customerName}', label: '{name}' },
-                      { tag: '{points}', label: '{points}' },
-                      { tag: '{walletBalance}', label: '{wallet}' },
-                      { tag: '{visits}', label: '{visits}' },
-                      { tag: '{spend}', label: '{spend}' },
-                      { tag: '{tier}', label: '{tier}' },
-                      { tag: '{rate}', label: '{rate}' },
-                      { tag: '{restaurantName}', label: '{restaurant}' },
-                      { tag: '{read_more}', label: '{read_more}' }
+                      { tag: '{name}', label: 'Name' },
+                      { tag: '{points}', label: 'Points' },
+                      { tag: '{wallet}', label: 'Wallet' },
+                      { tag: '{visits}', label: 'Visits' },
+                      { tag: '{spend}', label: 'Spend' },
+                      { tag: '{tier}', label: 'Tier' },
+                      { tag: '{rate}', label: 'Rate' },
+                      { tag: '{restaurant}', label: 'Restaurant' },
+                      { tag: '{read_more}', label: 'Read More' }
                     ].map(btn => (
                       <button
                         type="button"
                         key={btn.tag}
-                        onClick={() => setCampaignTemplate(prev => `${prev} ${btn.tag}`)}
-                        className="px-1.5 py-0.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-md text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                        onClick={() => handleInsertTag(btn.tag)}
+                        className="px-2 py-0.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-md text-[11px] font-bold transition-colors cursor-pointer"
+                        title={t(`Insert ${btn.label} at cursor`)}
                       >
-                        +{btn.label}
+                        + {btn.label}
                       </button>
                     ))}
                   </div>
@@ -1115,11 +1554,11 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                   <button
                     type="button"
                     onClick={() => setCampaignTemplate(
-`👑 *Exclusive Reward for {customerName}!*
-🍽️ *{restaurantName}* | *VIP Privilege*
+`👑 *Exclusive Reward for {name}!*
+🍽️ *{restaurant}* | *VIP Privilege*
 {read_more}
 ━━━━━━━━━━━━━━━━━━━━
-You have *{points} Loyalty Points* (worth ₹{walletBalance}) ready to redeem! 🎁
+You have *{points} Loyalty Points* (worth ₹{wallet}) ready to redeem! 🎁
 
 Visit us this week to enjoy delicious food and redeem your points on any order! ✨`
                     )}
@@ -1130,11 +1569,11 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
                   <button
                     type="button"
                     onClick={() => setCampaignTemplate(
-`⏰ *Points Expiry Alert for {customerName}!*
-🍽️ *{restaurantName}* | *Loyalty Balance*
+`⏰ *Points Expiry Alert for {name}!*
+🍽️ *{restaurant}* | *Loyalty Balance*
 {read_more}
 ━━━━━━━━━━━━━━━━━━━━
-Your *{points} Loyalty Points* (₹{walletBalance} Wallet Balance) are active! 🎁
+Your *{points} Loyalty Points* (₹{wallet} Wallet Balance) are active! 🎁
 
 Don't miss out on savings! Drop by and redeem your points on your next visit. 😊`
                     )}
@@ -1145,13 +1584,13 @@ Don't miss out on savings! Drop by and redeem your points on your next visit. �
                   <button
                     type="button"
                     onClick={() => setCampaignTemplate(
-`🌟 *VIP Privilege for {customerName}!*
-🍽️ *{restaurantName}* | *VIP Elite Status*
+`🌟 *VIP Privilege for {name}!*
+🍽️ *{restaurant}* | *VIP Elite Status*
 {read_more}
 ━━━━━━━━━━━━━━━━━━━━
 Thank you for being one of our most valued guests! 🍷
 
-Your current reward balance is *{points} Points* (₹{walletBalance}). Enjoy a complimentary treat when you dine with us this week! 🍰`
+Your current reward balance is *{points} Points* (₹{wallet}). Enjoy a complimentary treat when you dine with us this week! 🍰`
                     )}
                     className="px-2 py-1 bg-surface hover:bg-surface-hover border border-border rounded-lg text-[10px] font-bold text-text-main shrink-0 transition-colors cursor-pointer"
                   >
@@ -1160,6 +1599,7 @@ Your current reward balance is *{points} Points* (₹{walletBalance}). Enjoy a c
                 </div>
 
                 <textarea
+                  ref={textareaRef}
                   rows={6}
                   value={campaignTemplate}
                   onChange={(e) => setCampaignTemplate(e.target.value)}
@@ -1275,7 +1715,7 @@ Your current reward balance is *{points} Points* (₹{walletBalance}). Enjoy a c
                           .replace(/\{wallet\}/gi, '130')
                           .replace(/\{visits\}|\{totalVisits\}/gi, '57')
                           .replace(/\{spend\}|\{totalSpend\}/gi, '1,17,010')
-                          .replace(/\{tier\}|\{membershipTier\}/gi, 'Elite VIP Member')
+                          .replace(/\{tier\}|\{membershipTier\}/gi, 'Platinum VIP')
                           .replace(/\{rate\}|\{redemptionRate\}/gi, '1.00')
                           .replace(/\{restaurantName\.toUpperCase\(\)\}/gi, activeRestName.toUpperCase())
                           .replace(/\{restaurantName\}/gi, activeRestName)
@@ -1424,6 +1864,169 @@ Your current reward balance is *{points} Points* (₹{walletBalance}). Enjoy a c
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Real-Time Expiry Audit Execution Modal */}
+        {showAuditModal && auditResult && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-surface rounded-2xl border border-border p-5 max-w-lg w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+                    <Zap size={22} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-text-main">{t("Expiry Audit & Alert Report")}</h3>
+                    <p className="text-xs text-text-muted">{auditResult.message}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAuditModal(false)}
+                  className="p-1 rounded-lg text-text-muted hover:bg-surface-hover cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-3 gap-2 bg-background p-3 rounded-xl border border-border text-center">
+                <div>
+                  <div className="text-[10px] font-bold text-text-muted uppercase">{t("Accounts Evaluated")}</div>
+                  <div className="text-base font-black text-text-main mt-0.5">{auditResult.stats?.totalEvaluated || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-amber-600 uppercase">{t("Warnings Sent")}</div>
+                  <div className="text-base font-black text-amber-600 mt-0.5">{auditResult.stats?.warningsSent || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold text-rose-600 uppercase">{t("Expired Points Reset")}</div>
+                  <div className="text-base font-black text-rose-600 mt-0.5">{auditResult.stats?.expiredResetCount || 0}</div>
+                </div>
+              </div>
+
+              {/* Actions Detail List */}
+              {auditResult.actionsTaken && auditResult.actionsTaken.length > 0 && (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  <div className="text-xs font-bold text-text-muted uppercase">{t("Immediate Actions Taken:")}</div>
+                  {auditResult.actionsTaken.map((act, aIdx) => (
+                    <div key={aIdx} className="bg-background p-2 rounded-xl border border-border flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-text-main">{act.name}</span>
+                        <span className="text-text-muted text-[11px] ml-1.5">+91 {act.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {act.action === 'WARNING_DISPATCHED' ? (
+                          <span className="bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                            ⚠️ Alert Sent ({act.daysRemaining}d left)
+                          </span>
+                        ) : (
+                          <span className="bg-rose-500/10 text-rose-600 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+                            🔄 Expired Reset ({act.pointsCleared} pts)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowAuditModal(false)}
+                className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                {t("Close Report")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Expiring / Expired Customers List Modal */}
+        {viewExpiryType && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-surface rounded-2xl border border-border p-5 max-w-lg w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    viewExpiryType === 'expiring' ? 'bg-amber-500/10 text-amber-500' : 'bg-rose-500/10 text-rose-500'
+                  }`}>
+                    {viewExpiryType === 'expiring' ? <Clock size={20} /> : <AlertTriangle size={20} />}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-text-main">
+                      {viewExpiryType === 'expiring' ? t("Points Expiring Soon (Next 7 Days)") : t("Inactive / Expired Accounts")}
+                    </h3>
+                    <p className="text-xs text-text-muted">
+                      {viewExpiryType === 'expiring'
+                        ? t("Customers nearing expiration who need a gentle reminder")
+                        : t("Accounts that have exceeded the inactivity validity window")}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewExpiryType(null)}
+                  className="p-1 rounded-lg text-text-muted hover:bg-surface-hover cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* List */}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {(viewExpiryType === 'expiring' ? expiringSoonList : expiredList).map((c, cIdx) => (
+                  <div key={c.id || cIdx} className="bg-background p-2.5 rounded-xl border border-border flex items-center justify-between text-xs">
+                    <div>
+                      <div className="font-bold text-text-main flex items-center gap-1.5">
+                        <span>{c.name}</span>
+                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-surface border border-border text-primary">
+                          {c.tier}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-muted mt-0.5">
+                        +{c.phone} • Balance: <strong className="text-emerald-600">₹{c.walletBalance}</strong> ({c.points} pts)
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {viewExpiryType === 'expiring' ? (
+                        <div className="text-amber-600 font-bold text-xs">
+                          {c.daysRemaining} {t("days left")}
+                        </div>
+                      ) : (
+                        <div className="text-rose-600 font-bold text-xs">
+                          {c.daysOverdue} {t("days overdue")}
+                        </div>
+                      )}
+                      <span className="text-[10px] text-text-muted">
+                        {c.warningSent ? t("Alert Sent ✓") : t("Pending Alert")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setViewExpiryType(null)}
+                  className="flex-1 py-2 rounded-xl border border-border text-xs font-bold text-text-muted hover:bg-surface-hover cursor-pointer"
+                >
+                  {t("Close")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewExpiryType(null);
+                    handleRunExpiryAudit();
+                  }}
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer"
+                >
+                  {t("⚡ Execute Audit Now")}
+                </button>
+              </div>
             </div>
           </div>
         )}

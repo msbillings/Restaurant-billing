@@ -541,7 +541,7 @@ class WhatsAppService {
     return this.sendMessage(rawPhone, text);
   }
 
-  async sendLoyaltyMessage(rawPhone, { customerName, pointsEarned, totalPoints, walletBalance, restaurantName, welcomeBonus = 0, isFirstVisit = false, walletRedeemed = 0, imageUrl = null, imageBase64 = null }) {
+  async sendLoyaltyMessage(rawPhone, { customerName, pointsEarned, totalPoints, walletBalance, tier = null, restaurantName, welcomeBonus = 0, isFirstVisit = false, walletRedeemed = 0, imageUrl = null, imageBase64 = null }) {
     const customerDisplayName = (customerName && customerName !== 'Guest' && String(customerName).trim())
       ? String(customerName).trim()
       : 'Valued Customer';
@@ -550,6 +550,7 @@ class WhatsAppService {
       : (this.restaurantName || 'our restaurant');
     const walletBalanceFormatted = Number(walletBalance || 0).toFixed(0);
     const READ_MORE = String.fromCharCode(8206).repeat(4001);
+    const tierLine = tier ? `\n👑 *Membership Tier:* ${tier}` : '';
 
     let message;
     if (isFirstVisit && welcomeBonus > 0) {
@@ -559,7 +560,7 @@ class WhatsAppService {
 ${READ_MORE}
 ━━━━━━━━━━━━━━━━━━━━
 🎁 *Welcome Bonus:* ${welcomeBonus} pts added!
-${pointsEarned > 0 ? `⭐ *Points Earned this visit:* ${pointsEarned} pts\n` : ''}${walletRedeemed > 0 ? `💳 *Wallet Used:* ₹${walletRedeemed}\n` : ''}💰 *Wallet Balance:* ₹${walletBalanceFormatted}
+${pointsEarned > 0 ? `⭐ *Points Earned this visit:* ${pointsEarned} pts\n` : ''}${walletRedeemed > 0 ? `💳 *Wallet Used:* ₹${walletRedeemed}\n` : ''}💰 *Wallet Balance:* ₹${walletBalanceFormatted}${tierLine}
 
 Use your wallet balance on your next visit! 😊`;
     } else {
@@ -569,7 +570,7 @@ Thank you for visiting *${restName}*! 🍽️
 ${READ_MORE}
 ━━━━━━━━━━━━━━━━━━━━${walletRedeemed > 0 ? `\n💳 *Wallet Redeemed:* ₹${walletRedeemed}` : ''}${pointsEarned > 0 ? `\n⭐ *Points Earned:* ${pointsEarned} pts` : ''}
 🏆 *Total Points:* ${totalPoints} pts
-💰 *Wallet Balance:* ₹${walletBalanceFormatted}
+💰 *Wallet Balance:* ₹${walletBalanceFormatted}${tierLine}
 
 Use your wallet balance on your next visit! 😊`;
     }

@@ -7,7 +7,9 @@ import {
   adjustCustomerPoints,
   testLoyaltyWhatsApp,
   getCampaignAudience,
-  sendLoyaltyCampaign
+  sendLoyaltyCampaign,
+  getExpiryStats,
+  runLoyaltyExpiryAudit
 } from '../controllers/loyaltyController.js';
 import { authenticateToken as protect, requireAdmin as admin, optionalAuthenticateToken } from '../middleware/auth.js';
 
@@ -19,6 +21,12 @@ router.route('/config')
 
 router.route('/stats')
   .get(protect, admin, getStats);
+
+router.route('/expiry/stats')
+  .get(protect, admin, getExpiryStats);
+
+router.route('/expiry/audit')
+  .post(protect, admin, runLoyaltyExpiryAudit);
 
 router.route('/customer/:phone')
   .get(protect, getCustomerLoyalty);

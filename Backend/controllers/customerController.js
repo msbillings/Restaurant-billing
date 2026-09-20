@@ -175,7 +175,7 @@ export const updateCustomerFromBill = async (req, bill) => {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // LOYALTY POINTS ENGINE
+    // LOYALTY POINTS & REELO-GRADE VIP CLUB ENGINE
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     let loyaltyConfig = await LoyaltyConfig.findOne().lean();
     if (!loyaltyConfig) {
@@ -184,6 +184,26 @@ export const updateCustomerFromBill = async (req, bill) => {
       await newConfig.save();
       loyaltyConfig = newConfig.toObject();
     }
+
+    // ── 3-Tier VIP Club Progression (Silver, Gold, Platinum VIP) ──
+    const configTiers = loyaltyConfig.tiers || [];
+    const platTier = configTiers.find(t => t.name === 'Platinum VIP') || { minVisits: 15, minSpend: 15000, pointMultiplier: 1.5 };
+    const goldTier = configTiers.find(t => t.name === 'Gold') || { minVisits: 5, minSpend: 5000, pointMultiplier: 1.25 };
+    const silverTier = configTiers.find(t => t.name === 'Silver') || { minVisits: 0, minSpend: 0, pointMultiplier: 1.0 };
+
+    if (customer.totalVisits >= platTier.minVisits || customer.totalSpend >= platTier.minSpend) {
+      customer.tier = 'Platinum VIP';
+      customer.isVIP = true;
+    } else if (customer.totalVisits >= goldTier.minVisits || customer.totalSpend >= goldTier.minSpend) {
+      customer.tier = 'Gold';
+      customer.isVIP = false;
+    } else {
+      customer.tier = 'Silver';
+      customer.isVIP = false;
+    }
+
+    const currentTierObj = customer.tier === 'Platinum VIP' ? platTier : (customer.tier === 'Gold' ? goldTier : silverTier);
+    const tierMultiplier = Number(currentTierObj.pointMultiplier || 1.0);
 
     let totalPointsEarned = 0;
     let restaurantName = settings.restaurantName || 'our restaurant';
@@ -195,10 +215,11 @@ export const updateCustomerFromBill = async (req, bill) => {
       if (billTotal >= minBill) {
         const mode = loyaltyConfig.loyaltyMode || 'spend';
 
-        // --- SPEND-BASED POINTS ---
+        // --- SPEND-BASED POINTS WITH VIP MULTIPLIER ---
         if (mode === 'spend' || mode === 'both') {
           const conversionRate = loyaltyConfig.conversionRate || 100;
-          const spendPoints = Math.floor(billTotal / conversionRate);
+          const baseSpendPoints = Math.floor(billTotal / conversionRate);
+          const spendPoints = Math.floor(baseSpendPoints * tierMultiplier);
           totalPointsEarned += spendPoints;
         }
 
@@ -214,6 +235,15 @@ export const updateCustomerFromBill = async (req, bill) => {
                 totalPointsEarned += rule.bonusPoints * (billItem.quantity || 1);
               }
             }
+          }
+        }
+
+        // --- VISIT MILESTONE BONUS REWARDS ---
+        if (loyaltyConfig.milestoneRewards && Array.isArray(loyaltyConfig.milestoneRewards)) {
+          const milestoneRule = loyaltyConfig.milestoneRewards.find(m => m.visitNumber === customer.totalVisits);
+          if (milestoneRule && milestoneRule.rewardPoints > 0) {
+            totalPointsEarned += milestoneRule.rewardPoints;
+            console.log(`[Loyalty] Customer ${customer.name || customer.phone} reached ${customer.totalVisits}th visit milestone! Awarded ${milestoneRule.rewardPoints} bonus pts.`);
           }
         }
 
@@ -247,6 +277,11 @@ export const updateCustomerFromBill = async (req, bill) => {
         }
       }
 
+      // Update Points Expiry Date on customer
+      const walletExpiryDays = Number(loyaltyConfig.walletExpiry || 365);
+      customer.pointsExpiryDate = new Date(Date.now() + walletExpiryDays * 86400000);
+      customer.expiryWarningSent = false;
+
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       // SEND WHATSAPP LOYALTY NOTIFICATION
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -266,13 +301,15 @@ export const updateCustomerFromBill = async (req, bill) => {
               pointsEarned: totalPointsEarned,
               totalPoints: customer.points,
               walletBalance: customer.walletBalance,
+              tier: customer.tier,
+              tierMultiplier,
               restaurantName,
               welcomeBonus: loyaltyConfig.welcomeBonus,
               isFirstVisit,
               walletRedeemed,
               imageUrl: loyaltyConfig.attachImageToReceipt !== false ? (loyaltyConfig.loyaltyImageUrl || null) : null
             });
-            console.log(`[Loyalty WhatsApp] Successfully sent WhatsApp loyalty receipt to +91${cleanPhone}`);
+            console.log(`[Loyalty WhatsApp] Successfully sent WhatsApp loyalty receipt to +91${cleanPhone} (Tier: ${customer.tier})`);
           } else {
             console.warn(`[Loyalty WhatsApp] WhatsApp not in CONNECTED state (status: ${waStatus?.status})`);
           }

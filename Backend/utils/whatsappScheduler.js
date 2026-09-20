@@ -503,6 +503,123 @@ export const processWinbackCampaignsForTenant = async (dbName, validTimeStrings,
   }
 };
 
+const processLoyaltyExpiryForTenant = async (dbName, validTimeStrings, todayDateStr) => {
+  try {
+    const models = await getTenantModels(dbName);
+    const LoyaltyConfig = models.LoyaltyConfig;
+    const Customer = models.Customer;
+    const Setting = models.Setting;
+
+    if (!LoyaltyConfig || !Customer) return;
+
+    const config = await LoyaltyConfig.findOne();
+    if (!config || !config.enabled) return;
+    if (config.autoExpiryEnabled === false && config.expiryWarningNotify === false) return;
+
+    // Run once daily at 02:00 AM IST
+    const auditSlot = '02:00';
+    if (!validTimeStrings.has(auditSlot)) {
+      return;
+    }
+    if (config.lastExpiryAuditDate === todayDateStr) {
+      return;
+    }
+
+    const walletExpiryDays = Number(config.walletExpiry || 365);
+    const warningDays = Number(config.expiryWarningDays || 7);
+    const autoExpiryEnabled = config.autoExpiryEnabled !== false;
+    const expiryWarningNotify = config.expiryWarningNotify !== false;
+
+    // Restaurant name
+    let restName = 'our restaurant';
+    if (Setting) {
+      const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
+      let s = settingsDoc?.value;
+      if (typeof s === 'string') { try { s = JSON.parse(s); } catch (e) {} }
+      if (s?.restaurantName) restName = s.restaurantName;
+    }
+
+    const waManager = whatsappManager.getInstance(dbName);
+    await waManager.ensureConnection();
+    const waConnected = waManager.getStatus().status === 'CONNECTED';
+
+    const customersWithBalance = await Customer.find({
+      $or: [{ points: { $gt: 0 } }, { walletBalance: { $gt: 0 } }]
+    });
+
+    const now = Date.now();
+    const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+    for (const customer of customersWithBalance) {
+      const cleanPhone = (customer.phone || '').replace(/\D/g, '').slice(-10);
+      const lastActivity = new Date(customer.lastVisit || customer.updatedAt || customer.createdAt || now).getTime();
+      const expiryTimestamp = lastActivity + walletExpiryDays * 86400000;
+      const daysRemaining = Math.ceil((expiryTimestamp - now) / 86400000);
+      customer.pointsExpiryDate = new Date(expiryTimestamp);
+
+      // Tier update
+      const visits = customer.totalVisits || 0;
+      const spend = customer.totalSpend || 0;
+      if (customer.isVIP || visits >= 15 || spend >= 15000) {
+        customer.tier = 'Platinum VIP';
+      } else if (visits >= 5 || spend >= 5000) {
+        customer.tier = 'Gold';
+      } else {
+        customer.tier = 'Silver';
+      }
+
+      // 1. Warning alert (7 days or less remaining)
+      if (daysRemaining > 0 && daysRemaining <= warningDays) {
+        if (!customer.expiryWarningSent && expiryWarningNotify && waConnected && cleanPhone.length === 10) {
+          const customerName = (customer.name && customer.name !== 'Guest') ? customer.name : 'Valued Customer';
+          const warningMsg =
+`⏰ *LOYALTY POINTS EXPIRATION ALERT* ⏰
+🏨 *${restName.toUpperCase()}* | *ACTION REQUIRED*
+${READ_MORE}
+━━━━━━━━━━━━━━━━━━━━
+Dear *${customerName}*,
+
+You have active loyalty rewards at *${restName}* that are scheduled to expire soon!
+
+⭐ *Available Points:* *${customer.points} Points*
+💰 *Wallet Value:* *₹${Number(customer.walletBalance || 0).toFixed(0)}*
+⏳ *Time Remaining:* *Only ${daysRemaining} Day${daysRemaining > 1 ? 's' : ''} Left!*
+
+Don't let your rewards go to waste! Visit us this week or order online to redeem your points on delicious food before they reset. 🍽️
+
+━━━━━━━━━━━━━━━━━━━━
+🥂 _We look forward to serving you again at ${restName}!_`;
+
+          try {
+            await waManager.sendTextMessage('91' + cleanPhone, warningMsg);
+            customer.expiryWarningSent = true;
+            await new Promise(res => setTimeout(res, 2500));
+          } catch (waErr) {
+            console.warn(`[WhatsApp Scheduler] Expiry alert failed for ${cleanPhone}:`, waErr.message);
+          }
+        }
+      }
+
+      // 2. Expired Accounts (0 or negative days)
+      if (daysRemaining <= 0) {
+        if (autoExpiryEnabled) {
+          customer.points = 0;
+          customer.walletBalance = 0;
+          customer.expiryWarningSent = false;
+        }
+      }
+
+      await customer.save();
+    }
+
+    config.lastExpiryAuditDate = todayDateStr;
+    await config.save();
+    console.log(`[WhatsApp Scheduler] Loyalty expiry audit completed for ${dbName}.`);
+  } catch (err) {
+    console.error(`[WhatsApp Scheduler] Error processing loyalty expiry for ${dbName}:`, err);
+  }
+};
+
 export const startWhatsAppScheduler = () => {
   cron.schedule('* * * * *', async () => {
     try {
@@ -571,6 +688,13 @@ export const startWhatsAppScheduler = () => {
             await processWinbackCampaignsForTenant(dbName, validTimeStrings, todayDateStr);
           } catch (e) {
             console.error(`[WhatsApp Scheduler] Win-Back error for ${dbName}:`, e);
+          }
+
+          // ── Process Loyalty Expiry Audit ──
+          try {
+            await processLoyaltyExpiryForTenant(dbName, validTimeStrings, todayDateStr);
+          } catch (e) {
+            console.error(`[WhatsApp Scheduler] Loyalty Expiry error for ${dbName}:`, e);
           }
 
           if (!settingsDoc) continue;
