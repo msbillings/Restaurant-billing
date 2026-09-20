@@ -187,13 +187,9 @@ function createMenu() {
               mainWindow.webContents.send('checking-for-update');
             }
             autoUpdater.checkForUpdates().catch((err) => {
+              // Let autoUpdater.on('error') handle ALL errors properly
+              // Do NOT show "up to date" here — it masks real update failures
               console.error('[AutoUpdater] Manual menu check error:', err);
-              dialog.showMessageBox({
-                type: 'info',
-                title: 'Check for Updates',
-                message: `Your software is completely up to date! (Current version: v${app.getVersion()})`,
-                buttons: ['OK']
-              });
             });
           }
         },
