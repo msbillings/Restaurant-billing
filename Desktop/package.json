@@ -1,7 +1,7 @@
 {
   "name": "restaurant-billing-desktop",
   "productName": "MS Billings POS",
-  "version": "6.0.97",
+  "version": "6.0.98",
   "description": "Professional Restaurant Management Desktop Application, Billing Software",
   "main": "main.js",
   "scripts": {
