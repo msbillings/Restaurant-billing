@@ -64,6 +64,8 @@ jobs:
         run: npx electron-builder --win -p always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: false
+          EP_PRE_RELEASE: false
 
   # ─── Android APK ──────────────────────────────────────────────────────────
   build-apk:
@@ -117,6 +119,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
           files: |
             Frontend/android/app/build/outputs/apk/release/*.apk
             Frontend/android/app/build/outputs/apk/debug/*.apk
@@ -223,6 +227,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
           files: Frontend/ios/App/build/MS-Billings.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

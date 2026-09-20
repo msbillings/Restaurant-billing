@@ -725,17 +725,32 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('[AutoUpdater] Error:', err);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('update-error', err ? err.message : 'Unknown update error');
+    const errMsg = err?.message || '';
+
+    // 404 means no published release exists yet (draft or not yet released) — not a real error
+    const isNoRelease = errMsg.includes('404') || errMsg.includes('ENOTFOUND');
+
+    if (mainWindow && !mainWindow.isDestroyed() && !isNoRelease) {
+      mainWindow.webContents.send('update-error', errMsg || 'Unknown update error');
     }
     if (isManualUpdateCheck) {
       isManualUpdateCheck = false;
-      dialog.showMessageBox({
-        type: 'warning',
-        title: 'Update Check',
-        message: `Could not check for updates: ${err?.message || 'Network error'}\nPlease ensure you have an active internet connection.`,
-        buttons: ['OK']
-      });
+      if (isNoRelease) {
+        // Release not yet available / still being built — treat as up to date
+        dialog.showMessageBox({
+          type: 'info',
+          title: 'Check for Updates',
+          message: `Your software is up to date! (Current version: v${app.getVersion()})`,
+          buttons: ['OK']
+        });
+      } else {
+        dialog.showMessageBox({
+          type: 'warning',
+          title: 'Update Check',
+          message: `Could not check for updates.\nPlease ensure you have an active internet connection.`,
+          buttons: ['OK']
+        });
+      }
     }
   });
 }
