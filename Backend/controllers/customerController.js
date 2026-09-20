@@ -1,7 +1,10 @@
 import CustomerSchema from '../models/Customer.js';
 import BillDefault from '../models/Bill.js';
 import SettingDefault from '../models/Setting.js';
+import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
+import whatsappManager from '../services/whatsappService.js';
+import { resolveTenantInfo } from './whatsappController.js';
 
 export const searchCustomers = async (req, res) => {
   try {
@@ -110,9 +113,12 @@ export const updateCustomerFromBill = async (req, bill) => {
     const cleanPhone = bill.customerPhone.trim().replace(/\D/g, '').slice(-10);
 
     const Customer = getTenantModel(req, 'Customer', CustomerSchema);
-    
+    const Setting = getTenantModel(req, 'Setting', SettingDefault);
+    const LoyaltyConfig = getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault);
+
     let customer = await Customer.findOne({ phone: cleanPhone });
-    
+    const isFirstVisit = !customer;
+
     if (!customer) {
       customer = new Customer({
         phone: cleanPhone,
@@ -133,14 +139,18 @@ export const updateCustomerFromBill = async (req, bill) => {
     customer.lastVisit = new Date();
 
     // Fetch dynamic VIP thresholds from settings
-    const Setting = getTenantModel(req, 'Setting', SettingDefault);
     const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
-    const settings = settingsDoc?.value || {};
-    
-    const visitLimit = settings.vipVisitThreshold !== undefined ? settings.vipVisitThreshold : 5;
-    const spendLimit = settings.vipSpendThreshold !== undefined ? settings.vipSpendThreshold : 5000;
+    let settings = settingsDoc?.value || {};
+    if (typeof settings === 'string') {
+      try { settings = JSON.parse(settings); } catch (e) { settings = {}; }
+    }
+    const visitLimit = (settings.vipVisitThreshold !== undefined && settings.vipVisitThreshold !== null && settings.vipVisitThreshold !== '')
+      ? Number(settings.vipVisitThreshold)
+      : 5;
+    const spendLimit = (settings.vipSpendThreshold !== undefined && settings.vipSpendThreshold !== null && settings.vipSpendThreshold !== '')
+      ? Number(settings.vipSpendThreshold)
+      : 5000;
 
-    // Check VIP status dynamically
     if (customer.totalSpend >= spendLimit || customer.totalVisits >= visitLimit) {
       customer.isVIP = true;
     }
@@ -158,10 +168,118 @@ export const updateCustomerFromBill = async (req, bill) => {
       }
     }
 
-    // Keep top 20 favorites for detailed CRM view
+    // Keep top 20 favorites
     customer.favoriteItems.sort((a, b) => b.count - a.count);
     if (customer.favoriteItems.length > 20) {
       customer.favoriteItems = customer.favoriteItems.slice(0, 20);
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // LOYALTY POINTS ENGINE
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let loyaltyConfig = await LoyaltyConfig.findOne().lean();
+    if (!loyaltyConfig) {
+      // Create default config if none exists
+      const newConfig = new (getTenantModel(req, 'LoyaltyConfig', LoyaltyConfigDefault))({});
+      await newConfig.save();
+      loyaltyConfig = newConfig.toObject();
+    }
+
+    let totalPointsEarned = 0;
+    let restaurantName = settings.restaurantName || 'our restaurant';
+
+    if (loyaltyConfig.enabled) {
+      const billTotal = bill.total || 0;
+      const minBill = loyaltyConfig.minBillAmount || 0;
+
+      if (billTotal >= minBill) {
+        const mode = loyaltyConfig.loyaltyMode || 'spend';
+
+        // --- SPEND-BASED POINTS ---
+        if (mode === 'spend' || mode === 'both') {
+          const conversionRate = loyaltyConfig.conversionRate || 100;
+          const spendPoints = Math.floor(billTotal / conversionRate);
+          totalPointsEarned += spendPoints;
+        }
+
+        // --- ITEM-BASED BONUS POINTS ---
+        if ((mode === 'item' || mode === 'both') && loyaltyConfig.itemBonusRules?.length > 0) {
+          if (bill.items && Array.isArray(bill.items)) {
+            for (const billItem of bill.items) {
+              if (!billItem.name) continue;
+              const rule = loyaltyConfig.itemBonusRules.find(
+                r => r.itemName?.toLowerCase() === billItem.name?.toLowerCase()
+              );
+              if (rule && rule.bonusPoints > 0) {
+                totalPointsEarned += rule.bonusPoints * (billItem.quantity || 1);
+              }
+            }
+          }
+        }
+
+        // --- WELCOME BONUS (first visit only) ---
+        if (isFirstVisit && loyaltyConfig.welcomeBonus > 0) {
+          totalPointsEarned += loyaltyConfig.welcomeBonus;
+        }
+      }
+
+      const redemptionValue = loyaltyConfig.redemptionValue || 1;
+      const walletRedeemed = bill.walletRedemption ? Number(bill.walletRedemption) : 0;
+
+      // Deduct redeemed wallet balance and points if customer used wallet on this bill
+      if (walletRedeemed > 0) {
+        const pointsDeducted = Math.round(walletRedeemed / redemptionValue);
+        customer.points = Math.max(0, (customer.points || 0) - pointsDeducted);
+        customer.walletBalance = Math.max(0, (customer.walletBalance || 0) - walletRedeemed);
+      }
+
+      if (totalPointsEarned > 0) {
+        const walletEarned = totalPointsEarned * redemptionValue;
+        customer.points = (customer.points || 0) + totalPointsEarned;
+        customer.walletBalance = (customer.walletBalance || 0) + walletEarned;
+
+        // Save pointsEarned back to the bill
+        try {
+          const BillModel = getTenantModel(req, 'Bill', BillDefault);
+          await BillModel.findByIdAndUpdate(bill._id, { pointsEarned: totalPointsEarned });
+        } catch (billUpdateErr) {
+          console.error('[Loyalty] Failed to update pointsEarned on bill:', billUpdateErr?.message);
+        }
+      }
+
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // SEND WHATSAPP LOYALTY NOTIFICATION
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      if (loyaltyConfig.whatsappNotify !== false && (totalPointsEarned > 0 || walletRedeemed > 0) && cleanPhone && cleanPhone.length >= 10) {
+        try {
+          const { whatsappService } = await resolveTenantInfo(req);
+          await whatsappService.ensureConnection();
+          const waStatus = whatsappService.getStatus();
+
+          if (waStatus?.status === 'CONNECTED' || Boolean(whatsappService.sock?.user?.id)) {
+            const customerDisplayName = (customer.name && customer.name !== 'Guest')
+              ? customer.name
+              : 'Valued Customer';
+
+            await whatsappService.sendLoyaltyMessage(cleanPhone, {
+              customerName: customerDisplayName,
+              pointsEarned: totalPointsEarned,
+              totalPoints: customer.points,
+              walletBalance: customer.walletBalance,
+              restaurantName,
+              welcomeBonus: loyaltyConfig.welcomeBonus,
+              isFirstVisit,
+              walletRedeemed,
+              imageUrl: loyaltyConfig.attachImageToReceipt !== false ? (loyaltyConfig.loyaltyImageUrl || null) : null
+            });
+            console.log(`[Loyalty WhatsApp] Successfully sent WhatsApp loyalty receipt to +91${cleanPhone}`);
+          } else {
+            console.warn(`[Loyalty WhatsApp] WhatsApp not in CONNECTED state (status: ${waStatus?.status})`);
+          }
+        } catch (waErr) {
+          console.warn(`[Loyalty] WhatsApp notification skipped: ${waErr?.message || 'not connected'}`);
+        }
+      }
     }
 
     await customer.save();

@@ -1019,7 +1019,7 @@ export const settleBill = async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
-    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, showLogo } = req.body;
+    const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount, discount, discountType, discountValue, discountName, applicableTo, targetCategory, tax, taxBreakdown, total, subtotal, orderSource, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails, showLogo, walletRedemption } = req.body;
 
     let order = null;
     if (id && id !== 'new' && mongoose.Types.ObjectId.isValid(id)) {
@@ -1084,6 +1084,7 @@ export const settleBill = async (req, res) => {
     if (deliveryCharge !== undefined) order.deliveryCharge = Number(deliveryCharge) || 0;
     if (containerCharge !== undefined) order.containerCharge = Number(containerCharge) || 0;
     if (showLogo !== undefined) order.showLogo = showLogo;
+    if (walletRedemption !== undefined) order.walletRedemption = Math.max(0, Number(walletRedemption) || 0);
 
     // Apply optional pricing/discount adjustments if sent directly
     if (discount !== undefined) order.discount = Number(discount) || 0;
@@ -1169,6 +1170,9 @@ export const settleBill = async (req, res) => {
                 upi: Number(splitPayments.upi) || 0,
                 card: Number(splitPayments.card) || 0
               };
+            }
+            if (walletRedemption !== undefined) {
+              freshOrder.walletRedemption = Math.max(0, Number(walletRedemption) || 0);
             }
             freshOrder.updatedAt = new Date();
             if (!freshOrder.billNumber) freshOrder.billNumber = order.billNumber;

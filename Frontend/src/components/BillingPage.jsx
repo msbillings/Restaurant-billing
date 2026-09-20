@@ -2376,6 +2376,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       splitPayments: paymentData.splitPayments,
       amountPaid: paymentData.amountPaid,
       upiApp: paymentData.upiApp,
+      walletRedemption: paymentData.walletRedemption || 0,
       showLogo: (() => {
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -2401,6 +2402,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         splitPayments: paymentData.splitPayments || settledOrder?.splitPayments,
         amountPaid: paymentData.amountPaid || settledOrder?.amountPaid,
         upiApp: paymentData.upiApp || settledOrder?.upiApp,
+        walletRedemption: paymentData.walletRedemption || settledOrder?.walletRedemption || 0,
         billNumber: confirmedBillNumber,
         tableNo: tableToUse,
         subtotal,

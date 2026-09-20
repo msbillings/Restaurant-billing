@@ -197,9 +197,9 @@ export const getRestaurantInfo = async (req, res) => {
       serverIp: restaurantSettings.serverIp || '',
       autoSendDaybook: restaurantSettings.autoSendDaybook !== undefined ? restaurantSettings.autoSendDaybook : false,
       autoSendTime: restaurantSettings.autoSendTime || '22:00',
-      vipVisitThreshold: restaurantSettings.vipVisitThreshold !== undefined ? restaurantSettings.vipVisitThreshold : 5,
-      vipSpendThreshold: restaurantSettings.vipSpendThreshold !== undefined ? restaurantSettings.vipSpendThreshold : 5000,
       ...restaurantSettings,
+      vipVisitThreshold: (restaurantSettings.vipVisitThreshold !== undefined && restaurantSettings.vipVisitThreshold !== null && restaurantSettings.vipVisitThreshold !== '') ? Number(restaurantSettings.vipVisitThreshold) : 5,
+      vipSpendThreshold: (restaurantSettings.vipSpendThreshold !== undefined && restaurantSettings.vipSpendThreshold !== null && restaurantSettings.vipSpendThreshold !== '') ? Number(restaurantSettings.vipSpendThreshold) : 5000,
       logo: restaurantSettings.logo === '[logo_stored]' ? '' : (restaurantSettings.logo || '')
     };
 
@@ -259,7 +259,14 @@ export const updateRestaurantInfo = async (req, res) => {
       }
 
       const existingDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean().maxTimeMS(2500);
-      const existingSettings = existingDoc?.value || {};
+      let existingSettings = existingDoc?.value || {};
+      if (typeof existingSettings === 'string') {
+        try {
+          existingSettings = JSON.parse(existingSettings);
+        } catch (e) {
+          existingSettings = {};
+        }
+      }
       
       // CRITICAL FIX: If client sent dummy '[logo_stored]', never overwrite the existing stored logo
       if (settingsToSave.logo === '[logo_stored]') {
@@ -267,10 +274,16 @@ export const updateRestaurantInfo = async (req, res) => {
       }
       
       mergedSettings = { ...existingSettings, ...settingsToSave };
+      if (settingsToSave.vipVisitThreshold !== undefined && settingsToSave.vipVisitThreshold !== null && settingsToSave.vipVisitThreshold !== '') {
+        mergedSettings.vipVisitThreshold = Math.max(1, Number(settingsToSave.vipVisitThreshold));
+      }
+      if (settingsToSave.vipSpendThreshold !== undefined && settingsToSave.vipSpendThreshold !== null && settingsToSave.vipSpendThreshold !== '') {
+        mergedSettings.vipSpendThreshold = Math.max(0, Number(settingsToSave.vipSpendThreshold));
+      }
       if (mergedSettings.logo === '[logo_stored]') {
         mergedSettings.logo = '';
       }
-      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true }).maxTimeMS(3000));
+      updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true, new: true, setDefaultsOnInsert: true }).maxTimeMS(3000));
     }
     
     if (spaces) {
@@ -295,7 +308,7 @@ export const updateRestaurantInfo = async (req, res) => {
       } catch (e) { }
     }
 
-    res.status(200).json({ message: 'Updated successfully' });
+    res.status(200).json({ message: 'Updated successfully', restaurantSettings: mergedSettings });
   } catch (error) {
     res.status(500).json({ message: 'Error updating config', error: error.message });
   }

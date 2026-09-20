@@ -541,6 +541,52 @@ class WhatsAppService {
     return this.sendMessage(rawPhone, text);
   }
 
+  async sendLoyaltyMessage(rawPhone, { customerName, pointsEarned, totalPoints, walletBalance, restaurantName, welcomeBonus = 0, isFirstVisit = false, walletRedeemed = 0, imageUrl = null, imageBase64 = null }) {
+    const customerDisplayName = (customerName && customerName !== 'Guest' && String(customerName).trim())
+      ? String(customerName).trim()
+      : 'Valued Customer';
+    const restName = (restaurantName && String(restaurantName).trim())
+      ? String(restaurantName).trim()
+      : (this.restaurantName || 'our restaurant');
+    const walletBalanceFormatted = Number(walletBalance || 0).toFixed(0);
+    const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+    let message;
+    if (isFirstVisit && welcomeBonus > 0) {
+      message =
+`👋 Welcome *${customerDisplayName}*!
+🎉 You've joined *${restName}*'s Loyalty Program!
+${READ_MORE}
+━━━━━━━━━━━━━━━━━━━━
+🎁 *Welcome Bonus:* ${welcomeBonus} pts added!
+${pointsEarned > 0 ? `⭐ *Points Earned this visit:* ${pointsEarned} pts\n` : ''}${walletRedeemed > 0 ? `💳 *Wallet Used:* ₹${walletRedeemed}\n` : ''}💰 *Wallet Balance:* ₹${walletBalanceFormatted}
+
+Use your wallet balance on your next visit! 😊`;
+    } else {
+      message =
+`🌟 Hi *${customerDisplayName}*!
+Thank you for visiting *${restName}*! 🍽️
+${READ_MORE}
+━━━━━━━━━━━━━━━━━━━━${walletRedeemed > 0 ? `\n💳 *Wallet Redeemed:* ₹${walletRedeemed}` : ''}${pointsEarned > 0 ? `\n⭐ *Points Earned:* ${pointsEarned} pts` : ''}
+🏆 *Total Points:* ${totalPoints} pts
+💰 *Wallet Balance:* ₹${walletBalanceFormatted}
+
+Use your wallet balance on your next visit! 😊`;
+    }
+
+    if (imageUrl || imageBase64) {
+      return this.sendBillMedia(rawPhone, { imageUrl, imageBase64, caption: message });
+    }
+    return this.sendTextMessage(rawPhone, message);
+  }
+
+  async sendCampaignMessage(rawPhone, { imageUrl = null, imageBase64 = null, caption = '' }) {
+    if (imageUrl || imageBase64) {
+      return this.sendBillMedia(rawPhone, { imageUrl, imageBase64, caption });
+    }
+    return this.sendTextMessage(rawPhone, caption);
+  }
+
   async sendFeedbackMessage(rawPhone, customerName, reviewLink, restaurantName) {
     if (!reviewLink) {
       console.warn(`[WhatsApp Service - ${this.tenantId}] No review link provided, skipping feedback message.`);

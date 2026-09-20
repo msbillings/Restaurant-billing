@@ -253,6 +253,16 @@ const billSchema = new mongoose.Schema({
   whatsappSentAt: {
     type: Date
   },
+  walletRedemption: {
+    type: Number,
+    default: 0,
+    min: [0, 'Wallet redemption cannot be negative']
+  },
+  pointsEarned: {
+    type: Number,
+    default: 0,
+    min: [0, 'Points earned cannot be negative']
+  },
   billedAt: {
     type: Date
   },

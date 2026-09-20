@@ -1,7 +1,7 @@
 import { getApiUrl, getSuperadminApiUrl } from "../config.js";
 import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Search, Star, TrendingUp, Calendar, ChevronLeft, ChevronRight, FileText, X, Loader2, Eye, Settings, ChevronDown, ChevronUp, Save, CheckCircle2 } from 'lucide-react';
+import { Users, Search, Star, TrendingUp, Calendar, ChevronLeft, ChevronRight, FileText, X, Loader2, Eye, Settings, ChevronDown, ChevronUp, Save, CheckCircle2, Award, Coins } from 'lucide-react';
 import BackButton from './common/BackButton';
 import Invoice from './Invoice';
 import { getBills, getBillById } from '../api/billing';
@@ -36,6 +36,54 @@ const CRM = ({ onNavigate, onGoBack }) => {
   const [fullSettings, setFullSettings] = useState({});
   const [savingVipSettings, setSavingVipSettings] = useState(false);
 
+  const [adjustModal, setAdjustModal] = useState({
+    isOpen: false,
+    customer: null,
+    action: 'add_points',
+    amount: '',
+    reason: '',
+    loading: false
+  });
+
+  const handleAdjustLoyalty = async () => {
+    if (!adjustModal.customer?.phone) return;
+    const val = Math.abs(Number(adjustModal.amount) || 0);
+    if (val <= 0) {
+      alert(t('Please enter a valid amount greater than 0'));
+      return;
+    }
+    setAdjustModal(prev => ({ ...prev, loading: true }));
+    try {
+      let pointsDelta = 0;
+      let walletDelta = 0;
+      if (adjustModal.action === 'add_points') pointsDelta = val;
+      else if (adjustModal.action === 'deduct_points') pointsDelta = -val;
+      else if (adjustModal.action === 'add_wallet') walletDelta = val;
+      else if (adjustModal.action === 'deduct_wallet') walletDelta = -val;
+
+      const res = await api.post('/loyalty/adjust', {
+        phone: adjustModal.customer.phone,
+        customerId: adjustModal.customer._id,
+        pointsDelta: pointsDelta !== 0 ? pointsDelta : undefined,
+        walletDelta: walletDelta !== 0 ? walletDelta : undefined,
+        reason: adjustModal.reason
+      });
+
+      if (res.data?.customer) {
+        setCustomers(prev => prev.map(c =>
+          (c._id === adjustModal.customer._id || c.phone === adjustModal.customer.phone)
+            ? { ...c, points: res.data.customer.points, walletBalance: res.data.customer.walletBalance }
+            : c
+        ));
+      }
+      setAdjustModal({ isOpen: false, customer: null, action: 'add_points', amount: '', reason: '', loading: false });
+    } catch (err) {
+      console.error('Error adjusting loyalty:', err);
+      alert(err.response?.data?.message || t('Failed to adjust loyalty balance'));
+      setAdjustModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const toggleFavorites = (customerId) => {
     setExpandedFavorites(prev => ({
       ...prev,
@@ -46,50 +94,73 @@ const CRM = ({ onNavigate, onGoBack }) => {
   const loadVipSettings = async () => {
     try {
       const res = await api.get('/config/info');
-      if (res.data?.restaurantSettings) {
-        const backendSettings = res.data.restaurantSettings;
-        setFullSettings(backendSettings);
-        
-        // Use local saved settings if user recently customized them, else sync from backend
-        const localSaved = localStorage.getItem('resto_vip_settings');
-        if (localSaved) {
-          try {
-            setVipSettings(JSON.parse(localSaved));
-            return;
-          } catch (e) {}
-        }
-        
-        const newVip = {
-          vipVisitThreshold: backendSettings.vipVisitThreshold !== undefined ? Number(backendSettings.vipVisitThreshold) : 5,
-          vipSpendThreshold: backendSettings.vipSpendThreshold !== undefined ? Number(backendSettings.vipSpendThreshold) : 5000
-        };
-        setVipSettings(newVip);
-        localStorage.setItem('resto_vip_settings', JSON.stringify(newVip));
-      }
+      const backendSettings = res.data?.restaurantSettings || res.data || {};
+      setFullSettings(backendSettings);
+
+      const visits = (backendSettings.vipVisitThreshold !== undefined && backendSettings.vipVisitThreshold !== null && backendSettings.vipVisitThreshold !== '')
+        ? Number(backendSettings.vipVisitThreshold)
+        : 5;
+      const spend = (backendSettings.vipSpendThreshold !== undefined && backendSettings.vipSpendThreshold !== null && backendSettings.vipSpendThreshold !== '')
+        ? Number(backendSettings.vipSpendThreshold)
+        : 5000;
+
+      const newVip = {
+        vipVisitThreshold: visits,
+        vipSpendThreshold: spend
+      };
+
+      setVipSettings(newVip);
+      localStorage.setItem('resto_vip_settings', JSON.stringify(newVip));
     } catch (err) {
       console.error('Failed to load VIP settings', err);
     }
   };
 
   const saveVipSettings = async () => {
-    // 1. Instant optimistic UI close & LocalStorage update (0ms delay)
-    localStorage.setItem('resto_vip_settings', JSON.stringify(vipSettings));
-    const newFullSettings = { ...fullSettings, ...vipSettings };
-    setFullSettings(newFullSettings);
-    setVipSettingsOpen(false);
-
-    // 2. Non-blocking background API update
+    setSavingVipSettings(true);
     try {
-      await api.post('/config/info', { restaurantSettings: vipSettings });
+      const visitVal = (vipSettings.vipVisitThreshold !== undefined && vipSettings.vipVisitThreshold !== '' && !isNaN(Number(vipSettings.vipVisitThreshold)))
+        ? Math.max(1, Number(vipSettings.vipVisitThreshold))
+        : 5;
+      const spendVal = (vipSettings.vipSpendThreshold !== undefined && vipSettings.vipSpendThreshold !== '' && !isNaN(Number(vipSettings.vipSpendThreshold)))
+        ? Math.max(0, Number(vipSettings.vipSpendThreshold))
+        : 5000;
+
+      const cleanVip = {
+        vipVisitThreshold: visitVal,
+        vipSpendThreshold: spendVal
+      };
+
+      await api.post('/config/info', { restaurantSettings: cleanVip });
+
+      setVipSettings(cleanVip);
+      localStorage.setItem('resto_vip_settings', JSON.stringify(cleanVip));
+
+      // Also sync restaurantSettings in localStorage
+      try {
+        const storedResto = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        const updatedResto = { ...storedResto, ...cleanVip };
+        localStorage.setItem('restaurantSettings', JSON.stringify(updatedResto));
+        window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: updatedResto }));
+      } catch (e) {}
+
+      setVipSettingsOpen(false);
     } catch (err) {
-      console.error('Background save VIP settings failed:', err);
+      console.error('Save VIP settings failed:', err);
+      alert(t('Failed to save VIP settings. Please check your connection and try again.'));
+    } finally {
+      setSavingVipSettings(false);
     }
   };
 
   const isCustomerVIP = (customer) => {
-    const visits = vipSettings.vipVisitThreshold || 5;
-    const spend = vipSettings.vipSpendThreshold || 5000;
-    return customer.totalVisits >= visits || customer.totalSpend >= spend;
+    const visits = (vipSettings.vipVisitThreshold !== undefined && vipSettings.vipVisitThreshold !== '' && !isNaN(Number(vipSettings.vipVisitThreshold)))
+      ? Number(vipSettings.vipVisitThreshold)
+      : 5;
+    const spend = (vipSettings.vipSpendThreshold !== undefined && vipSettings.vipSpendThreshold !== '' && !isNaN(Number(vipSettings.vipSpendThreshold)))
+      ? Number(vipSettings.vipSpendThreshold)
+      : 5000;
+    return (customer.totalVisits || 0) >= visits || (customer.totalSpend || 0) >= spend;
   };
 
   const fetchCustomers = async () => {
@@ -346,6 +417,8 @@ const CRM = ({ onNavigate, onGoBack }) => {
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Last Visit Type")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-center">{t("Visits")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border text-right whitespace-nowrap">{t("Total Spend")}</th>
+              <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-center">{t("Points")}</th>
+              <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-right">{t("Wallet")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Last Visit")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap">{t("Favorites")}</th>
               <th className="px-3 py-2 text-[11px] font-bold text-text-muted uppercase tracking-wider border-b border-border whitespace-nowrap text-center">{t("Action")}</th>
@@ -354,7 +427,7 @@ const CRM = ({ onNavigate, onGoBack }) => {
           <tbody className="divide-y divide-border text-xs">
             {filteredCustomers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-text-muted">
+                <td colSpan={10} className="p-8 text-center text-text-muted">
                   <Users size={24} className="mx-auto text-text-muted/50 mb-1.5" />
                   <p>{t("No customers found.")}</p>
                 </td>
@@ -374,6 +447,14 @@ const CRM = ({ onNavigate, onGoBack }) => {
                   </td>
                   <td className="px-3 py-2 font-bold text-text-main whitespace-nowrap text-center">{customer.totalVisits}</td>
                   <td className="px-3 py-2 font-bold text-success text-right whitespace-nowrap">₹{customer.totalSpend?.toFixed(2) || '0.00'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-center">
+                    <span className="font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full text-[11px]">
+                      {customer.points || 0} pts
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 font-bold text-emerald-600 text-right whitespace-nowrap font-mono">
+                    ₹{(customer.walletBalance || 0).toFixed(0)}
+                  </td>
                   <td className="px-3 py-2 text-text-muted whitespace-nowrap">
                     <div className="flex items-center gap-1 text-[11px]"><Calendar size={12} /> {new Date(customer.lastVisit).toLocaleDateString()}</div>
                   </td>
@@ -411,14 +492,24 @@ const CRM = ({ onNavigate, onGoBack }) => {
                     </div>
                   </td>
                   <td className="px-3 py-2 whitespace-nowrap text-center">
-                    <button
-                      onClick={() => handleViewBills(customer)}
-                      disabled={!customer.phone}
-                      className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center cursor-pointer"
-                      title={t("View Customer Bills")}
-                    >
-                      <FileText size={15} />
-                    </button>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => handleViewBills(customer)}
+                        disabled={!customer.phone}
+                        className="p-1.5 bg-primary/10 text-primary hover:bg-primary/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center cursor-pointer"
+                        title={t("View Customer Bills")}
+                      >
+                        <FileText size={15} />
+                      </button>
+                      <button
+                        onClick={() => setAdjustModal({ isOpen: true, customer, action: 'add_points', amount: '', reason: '', loading: false })}
+                        disabled={!customer.phone}
+                        className="p-1.5 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center cursor-pointer"
+                        title={t("Adjust Loyalty Points / Wallet")}
+                      >
+                        <Award size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -449,9 +540,14 @@ const CRM = ({ onNavigate, onGoBack }) => {
               </div>
               <span className="text-xs sm:text-sm font-black text-success shrink-0">₹{customer.totalSpend?.toFixed(0) || '0'}</span>
             </div>
-            <div className="flex items-center gap-3 text-[11px] text-text-muted mt-1.5 pt-1.5 border-t border-border">
+            <div className="flex items-center justify-between gap-2 text-[11px] text-text-muted mt-1.5 pt-1.5 border-t border-border">
               <span>{t("Visits:")} <strong className="text-text-main">{customer.totalVisits}</strong></span>
-              {customer.lastVisit && <span className="flex items-center gap-1"><Calendar size={11} />{new Date(customer.lastVisit).toLocaleDateString()}</span>}
+              <span className="font-bold text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-full text-[10px]">
+                🏆 {customer.points || 0} pts
+              </span>
+              <span className="font-bold text-emerald-600 font-mono text-[11px]">
+                💰 ₹{(customer.walletBalance || 0).toFixed(0)}
+              </span>
             </div>
             {customer.favoriteItems?.length > 0 && (
               <div className="flex items-center gap-1 mt-1.5 relative">
@@ -486,7 +582,15 @@ const CRM = ({ onNavigate, onGoBack }) => {
                 )}
               </div>
             )}
-            <div className="mt-2 pt-2 border-t border-border flex justify-end">
+            <div className="mt-2 pt-2 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => setAdjustModal({ isOpen: true, customer, action: 'add_points', amount: '', reason: '', loading: false })}
+                disabled={!customer.phone}
+                className="px-2.5 py-1.5 bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 rounded-lg text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+              >
+                <Award size={14} />
+                {t("Points")}
+              </button>
               <button
                 onClick={() => handleViewBills(customer)}
                 disabled={!customer.phone}
@@ -664,6 +768,116 @@ const CRM = ({ onNavigate, onGoBack }) => {
         );
       })()}
 
+      {/* Loyalty Adjust Modal */}
+      {adjustModal.isOpen && adjustModal.customer && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+          <div className="bg-surface rounded-2xl border border-border shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-border flex justify-between items-center bg-gradient-to-r from-amber-500/10 to-emerald-500/10">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-500/20 text-amber-600 rounded-xl">
+                  <Award size={18} />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-text-main">{t("Adjust Customer Loyalty")}</h3>
+                  <p className="text-[11px] text-text-muted">{adjustModal.customer.name || 'Guest'} ({adjustModal.customer.phone})</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAdjustModal({ isOpen: false, customer: null, action: 'add_points', amount: '', reason: '', loading: false })}
+                className="text-text-muted hover:text-text-main p-1 rounded-lg hover:bg-surface-hover transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {/* Current Balances */}
+              <div className="grid grid-cols-2 gap-2 bg-background p-3 rounded-xl border border-border">
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-text-muted">{t("Current Points")}</div>
+                  <div className="text-base font-black text-amber-500 mt-0.5">{adjustModal.customer.points || 0} pts</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-text-muted">{t("Wallet Balance")}</div>
+                  <div className="text-base font-black text-emerald-600 font-mono mt-0.5">₹{(adjustModal.customer.walletBalance || 0).toFixed(0)}</div>
+                </div>
+              </div>
+
+              {/* Action Selector */}
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">{t("Select Action")}</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { id: 'add_points', label: t('+ Add Points'), color: 'text-amber-600 bg-amber-500/10 border-amber-500/30' },
+                    { id: 'deduct_points', label: t('- Deduct Points'), color: 'text-rose-600 bg-rose-500/10 border-rose-500/30' },
+                    { id: 'add_wallet', label: t('+ Add Wallet (₹)'), color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/30' },
+                    { id: 'deduct_wallet', label: t('- Deduct Wallet (₹)'), color: 'text-orange-600 bg-orange-500/10 border-orange-500/30' }
+                  ].map(act => (
+                    <button
+                      type="button"
+                      key={act.id}
+                      onClick={() => setAdjustModal(prev => ({ ...prev, action: act.id }))}
+                      className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
+                        adjustModal.action === act.id
+                          ? `${act.color} font-black ring-2 ring-primary/20`
+                          : 'bg-background border-border text-text-muted hover:text-text-main'
+                      }`}>
+                      {act.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amount Input */}
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                  {adjustModal.action.includes('points') ? t("Points Amount") : t("Wallet Amount (₹)")}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  autoFocus
+                  placeholder={t("Enter amount")}
+                  value={adjustModal.amount}
+                  onChange={(e) => setAdjustModal(prev => ({ ...prev, amount: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-base font-bold text-text-main focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              {/* Reason Input */}
+              <div>
+                <label className="text-[11px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+                  {t("Reason / Note (Optional)")}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t("e.g. Goodwill reward, correction")}
+                  value={adjustModal.reason}
+                  onChange={(e) => setAdjustModal(prev => ({ ...prev, reason: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-xs font-medium text-text-main focus:outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-border bg-surface flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAdjustModal({ isOpen: false, customer: null, action: 'add_points', amount: '', reason: '', loading: false })}
+                className="px-3 py-2 text-xs font-bold text-text-muted hover:text-text-main rounded-xl transition-colors cursor-pointer">
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={adjustModal.loading || !adjustModal.amount}
+                onClick={handleAdjustLoyalty}
+                className="px-4 py-2 text-xs font-bold bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md">
+                {adjustModal.loading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                <span>{t("Apply Adjustment")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* VIP Settings Modal */}
       {vipSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -686,8 +900,9 @@ const CRM = ({ onNavigate, onGoBack }) => {
                 <div className="relative">
                   <input
                     type="number"
-                    value={vipSettings.vipVisitThreshold}
-                    onChange={(e) => setVipSettings({ ...vipSettings, vipVisitThreshold: e.target.value === '' ? '' : Number(e.target.value) })}
+                    min="1"
+                    value={vipSettings.vipVisitThreshold ?? ''}
+                    onChange={(e) => setVipSettings(prev => ({ ...prev, vipVisitThreshold: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)) }))}
                     className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-text-main"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">{t("Visits")}</div>
@@ -698,8 +913,9 @@ const CRM = ({ onNavigate, onGoBack }) => {
                 <div className="relative">
                   <input
                     type="number"
-                    value={vipSettings.vipSpendThreshold}
-                    onChange={(e) => setVipSettings({ ...vipSettings, vipSpendThreshold: e.target.value === '' ? '' : Number(e.target.value) })}
+                    min="0"
+                    value={vipSettings.vipSpendThreshold ?? ''}
+                    onChange={(e) => setVipSettings(prev => ({ ...prev, vipSpendThreshold: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)) }))}
                     className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-text-main"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">₹</div>
