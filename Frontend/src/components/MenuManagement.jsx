@@ -699,6 +699,23 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
   (category.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // ─── Per-filter counts for mobile filter pill badges ─────────────────────────────
+  const filterCounts = React.useMemo(() => {
+    const term = searchTerm.toLowerCase();
+    const base = items.filter(item =>
+      item.name.toLowerCase().includes(term) ||
+      (item.category?.name || item.category || '').toLowerCase().includes(term)
+    );
+    const getType = item => (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+    return {
+      all: base.length,
+      veg: base.filter(i => getType(i) === 'veg').length,
+      nonVeg: base.filter(i => getType(i) !== 'veg').length,
+      hasDesc: base.filter(i => i.description && i.description.trim() !== '').length,
+      noDesc: base.filter(i => !i.description || i.description.trim() === '').length
+    };
+  }, [items, searchTerm]);
+
   // Pagination logic
   const itemsTotalPages = Math.ceil(filteredItems.length / itemsPerPage);
   const categoriesTotalPages = Math.ceil(filteredCategories.length / itemsPerPage);
@@ -972,13 +989,16 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             <button
               type="button"
               onClick={() => { setFoodTypeFilter('all'); setDescFilter('all'); setCurrentPage(1); }}
-              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border cursor-pointer ${
+              className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-full text-[11px] md:text-xs font-bold transition-all border cursor-pointer flex items-center gap-1 ${
                 foodTypeFilter === 'all' && descFilter === 'all'
                   ? 'bg-primary text-white border-primary shadow-xs'
                   : 'bg-surface border-border text-text-muted hover:border-primary hover:text-primary'
               }`}
             >
               {t("All")}
+              <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${
+                foodTypeFilter === 'all' && descFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>{filterCounts.all}</span>
             </button>
 
             {/* Veg Pill */}
@@ -993,6 +1013,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             >
               <span className={`w-2 h-2 rounded-full shrink-0 ${foodTypeFilter === 'veg' ? 'bg-white' : 'bg-emerald-500'}`} />
               {t("Veg")}
+              <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${
+                foodTypeFilter === 'veg' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700'
+              }`}>{filterCounts.veg}</span>
             </button>
 
             {/* Non-Veg Pill */}
@@ -1007,6 +1030,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             >
               <span className={`w-2 h-2 rounded-full shrink-0 ${foodTypeFilter === 'non-veg' ? 'bg-white' : 'bg-rose-500'}`} />
               {t("Non-Veg")}
+              <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${
+                foodTypeFilter === 'non-veg' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'
+              }`}>{filterCounts.nonVeg}</span>
             </button>
 
             <span className="w-px h-3.5 bg-border mx-0.5 hidden sm:inline-block shrink-0" />
@@ -1023,6 +1049,9 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
               {t("Has Description")}
+              <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${
+                descFilter === 'hasDesc' ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700'
+              }`}>{filterCounts.hasDesc}</span>
             </button>
 
             {/* No Description */}
@@ -1037,13 +1066,14 @@ const MenuManagement = ({ user, onNavigate, onGoBack }) => {const { t } = useLan
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/></svg>
               {t("No Description")}
+              <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${
+                descFilter === 'noDesc' ? 'bg-white/25 text-white' : 'bg-orange-100 text-orange-700'
+              }`}>{filterCounts.noDesc}</span>
             </button>
 
-            {(descFilter !== 'all' || foodTypeFilter !== 'all') && (
-              <span className="text-[10px] md:text-xs text-text-muted font-medium ml-1 shrink-0">
-                ({filteredItems.length} {t("items")})
-              </span>
-            )}
+            <span className="text-[10px] md:text-xs text-text-muted font-medium ml-1 shrink-0">
+              ({filteredItems.length} {t("items")})
+            </span>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2 } from 'lucide-react';
 import axios from 'axios';
@@ -8,21 +8,29 @@ import { getReceiptFontMetrics } from '../utils/receiptFonts';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
-  const [settings, setSettings] = useState({
-    restaurantName: 'msbillings'
+
+  // ─── Settings – load synchronously from localStorage to avoid flash ──────
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem('restaurantSettings');
+      if (saved) return { restaurantName: 'msbillings', ...JSON.parse(saved) };
+    } catch (_) {}
+    return { restaurantName: 'msbillings' };
   });
   const fontMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat);
   const receiptFont = settings.receiptFontFamily || "Arial, Helvetica, sans-serif";
+
   const [printerConfigs, setPrinterConfigs] = useState([]);
-  const [selectedDept, setSelectedDept] = useState('ALL'); // 'ALL' or specific kitchen department
+  const [selectedDept, setSelectedDept] = useState('ALL');
   const [isPrintingAll, setIsPrintingAll] = useState(false);
+  // ─── Single flag prevents duplicate prints when user taps button fast ────
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  // ─── Pre-resolved BT MAC cache – computed once on mount, reused on every print
+  const resolvedMacRef = useRef(null);
+  const macResolvedRef = useRef(false);
 
   useEffect(() => {
-    const savedSettings = localStorage.getItem('restaurantSettings');
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
-    }
-
     // Fetch configured printers to link departments to printer hardware
     const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
     axios.get(`${getApiUrl()}/printer-configs`, {
@@ -30,6 +38,63 @@ const KOT = ({ order, onClose }) => {
     }).then(res => {
       setPrinterConfigs(res.data || []);
     }).catch(() => {});
+  }, []);
+
+  // Pre-resolve the Bluetooth MAC address once on mount so print is instant
+  useEffect(() => {
+    if (macResolvedRef.current || !window.AndroidBluetooth) return;
+    macResolvedRef.current = true;
+
+    const resolveMac = () => {
+      const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+      const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
+
+      // 1. KOT-specific printer config
+      try {
+        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+        const kotStation = cached.find(p =>
+          p.isActive !== false &&
+          (p.type === 'kot' || p.type === 'general' || p.type === 'both') &&
+          tryMac(p.bluetoothAddress || p.deviceName || '')
+        );
+        if (kotStation) {
+          const mac = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
+          if (mac) { resolvedMacRef.current = mac; return; }
+        }
+      } catch (_) {}
+
+      // 2. kotPrinter setting
+      const s = settings;
+      let mac = tryMac(s.kotPrinter || '');
+      if (mac) { resolvedMacRef.current = mac; return; }
+
+      // 3. billingPrinter setting (shared single printer)
+      mac = tryMac(s.billingPrinter || '');
+      if (mac) { resolvedMacRef.current = mac; return; }
+
+      // 4. Any active BT printer
+      try {
+        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+        const any = cached.find(p => p.isActive !== false && tryMac(p.bluetoothAddress || p.deviceName || ''));
+        if (any) { resolvedMacRef.current = tryMac(any.bluetoothAddress || any.deviceName || ''); }
+      } catch (_) {}
+    };
+
+    resolveMac();
+  }, []);
+
+  // ─── Auto-print on mobile (Android APK) when KOT mounts ───────────────────
+  const autoPrintTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (autoPrintTriggeredRef.current) return;
+    const isAndroid = !!(window.AndroidBluetooth || window.AndroidPrint);
+    if (!isAndroid) return;
+    autoPrintTriggeredRef.current = true;
+    // 400ms is enough for React to finish painting the receipt node
+    const timer = setTimeout(() => {
+      handlePrintCurrent();
+    }, 400);
+    return () => clearTimeout(timer);
   }, []);
 
   // Group items dynamically by Kitchen Station / Printer Config
@@ -116,151 +181,115 @@ const KOT = ({ order, onClose }) => {
     );
   }, [order?.items, selectedDept, activeStationGroup]);
 
-  // Print current active tab/kitchen
+  // ─── Print current active tab/kitchen ────────────────────────────────────
   const handlePrintCurrent = async () => {
-    if (window.electronAPI) {
-      const receiptNode = document.querySelector('#kot-print-area .receipt-print');
-      const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
-      const isSilent = settings.silentPrinting !== false;
+    // Guard: block duplicate prints (user tapping multiple times)
+    if (isPrinting) return;
+    setIsPrinting(true);
 
-      // Find if there is a specific physical printer configured for this station
-      let targetPrinter = settings.kotPrinter || '';
-      if (activeStationGroup?.printer?.deviceName) {
-        targetPrinter = activeStationGroup.printer.deviceName;
-      }
+    try {
+      if (window.electronAPI) {
+        const receiptNode = document.querySelector('#kot-print-area .receipt-print');
+        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
+        const isSilent = settings.silentPrinting !== false;
+        let targetPrinter = settings.kotPrinter || '';
+        if (activeStationGroup?.printer?.deviceName) targetPrinter = activeStationGroup.printer.deviceName;
+        window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
 
-      window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
-    } else if (window.AndroidBluetooth) {
-      let macAddress = null;
+      } else if (window.AndroidBluetooth) {
+        const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+        const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
-      // 1. From active station group printer
-      if (activeStationGroup?.printer) {
-        const raw = activeStationGroup.printer.bluetoothAddress || activeStationGroup.printer.deviceName || '';
-        const m = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-        if (m) macAddress = m[0];
-      }
+        // Use pre-resolved MAC first (fastest path — no loops on every print)
+        let macAddress = resolvedMacRef.current;
 
-      // 2. From configured KOT stations (printerConfigs or local cache)
-      if (!macAddress) {
+        // Station-specific override (e.g. user switched kitchen tab)
+        if (activeStationGroup?.printer) {
+          const stationMac = tryMac(activeStationGroup.printer.bluetoothAddress || activeStationGroup.printer.deviceName || '');
+          if (stationMac) macAddress = stationMac;
+        }
+
+        // Last-resort live lookup if pre-resolve failed
+        if (!macAddress) {
+          try {
+            const allConfigs = (printerConfigs && printerConfigs.length > 0)
+              ? printerConfigs
+              : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+            const kotStation = allConfigs.find(p =>
+              p.isActive !== false &&
+              (p.type === 'kot' || p.type === 'general' || p.type === 'both') &&
+              tryMac(p.bluetoothAddress || p.deviceName || '')
+            );
+            if (kotStation) macAddress = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
+          } catch (_) {}
+        }
+        if (!macAddress) macAddress = tryMac(settings.kotPrinter || '') || tryMac(settings.billingPrinter || '');
+
+        if (macAddress && window.AndroidBluetooth.printImage) {
+          try {
+            const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
+            if (receiptNode) {
+              const paperWidthDots = (settings.printFormat === '58mm' || activeStationGroup?.printer?.paperWidth === '58mm') ? 384 : 576;
+              // scale:1.5 is sharp enough for thermal and renders ~40% faster than scale:2
+              const canvas = await html2canvas(receiptNode, {
+                scale: 1.5,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false,
+                imageTimeout: 0
+              });
+              const base64Png = canvas.toDataURL('image/png', 0.92);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+              const res = JSON.parse(resStr || '{}');
+              if (res.success) return;
+              console.warn('[KOT] Bluetooth print failed:', res.error);
+            }
+          } catch (e) {
+            console.warn('[KOT] Error capturing KOT for Bluetooth print:', e);
+          }
+        }
+
+        if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+          window.AndroidPrint.print();
+        } else {
+          window.print();
+        }
+
+      } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+        window.AndroidPrint.print();
+
+      } else {
+        // Direct Backend KOT Printer (TCP ESC/POS or USB RAW via Node.js Backend)
         try {
-          const allConfigs = (printerConfigs && printerConfigs.length > 0)
+          const cached = (printerConfigs && printerConfigs.length > 0)
             ? printerConfigs
             : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          const kotStation = allConfigs.find(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both') && (p.connectionType === 'bluetooth' || (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/)));
-          if (kotStation) {
-            const raw = kotStation.bluetoothAddress || kotStation.deviceName || kotStation.name || '';
-            const m = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-            if (m) macAddress = m[0];
+
+          let targetBackendPrinter = null;
+          if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb')) {
+            targetBackendPrinter = activeStationGroup.printer;
+          } else {
+            targetBackendPrinter = cached.find(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb'));
           }
-        } catch (_) {}
-      }
 
-      // 3. From settings.kotPrinter (state or fresh from localStorage)
-      if (!macAddress) {
-        let raw = settings.kotPrinter || '';
-        if (!raw) {
-          try {
-            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-            raw = s.kotPrinter || '';
-          } catch (_) {}
-        }
-        const m = (raw || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-        if (m) macAddress = m[0];
-      }
-
-      // 4. Fallback to settings.billingPrinter (if shared single Bluetooth printer)
-      if (!macAddress) {
-        let raw = settings.billingPrinter || '';
-        if (!raw) {
-          try {
-            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-            raw = s.billingPrinter || '';
-          } catch (_) {}
-        }
-        const m = (raw || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-        if (m) macAddress = m[0];
-      }
-
-      // 5. Fallback to ANY configured Bluetooth printer station
-      if (!macAddress) {
-        try {
-          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          const anyStation = cached.find(p => p.isActive !== false && (p.bluetoothAddress || p.deviceName || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/));
-          if (anyStation) {
-            const m = (anyStation.bluetoothAddress || anyStation.deviceName).match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-            if (m) macAddress = m[0];
+          if (targetBackendPrinter) {
+            const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+            const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
+            const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
+            const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+            const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
+              bill: order, items: itemsToPrint, kotNumber: kotNo, queueNumber: qNo, printerId: targetBackendPrinter._id
+            }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
+            if (response.data && response.data.success) return;
           }
-        } catch (_) {}
-      }
-
-      if (macAddress && window.AndroidBluetooth.printImage) {
-        try {
-          const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
-          if (receiptNode) {
-            const paperWidthDots = (settings.printFormat === '58mm' || activeStationGroup?.printer?.paperWidth === '58mm') ? 384 : 576;
-            const canvas = await html2canvas(receiptNode, {
-              scale: 2,
-              backgroundColor: '#ffffff',
-              useCORS: true,
-              logging: false
-            });
-            const base64Png = canvas.toDataURL('image/png');
-            const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
-            const res = JSON.parse(resStr || '{}');
-            if (res.success) return;
-            console.warn('[KOT] Direct Bluetooth print failed:', res.error);
-          }
-        } catch (e) {
-          console.warn('[KOT] Error capturing KOT for Bluetooth print:', e);
+        } catch (netErr) {
+          console.warn('[KOT] Network thermal print failed, falling back to browser print:', netErr);
         }
-      }
-
-      if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
-        window.AndroidPrint.print();
-      } else {
         window.print();
       }
-    } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
-      window.AndroidPrint.print();
-    } else {
-      // Direct Backend KOT Printer (TCP ESC/POS or USB RAW via Node.js Backend)
-      try {
-        const cached = (printerConfigs && printerConfigs.length > 0)
-          ? printerConfigs
-          : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-        
-        let targetBackendPrinter = null;
-        if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb')) {
-          targetBackendPrinter = activeStationGroup.printer;
-        } else {
-          targetBackendPrinter = cached.find(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb'));
-        }
-
-        if (targetBackendPrinter) {
-          const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-          const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
-          const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
-          const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
-
-          const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
-            bill: order,
-            items: itemsToPrint,
-            kotNumber: kotNo,
-            queueNumber: qNo,
-            printerId: targetBackendPrinter._id
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-
-          if (response.data && response.data.success) {
-            return;
-          }
-        }
-      } catch (netErr) {
-        console.warn('[KOT] Network thermal print failed, falling back to browser print:', netErr);
-      }
-
-      window.print();
+    } finally {
+      // Re-enable button after a short cooldown so user knows print was triggered
+      setTimeout(() => setIsPrinting(false), 2500);
     }
   };
 
@@ -438,12 +467,21 @@ const KOT = ({ order, onClose }) => {
 
           <button
             onClick={handlePrintCurrent}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-black text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
-            <Printer size={15} />
+            disabled={isPrinting}
+            className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer ${
+              isPrinting
+                ? 'bg-green-600 opacity-90 cursor-not-allowed'
+                : 'bg-gray-900 hover:bg-black'
+            }`}>
+            {isPrinting
+              ? <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+              : <Printer size={15} />}
             <span>
-              {stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
-                ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}` 
-                : t("Print KOT")}
+              {isPrinting
+                ? t('Printing...')
+                : stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
+                  ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}`
+                  : t('Print KOT')}
             </span>
           </button>
 
@@ -638,7 +676,7 @@ const KOT = ({ order, onClose }) => {
             <div>
               {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
             </div>
-            <div className="text-lg font-bold" style={{ fontSize: '18px', fontWeight: 'bold' }}>
+            <div className="font-bold" style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold' }}>
               {(() => {
                 const raw = (order.kotNumber || order.billNumber || '').toString().trim();
                 if (!raw) return 'KOT PREVIEW';
@@ -661,7 +699,7 @@ const KOT = ({ order, onClose }) => {
                 : selectedDept.toUpperCase();
               return (
                 <div style={{
-                  fontSize: '14px',
+                  fontSize: fontMetrics.detailSize,
                   fontWeight: 'bold',
                   padding: '3px 10px',
                   border: '1.5px solid #000',
@@ -751,10 +789,10 @@ const KOT = ({ order, onClose }) => {
                     <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                       <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
                         {item.name || 'Unknown Item'}
-                        {isCancelled && <span className="text-[10px] ml-1 font-black text-red-600" style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
-                        {isReduced && <span className="text-[10px] ml-1 font-black text-red-500" style={{ fontSize: '10px', marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
+                        {isCancelled && <span className="ml-1 font-black text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
+                        {isReduced && <span className="ml-1 font-black text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
                       </div>
-                      <div className="text-center px-1 break-words text-xs" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: '11px', color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
+                      <div className="text-center px-1 break-words" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: fontMetrics.detailSize, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
                         {item.specialNote ? item.specialNote : '-'}
                       </div>
                       <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>

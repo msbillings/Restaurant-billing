@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
@@ -67,6 +67,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const [msgExpanded, setMsgExpanded] = useState(false);
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // ─── Duplicate-tap guard: locked while Bluetooth print is in progress ────
+  const [isPrinting, setIsPrinting] = useState(false);
+  // ─── WhatsApp capture flag — tells QR render whether to use whatsappShowQr setting
+  const isCapturingForWhatsApp = useRef(false);
 
 
   // ─── Duplicate WhatsApp Send Prevention ──────────────────────────────────────
@@ -200,108 +204,107 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       return;
     }
 
-    // 2. Desktop Electron App
-    if (window.electronAPI) {
-      const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
-      const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-      const isSilent = activeSettings.silentPrinting !== false;
-      if (isSilent && activeSettings.billingPrinter) {
-        window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
-      } else {
-        window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
-      }
-      return;
-    }
+    // Guard: block duplicate prints while a Bluetooth render is in progress
+    if (isPrinting) return;
+    setIsPrinting(true);
 
-    // 3. Android APK (Bluetooth)
-    if (window.AndroidBluetooth) {
-      let targetPrinter = activeSettings.billingPrinter || '';
-      let match = targetPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-      let macAddress = match ? match[0] : null;
-
-      // Check if a Receipt printer station is configured in Printer & Multi-Kitchen Routing
-      if (!macAddress) {
-        try {
-          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          const receiptStation = cached.find(c => c.isActive && c.type === 'receipt' && c.connectionType === 'bluetooth');
-          if (receiptStation) {
-            const rawMac = receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name;
-            const m = (rawMac || '').match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-            if (m) macAddress = m[0];
-          }
-        } catch (_) {}
-      }
-
-      if (macAddress && window.AndroidBluetooth.printImage) {
-        try {
-          const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
-          if (receiptNode) {
-            const paperWidthDots = (activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
-            const canvas = await html2canvas(receiptNode, {
-              scale: 2,
-              backgroundColor: '#ffffff',
-              useCORS: true,
-              logging: false
-            });
-            const base64Png = canvas.toDataURL('image/png');
-            const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
-            const res = JSON.parse(resStr || '{}');
-            if (res.success) {
-              return;
-            }
-            console.warn('[Print] Bluetooth print failed, fallback to system print:', res.error);
-          }
-        } catch (err) {
-          console.warn('[Print] Error capturing receipt for Bluetooth print:', err);
+    try {
+      // 2. Desktop Electron App
+      if (window.electronAPI) {
+        const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
+        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
+        const isSilent = activeSettings.silentPrinting !== false;
+        if (isSilent && activeSettings.billingPrinter) {
+          window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
+        } else {
+          window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
         }
+        return;
       }
 
+      // 3. Android APK (Bluetooth)
+      if (window.AndroidBluetooth) {
+        const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+        const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
+
+        let macAddress = tryMac(activeSettings.billingPrinter || '');
+
+        // Check if a Receipt printer station is configured in Printer & Multi-Kitchen Routing
+        if (!macAddress) {
+          try {
+            const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+            const receiptStation = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && tryMac(c.bluetoothAddress || c.deviceName || ''));
+            if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
+          } catch (_) {}
+        }
+
+        if (macAddress && window.AndroidBluetooth.printImage) {
+          try {
+            const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
+            if (receiptNode) {
+              const paperWidthDots = (activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
+              // scale:1.5 renders ~40% faster than scale:2 — sufficient for thermal printers
+              const canvas = await html2canvas(receiptNode, {
+                scale: 1.5,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false,
+                imageTimeout: 0
+              });
+              const base64Png = canvas.toDataURL('image/png', 0.92);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+              const res = JSON.parse(resStr || '{}');
+              if (res.success) return;
+              console.warn('[Print] Bluetooth print failed, fallback to system print:', res.error);
+            }
+          } catch (err) {
+            console.warn('[Print] Error capturing receipt for Bluetooth print:', err);
+          }
+        }
+
+        if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+          window.AndroidPrint.print();
+        } else {
+          window.print();
+        }
+        return;
+      }
+
+      // 4. Android System Print
       if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
         window.AndroidPrint.print();
-      } else {
-        window.print();
+        return;
       }
-      return;
-    }
 
-    // 4. Android System Print
-    if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
-      window.AndroidPrint.print();
-      return;
-    }
+      // 5. Direct Network Thermal Receipt Printer (TCP ESC/POS via Node.js Backend, e.g. FosiFlow)
+      try {
+        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+        const networkReceiptPrinter = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && c.connectionType === 'network' && c.ipAddress);
 
-    // 5. Direct Network Thermal Receipt Printer (TCP ESC/POS via Node.js Backend, e.g. FosiFlow)
-    try {
-      const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-      const networkReceiptPrinter = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && c.connectionType === 'network' && c.ipAddress);
-
-      if (networkReceiptPrinter) {
-        setToast({ message: `🖨️ ${t("Sending bill to")} ${networkReceiptPrinter.name} (${networkReceiptPrinter.ipAddress})...`, type: 'info' });
-        const billPayload = {
-          ...bill,
-          restaurantDetails: activeSettings
-        };
-        const response = await api.post('/printer-configs/print-bill', {
-          bill: billPayload,
-          billId: bill?._id,
-          printerId: networkReceiptPrinter._id
-        });
-
-        if (response.data && response.data.success) {
-          setToast({ message: `✅ ${t("Bill printed to")} ${networkReceiptPrinter.name}!`, type: 'success' });
-          return;
-        } else {
-          setToast({ message: response.data?.message || `Failed to print to ${networkReceiptPrinter.name}`, type: 'warning' });
+        if (networkReceiptPrinter) {
+          setToast({ message: `🖨️ ${t("Sending bill to")} ${networkReceiptPrinter.name} (${networkReceiptPrinter.ipAddress})...`, type: 'info' });
+          const billPayload = { ...bill, restaurantDetails: activeSettings };
+          const response = await api.post('/printer-configs/print-bill', {
+            bill: billPayload, billId: bill?._id, printerId: networkReceiptPrinter._id
+          });
+          if (response.data && response.data.success) {
+            setToast({ message: `✅ ${t("Bill printed to")} ${networkReceiptPrinter.name}!`, type: 'success' });
+            return;
+          } else {
+            setToast({ message: response.data?.message || `Failed to print to ${networkReceiptPrinter.name}`, type: 'warning' });
+          }
         }
+      } catch (netErr) {
+        console.warn('[Print] Network receipt print error, falling back to browser print:', netErr);
+        const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
+        setToast({ message: `⚠️ ${errMsg}. ${t("Opening browser print...")}`, type: 'warning' });
       }
-    } catch (netErr) {
-      console.warn('[Print] Network receipt print error, falling back to browser print:', netErr);
-      const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
-      setToast({ message: `⚠️ ${errMsg}. ${t("Opening browser print...")}`, type: 'warning' });
-    }
 
-    // 6. Default Fallback: Browser Native Print Dialog
-    window.print();
+      // 6. Default Fallback: Browser Native Print Dialog
+      window.print();
+    } finally {
+      setTimeout(() => setIsPrinting(false), 2500);
+    }
   };
 
   const generateEBillWhatsAppText = (overrideName = null) => {
@@ -438,6 +441,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       roundOffText +
       `\n• *GRAND TOTAL:* *₹${total}*\n` +
       `• *Payment Mode:* ${paymentInfo}\n` +
+      (s.whatsappShowQr !== false && s.upiId ? `• *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `_${footerMessage}_`;
   };
@@ -470,6 +474,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     // High-resolution receipt image capture
     let imageBase64 = null;
+    // Signal QR render to use whatsappShowQr setting instead of enableQrPayment
+    isCapturingForWhatsApp.current = true;
     try {
       const receiptElement = document.querySelector('#invoice-print-area .receipt-print');
       console.log('[eBill] Receipt element found:', !!receiptElement, receiptElement);
@@ -521,6 +527,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 c.style.display = 'none';
               });
 
+              // 3.5 Show/Hide QR code explicitly for WhatsApp based on whatsappShowQr setting
+              const showInWhatsapp = activeSettings.whatsappShowQr !== false;
+              const qrWrappers = clonedDoc.querySelectorAll('.receipt-qr-wrapper');
+              qrWrappers.forEach(w => {
+                const isFlex = w.style.flexDirection === 'column';
+                w.style.setProperty('display', showInWhatsapp ? (isFlex ? 'flex' : 'block') : 'none', 'important');
+              });
+
               // 4. Style the receipt container
               const el = clonedDoc.querySelector('.receipt-print');
               if (el) {
@@ -565,6 +579,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
     } catch (captureErr) {
       console.error('[eBill] Receipt image capture error:', captureErr);
+    } finally {
+      isCapturingForWhatsApp.current = false;
     }
 
     if (!imageBase64) {
@@ -774,10 +790,17 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         <div className="flex items-center bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
           <button
             onClick={() => handlePrint(false)}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-gray-900 font-bold text-xs sm:text-sm hover:bg-gray-100 transition-all active:scale-95 cursor-pointer"
+            disabled={isPrinting}
+            className={`flex items-center gap-1.5 px-3.5 py-2 font-bold text-xs sm:text-sm transition-all active:scale-95 cursor-pointer ${
+              isPrinting
+                ? 'bg-green-50 text-green-700 cursor-not-allowed opacity-90'
+                : 'text-gray-900 hover:bg-gray-100'
+            }`}
             title={activeNetworkReceiptPrinter ? `${t("Print directly to")} ${activeNetworkReceiptPrinter.name} (${activeNetworkReceiptPrinter.ipAddress})` : t("Print Bill")}>
-            <Printer size={16} className={activeNetworkReceiptPrinter ? "text-emerald-600" : "text-gray-900"} />
-            <span>{activeNetworkReceiptPrinter ? `${t("Print")} (${activeNetworkReceiptPrinter.name})` : t("Print Bill")}</span>
+            {isPrinting
+              ? <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+              : <Printer size={16} className={activeNetworkReceiptPrinter ? "text-emerald-600" : "text-gray-900"} />}
+            <span>{isPrinting ? t('Printing...') : (activeNetworkReceiptPrinter ? `${t("Print")} (${activeNetworkReceiptPrinter.name})` : t("Print Bill"))}</span>
           </button>
           {activeNetworkReceiptPrinter && (
             <button
@@ -1362,8 +1385,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               }
             })()}
 
-            {/* QR Code (if enabled) */}
-            {activeSettings.enableQrPayment !== false && (() => {
+            {/* QR Code (if enabled) — for WhatsApp capture, respects separate whatsappShowQr toggle completely independently */}
+            {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
               const pa = (activeSettings.upiId || '').trim();
               if (!pa) return null;
               const isMixed = bill.paymentMode === 'Mixed';
@@ -1375,9 +1398,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
               const tr = `INV${Date.now()}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+              
+              const showNormally = activeSettings.enableQrPayment !== false;
 
               return (
-                <div style={{ textAlign: 'center', margin: '5px 0' }}>
+                <div className="receipt-qr-wrapper" style={{ display: showNormally ? 'block' : 'none', textAlign: 'center', margin: '5px 0' }}>
                   <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{t("SCAN TO PAY VIA UPI")}</div>
                   <div style={{ margin: '3px auto', display: 'inline-block' }}>
                     <QRCodeSVG value={qrUri} size={84} level="M" includeMargin={false} />
@@ -1738,8 +1763,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             return null;
           })()}
 
-          {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) */}
-          {activeSettings.enableQrPayment !== false && (() => {
+          {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) — respects whatsappShowQr toggle completely independently during WhatsApp capture */}
+          {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
             const pa = (activeSettings.upiId || '').trim();
             if (!pa) return null;
 
@@ -1758,8 +1783,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const tr = `INV${Date.now()}`;
             const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
 
+            const showNormally = activeSettings.enableQrPayment !== false;
+
             return (
-              <div className="my-2 text-center flex flex-col items-center justify-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
+              <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
                 <div className="uppercase mb-0.5" style={{ fontSize: '13px', fontWeight: 'bold', textAlign: 'center' }}>
                   {isMixed && upiSplit > 0 ? `${t("SCAN TO PAY UPI PORTION")} (${currencySymbol}${am})` : t("SCAN TO PAY VIA UPI")}
                 </div>

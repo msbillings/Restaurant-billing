@@ -167,6 +167,7 @@ const MenuGrid = ({
   userRole = 'Admin',
   foodTypeFilter: externalFoodTypeFilter,
   onFoodTypeFilterChange,
+  onFilterCounts,
   isLocked = false
 }) => {
   const { t, language } = useLanguage();
@@ -489,6 +490,55 @@ const MenuGrid = ({
     });
   }, [items, category, debouncedSearchTerm, foodTypeFilter, sortBy, categories, descFilter]);
 
+  // ─── Per-category counts for mobile tab badges (respects foodType + descFilter, ignores category) ─
+  const categoryItemCounts = React.useMemo(() => {
+    const term = (debouncedSearchTerm || '').trim().toLowerCase();
+    const counts = {};
+    // Count for 'All'
+    counts['All'] = items.filter(item => {
+      const matchesSearch = !term || item.name.toLowerCase().includes(term) || (item.description && item.description.toLowerCase().includes(term));
+      const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+      const matchesFoodType = foodTypeFilter === 'all' || (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) || (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
+      const matchesDesc = descFilter === 'all' || (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') || (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
+      return matchesSearch && matchesFoodType && matchesDesc;
+    }).length;
+    // Count per named category
+    categories.forEach(cat => {
+      counts[cat.name] = items.filter(item => {
+        const itemCatName = item.category?.name || (typeof item.category === 'string' ? item.category : '');
+        const itemCatId = item.category?._id || item.category;
+        const matchedCat = cat;
+        const matchesCategory = itemCatName === cat.name || (matchedCat && (itemCatId === matchedCat._id || itemCatName === matchedCat.name));
+        const matchesSearch = !term || item.name.toLowerCase().includes(term) || (item.description && item.description.toLowerCase().includes(term));
+        const itemType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+        const matchesFoodType = foodTypeFilter === 'all' || (foodTypeFilter === 'veg' && (itemType === 'veg' || item.isVeg === true)) || (foodTypeFilter === 'non-veg' && (itemType === 'non-veg' || item.isVeg === false));
+        const matchesDesc = descFilter === 'all' || (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') || (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
+        return matchesCategory && matchesSearch && matchesFoodType && matchesDesc;
+      }).length;
+    });
+    return counts;
+  }, [items, debouncedSearchTerm, foodTypeFilter, descFilter, categories]);
+
+  // ─── Per-foodType counts for BillingPage mobile Veg/Non-Veg badge counts ─────────────
+  const filterTypeCounts = React.useMemo(() => {
+    const term = (debouncedSearchTerm || '').trim().toLowerCase();
+    const base = items.filter(item => {
+      const matchesSearch = !term || item.name.toLowerCase().includes(term) || (item.description && item.description.toLowerCase().includes(term));
+      const matchesDesc = descFilter === 'all' || (descFilter === 'hasDesc' && item.description && item.description.trim() !== '') || (descFilter === 'noDesc' && (!item.description || item.description.trim() === ''));
+      return matchesSearch && matchesDesc;
+    });
+    const getType = item => (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toLowerCase();
+    return {
+      all: base.length,
+      veg: base.filter(i => getType(i) === 'veg' || i.isVeg === true).length,
+      nonVeg: base.filter(i => getType(i) === 'non-veg' || i.isVeg === false).length
+    };
+  }, [items, debouncedSearchTerm, descFilter]);
+
+  useEffect(() => {
+    if (onFilterCounts) onFilterCounts(filterTypeCounts);
+  }, [filterTypeCounts, onFilterCounts]);
+
   // IntersectionObserver for mobile sentinel (placed AFTER filteredItems is defined)
   useEffect(() => {
     if (!isMobile) return;
@@ -560,6 +610,7 @@ const MenuGrid = ({
       <div className="flex lg:hidden overflow-x-auto category-scroll py-2 px-3 bg-gray-50 border-b border-gray-200 shrink-0 gap-2 w-full no-scrollbar">
         {categoryOptions.filter(cat => cat !== '⭐ Favourites').map((cat) => {
           const isSelected = category === cat;
+          const count = categoryItemCounts[cat];
           return (
             <button
               key={cat}
@@ -570,6 +621,13 @@ const MenuGrid = ({
                 }`}>
               {getCategoryIcon(cat, isSelected)}
               <span>{t(cat)}</span>
+              {count !== undefined && (
+                <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full leading-none ${
+                  isSelected
+                    ? 'bg-white/25 text-white'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>{count}</span>
+              )}
             </button>
           );
         })}

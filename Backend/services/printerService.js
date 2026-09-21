@@ -444,6 +444,15 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       try {
         let res;
         if (isUsb) {
+          // Check if the printer is actually physically connected before sending to Windows Spooler.
+          // Windows Spooler will return success even if offline (queues it), causing false notifications.
+          const activePorts = await getAvailableUSBAndCOMPorts();
+          const isConnected = activePorts.some(p => p.port === printer.usbPort);
+          
+          if (!isConnected) {
+            throw new Error(`USB Port ${printer.usbPort} is currently offline or disconnected`);
+          }
+          
           res = await sendRawToUSBPrinter(printer.usbPort, buffer);
         } else {
           res = await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
@@ -995,6 +1004,12 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null) =
       const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : `${printer.ipAddress}:${printer.port || 9100}`;
       try {
         if (isUsb) {
+          const activePorts = await getAvailableUSBAndCOMPorts();
+          const isConnected = activePorts.some(p => p.port === printer.usbPort);
+          
+          if (!isConnected) {
+            throw new Error(`USB Port ${printer.usbPort} is currently offline or disconnected`);
+          }
           await sendRawToUSBPrinter(printer.usbPort, buffer);
         } else {
           await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);

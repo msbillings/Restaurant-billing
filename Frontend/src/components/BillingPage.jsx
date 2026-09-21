@@ -431,6 +431,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
   const [searchTerm, setSearchTerm] = useState('');
   const [foodTypeFilter, setFoodTypeFilter] = useState('all'); // 'all' | 'veg' | 'non-veg'
+  const [menuFilterCounts, setMenuFilterCounts] = useState({ all: 0, veg: 0, nonVeg: 0 }); // live counts from MenuGrid
   const [dailyStats, setDailyStats] = useState(() => {
     try {
       const cached = localStorage.getItem('ms_daily_stats_cache');
@@ -2838,12 +2839,15 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             <button
               type="button"
               onClick={() => setFoodTypeFilter('all')}
-              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${foodTypeFilter === 'all'
+              className={`px-1.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-0.5 ${foodTypeFilter === 'all'
                 ? 'bg-gray-900 text-white shadow-xs'
                 : 'text-text-muted hover:text-text-main'
                 }`}
             >
               {t("All")}
+              {menuFilterCounts.all > 0 && (
+                <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ml-0.5 ${foodTypeFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-500'}`}>{menuFilterCounts.all}</span>
+              )}
             </button>
             <button
               type="button"
@@ -2855,6 +2859,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 border border-white shrink-0"></span>
               <span>{t("Veg")}</span>
+              {menuFilterCounts.veg > 0 && (
+                <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${foodTypeFilter === 'veg' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700'}`}>{menuFilterCounts.veg}</span>
+              )}
             </button>
             <button
               type="button"
@@ -2866,6 +2873,9 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             >
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500 border border-white shrink-0"></span>
               <span>{t("Non-Veg")}</span>
+              {menuFilterCounts.nonVeg > 0 && (
+                <span className={`text-[9px] font-extrabold px-1 py-0.5 rounded-full leading-none ${foodTypeFilter === 'non-veg' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700'}`}>{menuFilterCounts.nonVeg}</span>
+              )}
             </button>
           </div>
 
@@ -2999,6 +3009,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               onSearchChange={setSearchTerm}
               foodTypeFilter={foodTypeFilter}
               onFoodTypeFilterChange={setFoodTypeFilter}
+              onFilterCounts={setMenuFilterCounts}
               isLayoutLocked={isLayoutLocked}
               onNavigate={onNavigate}
               userRole={userRole}
