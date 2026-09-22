@@ -17,76 +17,61 @@ export async function getAvailableUSBAndCOMPorts() {
     const psScript = `
       $ErrorActionPreference = 'SilentlyContinue'
 
-      # --- Step 1: Get physically connected USB/PnP printer devices RIGHT NOW ---
-      # Get-PnpDevice only returns hardware that is currently on the bus
-      $connectedPnpPrinters = Get-PnpDevice -Class 'SoftwareDevice', 'USB' -Status 'OK' -ErrorAction SilentlyContinue |
-        Select-Object FriendlyName, Status, InstanceId
+      # 1. Connected PnP devices (ONLY physically present devices with Status 'OK')
+      $pnpList = Get-PnpDevice -PresentOnly -Status 'OK' -ErrorAction SilentlyContinue
 
-      # Also get USB serial (COM) devices currently connected
-      $connectedPnpCOM = Get-PnpDevice -Class 'Ports' -Status 'OK' -ErrorAction SilentlyContinue |
-        Select-Object FriendlyName, Status, InstanceId
+      # 2. Installed Printers in Windows Spooler
+      $spoolerPrinters = Get-Printer -ErrorAction SilentlyContinue
 
-      # Build a set of currently connected device friendly names (lowercase)
-      $connectedNames = @{}
-      foreach ($d in $connectedPnpPrinters) {
-        if ($d.FriendlyName) { $connectedNames[$d.FriendlyName.ToLower().Trim()] = $d.FriendlyName }
-      }
-      foreach ($d in $connectedPnpCOM) {
-        if ($d.FriendlyName) { $connectedNames[$d.FriendlyName.ToLower().Trim()] = $d.FriendlyName }
-      }
-
-      # --- Step 2: Get spooler ports + matched printer names ---
-      $spoolerPorts = Get-PrinterPort | Where-Object { $_.Name -match '^(USB|COM)' } | Select-Object Name, Description
-      $spoolerPrinters = Get-Printer | Select-Object Name, PortName
+      # 3. Active COM ports directly from system
+      $serialPorts = [System.IO.Ports.SerialPort]::GetPortNames()
 
       $result = @()
-      foreach ($p in $spoolerPorts) {
-        $matchedPrinter = $spoolerPrinters | Where-Object { $_.PortName -eq $p.Name } | Select-Object -First 1
-        $pName = if ($matchedPrinter) { $matchedPrinter.Name } else { '' }
+      $seenPorts = @{}
 
-        # --- Step 3: Cross-validate --- only include port if printer is currently connected ---
-        $isCurrentlyConnected = $false
-        # Check by printer name first
-        if ($pName) {
-          $pNameLower = $pName.ToLower().Trim()
-          foreach ($key in $connectedNames.Keys) {
-            if ($key -match [regex]::Escape($pNameLower)) {
-              $isCurrentlyConnected = $true
-              break
-            }
+      # A. Scan physically connected USBPRINT devices FIRST (real hardware)
+      $usbPrintDevices = $pnpList | Where-Object { $_.InstanceId -match 'USBPRINT' }
+      foreach ($dev in $usbPrintDevices) {
+        if ($dev.InstanceId -match '(USB\\d+)') {
+          $portName = $matches[1]
+          $seenPorts[$portName] = $true
+
+          $matchedPrinter = $spoolerPrinters | Where-Object { ($_.PortName -replace '[:\\\\/]', '') -eq $portName } | Select-Object -First 1
+          $pName = if ($matchedPrinter) { $matchedPrinter.Name } else { '' }
+          $desc = if ($dev.FriendlyName) { $dev.FriendlyName } else { 'USB Thermal Printer' }
+
+          $dn = "$portName ($desc)"
+          if ($pName) { $dn = "$dn - $pName" }
+
+          $result += [PSCustomObject]@{
+            port = $portName
+            name = $portName
+            description = $desc
+            printerName = $pName
+            isThermalLikely = $true
+            displayName = $dn
           }
         }
+      }
 
-        # If not matched by name, check COM or USB port descriptions
-        if (-not $isCurrentlyConnected) {
-          $cName = if ($p.Name -match '^COM') { $p.Name } else { $p.Description }
-          if ($cName) {
-            $cNameLower = $cName.ToLower().Trim()
-            foreach ($key in $connectedNames.Keys) {
-              if ($key -match [regex]::Escape($cNameLower) -or $cNameLower -match [regex]::Escape($key)) {
-                $isCurrentlyConnected = $true
-                break
-              }
-            }
-          }
-        }
+      # B. Scan active COM ports
+      foreach ($com in $serialPorts) {
+        $portName = $com -replace '[:\\\\/]', ''
+        if ($seenPorts.ContainsKey($portName)) { continue }
+        $seenPorts[$portName] = $true
 
-        # Skip stale / disconnected ports
-        if (!$isCurrentlyConnected) { continue }
-
-        $desc = if ($p.Description) { $p.Description } else { '' }
-        $it = ($desc -match '(?i)(pos|epson|thermal|receipt|caysn|t82|kpc|xprinter|cashino|rongta|hprt|gprinter|bixolon|citizen)') -or 
-              ($pName -match '(?i)(pos|epson|thermal|receipt|caysn|t82|kpc|xprinter|cashino|rongta|hprt|gprinter|bixolon|citizen)')
-
-        # If it doesn't have a printer name but it's connected on a USB port, we mark it as needing driver
-        $finalPrinterName = if ($pName) { $pName } elseif ($p.Name -match '^USB') { "Uninstalled Printer (" + $desc + ")" } else { "" }
+        $pnpMatch = $pnpList | Where-Object { $_.FriendlyName -match [regex]::Escape($portName) } | Select-Object -First 1
+        $desc = if ($pnpMatch -and $pnpMatch.FriendlyName) { $pnpMatch.FriendlyName } else { 'Serial / COM Port' }
+        $allText = ($portName + ' ' + $desc).ToLower()
+        $isThermal = $allText -match '(pos|epson|thermal|receipt|caysn|t82|kpc|xprinter|cashino|rongta|hprt|gprinter|bixolon|citizen|rp\\d+|nt-|58|80)'
 
         $result += [PSCustomObject]@{
-          port = $p.Name
-          name = $p.Name
+          port = $portName
+          name = $portName
           description = $desc
-          printerName = $finalPrinterName
-          isThermalLikely = [bool]$it
+          printerName = ''
+          isThermalLikely = [bool]$isThermal
+          displayName = "$portName ($desc)"
         }
       }
 
@@ -121,26 +106,14 @@ export async function getAvailableUSBAndCOMPorts() {
       // Format clean display labels and sort so thermal printers (e.g. Caysn, Epson, POS80) appear first
       const formattedPorts = rawPorts
         .filter(p => p && p.port)
-        .map(p => {
-          let label = p.port;
-          if (p.description && p.description !== 'Local Port' && p.description !== 'Virtual printer port for USB') {
-            label += ` (${p.description})`;
-          } else if (p.printerName) {
-            label += ` (${p.printerName})`;
-          }
-          if (p.printerName && !label.includes(p.printerName)) {
-            label += ` - ${p.printerName}`;
-          }
-
-          return {
-            port: p.port,
-            name: p.port,
-            description: p.description,
-            printerName: p.printerName,
-            isThermalLikely: Boolean(p.isThermalLikely),
-            displayName: label
-          };
-        })
+        .map(p => ({
+          port: p.port,
+          name: p.port,
+          description: p.description,
+          printerName: p.printerName,
+          isThermalLikely: Boolean(p.isThermalLikely),
+          displayName: p.displayName || p.port
+        }))
         .sort((a, b) => {
           // Priority 1: Likely thermal printers
           if (a.isThermalLikely && !b.isThermalLikely) return -1;
@@ -185,7 +158,7 @@ export async function getAvailableUSBAndCOMPorts() {
 /**
  * Send raw binary ESC/POS buffer directly to a USB or COM port
  */
-export async function sendRawToUSBPrinter(portName, buffer) {
+export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
   if (!portName || typeof portName !== 'string') {
     throw new Error('USB / COM port identifier is required');
   }
@@ -206,17 +179,44 @@ export async function sendRawToUSBPrinter(portName, buffer) {
     const psScriptPath = path.join(__dirname, '..', 'utils', 'rawPrint.ps1');
 
     try {
-      const cleanPort = portName.trim();
-      const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}" -Port "${cleanPort}" -File "${tempBin}"`;
-      const { stdout, stderr } = await execPromise(cmd, { timeout: 10000 });
+      let cleanPort = portName.trim().replace(/[:\\/]/g, '');
+      const cleanPrinterName = (printerName || '').trim();
+
+      // Check live active ports to verify physical connection and auto-heal if port shifted
+      try {
+        const livePorts = await getAvailableUSBAndCOMPorts();
+        const isPortLive = livePorts.some(p => p.port === cleanPort);
+        if (!isPortLive && cleanPort.startsWith('USB')) {
+          const activeUsb = livePorts.find(p => p.port.startsWith('USB') && p.isThermalLikely) || livePorts.find(p => p.port.startsWith('USB'));
+          if (activeUsb) {
+            console.log(`[USBPrinterService] Configured USB port '${cleanPort}' is disconnected; auto-rerouting to physically active port '${activeUsb.port}' (${activeUsb.description})`);
+            cleanPort = activeUsb.port;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('[USBPrinterService] Could not check live USB ports before printing:', checkErr.message);
+      }
+
+      const printerParam = cleanPrinterName ? ` -PrinterName "${cleanPrinterName}"` : '';
+      const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}" -Port "${cleanPort}" -File "${tempBin}"${printerParam}`;
+      const { stdout, stderr } = await execPromise(cmd, { timeout: 12000 });
       
       const outText = (stdout || '').trim();
       if (stderr && stderr.toLowerCase().includes('failed:')) {
         throw new Error(stderr.trim());
       }
+
+      // Check if rawPrint.ps1 rerouted to another port
+      let finalPort = cleanPort;
+      const rerouteMatch = outText.match(/auto-rerouting to active port '([^']+)'/i);
+      if (rerouteMatch && rerouteMatch[1]) {
+        finalPort = rerouteMatch[1];
+      }
+
       return {
         success: true,
-        message: outText || `Printed raw ESC/POS to ${cleanPort}`
+        actualPort: finalPort,
+        message: outText || `Printed raw ESC/POS to ${finalPort}`
       };
     } finally {
       try {
@@ -431,4 +431,95 @@ export async function scanBluetoothDevices() {
 
   // macOS / unsupported – return unavailable
   return { btAvailable: false, devices: [] };
+}
+
+/**
+ * Send raw binary ESC/POS buffer directly to a paired Bluetooth thermal printer on Windows or Linux
+ */
+export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
+  if (!addressOrName || typeof addressOrName !== 'string') {
+    throw new Error('Bluetooth MAC address or printer name is required');
+  }
+  if (!buffer || buffer.length === 0) {
+    throw new Error('Empty print buffer data');
+  }
+
+  if (process.platform === 'win32') {
+    const cleanAddress = addressOrName.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    const tempDir = path.join(os.tmpdir(), 'msbillings_print');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    const tempBin = path.join(tempDir, `bt_print_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.bin`);
+    fs.writeFileSync(tempBin, buffer);
+
+    const psScript = `
+      $ErrorActionPreference = 'Stop'
+      $cleanMac = '${cleanAddress}'
+      $targetName = '${addressOrName.replace(/'/g, "''")}'
+
+      # 1. Find assigned COM port for this Bluetooth device
+      $allPorts = Get-PnpDevice -Class 'Ports' -Status 'OK' -ErrorAction SilentlyContinue |
+        Select-Object FriendlyName, InstanceId
+
+      $matchedPort = ''
+      foreach ($p in $allPorts) {
+        if ($cleanMac -and $p.InstanceId -and $p.InstanceId.ToUpper() -match $cleanMac) {
+          if ($p.FriendlyName -match 'COM\\d+') {
+            $matchedPort = $matches[0]
+            break
+          }
+        }
+      }
+
+      if (-not $matchedPort) {
+        foreach ($p in $allPorts) {
+          if ($p.FriendlyName -match [regex]::Escape($targetName)) {
+            if ($p.FriendlyName -match 'COM\\d+') {
+              $matchedPort = $matches[0]
+              break
+            }
+          }
+        }
+      }
+
+      if (-not $matchedPort) {
+        Write-Error "No active COM port found for Bluetooth printer $targetName ($cleanMac). Ensure printer is ON and paired in Windows Settings."
+        exit 1
+      }
+
+      # 2. Open serial port and transmit raw bytes
+      $rawBytes = [System.IO.File]::ReadAllBytes('${tempBin.replace(/\\/g, '\\\\')}')
+      $sp = New-Object System.IO.Ports.SerialPort $matchedPort, 9600, 'None', 8, 'One'
+      $sp.WriteTimeout = 15000
+      $sp.ReadTimeout = 3000
+      try {
+        $sp.Open()
+        $sp.Write($rawBytes, 0, $rawBytes.Length)
+        Start-Sleep -Milliseconds 500
+        $sp.Close()
+        Write-Output "SUCCESS: Printed raw data over Bluetooth $matchedPort ($targetName)"
+      } catch {
+        if ($sp.IsOpen) { $sp.Close() }
+        Write-Error "Failed to send data to Bluetooth port $matchedPort : $($_.Exception.Message)"
+        exit 1
+      }
+    `;
+
+    try {
+      const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
+      const { stdout, stderr } = await execPromise(
+        `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
+        { timeout: 25000 }
+      );
+      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+      return { success: true, message: (stdout || '').trim() || `Printed to Bluetooth port for ${addressOrName}` };
+    } catch (err) {
+      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+      const errMsg = err.stderr || err.stdout || err.message;
+      throw new Error(errMsg.replace(/powershell.*?:/i, '').trim());
+    }
+  }
+
+  throw new Error('Bluetooth raw printing via server is only supported on Windows / Linux hosts.');
 }

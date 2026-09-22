@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2 } from 'lucide-react';
+import { Printer, ArrowLeft, ChefHat, Layers, CheckCircle2, WifiOff, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { getApiUrl } from '../config';
-import html2canvas from 'html2canvas';
-import { getReceiptFontMetrics } from '../utils/receiptFonts';
+import html2canvas from 'html2canvas-pro';
+import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
+import { renderElementToESCPOSRaster, autoTrimCanvasBottom } from '../utils/escposRaster';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
@@ -17,18 +18,59 @@ const KOT = ({ order, onClose }) => {
     } catch (_) {}
     return { restaurantName: 'msbillings' };
   });
+
+  useEffect(() => {
+    const updateLocalSettings = () => {
+      try {
+        const saved = localStorage.getItem('restaurantSettings');
+        if (saved) setSettings(prev => ({ ...prev, ...JSON.parse(saved) }));
+      } catch (_) {}
+    };
+    updateLocalSettings();
+    axios.get(`${getApiUrl()}/config/info`).then(res => {
+      const incoming = res.data?.restaurantSettings || res.data;
+      if (incoming && typeof incoming === 'object') {
+        setSettings(prev => ({ ...prev, ...incoming }));
+        try {
+          const local = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          localStorage.setItem('restaurantSettings', JSON.stringify({ ...local, ...incoming }));
+        } catch (_) {}
+      }
+    }).catch(() => {});
+    window.addEventListener('settingsUpdated', updateLocalSettings);
+    return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
+  }, []);
+
+  const matchedFontObj = findReceiptFont(settings.receiptFontFamily);
+  const receiptFont = matchedFontObj.value;
   const fontMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat);
-  const receiptFont = settings.receiptFontFamily || "Arial, Helvetica, sans-serif";
 
   const [printerConfigs, setPrinterConfigs] = useState([]);
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [isPrintingAll, setIsPrintingAll] = useState(false);
-  // ─── Single flag prevents duplicate prints when user taps button fast ────
+  // ─── Print status for dynamic button feedback ─────────────────────────────
+  // null | 'printing' | 'success' | 'failed' | 'not_connected'
+  const [printStatus, setPrintStatus] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // ─── Pre-resolved BT MAC cache – computed once on mount, reused on every print
   const resolvedMacRef = useRef(null);
   const macResolvedRef = useRef(false);
+
+  // Helper: show toast
+  const showToast = useCallback((message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // Helper: reset print status after delay
+  const resetPrintStatus = useCallback((delay = 3500) => {
+    setTimeout(() => {
+      setPrintStatus(null);
+      setIsPrinting(false);
+    }, delay);
+  }, []);
 
   useEffect(() => {
     // Fetch configured printers to link departments to printer hardware
@@ -83,19 +125,8 @@ const KOT = ({ order, onClose }) => {
     resolveMac();
   }, []);
 
-  // ─── Auto-print on mobile (Android APK) when KOT mounts ───────────────────
-  const autoPrintTriggeredRef = useRef(false);
-  useEffect(() => {
-    if (autoPrintTriggeredRef.current) return;
-    const isAndroid = !!(window.AndroidBluetooth || window.AndroidPrint);
-    if (!isAndroid) return;
-    autoPrintTriggeredRef.current = true;
-    // 400ms is enough for React to finish painting the receipt node
-    const timer = setTimeout(() => {
-      handlePrintCurrent();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
+  // ─── Auto-print on mount REMOVED ─────────────────────────────────────────
+  // KOT only prints when user explicitly clicks Print KOT or Send to All Kitchens
 
   // Group items dynamically by Kitchen Station / Printer Config
   const stationGroups = useMemo(() => {
@@ -103,9 +134,19 @@ const KOT = ({ order, onClose }) => {
       return [];
     }
 
-    const activePrinters = printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
+    const activePrinters = (printerConfigs && printerConfigs.length > 0)
+      ? printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general' || p.type === 'both'))
+      : (() => {
+          try {
+            const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+            return cached.filter(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
+          } catch (_) { return []; }
+        })();
 
     const map = new Map();
+
+    // Fallback general printer for unassigned items
+    const fallbackPrinter = activePrinters.find(p => (!p.assignedCategories || p.assignedCategories.length === 0) && (!p.assignedItems || p.assignedItems.length === 0)) || activePrinters[0] || null;
 
     order.items.forEach(item => {
       const itemLower = (item.name || '').trim().toLowerCase();
@@ -139,6 +180,11 @@ const KOT = ({ order, onClose }) => {
             break;
           }
         }
+      }
+
+      // If no specific printer matched and multiple printers exist, assign to fallback general printer
+      if (!matchedPrinter && fallbackPrinter && activePrinters.length > 1) {
+        matchedPrinter = fallbackPrinter;
       }
 
       const key = matchedPrinter
@@ -184,8 +230,19 @@ const KOT = ({ order, onClose }) => {
   // ─── Print current active tab/kitchen ────────────────────────────────────
   const handlePrintCurrent = async () => {
     // Guard: block duplicate prints (user tapping multiple times)
-    if (isPrinting) return;
+    if (isPrinting || isPrintingAll) return;
+
+    // When viewing "All Kitchens" and multiple station groups exist, automatically print to each station!
+    if (selectedDept === 'ALL' && stationGroups.length > 1) {
+      return handlePrintAllKitchens();
+    }
+
+    // ── IMMEDIATE UI FEEDBACK ── set state BEFORE any async work
     setIsPrinting(true);
+    setPrintStatus('printing');
+
+    // ⚡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
+    await new Promise(res => setTimeout(res, 80));
 
     try {
       if (window.electronAPI) {
@@ -193,8 +250,13 @@ const KOT = ({ order, onClose }) => {
         const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
         const isSilent = settings.silentPrinting !== false;
         let targetPrinter = settings.kotPrinter || '';
-        if (activeStationGroup?.printer?.deviceName) targetPrinter = activeStationGroup.printer.deviceName;
+        const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
+        if (targetStation?.printer?.deviceName) targetPrinter = targetStation.printer.deviceName;
         window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
+        setPrintStatus('success');
+        showToast(t('KOT sent to printer!'), 'success');
+        resetPrintStatus(3000);
+        return;
 
       } else if (window.AndroidBluetooth) {
         const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
@@ -203,9 +265,10 @@ const KOT = ({ order, onClose }) => {
         // Use pre-resolved MAC first (fastest path — no loops on every print)
         let macAddress = resolvedMacRef.current;
 
-        // Station-specific override (e.g. user switched kitchen tab)
-        if (activeStationGroup?.printer) {
-          const stationMac = tryMac(activeStationGroup.printer.bluetoothAddress || activeStationGroup.printer.deviceName || '');
+        // Station-specific override or first available station group (e.g. "All in One" when viewing ALL)
+        const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
+        if (targetStation?.printer) {
+          const stationMac = tryMac(targetStation.printer.bluetoothAddress || targetStation.printer.deviceName || '');
           if (stationMac) macAddress = stationMac;
         }
 
@@ -225,38 +288,83 @@ const KOT = ({ order, onClose }) => {
         }
         if (!macAddress) macAddress = tryMac(settings.kotPrinter || '') || tryMac(settings.billingPrinter || '');
 
-        if (macAddress && window.AndroidBluetooth.printImage) {
+        // ── CONNECTION CHECK: Show error immediately if no printer found
+        if (!macAddress) {
+          setPrintStatus('not_connected');
+          showToast(t('Printer not connected. Please pair a Bluetooth printer in Printer & Kitchen Routing settings.'), 'error');
+          resetPrintStatus(4000);
+          return;
+        }
+
+        if (window.AndroidBluetooth.printImage) {
           try {
-            const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
+            const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
-              const paperWidthDots = (settings.printFormat === '58mm' || activeStationGroup?.printer?.paperWidth === '58mm') ? 384 : 576;
-              // scale:1.5 is sharp enough for thermal and renders ~40% faster than scale:2
+              const paperWidthDots = (settings.printFormat === '58mm' || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
               const canvas = await html2canvas(receiptNode, {
                 scale: 1.5,
                 backgroundColor: '#ffffff',
                 useCORS: true,
                 logging: false,
-                imageTimeout: 0
+                imageTimeout: 0,
+                onclone: (clonedDoc) => {
+                  const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip');
+                  if (receipt) {
+                    receipt.style.boxShadow = 'none';
+                    receipt.style.filter = 'none';
+                    receipt.style.backgroundColor = '#ffffff';
+                    receipt.style.color = '#000000';
+                  }
+                }
               });
-              const base64Png = canvas.toDataURL('image/png', 0.92);
+              const trimmedCanvas = autoTrimCanvasBottom(canvas);
+              const base64Png = trimmedCanvas.toDataURL('image/png', 0.95);
+              // Yield a brief moment so UI remains fluid before native bridge
+              await new Promise(res => setTimeout(res, 20));
               const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
-              if (res.success) return;
-              console.warn('[KOT] Bluetooth print failed:', res.error);
+              if (res.success) {
+                setPrintStatus('success');
+                showToast(t('KOT printed successfully!'), 'success');
+                resetPrintStatus(3000);
+                return;
+              } else {
+                const errMsg = res.error || 'Bluetooth print failed';
+                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket')) {
+                  setPrintStatus('not_connected');
+                  showToast(t('Printer not connected. Please check Bluetooth connection.'), 'error');
+                } else {
+                  setPrintStatus('failed');
+                  showToast(`${t('KOT print failed')}: ${errMsg}`, 'error');
+                }
+                resetPrintStatus(4000);
+                return;
+              }
             }
           } catch (e) {
-            console.warn('[KOT] Error capturing KOT for Bluetooth print:', e);
+            setPrintStatus('failed');
+            showToast(`${t('KOT print error')}: ${e.message || 'Unknown error'}`, 'error');
+            resetPrintStatus(4000);
+            return;
           }
         }
 
+        // Fallback to system print
         if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
           window.AndroidPrint.print();
+          setPrintStatus('success');
+          showToast(t('KOT sent to system printer!'), 'success');
         } else {
           window.print();
+          setPrintStatus('success');
         }
+        resetPrintStatus(3000);
 
       } else if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
         window.AndroidPrint.print();
+        setPrintStatus('success');
+        showToast(t('KOT sent to system printer!'), 'success');
+        resetPrintStatus(3000);
 
       } else {
         // Direct Backend KOT Printer (TCP ESC/POS or USB RAW via Node.js Backend)
@@ -265,31 +373,70 @@ const KOT = ({ order, onClose }) => {
             ? printerConfigs
             : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
 
-          let targetBackendPrinter = null;
-          if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb')) {
-            targetBackendPrinter = activeStationGroup.printer;
+          let targetPrinters = [];
+          if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb' || activeStationGroup.printer.connectionType === 'bluetooth')) {
+            targetPrinters = [activeStationGroup.printer];
           } else {
-            targetBackendPrinter = cached.find(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb'));
+            targetPrinters = cached.filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb' || c.connectionType === 'bluetooth'));
           }
 
-          if (targetBackendPrinter) {
-            const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-            const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
-            const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
-            const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
-            const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
-              bill: order, items: itemsToPrint, kotNumber: kotNo, queueNumber: qNo, printerId: targetBackendPrinter._id
-            }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
-            if (response.data && response.data.success) return;
+          if (targetPrinters.length > 0) {
+            let anySuccess = false;
+            for (const targetBackendPrinter of targetPrinters) {
+              // Render exact UI from screen to 1-bit ESC/POS raster bit image
+              let rasterBufferBase64 = null;
+              try {
+                const kotNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+                if (kotNode) {
+                  const dots = (targetBackendPrinter.paperWidth === '58mm' || settings.printFormat === '58mm') ? 384 : 576;
+                  rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
+                }
+              } catch (renderErr) {
+                console.warn('[KOT] Raster render error, falling back to text ESC/POS:', renderErr);
+              }
+              
+              const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
+              const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
+              const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+              try {
+                const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
+                  bill: order,
+                  items: itemsToPrint,
+                  kotNumber: kotNo,
+                  queueNumber: qNo,
+                  printerId: targetBackendPrinter._id,
+                  rasterBufferBase64
+                }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
+                if (response.data && response.data.success) {
+                  anySuccess = true;
+                }
+              } catch (singleErr) {
+                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
+              }
+            }
+
+            if (anySuccess) {
+              setPrintStatus('success');
+              showToast(t('KOT sent to printer(s)!'), 'success');
+              resetPrintStatus(3000);
+              return;
+            } else {
+              setPrintStatus('failed');
+              showToast(t('Printer did not respond. Opening browser print...'), 'warning');
+            }
           }
         } catch (netErr) {
-          console.warn('[KOT] Network thermal print failed, falling back to browser print:', netErr);
+          const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
+          setPrintStatus('failed');
+          showToast(`${t('Network print failed')}: ${errMsg}. ${t('Opening browser print...')}`, 'warning');
         }
         window.print();
+        resetPrintStatus(3000);
       }
-    } finally {
-      // Re-enable button after a short cooldown so user knows print was triggered
-      setTimeout(() => setIsPrinting(false), 2500);
+    } catch (unexpectedErr) {
+      setPrintStatus('failed');
+      showToast(`${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, 'error');
+      resetPrintStatus(4000);
     }
   };
 
@@ -308,8 +455,8 @@ const KOT = ({ order, onClose }) => {
       await new Promise(res => setTimeout(res, 280));
 
       if (window.electronAPI) {
-        const receiptNode = document.querySelector('#kot-print-area .receipt-print');
-        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
+        const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+        const htmlContent = receiptNode ? receiptNode.outerHTML : '';
         const isSilent = settings.silentPrinting !== false;
 
         const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
@@ -328,24 +475,45 @@ const KOT = ({ order, onClose }) => {
 
         if (macAddress && window.AndroidBluetooth.printImage) {
           try {
-            const receiptNode = document.querySelector('#kot-print-area .receipt-print') || document.getElementById('kot-print-area');
+            const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
               const paperWidthDots = (settings.printFormat === '58mm' || grp.printer?.paperWidth === '58mm') ? 384 : 576;
               const canvas = await html2canvas(receiptNode, {
-                scale: 2,
+                scale: 1.5,
                 backgroundColor: '#ffffff',
                 useCORS: true,
-                logging: false
+                logging: false,
+                imageTimeout: 0,
+                onclone: (clonedDoc) => {
+                  const receipt = clonedDoc.querySelector('.receipt-print');
+                  if (receipt) {
+                    receipt.style.boxShadow = 'none';
+                    receipt.style.filter = 'none';
+                    receipt.style.backgroundColor = '#ffffff';
+                    receipt.style.color = '#000000';
+                  }
+                }
               });
-              const base64Png = canvas.toDataURL('image/png');
+              const trimmedCanvas = autoTrimCanvasBottom(canvas);
+              const base64Png = trimmedCanvas.toDataURL('image/png', 0.95);
+              await new Promise(res => setTimeout(res, 20));
               window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
             }
           } catch (e) {
             console.warn('[KOT] Multi-station Bluetooth print error:', e);
           }
         }
-      } else if (grp.printer && (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb')) {
+      } else if (grp.printer && (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb' || grp.printer.connectionType === 'bluetooth')) {
         try {
+          let rasterBufferBase64 = null;
+          try {
+            const kotNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+            if (kotNode) {
+              const dots = (grp.printer.paperWidth === '58mm' || settings.printFormat === '58mm') ? 384 : 576;
+              rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
+            }
+          } catch (e) {}
+
           const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
           const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
           const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
@@ -354,7 +522,8 @@ const KOT = ({ order, onClose }) => {
             items: grp.items,
             kotNumber: kotNo,
             queueNumber: qNo,
-            printerId: grp.printer._id
+            printerId: grp.printer._id,
+            rasterBufferBase64
           }, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -381,7 +550,7 @@ const KOT = ({ order, onClose }) => {
   };
 
   return (
-    <div id="kot-print-area" className="invoice-container fixed inset-0 bg-black/40 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-3 sm:p-4 print:p-0 print:block print:w-full print:h-full">
+    <div className="invoice-container fixed inset-0 bg-black/40 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-3 sm:p-4 print:p-0 print:block print:w-full print:h-full">
       <style>
         {`
           @media print {
@@ -465,20 +634,33 @@ const KOT = ({ order, onClose }) => {
             </button>
           )}
 
+          {/* Dynamic Print Button — shows instant status feedback */}
           <button
             onClick={handlePrintCurrent}
             disabled={isPrinting}
-            className={`flex items-center gap-1.5 px-4 py-2 text-white rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer ${
-              isPrinting
-                ? 'bg-green-600 opacity-90 cursor-not-allowed'
-                : 'bg-gray-900 hover:bg-black'
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-white rounded-xl transition-colors duration-100 shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer min-w-[130px] justify-center ${
+              printStatus === 'success'
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : printStatus === 'failed'
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : printStatus === 'not_connected'
+                    ? 'bg-orange-500 hover:bg-orange-600'
+                    : printStatus === 'printing'
+                      ? 'bg-blue-600 opacity-90 cursor-not-allowed'
+                      : 'bg-gray-900 hover:bg-black'
             }`}>
-            {isPrinting
-              ? <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-              : <Printer size={15} />}
+            {printStatus === 'printing' && (
+              <svg className="animate-spin shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+            )}
+            {printStatus === 'success' && <CheckCircle2 size={15} className="shrink-0" />}
+            {printStatus === 'failed' && <AlertCircle size={15} className="shrink-0" />}
+            {printStatus === 'not_connected' && <WifiOff size={15} className="shrink-0" />}
+            {!printStatus && <Printer size={15} className="shrink-0" />}
             <span>
-              {isPrinting
-                ? t('Printing...')
+              {printStatus === 'printing' ? t('Printing...')
+                : printStatus === 'success' ? t('Printed! ✓')
+                : printStatus === 'failed' ? t('Print Failed')
+                : printStatus === 'not_connected' ? t('Not Connected')
                 : stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
                   ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}`
                   : t('Print KOT')}
@@ -487,19 +669,34 @@ const KOT = ({ order, onClose }) => {
 
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-all font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+            className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors duration-100 font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
             <ArrowLeft size={15} />
             <span>{t("Close")}</span>
           </button>
         </div>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`w-full mt-1 px-3 py-2 rounded-xl text-xs font-bold text-center transition-all ${
+            toast.type === 'success' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+            : toast.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200'
+            : toast.type === 'warning' ? 'bg-amber-100 text-amber-800 border border-amber-200'
+            : 'bg-blue-100 text-blue-800 border border-blue-200'
+          }`}>
+            {toast.message}
+          </div>
+        )}
       </div>
 
       {/* KOT Receipt Preview */}
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none my-4 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
+        id="kot-receipt-slip"
+        className={`receipt-print bg-white text-black mx-auto shadow-md border border-gray-200 print:shadow-none my-1 pb-1 print:m-0 print:border-0 overflow-hidden ${getFormatClasses()}`}
         style={{
           fontFamily: receiptFont,
-          color: '#000',
+          ...(matchedFontObj?.previewStyle || {}),
+          color: '#000000',
+          backgroundColor: '#ffffff',
           fontWeight: 'normal',
           fontSize: fontMetrics.bodySize,
           lineHeight: fontMetrics.lineHeight,
@@ -509,7 +706,7 @@ const KOT = ({ order, onClose }) => {
         
         {settings.printFormat === '58mm' ? (
           /* 58mm Compact Clean KOT Slip Layout (Zomato Style) */
-          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
+          <div style={{ padding: '4px 4px 2px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '3px' }}>
               <div style={{ fontSize: fontMetrics.detailSize }}>
@@ -669,7 +866,15 @@ const KOT = ({ order, onClose }) => {
           </div>
         ) : (
           /* Existing 80mm and A4 layout - completely untouched! */
-          <div style={{ padding: '0 8px', boxSizing: 'border-box' }}>
+          <div style={{
+            padding: '0 8px',
+            boxSizing: 'border-box',
+            fontFamily: receiptFont,
+            ...(matchedFontObj?.previewStyle || {}),
+            fontSize: fontMetrics.bodySize,
+            lineHeight: fontMetrics.lineHeight,
+            color: '#000000'
+          }}>
             
             {/* Header - Centered */}
           <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>

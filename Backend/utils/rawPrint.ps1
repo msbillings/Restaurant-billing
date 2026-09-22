@@ -3,7 +3,10 @@ param (
     [string]$Port,
 
     [Parameter(Mandatory=$true)]
-    [string]$File
+    [string]$File,
+
+    [Parameter(Mandatory=$false)]
+    [string]$PrinterName = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -60,25 +63,74 @@ public class RawPrinterHelper {
 "@
 Add-Type -TypeDefinition $Source -ErrorAction SilentlyContinue
 
-$printers = Get-Printer | Where-Object { $_.PortName -eq $Port }
-$printerName = if ($printers) { $printers[0].Name } else { $null }
+$cleanPort = ($Port -replace '[:\\/]', '').Trim()
 
-if (-not $printerName) {
-    $autoName = "MS_POS_" + ($Port -replace '[:\\/]', '')
-    try {
-        Add-Printer -Name $autoName -DriverName "POS80" -PortName $Port -ErrorAction Stop
-        $printerName = $autoName
-    } catch {
-        Write-Error "Could not auto-create queue for port $Port : $($_.Exception.Message)"
+# 1. Check physical connectivity for USB printer ports
+if ($cleanPort -match '^USB\d+$') {
+    $activeUsbDevices = Get-PnpDevice -PresentOnly -Status 'OK' -ErrorAction SilentlyContinue |
+                        Where-Object { $_.InstanceId -match 'USBPRINT' }
+
+    $targetDevice = $activeUsbDevices | Where-Object { $_.InstanceId -match [regex]::Escape($cleanPort) } | Select-Object -First 1
+
+    if (-not $targetDevice -and $activeUsbDevices) {
+        # Target USB port is not physically connected, but another active USBPRINT device IS connected!
+        $firstActive = $activeUsbDevices[0]
+        if ($firstActive.InstanceId -match '(USB\d+)') {
+            $reroutedPort = $matches[1]
+            Write-Host "NOTE: Configured USB port '$cleanPort' is offline; auto-rerouting to active port '$reroutedPort' ($($firstActive.FriendlyName))"
+            $cleanPort = $reroutedPort
+            $Port = $reroutedPort
+        }
+    } elseif (-not $targetDevice -and -not $activeUsbDevices) {
+        Write-Error "FAILED: No physical USB thermal printer is connected or powered on. Please check the USB cable and printer power switch."
         exit 1
     }
 }
 
+# 2. Find or create the Windows Print Spooler queue for this port
+$allPrinters = Get-Printer -ErrorAction SilentlyContinue
+$targetPrinter = $null
+
+# Priority 1: Match printer queue that is bound to the target $cleanPort
+$targetPrinter = $allPrinters | Where-Object {
+    ($_.PortName -replace '[:\\/]', '').Trim() -eq $cleanPort
+} | Select-Object -First 1
+
+# Priority 2: If none matched by port, but $PrinterName is on $cleanPort
+if (-not $targetPrinter -and $PrinterName) {
+    $namedPrinter = $allPrinters | Where-Object { $_.Name -eq $PrinterName } | Select-Object -First 1
+    if ($namedPrinter -and ($namedPrinter.PortName -replace '[:\\/]', '').Trim() -eq $cleanPort) {
+        $targetPrinter = $namedPrinter
+    }
+}
+
+if (-not $targetPrinter) {
+    $autoName = "MS_POS_" + $cleanPort
+    try {
+        Add-Printer -Name $autoName -DriverName "POS80" -PortName $cleanPort -ErrorAction Stop
+        $targetPrinter = Get-Printer -Name $autoName -ErrorAction Stop
+    } catch {
+        Write-Error "Could not auto-create queue for port $cleanPort : $($_.Exception.Message)"
+        exit 1
+    }
+}
+
+$printerQueueName = $targetPrinter.Name
+
+# 3. Clean any stale or errored jobs in queue to avoid spooler hang
+$stuckJobs = Get-PrintJob -PrinterName $printerQueueName -ErrorAction SilentlyContinue
+foreach ($job in $stuckJobs) {
+    if ($job.JobStatus -match 'Error|Offline|UserIntervention' -or $job.DocumentName -eq 'MS_BILLING_RAW') {
+        Remove-PrintJob -PrinterName $printerQueueName -ID $job.Id -ErrorAction SilentlyContinue
+    }
+}
+
+# 4. Read file and send raw bytes directly to printer
 $rawBytes = [System.IO.File]::ReadAllBytes($File)
-$success = [RawPrinterHelper]::SendBytesToPrinter($printerName, $rawBytes)
+$success = [RawPrinterHelper]::SendBytesToPrinter($printerQueueName, $rawBytes)
 if ($success) {
-    Write-Output "SUCCESS: Printed raw data to $printerName on $Port"
+    Write-Output "SUCCESS: Printed raw data to $printerQueueName on $cleanPort"
 } else {
-    Write-Error "FAILED: SendBytesToPrinter returned false for $printerName on $Port"
+    Write-Error "FAILED: SendBytesToPrinter returned false for $printerQueueName on $cleanPort"
     exit 1
 }

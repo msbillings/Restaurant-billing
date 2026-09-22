@@ -221,23 +221,8 @@ export const sendBill = async (req, res) => {
     }
 
     let imageUrl = null;
-    if (imageBase64 && typeof imageBase64 === 'string' && imageBase64.startsWith('data:image/')) {
-      try {
-        console.log(`[WhatsApp sendBill] ⚡ Uploading receipt image to Cloudinary for fast WhatsApp delivery...`);
-        const cloudRes = await uploadImage(imageBase64, {
-          folder: `msbillings/${tenantId}/receipts`,
-          publicId: `bill_${billNumber || Date.now()}`,
-          maxWidth: 900
-        });
-        if (cloudRes && cloudRes.url) {
-          imageUrl = cloudRes.url;
-          console.log(`[WhatsApp sendBill] ✅ Cloudinary receipt image URL: ${imageUrl}`);
-        }
-      } catch (cErr) {
-        console.warn(`[WhatsApp sendBill] Cloudinary upload warning (fallback to base64 buffer):`, cErr.message);
-      }
-    }
-
+    // Removed Cloudinary upload to eliminate 3-5 second latency.
+    // The WhatsApp service will directly use the base64 buffer for instant (< 1s) delivery.
     try {
       console.log(`[WhatsApp sendBill] Sending MEDIA (Receipt Photo) to ${phone}... (hasCloudUrl=${!!imageUrl})`);
       await whatsappService.sendBillMedia(phone, {

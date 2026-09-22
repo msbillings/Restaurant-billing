@@ -6,7 +6,7 @@ import SettingDefault from '../models/Setting.js';
 import FloorDefault from '../models/Floor.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { emitNotification } from '../utils/notificationHelper.js';
-import { sendRawToUSBPrinter, getAvailableUSBAndCOMPorts } from './usbPrinterService.js';
+import { sendRawToUSBPrinter, sendRawToBluetoothPrinter, getAvailableUSBAndCOMPorts } from './usbPrinterService.js';
 import { scanNetworkThermalPrinters } from './networkPrinterScanner.js';
 
 // ESC/POS Commands
@@ -29,6 +29,8 @@ const CMD = {
   LINE_SPACING_RELAXED: ESC + '3\x26', // Relaxed 38-dot line spacing (for Large/XL text size)
   BOLD_ON: ESC + 'E\x01',            // Bold text ON
   BOLD_OFF: ESC + 'E\x00',           // Bold text OFF
+  DOUBLE_STRIKE_ON: ESC + 'G\x01',   // Double-strike ON (darker thermal print)
+  DOUBLE_STRIKE_OFF: ESC + 'G\x00',  // Double-strike OFF
   CUT_PAPER: GS + 'V\x42\x00',       // Full paper cut
   LINE_FEED: '\n'
 };
@@ -113,8 +115,47 @@ export const generateESCPOSTestReceipt = (config) => {
 };
 
 /**
+ * Text wrapping helper for fixed width thermal receipt printers
+ */
+export const wrapTextLines = (text, maxChars) => {
+  if (!text) return [];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let currentLine = '';
+
+  words.forEach(word => {
+    if (!currentLine) {
+      currentLine = word;
+    } else if ((currentLine + ' ' + word).length <= maxChars) {
+      currentLine += ' ' + word;
+    } else {
+      lines.push(currentLine);
+      currentLine = word;
+    }
+  });
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+};
+
+/**
+ * Two-column aligned row generator (Left aligned key, Right aligned value)
+ */
+export const formatTwoCols = (left, right, width = 48) => {
+  const l = String(left || '');
+  const r = String(right || '');
+  if (l.length + r.length >= width) {
+    return l + ' ' + r;
+  }
+  return l + ' '.repeat(width - l.length - r.length) + r;
+};
+
+/**
  * Generate a formatted KOT ESC/POS Buffer for thermal printers
- * Matches on-screen layout: Date/Time, KOT No, Queue No & Order Type in single row, Table No, Biller, and 3-col items table
+ * Matches on-screen layout: Date/Time, KOT No, Station Badge, Queue No & Order Type in single row, Table No, Biller, and 3-col items table
  */
 export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = {}, queueNumber, restaurantDetails = {}) => {
   const s = { ...restaurantDetails, ...(bill?.restaurantDetails || {}) };
@@ -150,7 +191,7 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     content += CMD.LINE_SPACING_DEFAULT;
   }
 
-  // 1. Date & Time Centered (Matching Image 2: "19/09/2026 11:19 AM")
+  // 1. Date & Time Centered
   content += CMD.ALIGN_CENTER;
   const d = new Date(bill.createdAt || Date.now());
   const dateStr = `${d.toLocaleDateString('en-GB')} ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
@@ -162,7 +203,14 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
   const kotLabel = rawKot.toUpperCase().includes('UPDATE') ? rawKot : (numOnly ? `KOT No: ${numOnly}` : `KOT No: ${rawKot}`);
   content += CMD.TEXT_DOUBLE_HEIGHT + CMD.BOLD_ON + kotLabel + CMD.LINE_FEED + CMD.TEXT_NORMAL + CMD.BOLD_OFF;
 
-  // 3. Queue No & Dine-In / Delivery / Takeaway in a SINGLE ROW
+  // 3. Station Badge immediately below KOT No (Matches right slip in user photo)
+  const kitchenTitle = (printerConfig.name || printerConfig.assignTo || '').trim().toUpperCase();
+  const locationSub = printerConfig.location ? ` - ${printerConfig.location.trim().toUpperCase()}` : '';
+  if (kitchenTitle && kitchenTitle !== 'KITCHEN') {
+    content += CMD.BOLD_ON + `[ ${kitchenTitle}${locationSub} ]` + CMD.BOLD_OFF + CMD.LINE_FEED;
+  }
+
+  // 4. Queue No & Dine-In / Delivery / Takeaway in a SINGLE ROW
   const queueNo = queueNumber || bill.tokenNo || bill.queueNumber || '1';
   const bType = bill.billType || bill.orderType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
   let typeStr = 'Dine In';
@@ -177,7 +225,7 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
   const queueStr = `Queue No: #${queueNo}`;
   content += CMD.BOLD_ON + formatTwoCols(queueStr, typeStr, width) + CMD.LINE_FEED + CMD.BOLD_OFF;
 
-  // 4. Table Number Centered (e.g. "Table No: Ground Floor - Table 3")
+  // 5. Table Number Centered (Bold)
   let tableLabel = '';
   if (bType === 'Delivery') {
     tableLabel = `Order #${bill.tableNo || 'DEL'}`;
@@ -195,10 +243,10 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     content += CMD.ALIGN_CENTER + cust.substring(0, width) + CMD.LINE_FEED;
   }
 
-  // 5. Divider Line
+  // 6. Divider Line
   content += lineDivider + CMD.LINE_FEED;
 
-  // 6. Biller Info (Left Aligned, e.g. "Biller: admin")
+  // 7. Biller Info (Left Aligned)
   content += CMD.ALIGN_LEFT;
   const cashier = bill.cashierName || bill.billerName || 'admin';
   const billerLine = `Biller: ${cashier}`;
@@ -208,20 +256,22 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     content += billerLine + CMD.LINE_FEED;
   }
 
-  // 7. Divider Line
+  // 8. Divider Line
   content += lineDivider + CMD.LINE_FEED;
 
-  // 8. 3-Column Items Table Header (Item, Special Note, Qty.)
+  // 9. 3-Column Items Table Header (Item, Special Note, Qty.)
   if (is58mm) {
-    // 32 columns: Item (16) + space + Note (9) + space + Qty. (5) = 32
     content += CMD.BOLD_ON + 'Item              Note       Qty.' + CMD.LINE_FEED + CMD.BOLD_OFF;
   } else {
-    // 48 columns: Item (22) + space + Special Note (18) + space + Qty. (6) = 48
     content += CMD.BOLD_ON + 'Item                    Special Note        Qty.' + CMD.LINE_FEED + CMD.BOLD_OFF;
   }
   content += lineDivider + CMD.LINE_FEED;
 
-  // 9. Items Rows
+  // 10. Items Rows with BOLD item names, BOLD quantities, and clean whole-word wrapping
+  const maxItem = is58mm ? 16 : 22;
+  const maxNote = is58mm ? 9 : 18;
+  const qWidth = is58mm ? 5 : 6;
+
   items.forEach((item) => {
     const isCancelled = item.status === 'Cancelled' || item.isCancelled;
     const isReduced = !isCancelled && (item.reducedQuantity > 0);
@@ -233,39 +283,33 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
 
     const noteStr = (item.specialNote && item.specialNote.trim()) ? item.specialNote.trim() : '-';
 
-    if (is58mm) {
-      const qStr = String(qtyNum).padStart(5, ' ');
-      const maxItem = 16;
-      const maxNote = 9;
-      const iPart = itemName.substring(0, maxItem).padEnd(maxItem, ' ');
-      const nPart = noteStr.substring(0, maxNote).padEnd(maxNote, ' ');
-      content += `${iPart} ${nPart} ${qStr}` + CMD.LINE_FEED;
-      if (itemName.length > maxItem) {
-        content += `  ${itemName.substring(maxItem)}` + CMD.LINE_FEED;
-      }
-    } else {
-      const qStr = String(qtyNum).padStart(6, ' ');
-      const maxItem = 22;
-      const maxNote = 18;
-      const iPart = itemName.substring(0, maxItem).padEnd(maxItem, ' ');
-      const nPart = noteStr.substring(0, maxNote).padEnd(maxNote, ' ');
-      content += `${iPart} ${nPart} ${qStr}` + CMD.LINE_FEED;
-      if (itemName.length > maxItem) {
-        content += `  ${itemName.substring(maxItem).trim()}` + CMD.LINE_FEED;
-      }
+    const itemLines = wrapTextLines(itemName, maxItem);
+    const firstLineItem = (itemLines[0] || '').padEnd(maxItem, ' ');
+    const firstLineNote = noteStr.substring(0, maxNote).padEnd(maxNote, ' ');
+    const firstLineQty = String(qtyNum).padStart(qWidth, ' ');
+
+    // Item line: BOLD item name and BOLD quantity!
+    content += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + firstLineNote + ' ' + CMD.BOLD_ON + firstLineQty + CMD.BOLD_OFF + CMD.LINE_FEED;
+
+    // Remaining wrapped item name lines (all bold, no hyphens!)
+    for (let l = 1; l < itemLines.length; l++) {
+      content += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
+    }
+
+    // Special Note lines if longer than maxNote
+    if (noteStr !== '-' && noteStr.length > maxNote) {
+      const extraNoteLines = wrapTextLines(noteStr.substring(maxNote).trim(), width - 4);
+      extraNoteLines.forEach(enl => {
+        content += `  * ${enl}` + CMD.LINE_FEED;
+      });
     }
   });
 
-  // 10. Divider Line
+  // 11. Divider Line
   content += lineDivider + CMD.LINE_FEED;
 
-  // 11. Station Badge Footer (if configured)
-  const kitchenTitle = (printerConfig.name || printerConfig.assignTo || '').trim().toUpperCase();
-  const locationSub = printerConfig.location ? ` - ${printerConfig.location.trim().toUpperCase()}` : '';
-  if (kitchenTitle) {
-    content += CMD.ALIGN_CENTER + `[ ${kitchenTitle}${locationSub} ]` + CMD.LINE_FEED;
-  }
-  content += CMD.LINE_FEED + CMD.LINE_FEED + CMD.LINE_FEED;
+  // Feed and cut - minimum feed to prevent paper waste
+  content += CMD.LINE_FEED;
   content += CMD.CUT_PAPER;
 
   return Buffer.from(content, 'utf-8');
@@ -381,9 +425,10 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
 
       const isNetwork = printer.connectionType === 'network' && printer.ipAddress;
       const isUsb = printer.connectionType === 'usb' && printer.usbPort;
+      const isBluetooth = printer.connectionType === 'bluetooth' && (printer.bluetoothAddress || printer.deviceName || printer.name);
 
-      if (!isNetwork && !isUsb) {
-        console.log(`[PrinterService] Printer '${printer.name}' is ${printer.connectionType} without IP or USB port configured.`);
+      if (!isNetwork && !isUsb && !isBluetooth) {
+        console.log(`[PrinterService] Printer '${printer.name}' is ${printer.connectionType} without IP, USB port, or Bluetooth configured.`);
         return;
       }
 
@@ -438,22 +483,26 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       const itemsToPrint = targetItems.length > 0 ? targetItems : kotItems;
       const buffer = generateKOTESCPOSBuffer(bill, itemsToPrint, kotNumber, printer, queueNumber, restaurantDetails);
 
-      const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : `${printer.ipAddress}:${printer.port || 9100}`;
+      const targetDestination = isUsb
+        ? `USB Port: ${printer.usbPort}`
+        : isBluetooth
+          ? `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`
+          : `${printer.ipAddress}:${printer.port || 9100}`;
       console.log(`[PrinterService] Streaming KOT #${kotNumber} to '${printer.name}' (${targetDestination})`);
 
       try {
         let res;
         if (isUsb) {
-          // Check if the printer is actually physically connected before sending to Windows Spooler.
-          // Windows Spooler will return success even if offline (queues it), causing false notifications.
-          const activePorts = await getAvailableUSBAndCOMPorts();
-          const isConnected = activePorts.some(p => p.port === printer.usbPort);
-          
-          if (!isConnected) {
-            throw new Error(`USB Port ${printer.usbPort} is currently offline or disconnected`);
+          res = await sendRawToUSBPrinter(printer.usbPort, buffer, printer.deviceName || printer.name);
+          if (res.actualPort && res.actualPort !== printer.usbPort) {
+            printer.usbPort = res.actualPort;
+            try {
+              const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
+              await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
+            } catch (_) {}
           }
-          
-          res = await sendRawToUSBPrinter(printer.usbPort, buffer);
+        } else if (isBluetooth) {
+          res = await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);
         } else {
           res = await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
         }
@@ -483,44 +532,7 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
   }
 };
 
-/**
- * Text wrapping helper for fixed width thermal receipt printers
- */
-const wrapTextLines = (text, maxChars) => {
-  if (!text) return [];
-  const words = text.split(/\s+/);
-  const lines = [];
-  let currentLine = '';
 
-  words.forEach(word => {
-    if (!currentLine) {
-      currentLine = word;
-    } else if ((currentLine + ' ' + word).length <= maxChars) {
-      currentLine += ' ' + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
-    }
-  });
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines;
-};
-
-/**
- * Two-column aligned row generator (Left aligned key, Right aligned value)
- */
-const formatTwoCols = (left, right, width = 48) => {
-  const l = String(left || '');
-  const r = String(right || '');
-  if (l.length + r.length >= width) {
-    return l + ' ' + r;
-  }
-  return l + ' '.repeat(width - l.length - r.length) + r;
-};
 
 /**
  * Generate binary ESC/POS commands to print a native 2D QR Code on thermal receipt printers
@@ -685,28 +697,26 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
     const name = (item.name || item.itemName || 'Unknown Item').trim();
 
     if (is58mm) {
+      const maxLen = 16;
+      const itemLines = wrapTextLines(name, maxLen);
+      const firstLineItem = (itemLines[0] || '').padEnd(maxLen, ' ');
       const qStr = String(qty).padStart(4, ' ');
       const aStr = amount.padStart(10, ' ');
-      const maxLen = 16;
-      const nPart = name.substring(0, maxLen).padEnd(maxLen, ' ');
-      content += `${nPart} ${qStr} ${aStr}` + CMD.LINE_FEED;
-      if (name.length > maxLen) {
-        content += `  ${name.substring(maxLen)}` + CMD.LINE_FEED;
+      content += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + qStr + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + aStr + CMD.BOLD_OFF + CMD.LINE_FEED;
+      for (let l = 1; l < itemLines.length; l++) {
+        content += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
       }
     } else {
       // 48 chars: Item (22) + space + Qty. (6) + space + Price (8) + space + Amount (9) = 48
+      const maxLen = 22;
+      const itemLines = wrapTextLines(name, maxLen);
+      const firstLineItem = (itemLines[0] || '').padEnd(maxLen, ' ');
       const qStr = String(qty).padStart(6, ' ');
       const pStr = price.padStart(8, ' ');
       const aStr = amount.padStart(9, ' ');
-      const maxLen = 22;
-      const nPart = name.substring(0, maxLen).padEnd(maxLen, ' ');
-      content += `${nPart} ${qStr} ${pStr} ${aStr}` + CMD.LINE_FEED;
-      if (name.length > maxLen) {
-        const remaining = name.substring(maxLen).trim();
-        const wrappedLines = wrapTextLines(remaining, width - 4);
-        wrappedLines.forEach(wl => {
-          content += `  ${wl}` + CMD.LINE_FEED;
-        });
+      content += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + qStr + CMD.BOLD_OFF + ' ' + pStr + ' ' + CMD.BOLD_ON + aStr + CMD.BOLD_OFF + CMD.LINE_FEED;
+      for (let l = 1; l < itemLines.length; l++) {
+        content += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
       }
     }
 
@@ -872,7 +882,7 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
     footer += printerConfig.printFooter.trim() + CMD.LINE_FEED;
   }
   footer += CMD.BOLD_ON + (s.footerMessage || '*** THANK YOU! VISIT AGAIN ***') + CMD.LINE_FEED + CMD.BOLD_OFF;
-  footer += CMD.LINE_FEED + CMD.LINE_FEED + CMD.LINE_FEED;
+  footer += CMD.LINE_FEED;
   footer += CMD.CUT_PAPER;
 
   return Buffer.concat([
@@ -885,7 +895,7 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
 /**
  * Routes and sends Bill Receipt to active thermal network printers concurrently
  */
-export const printBillToPrinters = async (req, bill, specificPrinterId = null) => {
+export const printBillToPrinters = async (req, bill, specificPrinterId = null, rasterBufferBase64 = null) => {
   try {
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const Setting = getTenantModel(req, 'Setting', SettingDefault);
@@ -920,13 +930,14 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null) =
 
     const targetPrinters = receiptPrinters.filter(p => 
       (p.connectionType === 'network' && p.ipAddress) ||
-      (p.connectionType === 'usb' && p.usbPort)
+      (p.connectionType === 'usb' && p.usbPort) ||
+      (p.connectionType === 'bluetooth' && (p.bluetoothAddress || p.deviceName || p.name))
     );
 
     if (targetPrinters.length === 0) {
       return {
         success: false,
-        message: `Found ${receiptPrinters.length} receipt printer(s), but none are configured with Network IP or USB port.`
+        message: `Found ${receiptPrinters.length} receipt printer(s), but none are configured with Network IP, USB port, or Bluetooth.`
       };
     }
 
@@ -986,6 +997,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null) =
 
       const isUsb = printer.connectionType === 'usb' && printer.usbPort;
       const isNetwork = printer.connectionType === 'network' && printer.ipAddress;
+      const isBluetooth = printer.connectionType === 'bluetooth' && (printer.bluetoothAddress || printer.deviceName || printer.name);
 
       if (isNetwork) {
         const isPrivateLanIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(printer.ipAddress);
@@ -1000,32 +1012,52 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null) =
         }
       }
 
-      const buffer = generateESCPOSBillReceipt(bill, printer, restaurantDetails);
-      const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : `${printer.ipAddress}:${printer.port || 9100}`;
+      let buffer;
+      if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
+        buffer = Buffer.from(rasterBufferBase64, 'base64');
+      } else {
+        buffer = generateESCPOSBillReceipt(bill, printer, restaurantDetails);
+      }
+      const targetDestination = isUsb
+        ? `USB Port: ${printer.usbPort}`
+        : isBluetooth
+          ? `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`
+          : `${printer.ipAddress}:${printer.port || 9100}`;
       try {
+        let actualUsbPort = printer.usbPort;
         if (isUsb) {
-          const activePorts = await getAvailableUSBAndCOMPorts();
-          const isConnected = activePorts.some(p => p.port === printer.usbPort);
-          
-          if (!isConnected) {
-            throw new Error(`USB Port ${printer.usbPort} is currently offline or disconnected`);
+          const res = await sendRawToUSBPrinter(printer.usbPort, buffer, printer.deviceName || printer.name);
+          if (res.actualPort && res.actualPort !== printer.usbPort) {
+            actualUsbPort = res.actualPort;
+            console.log(`[PrinterService] Auto-updated printer '${printer.name}' port from ${printer.usbPort} to ${res.actualPort}`);
+            printer.usbPort = res.actualPort;
+            try {
+              const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
+              await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
+            } catch (_) {}
           }
-          await sendRawToUSBPrinter(printer.usbPort, buffer);
+        } else if (isBluetooth) {
+          await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);
         } else {
           await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
         }
+
+        const effectiveDestination = isUsb
+          ? `USB Port: ${actualUsbPort}`
+          : targetDestination;
+
         results.push({
           printer: printer.name,
           ip: printer.ipAddress || null,
-          usbPort: printer.usbPort || null,
+          usbPort: isUsb ? actualUsbPort : null,
           port: printer.port || 9100,
           success: true,
-          message: `Bill #${bill.billNumber || ''} printed successfully to ${printer.name} (${targetDestination})`
+          message: `Bill #${bill.billNumber || ''} printed successfully to ${printer.name} (${effectiveDestination})`
         });
         emitNotification(
           req,
           '🖨️ Bill Printed',
-          `Bill #${bill.billNumber || ''} printed to ${printer.name} (${targetDestination})`,
+          `Bill #${bill.billNumber || ''} printed to ${printer.name} (${effectiveDestination})`,
           'success',
           ['Admin', 'Cashier', 'Manager']
         );

@@ -3,7 +3,7 @@ import { CheckCircle, Banknote, Wallet, CreditCard, PieChart, BookOpen, Receipt,
 import confetti from "canvas-confetti";
 import { useLanguage } from "../context/LanguageContext";
 
-const DISPLAY_DURATION_MS = 2000; // 2 seconds display time as requested
+const DISPLAY_DURATION_MS = 1700; // 1.7 seconds — strict display time
 
 const PaymentSuccessScreen = ({ billData, paymentData, onDone }) => {
   const { t } = useLanguage();
@@ -36,7 +36,7 @@ const PaymentSuccessScreen = ({ billData, paymentData, onDone }) => {
       if (!doneCalledRef.current) {
         doneCalledRef.current = true;
         setVisible(false);
-        setTimeout(() => onDone?.(), 200);
+        setTimeout(() => onDone?.(), 180);
       }
     }, DISPLAY_DURATION_MS);
 

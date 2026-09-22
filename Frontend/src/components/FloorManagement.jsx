@@ -800,9 +800,9 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     };
 
     const catKey = rawType.toLowerCase() === 'table' ? 'tables'
-                 : rawType.toLowerCase() === 'cabin' ? 'cabins'
-                 : rawType.toLowerCase() === 'sofa' ? 'sofas'
-                 : 'spaces';
+      : rawType.toLowerCase() === 'cabin' ? 'cabins'
+        : rawType.toLowerCase() === 'sofa' ? 'sofas'
+          : 'spaces';
 
     const next = floorsRef.current.map((floor) => {
       if (isMatchingFloor(floor, activeFloorId)) {
@@ -1601,13 +1601,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                 key={floor._id || `${floor.id}-${index}`}
                 onClick={() => handleSelectFloor(floor.id || floor._id)}
                 title={isOtherFloorLocked ? `${t('Floor is locked to')} ${getCurrentFloor(floors, lockedFloorId)?.name || ''}` : ''}
-                className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${
-                  isCurrentActive
+                className={`group relative flex items-center gap-2 px-4 py-2 border-b-2 font-bold cursor-pointer transition-colors whitespace-nowrap text-sm sm:text-base ${isCurrentActive
                     ? 'border-red-600 text-red-600 bg-red-50/50 rounded-t-xl'
                     : isOtherFloorLocked
-                    ? 'border-transparent text-gray-300 hover:text-gray-400 cursor-not-allowed rounded-t-xl'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
-                }`}>
+                      ? 'border-transparent text-gray-300 hover:text-gray-400 cursor-not-allowed rounded-t-xl'
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded-t-xl'
+                  }`}>
                 {isLockedToThis && (
                   <Lock size={14} className="text-amber-600 shrink-0" />
                 )}
@@ -1635,11 +1634,10 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         <div className="shrink-0 pb-1 pl-2">
           <button
             onClick={handleToggleFloorLock}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer border ${
-              lockedFloorId
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-2xs cursor-pointer border ${lockedFloorId
                 ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600 shadow-amber-200/50 ring-2 ring-amber-300'
                 : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300'
-            }`}
+              }`}
             title={lockedFloorId ? t("Floor is locked to this terminal. Click to unlock.") : t("Lock this terminal to the current floor")}>
             {lockedFloorId ? (
               <>
@@ -1688,49 +1686,49 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             });
 
             return (
-            <section key={`${typeName}-${index}`}>
-              <div className="flex items-center justify-between w-full mb-3 group/section">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs sm:text-sm font-black text-[#d32f2f] uppercase tracking-wider">
-                    {t(typeName)}
-                  </h3>
+              <section key={`${typeName}-${index}`}>
+                <div className="flex items-center justify-between w-full mb-3 group/section">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs sm:text-sm font-black text-[#d32f2f] uppercase tracking-wider">
+                      {t(typeName)}
+                    </h3>
+                    <button
+                      onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
+                      className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50 cursor-pointer"
+                      title={`Delete all ${typeName}s`}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+
+                  {/* Right-aligned Category Total Count Badge for Active Floor */}
+                  <div className="flex items-center gap-1.5 bg-white text-slate-800 border border-gray-200 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs">
+                    <span className="text-[10px] uppercase font-extrabold text-gray-500">
+                      {t("Total")} {t(typeName)}s:
+                    </span>
+                    <span className="bg-[#d32f2f] text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">
+                      {items.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Grid Layout: 2 cols mobile → more cols on larger screens for smaller cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3 sm:gap-3 w-full auto-rows-[148px] sm:auto-rows-[152px]">
+                  {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
+                  {/* Inline Add Button for this category */}
                   <button
-                    onClick={(e) => handleRemoveSpaceCategory(e, typeName)}
-                    className="opacity-100 md:opacity-0 md:group-hover/section:opacity-100 text-gray-400 hover:text-red-500 transition-all p-1 rounded hover:bg-red-50 cursor-pointer"
-                    title={`Delete all ${typeName}s`}>
-                    <Trash2 size={13} />
+                    onClick={() => {
+                      const tType = typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase();
+                      const defCap = tType.toLowerCase() === 'cabin' ? 6 : (tType.toLowerCase() === 'ac hall' ? 8 : (tType.toLowerCase() === 'sofa' ? 4 : 4));
+                      const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
+                      const { nextName } = getNextSerialInfo(tType, currentFloor);
+                      setAddSpaceModal({ isOpen: true, name: nextName, type: tType, capacity: defCap });
+                    }}
+                    className="w-full h-[148px] sm:h-[152px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors cursor-pointer">
+                    <Plus size={22} />
+                    <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
                   </button>
                 </div>
-
-                {/* Right-aligned Category Total Count Badge for Active Floor */}
-                <div className="flex items-center gap-1.5 bg-white text-slate-800 border border-gray-200 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs">
-                  <span className="text-[10px] uppercase font-extrabold text-gray-500">
-                    {t("Total")} {t(typeName)}s:
-                  </span>
-                  <span className="bg-[#d32f2f] text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[20px] text-center leading-tight">
-                    {items.length}
-                  </span>
-                </div>
-              </div>
-
-              {/* Grid Layout: 2 cols mobile → more cols on larger screens for smaller cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-3 sm:gap-3 w-full auto-rows-[148px] sm:auto-rows-[152px]">
-                {items.map((item, i) => renderSpaceCard(item, item._origType, Coffee, i))}
-                {/* Inline Add Button for this category */}
-                <button
-                  onClick={() => {
-                    const tType = typeName.charAt(0).toUpperCase() + typeName.slice(1).toLowerCase();
-                    const defCap = tType.toLowerCase() === 'cabin' ? 6 : (tType.toLowerCase() === 'ac hall' ? 8 : (tType.toLowerCase() === 'sofa' ? 4 : 4));
-                    const currentFloor = getCurrentFloor(floorsRef.current, activeFloorId);
-                    const { nextName } = getNextSerialInfo(tType, currentFloor);
-                    setAddSpaceModal({ isOpen: true, name: nextName, type: tType, capacity: defCap });
-                  }}
-                  className="w-full h-[148px] sm:h-[152px] rounded-2xl border-2 border-dashed border-gray-300 hover:border-emerald-400 hover:bg-emerald-50 flex flex-col items-center justify-center gap-1 sm:gap-2 text-gray-400 hover:text-emerald-600 transition-colors cursor-pointer">
-                  <Plus size={22} />
-                  <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-center px-1 leading-tight">{t("Add")}<br />{t(typeName)}</span>
-                </button>
-              </div>
-            </section>
+              </section>
             );
           });
         })()}
@@ -1804,12 +1802,12 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
                           const defCap = suggestion.toLowerCase() === 'cabin' ? 6 : (suggestion.toLowerCase() === 'ac hall' ? 8 : (suggestion.toLowerCase() === 'sofa' ? 4 : 4));
                           const currentFloor = floorsRef.current.find((f) => f.id === activeFloorId);
                           const { nextName } = getNextSerialInfo(suggestion, currentFloor);
-                          setAddSpaceModal((prev) => ({ 
-                            ...prev, 
-                            type: suggestion, 
-                            name: nextName, 
+                          setAddSpaceModal((prev) => ({
+                            ...prev,
+                            type: suggestion,
+                            name: nextName,
                             // Only override capacity if it was untouched default
-                            capacity: [4, 6, 8].includes(parseInt(prev.capacity)) ? defCap : prev.capacity 
+                            capacity: [4, 6, 8].includes(parseInt(prev.capacity)) ? defCap : prev.capacity
                           }));
                         }}
                         className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${addSpaceModal.type.toLowerCase() === suggestion.toLowerCase() ? 'bg-primary text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>

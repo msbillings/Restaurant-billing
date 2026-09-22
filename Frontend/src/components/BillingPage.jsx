@@ -334,7 +334,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         const API_BASE_URL = getApiUrl();
         const res = await fetch(`${API_BASE_URL}/config/info`, {
           headers: {
-            'X-Tenant-DB': localStorage.getItem('resto_db_name') || ''
+            'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
+            Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}`
           }
         });
         if (res.ok) {
@@ -494,7 +495,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       if (whatsappBillSentIds.current.has(id)) return true;
       if (sessionStorage.getItem(`ms_wa_sent_${id}`) === 'true') return true;
-    } catch {}
+    } catch { }
     return false;
   };
 
@@ -503,7 +504,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     try {
       whatsappBillSentIds.current.add(id);
       sessionStorage.setItem(`ms_wa_sent_${id}`, 'true');
-    } catch {}
+    } catch { }
   };
 
   const buildWhatsAppBillText = (bill, s = {}) => {
@@ -598,7 +599,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const billNo = bill.billNumber || bill.confirmedBillNumber;
     if (isBillAlreadySent(billNo)) return;
-    markBillAlreadySent(billNo);
 
     const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
     const billText = buildWhatsAppBillText(bill, s);
@@ -606,9 +606,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // Mount offscreen bill for canvas capture
     setOffscreenBill(bill);
 
-    // Yield frames so React mounts DOM element and loads images
+    // Yield frames so React mounts DOM element
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-    await new Promise(r => setTimeout(r, 150));
 
     let imageBase64 = null;
     try {
@@ -623,7 +622,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
         const canvas = await Promise.race([
           html2canvas(el, {
-            scale: 2.0,
+            scale: 1.5,
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
@@ -1183,12 +1182,6 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             customerPhone: cleanPhone,
             billType
           }));
-        } else if (activeTable) {
-          syncPromises.push(api.patch(`/bills/${encodeURIComponent(activeTable)}/customer`, {
-            customerName: cleanName || 'Guest',
-            customerPhone: cleanPhone,
-            billType
-          }));
         }
 
         await Promise.all(syncPromises);
@@ -1427,7 +1420,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         if (freshOrder && freshOrder.tableNo && isTableMatching(freshOrder.tableNo, tableToFetch) && freshOrder.items && freshOrder.items.length > 0) {
           checkAndApplyCache([freshOrder]);
         }
-      }).catch(() => {});
+      }).catch(() => { });
       return;
     }
 
@@ -2186,7 +2179,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           try {
             const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             return s.showLogo !== false;
-          } catch(e) { return true; }
+          } catch (e) { return true; }
         })()
       };
 
@@ -2382,7 +2375,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           return s.showLogo !== false;
-        } catch(e) { return true; }
+        } catch (e) { return true; }
       })()
     };
 
@@ -2589,7 +2582,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               cacheKotHistory([newEntry, ...cached]);
             }
           }
-        }).catch(() => {});
+        }).catch(() => { });
       }
       fetchDailyStats();
       if (onOrderUpdate) onOrderUpdate();
@@ -3108,7 +3101,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
                   try {
                     localStorage.setItem('ms_auto_wa', val ? '1' : '0');
                     sessionStorage.setItem('ms_auto_wa', val ? '1' : '0');
-                  } catch (e) {}
+                  } catch (e) { }
                 }}
                 isWhatsAppConnected={isWhatsAppConnected}
                 whatsappBillSentIds={whatsappBillSentIds.current}
@@ -3159,7 +3152,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             try {
               sessionStorage.setItem('ms_invoice_open', 'true');
               sessionStorage.setItem('ms_completed_bill', JSON.stringify(successPaymentData.billData));
-            } catch (e) {}
+            } catch (e) { }
           }}
         />
       )}
@@ -3200,7 +3193,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             onWhatsAppSent={(id) => {
               setAutoSendWhatsAppToInvoice(false);
               whatsappBillSentIds.current.add(id);
-              try { sessionStorage.setItem(`ms_wa_sent_${id}`, 'true'); } catch (e) {}
+              try { sessionStorage.setItem(`ms_wa_sent_${id}`, 'true'); } catch (e) { }
             }}
             autoSendWhatsApp={autoSendWhatsAppToInvoice}
           />
@@ -3434,8 +3427,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             {offscreenBill.billType === 'Delivery'
               ? `Delivery: ${offscreenBill.tableNo || 'DEL'}`
               : offscreenBill.billType === 'Takeaway'
-              ? `Takeaway: ${offscreenBill.tableNo || 'TAK'}`
-              : `Dine-In: ${offscreenBill.tableNo || 'Table'}`}
+                ? `Takeaway: ${offscreenBill.tableNo || 'TAK'}`
+                : `Dine-In: ${offscreenBill.tableNo || 'Table'}`}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
@@ -3517,5 +3510,5 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     </div>
   );
 };
- 
+
 export default BillingPage;

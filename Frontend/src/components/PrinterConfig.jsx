@@ -23,6 +23,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Bluetooth device discovery
   const [bluetoothDevices, setBluetoothDevices] = useState([]);
@@ -50,25 +51,29 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       if (res.data && res.data.success && Array.isArray(res.data.ports)) {
         setUsbPorts(res.data.ports);
         if (res.data.ports.length > 0) {
-          // Auto-select only if nothing is currently chosen (new config)
+          // Auto-select recommended thermal port if none chosen or if previously chosen port is disconnected
           setFormData(prev => {
+            const recommended = res.data.ports.find(p => p.isThermalLikely) || res.data.ports[0];
             if (!prev.usbPort) {
-              const recommended = res.data.ports.find(p => p.isThermalLikely) || res.data.ports[0];
               return {
                 ...prev,
                 usbPort: recommended.port,
                 deviceName: recommended.description || recommended.printerName || prev.deviceName
               };
             }
-            // Also: if the previously selected port no longer appears in the live scan, clear it
+            // Also: if the previously selected port no longer appears in the live scan, switch to recommended
             const stillConnected = res.data.ports.some(p => p.port === prev.usbPort);
-            if (!stillConnected) {
-              return { ...prev, usbPort: '', deviceName: '' };
+            if (!stillConnected && recommended) {
+              return {
+                ...prev,
+                usbPort: recommended.port,
+                deviceName: recommended.description || recommended.printerName || prev.deviceName
+              };
             }
             return prev;
           });
         } else {
-          // No ports found — clear any stale selection
+          // No ports found — clear stale selection
           setUsbPorts([]);
           setFormData(prev => ({ ...prev, usbPort: '', deviceName: '' }));
         }
@@ -239,6 +244,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     fetchConfigs();
     fetchMenuData();
     loadBluetoothDevices();
+    scanUsbPorts();
   }, []);
 
   // Map other printers' assignments to identify duplicates
@@ -402,6 +408,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
       const stationName = (formData.name || '').trim();
@@ -424,7 +431,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       fetchConfigs();
     } catch (error) {
       console.error('Error saving config', error);
-      alert('Failed to save printer configuration');
+      alert(t('Failed to save printer configuration: ') + (error.response?.data?.message || error.message));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -469,22 +478,24 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
           setTestingId(null);
           return;
         }
-      } else {
-        alert(t("Bluetooth thermal printing is only supported in the Android Mobile/Tablet App."));
+      } else if (typeof window !== 'undefined' && window.electronAPI?.silentPrint) {
+        window.electronAPI.silentPrint('<html><body style="font-family:monospace;padding:10px;"><h2>MS Billings</h2><p>Bluetooth Thermal Test OK</p></body></html>', config.name || '', false);
+        alert(t("Test print sent successfully!"));
         setTestingId(null);
         return;
       }
     }
 
+    // Direct backend printing (Network, USB, or Windows Bluetooth serial)
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      await axios.post(`${getApiUrl()}/printer-configs/${id}/test`, {}, {
+      const res = await axios.post(`${getApiUrl()}/printer-configs/${id}/test`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert(t("Test print sent successfully!"));
+      alert(res.data?.message || t("Test print sent successfully!"));
     } catch (error) {
       console.error('Error testing printer', error);
-      const errMsg = error.response?.data?.message || t("Failed to connect to printer");
+      const errMsg = error.response?.data?.message || error.message || t("Failed to connect to printer");
       alert(t("Print Error: ") + errMsg);
     } finally {
       setTestingId(null);
@@ -492,7 +503,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 p-2 sm:p-3 md:p-4 overflow-y-auto font-sans">
+    <div className="min-h-full flex-1 flex flex-col bg-gray-50 p-2 sm:p-3 md:p-4 overflow-y-auto overscroll-y-auto font-sans touch-pan-y">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-3 bg-white p-3 sm:p-4 rounded-xl border border-gray-200 shadow-sm">
         <div className="flex items-center gap-2.5 sm:gap-3">
@@ -832,10 +843,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
       {/* Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] border border-gray-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto overscroll-contain touch-pan-y animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] border border-gray-200 my-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-200 bg-gray-50/80">
+            <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-200 bg-gray-50/80 shrink-0">
               <div>
                 <h2 className="text-sm sm:text-lg font-black text-gray-900 flex items-center gap-1.5 sm:gap-2">
                   <ChefHat className="text-red-600 shrink-0" size={18} />
@@ -851,7 +862,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
             </div>
 
             {/* Modal Body */}
-            <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5">
+            <div className="p-3.5 sm:p-6 overflow-y-auto overscroll-contain flex-1 space-y-4 sm:space-y-5 touch-pan-y">
               <form id="printer-form" onSubmit={handleSave} className="space-y-5">
                 {/* Station Name & Location */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1466,33 +1477,6 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                   </div>
                 )}
 
-                {/* Receipt Header / Footer configuration */}
-                {(formData.type === 'receipt' || formData.type === 'both') && (
-                  <div className="space-y-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">{t("Bill Header Text")}</label>
-                      <textarea
-                        name="printHeader"
-                        rows="2"
-                        placeholder={t("e.g. Welcome to MS Billings Cafe!")}
-                        value={formData.printHeader}
-                        onChange={handleInputChange}
-                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none resize-none font-medium bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">{t("Bill Footer Text")}</label>
-                      <textarea
-                        name="printFooter"
-                        rows="2"
-                        placeholder={t("e.g. Thank you! Visit Again.")}
-                        value={formData.printFooter}
-                        onChange={handleInputChange}
-                        className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none resize-none font-medium bg-white"
-                      />
-                    </div>
-                  </div>
-                )}
 
                 {/* Active Checkbox */}
                 <div className="flex items-center gap-2.5 pt-1">
@@ -1522,8 +1506,16 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
               <button
                 type="submit"
                 form="printer-form"
-                className="w-full sm:w-auto px-5 py-2 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 rounded-xl transition-all shadow-md shadow-red-500/20 cursor-pointer text-center">
-                {editingConfig ? t('Save Changes') : t('Create Station')}
+                disabled={isSaving}
+                className="w-full sm:w-auto px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 disabled:opacity-60 rounded-xl transition-all shadow-md shadow-red-500/20 cursor-pointer text-center flex items-center justify-center gap-2">
+                {isSaving ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin text-white" />
+                    <span>{editingConfig ? t('Saving Changes...') : t('Creating Station...')}</span>
+                  </>
+                ) : (
+                  <span>{editingConfig ? t('Save Changes') : t('Create Station')}</span>
+                )}
               </button>
             </div>
           </div>

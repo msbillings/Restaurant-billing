@@ -5,10 +5,11 @@ import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, 
 import { QRCodeSVG } from 'qrcode.react';
 import Toast from './Toast';
 import { sendWhatsAppBill } from '../api/whatsapp';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import api from '../api/axios';
 import { formatTime12 } from '../utils/timeFormat';
-import { getReceiptFontMetrics } from '../utils/receiptFonts';
+import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
+import { renderElementToESCPOSRaster, autoTrimCanvasBottom } from '../utils/escposRaster';
 
 const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
   const { t } = useLanguage();
@@ -23,7 +24,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       const found = s.find((r) => r.code === primaryCurrency);
       if (found) baseRate = found.rate;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const [settings, setSettings] = useState(() => {
     try {
@@ -44,7 +45,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           ...parsed
         };
       }
-    } catch (e) {}
+    } catch (e) { }
     return {
       restaurantName: 'msbillings',
       restaurantType: 'Restaurant',
@@ -69,6 +70,16 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const [showSuggestions, setShowSuggestions] = useState(false);
   // ─── Duplicate-tap guard: locked while Bluetooth print is in progress ────
   const [isPrinting, setIsPrinting] = useState(false);
+  // ─── Dynamic print status: null | 'printing' | 'success' | 'failed' | 'not_connected'
+  const [printStatus, setPrintStatus] = useState(null);
+
+  // Helper: reset print status after delay
+  const resetPrintStatus = (delay = 3500) => {
+    setTimeout(() => {
+      setPrintStatus(null);
+      setIsPrinting(false);
+    }, delay);
+  };
   // ─── WhatsApp capture flag — tells QR render whether to use whatsappShowQr setting
   const isCapturingForWhatsApp = useRef(false);
 
@@ -87,7 +98,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       if (whatsappBillSentIds && (whatsappBillSentIds.has(billIdentifier) || (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) || (bill?._id && whatsappBillSentIds.has(bill._id)))) return true;
       // NOTE: bill?.whatsappSent (DB flag) intentionally NOT used here — stale DB state
       // should NOT block the user from sending. Only in-session confirms count.
-    } catch (e) {}
+    } catch (e) { }
     return false;
   });
 
@@ -95,7 +106,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     if (!billIdentifier) return;
     try {
       const sentInSession = (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') ||
-                            (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true');
+        (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true');
       const sentInSet = whatsappBillSentIds && (
         (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) ||
         (bill?._id && whatsappBillSentIds.has(bill._id))
@@ -104,7 +115,34 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       if (sentInSession || sentInSet) {
         setIsAlreadySent(true);
       }
-    } catch (e) {}
+    } catch (e) { }
+
+    const handleWaSent = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setIsAlreadySent(true);
+        setSendingAutomated(false);
+      }
+    };
+    const handleWaSending = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setSendingAutomated(true);
+      }
+    };
+    const handleWaFailed = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setSendingAutomated(false);
+      }
+    };
+
+    window.addEventListener('whatsappSent', handleWaSent);
+    window.addEventListener('whatsappSending', handleWaSending);
+    window.addEventListener('whatsappSendFailed', handleWaFailed);
+
+    return () => {
+      window.removeEventListener('whatsappSent', handleWaSent);
+      window.removeEventListener('whatsappSending', handleWaSending);
+      window.removeEventListener('whatsappSendFailed', handleWaFailed);
+    };
   }, [bill?.billNumber, bill?._id, whatsappBillSentIds]);
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -123,7 +161,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         setShowSuggestions(false);
       }
     };
-    
+
     const timeoutId = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(timeoutId);
   }, [whatsappPhone]);
@@ -137,10 +175,21 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           if (parsed.logo === '[logo_stored]') parsed.logo = '';
           setSettings((prev) => ({ ...prev, ...parsed }));
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     updateLocalSettings();
+    api.get('/config/info').then(res => {
+      const incoming = res.data?.restaurantSettings || res.data;
+      if (incoming && typeof incoming === 'object') {
+        setSettings(prev => ({ ...prev, ...incoming }));
+        try {
+          const local = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          localStorage.setItem('restaurantSettings', JSON.stringify({ ...local, ...incoming }));
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
     window.addEventListener('settingsUpdated', updateLocalSettings);
     return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
   }, []);
@@ -149,13 +198,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const storedLogo = (settings?.logo && settings.logo !== '[logo_stored]')
     ? settings.logo
     : (() => {
-        try {
-          const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-          return (s.logo && s.logo !== '[logo_stored]') ? s.logo : '';
-        } catch (e) {
-          return '';
-        }
-      })();
+      try {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        return (s.logo && s.logo !== '[logo_stored]') ? s.logo : '';
+      } catch (e) {
+        return '';
+      }
+    })();
 
   const billRest = bill?.restaurantDetails || {};
   // If the bill has its own real image logo (data URI / URL), use it.
@@ -174,8 +223,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   // For bills viewed from history (isHistoryView=true), check if the bill explicitly has showLogo saved.
   // If so, use it exactly as it was when the bill was generated/settled.
   // Otherwise fallback to the active settings toggle.
-  const shouldShowLogo = bill?.showLogo !== undefined 
-    ? bill.showLogo 
+  const shouldShowLogo = bill?.showLogo !== undefined
+    ? bill.showLogo
     : (activeSettings.showLogo !== false);
   const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
     enableCgst: activeSettings.enableCgst !== false,
@@ -185,16 +234,50 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     sgstRate: activeSettings.sgstRate !== undefined ? Number(activeSettings.sgstRate) : 2.5,
     gstRate: activeSettings.gstRate !== undefined ? Number(activeSettings.gstRate) : 5
   };
-  const fontMetrics = getReceiptFontMetrics(activeSettings.receiptFontSize || 'medium', activeSettings.printFormat);
-  const receiptFont = activeSettings.receiptFontFamily || "Arial, Helvetica, sans-serif";
+  const activeFontFamilyVal = settings.receiptFontFamily || activeSettings.receiptFontFamily;
+  const matchedFontObj = findReceiptFont(activeFontFamilyVal);
+  const receiptFont = matchedFontObj.value;
+  const activeFontSize = settings.receiptFontSize || activeSettings.receiptFontSize || 'medium';
+  const fontMetrics = getReceiptFontMetrics(activeFontSize, activeSettings.printFormat);
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
-  const activeNetworkReceiptPrinter = (() => {
+  const [printerConfigs, setPrinterConfigs] = useState(() => {
     try {
-      const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-      return cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general') && c.connectionType === 'network' && c.ipAddress) || null;
+      return JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
     } catch (_) {
-      return null;
+      return [];
     }
+  });
+
+  useEffect(() => {
+    const fetchPrinters = async () => {
+      try {
+        const res = await api.get('/printer-configs');
+        if (Array.isArray(res.data)) {
+          setPrinterConfigs(res.data);
+          try {
+            localStorage.setItem('msbillings_printer_configs', JSON.stringify(res.data));
+          } catch (_) {}
+        }
+      } catch (_) {}
+    };
+    fetchPrinters();
+  }, []);
+
+  const activeReceiptPrinter = (() => {
+    const list = (printerConfigs && printerConfigs.length > 0)
+      ? printerConfigs
+      : (() => {
+          try {
+            return JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          } catch (_) {
+            return [];
+          }
+        })();
+    return list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+      (c.connectionType === 'usb' && c.usbPort) ||
+      (c.connectionType === 'network' && c.ipAddress) ||
+      (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+    )) || null;
   })();
 
   const handlePrint = async (forceBrowserPrint = false) => {
@@ -206,7 +289,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     // Guard: block duplicate prints while a Bluetooth render is in progress
     if (isPrinting) return;
+
+    // ── IMMEDIATE UI FEEDBACK ── set state BEFORE any async work
     setIsPrinting(true);
+    setPrintStatus('printing');
+
+    // ⚡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
+    await new Promise(res => setTimeout(res, 80));
 
     try {
       // 2. Desktop Electron App
@@ -219,6 +308,9 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         } else {
           window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
         }
+        setPrintStatus('success');
+        setToast({ message: t('Bill sent to printer!'), type: 'success' });
+        resetPrintStatus(3000);
         return;
       }
 
@@ -235,30 +327,65 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
             const receiptStation = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && tryMac(c.bluetoothAddress || c.deviceName || ''));
             if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
-          } catch (_) {}
+          } catch (_) { }
         }
 
-        if (macAddress && window.AndroidBluetooth.printImage) {
+        // ── CONNECTION CHECK: Show error immediately if no printer found
+        if (!macAddress) {
+          setPrintStatus('not_connected');
+          setToast({ message: t('Printer not connected. Please pair a Bluetooth printer in Printer & Kitchen Routing settings.'), type: 'error' });
+          resetPrintStatus(4000);
+          return;
+        }
+
+        if (window.AndroidBluetooth.printImage) {
           try {
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
               const paperWidthDots = (activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              // scale:1.5 renders ~40% faster than scale:2 — sufficient for thermal printers
               const canvas = await html2canvas(receiptNode, {
                 scale: 1.5,
                 backgroundColor: '#ffffff',
                 useCORS: true,
                 logging: false,
-                imageTimeout: 0
+                imageTimeout: 0,
+                onclone: (clonedDoc) => {
+                  const receipt = clonedDoc.querySelector('.receipt-print');
+                  if (receipt) {
+                    receipt.style.boxShadow = 'none';
+                    receipt.style.filter = 'none';
+                    receipt.style.backgroundColor = '#ffffff';
+                  }
+                }
               });
-              const base64Png = canvas.toDataURL('image/png', 0.92);
+              const trimmedCanvas = autoTrimCanvasBottom(canvas);
+              const base64Png = trimmedCanvas.toDataURL('image/png', 0.95);
+              await new Promise(res => setTimeout(res, 20));
               const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
-              if (res.success) return;
-              console.warn('[Print] Bluetooth print failed, fallback to system print:', res.error);
+              if (res.success) {
+                setPrintStatus('success');
+                setToast({ message: t('Bill printed successfully!'), type: 'success' });
+                resetPrintStatus(3000);
+                return;
+              } else {
+                const errMsg = res.error || 'Bluetooth print failed';
+                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket')) {
+                  setPrintStatus('not_connected');
+                  setToast({ message: t('Printer not connected. Please check Bluetooth connection.'), type: 'error' });
+                } else {
+                  setPrintStatus('failed');
+                  setToast({ message: `${t('Bill print failed')}: ${errMsg}`, type: 'error' });
+                }
+                resetPrintStatus(4000);
+                return;
+              }
             }
           } catch (err) {
-            console.warn('[Print] Error capturing receipt for Bluetooth print:', err);
+            setPrintStatus('failed');
+            setToast({ message: `${t('Bill print error')}: ${err.message || 'Unknown error'}`, type: 'error' });
+            resetPrintStatus(4000);
+            return;
           }
         }
 
@@ -267,43 +394,81 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         } else {
           window.print();
         }
+        setPrintStatus('success');
+        resetPrintStatus(3000);
         return;
       }
 
       // 4. Android System Print
       if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
         window.AndroidPrint.print();
+        setPrintStatus('success');
+        resetPrintStatus(3000);
         return;
       }
 
-      // 5. Direct Network Thermal Receipt Printer (TCP ESC/POS via Node.js Backend, e.g. FosiFlow)
+      // 5. Direct Thermal Receipt Printer (USB RAW or TCP ESC/POS via Node.js Backend)
       try {
-        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-        const networkReceiptPrinter = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && c.connectionType === 'network' && c.ipAddress);
+        const list = (printerConfigs && printerConfigs.length > 0)
+          ? printerConfigs
+          : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+        const receiptPrinter = list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+          (c.connectionType === 'usb' && c.usbPort) ||
+          (c.connectionType === 'network' && c.ipAddress) ||
+          (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+        ));
 
-        if (networkReceiptPrinter) {
-          setToast({ message: `🖨️ ${t("Sending bill to")} ${networkReceiptPrinter.name} (${networkReceiptPrinter.ipAddress})...`, type: 'info' });
+        if (receiptPrinter) {
+          const destName = receiptPrinter.connectionType === 'usb'
+            ? `USB (${receiptPrinter.usbPort})`
+            : receiptPrinter.connectionType === 'bluetooth'
+              ? `Bluetooth (${receiptPrinter.bluetoothAddress || receiptPrinter.name})`
+              : `${receiptPrinter.ipAddress}`;
+          setToast({ message: `🖨️ ${t("Printing receipt to")} ${receiptPrinter.name} (${destName})...`, type: 'info' });
+
+          // Render exact UI from screen to 1-bit ESC/POS raster bit image
+          let rasterBufferBase64 = null;
+          try {
+            const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area') || document.querySelector('.receipt-print');
+            if (receiptNode) {
+              const dots = (receiptPrinter.paperWidth === '58mm' || activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
+              rasterBufferBase64 = await renderElementToESCPOSRaster(receiptNode, dots);
+            }
+          } catch (renderErr) {
+            console.warn('[Invoice] Raster render error, falling back to text ESC/POS:', renderErr);
+          }
+
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           const response = await api.post('/printer-configs/print-bill', {
-            bill: billPayload, billId: bill?._id, printerId: networkReceiptPrinter._id
+            bill: billPayload,
+            billId: bill?._id,
+            printerId: receiptPrinter._id,
+            rasterBufferBase64
           });
           if (response.data && response.data.success) {
-            setToast({ message: `✅ ${t("Bill printed to")} ${networkReceiptPrinter.name}!`, type: 'success' });
-            return;
+            setPrintStatus('success');
+            setToast({ message: `✅ ${t("Bill printed to")} ${receiptPrinter.name}!`, type: 'success' });
+            resetPrintStatus(3000);
+            return; // ⚡ Immediate return: Prints directly to hardware, never opening browser dialog!
           } else {
-            setToast({ message: response.data?.message || `Failed to print to ${networkReceiptPrinter.name}`, type: 'warning' });
+            setPrintStatus('failed');
+            setToast({ message: response.data?.message || `Failed to print to ${receiptPrinter.name}`, type: 'warning' });
           }
         }
       } catch (netErr) {
-        console.warn('[Print] Network receipt print error, falling back to browser print:', netErr);
         const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
+        setPrintStatus('failed');
         setToast({ message: `⚠️ ${errMsg}. ${t("Opening browser print...")}`, type: 'warning' });
       }
 
-      // 6. Default Fallback: Browser Native Print Dialog
+      // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
       window.print();
-    } finally {
-      setTimeout(() => setIsPrinting(false), 2500);
+      setPrintStatus('success');
+      resetPrintStatus(3000);
+    } catch (unexpectedErr) {
+      setPrintStatus('failed');
+      setToast({ message: `${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, type: 'error' });
+      resetPrintStatus(4000);
     }
   };
 
@@ -469,8 +634,9 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     setSendingAutomated(true);
 
-    // Yield animation frame so React paints spinner immediately
-    await new Promise(resolve => requestAnimationFrame(resolve));
+    // Give React and the browser ample time (300ms) to paint the loading spinner 
+    // and start the CSS animation before html2canvas blocks the main thread
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // High-resolution receipt image capture
     let imageBase64 = null;
@@ -482,7 +648,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       if (receiptElement) {
         const canvas = await Promise.race([
           html2canvas(receiptElement, {
-            scale: 2.0,
+            scale: 1.5,
             useCORS: true,
             allowTaint: true,
             logging: false,
@@ -613,10 +779,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setIsAlreadySent(true);
         if (bill?.billNumber) {
-          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) {}
+          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) { }
         }
         if (bill?._id) {
-          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) {}
+          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) { }
         }
         if (onWhatsAppSent) onWhatsAppSent(bill?.billNumber || bill?._id);
         setShowWhatsAppModal(false);
@@ -664,15 +830,24 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     if (cleanPhone.length >= 10) {
       autoSendTriggeredRef.current = true;
-      console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill with original receipt image for ${cleanPhone}...`);
-      // Start auto-send without cancelable cleanup timer so re-renders cannot abort it
-      // Increased delay to 1500ms to allow Invoice fade-in animation to complete 
-      // smoothly before html2canvas blocks the main thread.
-      setTimeout(() => {
-        handleSendWhatsAppBill(targetPhone, custName || undefined);
-      }, 1500);
+      console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill for ${cleanPhone}...`);
+      // Two rAF passes let React flush the invoice DOM paint first,
+      // then we wait a short idle gap before html2canvas captures.
+      // This keeps the invoice preview visually instant (no main-thread block on open).
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            handleSendWhatsAppBill(targetPhone, custName || undefined);
+          }, 300);
+        });
+      });
+    } else {
+      // Auto-send is on, but phone is missing. Prompt the user!
+      autoSendTriggeredRef.current = true;
+      setShowWhatsAppModal(true);
     }
   }, [autoSendWhatsApp, isAlreadySent, whatsappPhone, bill?.customerPhone, bill?.billNumber]);
+
 
   const getFormatClasses = () => {
     switch (activeSettings.printFormat) {
@@ -715,9 +890,9 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       {/* Controls - Hidden on Print */}
       <div className="sticky top-4 flex flex-wrap items-center justify-center gap-2.5 print:hidden w-full max-w-2xl mx-auto z-30 px-4 py-2.5 bg-transparent mb-4">
         {onSave &&
-        <button
-          onClick={onSave}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-gray-900 rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+          <button
+            onClick={onSave}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-gray-900 rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
             <Save size={16} />
             <span>{t("Finish")}</span>
           </button>
@@ -736,10 +911,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 // Allow resend — customer may not have received it
                 setIsAlreadySent(false);
                 if (bill?.billNumber) {
-                  try { sessionStorage.removeItem(`ms_wa_sent_${bill.billNumber}`); } catch (e) {}
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill.billNumber}`); } catch (e) { }
                 }
                 if (bill?._id) {
-                  try { sessionStorage.removeItem(`ms_wa_sent_${bill._id}`); } catch (e) {}
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill._id}`); } catch (e) { }
                 }
                 setToast({ message: t("Ready to resend. Click WhatsApp e-Bill to send again."), type: 'info' });
               }}
@@ -773,7 +948,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               ) : (
                 <>
                   <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
                   </svg>
                   <span>{t("WhatsApp e-Bill")}</span>
                 </>
@@ -791,18 +966,33 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           <button
             onClick={() => handlePrint(false)}
             disabled={isPrinting}
-            className={`flex items-center gap-1.5 px-3.5 py-2 font-bold text-xs sm:text-sm transition-all active:scale-95 cursor-pointer ${
-              isPrinting
-                ? 'bg-green-50 text-green-700 cursor-not-allowed opacity-90'
-                : 'text-gray-900 hover:bg-gray-100'
-            }`}
-            title={activeNetworkReceiptPrinter ? `${t("Print directly to")} ${activeNetworkReceiptPrinter.name} (${activeNetworkReceiptPrinter.ipAddress})` : t("Print Bill")}>
-            {isPrinting
-              ? <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-              : <Printer size={16} className={activeNetworkReceiptPrinter ? "text-emerald-600" : "text-gray-900"} />}
-            <span>{isPrinting ? t('Printing...') : (activeNetworkReceiptPrinter ? `${t("Print")} (${activeNetworkReceiptPrinter.name})` : t("Print Bill"))}</span>
+            className={`flex items-center gap-1.5 px-3.5 py-2 font-bold text-xs sm:text-sm transition-colors duration-100 active:scale-95 cursor-pointer min-w-[110px] justify-center ${printStatus === 'success'
+                ? 'bg-emerald-50 text-emerald-700'
+                : printStatus === 'failed'
+                  ? 'bg-red-50 text-red-700'
+                  : printStatus === 'not_connected'
+                    ? 'bg-orange-50 text-orange-700'
+                    : printStatus === 'printing'
+                      ? 'bg-blue-50 text-blue-700 cursor-not-allowed'
+                      : 'text-gray-900 hover:bg-gray-100'
+              }`}
+            title={activeReceiptPrinter ? `${t("Print directly to")} ${activeReceiptPrinter.name} (${activeReceiptPrinter.connectionType === 'usb' ? activeReceiptPrinter.usbPort : activeReceiptPrinter.connectionType === 'bluetooth' ? (activeReceiptPrinter.bluetoothAddress || 'Bluetooth') : activeReceiptPrinter.ipAddress})` : t("Print Bill")}>
+            {printStatus === 'printing' && (
+              <svg className="animate-spin shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+            )}
+            {printStatus === 'success' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-600 shrink-0"><path d="M20 6L9 17l-5-5" /></svg>}
+            {printStatus === 'failed' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-red-600 shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>}
+            {printStatus === 'not_connected' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-orange-600 shrink-0"><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></svg>}
+            {!printStatus && <Printer size={16} className={activeReceiptPrinter ? "text-emerald-600 shrink-0" : "text-gray-900 shrink-0"} />}
+            <span>
+              {printStatus === 'printing' ? t('Printing...')
+                : printStatus === 'success' ? t('Printed! ✓')
+                  : printStatus === 'failed' ? t('Print Failed')
+                    : printStatus === 'not_connected' ? t('Not Connected')
+                      : activeReceiptPrinter ? `${t("Print")} (${activeReceiptPrinter.name})` : t("Print Bill")}
+            </span>
           </button>
-          {activeNetworkReceiptPrinter && (
+          {activeReceiptPrinter && (
             <button
               onClick={() => handlePrint(true)}
               className="px-2.5 py-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 border-l border-gray-200 transition-colors cursor-pointer text-[11px] font-bold"
@@ -831,7 +1021,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               <div className="flex items-center gap-2.5 text-[#25D366] font-bold text-base">
                 <div className="w-8 h-8 rounded-xl bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-center text-[#25D366]">
                   <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
                   </svg>
                 </div>
                 <span>{t("Send WhatsApp e-Bill")}</span>
@@ -904,8 +1094,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                         }}
                       >
                         <div className="flex flex-col">
-                           <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
-                           <span className="text-xs text-gray-500">{cust.name}</span>
+                          <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
+                          <span className="text-xs text-gray-500">{cust.name}</span>
                         </div>
                       </div>
                     ))}
@@ -946,7 +1136,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 return (
                   <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 shadow-sm">
                     <div className="text-[11px] text-gray-600 font-semibold mb-1.5 flex items-center gap-1">
-                      <svg className="w-3 h-3 fill-emerald-600" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                      <svg className="w-3 h-3 fill-emerald-600" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
                       <span>{t("Message Preview")}</span>
                     </div>
                     <pre className="text-[11px] text-gray-800 whitespace-pre-wrap leading-relaxed font-sans max-h-48 overflow-y-auto">
@@ -977,17 +1167,16 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 type="button"
                 disabled={sendingAutomated || isAlreadySent}
                 onClick={() => handleSendWhatsAppBill(whatsappPhone, whatsappCustomerName)}
-                className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${
-                  isAlreadySent
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${isAlreadySent
                     ? 'bg-gray-400 text-white shadow-none'
                     : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-[#25D366]/20'
-                }`}>
+                  }`}>
                 {sendingAutomated ? (
                   <><Loader2 size={16} className="animate-spin" /><span className="animate-pulse">{t("Sending...")}</span></>
                 ) : isAlreadySent ? (
                   <><span className="font-bold">✓</span><span>{t("Already Sent")}</span></>
                 ) : (
-                  <><svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg><span>{t("Send e-Bill")}</span></>
+                  <><svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg><span>{t("Send e-Bill")}</span></>
                 )}
               </button>
             </div>
@@ -1049,8 +1238,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                         }}
                       >
                         <div className="flex flex-col">
-                           <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
-                           <span className="text-xs text-gray-500">{cust.name}</span>
+                          <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
+                          <span className="text-xs text-gray-500">{cust.name}</span>
                         </div>
                       </div>
                     ))}
@@ -1083,7 +1272,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       )}
 
       <div
-        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-6 mb-10 print:m-0 print:border-0 ${getFormatClasses()}`}
+        id="invoice-print-area"
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-2 mb-2 pb-1 print:m-0 print:border-0 ${getFormatClasses()}`}
         style={{
           fontFamily: receiptFont,
           color: '#000',
@@ -1094,8 +1284,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined,
           overflow: 'visible',
           boxSizing: 'border-box'
-      }}>
-        
+        }}>
+
         {activeSettings.printFormat === '58mm' ? (
           /* 58mm Compact Clean Receipt Layout (Zomato Style) */
           <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
@@ -1103,11 +1293,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             <div style={{ textAlign: 'center', marginBottom: '3px' }}>
               {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) && (
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '3px' }}>
-                  <img 
-                    src={activeSettings.logo} 
-                    alt="Logo" 
+                  <img
+                    src={activeSettings.logo}
+                    alt="Logo"
                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    style={{ maxHeight: '38px', maxWidth: '110px', objectFit: 'contain' }} 
+                    style={{ maxHeight: '38px', maxWidth: '110px', objectFit: 'contain' }}
                   />
                 </div>
               )}
@@ -1398,7 +1588,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
               const tr = `INV${Date.now()}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
-              
+
               const showNormally = activeSettings.enableQrPayment !== false;
 
               return (
@@ -1418,399 +1608,395 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             </div>
           </div>
         ) : (
-          /* Existing 80mm and A4 layout - completely untouched! */
-          <div className="p-3 print:p-2" style={{ paddingLeft: '8px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '16px', boxSizing: 'border-box' }}>
-          
-          {/* Header */}
-          <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
-            {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) &&
-              <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
-                <img 
-                  src={activeSettings.logo} 
-                  alt="Restaurant Logo" 
-                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }} 
-                  className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]" 
-                />
-              </div>
-            }
-            <div align="center" style={{ fontSize: '18px', lineHeight: '1.1', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
-              {(activeSettings.restaurantName || 'MSBILLINGS').toUpperCase()}
-            </div>
-            <div align="center" style={{ fontSize: '12px', lineHeight: '1.2', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
-              {(activeSettings.address || '').split('\n').map((line, i) =>
-              <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
-              )}
-              {activeSettings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{activeSettings.gstin}</div>}
-              {activeSettings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{activeSettings.phone}</div>}
-              {activeSettings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{activeSettings.fssai}</div>}
-            </div>
-          </div>
+          /* Existing 80mm and A4 layout with dynamic typography */
+          <div className="p-3 print:p-2" style={{
+            paddingLeft: '8px',
+            paddingRight: '8px',
+            paddingTop: '8px',
+            paddingBottom: '16px',
+            boxSizing: 'border-box',
+            fontFamily: receiptFont,
+            ...(matchedFontObj?.previewStyle || {}),
+            fontSize: fontMetrics.bodySize,
+            lineHeight: fontMetrics.lineHeight,
+            color: '#000000'
+          }}>
 
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-          
-          <div style={{ fontSize: '16px', textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
-            {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
-          </div>
-
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-          
-          {/* Customer name & phone hidden for privacy — data kept in bill object, easy to re-enable */}
-          {/* {bill.customerName && (
-            <div style={{ fontSize: '14px', fontWeight: 'normal' }}>
-              {t("Name: ")}<strong>{bill.customerName}</strong>
-            </div>
-          )}
-          {bill.customerPhone && (
-            <div style={{ fontSize: '14px', fontWeight: 'normal' }}>
-              {t("Phone: ")}<strong>{bill.customerPhone}</strong>
-            </div>
-          )}
-          {(bill.customerName || bill.customerPhone) && (
-            <div style={{ borderTop: '1px solid black', margin: '4px 0' }}></div>
-          )} */}
-
-          {/* Bill Info Grid - Table on own row, then Date+Time side-by-side, then Cashier+BillNo */}
-          {/* Row 1: Order Type / Table Name - full width, centered */}
-          {(() => {
-            const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
-            let label = '';
-            if (bType === 'Delivery') {
-              const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
-              label = `DELIVERY: ${channel.toUpperCase()}${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
-            } else if (bType === 'Takeaway') {
-              label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
-            } else {
-              label = `Dine-In: ${bill.tableNo || 'Table'}`;
-            }
-            return (
-              <div style={{ width: '100%', textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '2px' }}>
-                {label}
-              </div>
-            );
-          })()}
-
-          {/* Row 2: Date (left) | Time 12h (right) */}
-          <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'normal', marginBottom: '2px' }}>
-            <span>{t('Date:')}{new Date(billDateTime).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
-            <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
-          </div>
-
-          {/* Row 3: Cashier (left) | Bill No (right) */}
-          <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: '14px', fontWeight: 'normal', marginBottom: '2px' }}>
-            <span>{t('Cashier:')}{bill.cashierName || 'admin'}</span>
-            <span style={{ fontWeight: 'bold' }}>{t('Bill No.:')}{bill.billNumber || 'PREVIEW'}</span>
-          </div>
-          {bill.captainName && (
-            <div style={{ fontSize: '14px', fontWeight: 'normal' }}>{t('Assign to:')}{bill.captainName}</div>
-          )}
-          {bill.tokenNumber && (
-            <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{t('Token No.:')}{bill.tokenNumber}</div>
-          )}
-
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-
-          {/* Items Header */}
-          <div className="flex pb-0.5" style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: '13px', fontWeight: 'normal' }}>
-            <div className="flex-1" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t('Item')}</div>
-            <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0 }}>{t("Qty.")}</div>
-            <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{t("Price")}</div>
-            <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t('Amount')}</div>
-          </div>
-
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '3px 0 5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-
-          {/* Items List */}
-          <div className="mb-1 pb-1" style={{ borderBottom: '1.5px solid #000000', paddingBottom: '4px', marginBottom: '4px' }}>
-            {bill.items && bill.items.length > 0 ?
-            bill.items.filter(item => !item.isCancelled).map((item, idx) => {
-              const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
-              if (activeQty <= 0) return null;
-              return (
-                <div key={idx} className="flex items-start mb-1 leading-tight" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', fontSize: '14px', fontWeight: 'normal' }}>
-                  <div className="flex-1 pr-1 break-words" style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', fontSize: '12px' }}>
-                    {item.name || 'Unknown Item'}
-                    {item.hsnCode ? <span style={{ fontSize: '10px' }}>{t("(HSN:")}{item.hsnCode})</span> : ''}
-                  </div>
-                  <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0, fontSize: '13px' }}>{activeQty}</div>
-                  <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0, fontSize: '13px' }}>{(item.price || 0).toFixed(2)}</div>
-                  <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontSize: '13px' }}>{(item.price * activeQty).toFixed(2)}</div>
-                </div>
-              );
-            }) :
-
-            <div className="text-center py-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal' }}>{t("No items")}</div>
-            }
-          </div>
-
-          {/* Tax / Discount / Items summary */}
-          <div className="flex flex-col gap-0.5 mt-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px', fontWeight: 'normal' }}>
-            <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="text-left w-24" style={{ width: '96px', textAlign: 'left', flexShrink: 0 }}>{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
-              <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
-                <span className="text-left" style={{ textAlign: 'left' }}>{t("Sub Total")}</span>
-                <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
-              </div>
-            </div>
-            {bill.discount > 0 &&
-              <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: '15px' }}>
-                <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
-                <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
-                  <span className="text-left" style={{ textAlign: 'left', fontWeight: 'bold' }}>
-                    {t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}
-                  </span>
-                  <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold' }}>-{(bill.discount || 0).toFixed(2)}</span>
-                </div>
-              </div>
-            }
-            
-            {(() => {
-              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
-              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
-              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
-              const totRate = cRate + sRate + gRate;
-
-              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
-              const disc = Number(bill.discount || 0);
-              const taxable = Math.max(0, sub - disc);
-
-              let rate = totRate;
-              let taxRupees = 0;
-
-              if (bill.tax !== undefined && bill.tax !== null) {
-                if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
-                  rate = Number(bill.tax);
-                  taxRupees = taxable * rate / 100;
-                } else {
-                  taxRupees = Number(bill.tax);
-                  rate = bill.taxRate || Math.round(taxRupees / Math.max(1, taxable) * 100) || totRate;
-                }
-              } else if (totRate > 0) {
-                rate = totRate;
-                taxRupees = taxable * rate / 100;
-              }
-
-              if (taxRupees === 0 || rate === 0) return null;
-
-              const cEff = rate * (cRate / Math.max(1, totRate));
-              const cAmt = taxRupees * (cRate / Math.max(1, totRate));
-              const sEff = rate * (sRate / Math.max(1, totRate));
-              const sAmt = taxRupees * (sRate / Math.max(1, totRate));
-              const gEff = rate * (gRate / Math.max(1, totRate));
-              const gAmt = taxRupees * (gRate / Math.max(1, totRate));
-
-              return (
-                <>
-                  {cRate > 0 &&
-                  <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("CGST@")}{cEff.toFixed(1)}%</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{cAmt.toFixed(2)}</span>
-                    </div>
-                  }
-                  {sRate > 0 &&
-                  <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("SGST@")}{sEff.toFixed(1)}%</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{sAmt.toFixed(2)}</span>
-                    </div>
-                  }
-                  {gRate > 0 &&
-                  <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("GST@")}{gEff.toFixed(1)}%</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{gAmt.toFixed(2)}</span>
-                    </div>
-                  }
-                </>);
-
-            })()}
-          </div>
-          
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0 4px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-
-          {/* Total & Round off */}
-          <div className="flex flex-col pb-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px' }}>
-            {(() => {
-              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
-              const disc = Number(bill.discount || 0);
-              const taxable = Math.max(0, sub - disc);
-              let finalTotal = Number(bill.total);
-
-              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
-              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
-              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
-              const totRate = cRate + sRate + gRate;
-              
-              const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
-                ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
-                : (totRate > 0 ? (taxable * totRate) / 100 : 0);
-
-              const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
-
-              // Safeguard: If bill.total is missing, 0, NaN or <= 0 while sub > 0, compute dynamically
-              if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
-                finalTotal = taxable + taxRupees + addCharges;
-              }
-
-              const roundedTotal = Math.round(finalTotal);
-              const roundOff = roundedTotal - finalTotal;
-
-              return (
-                <>
-                  {Number(bill.deliveryCharge || 0) > 0 && (
-                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Delivery Charge")}</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.deliveryCharge).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(bill.containerCharge || 0) > 0 && (
-                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Container Charge")}</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.containerCharge).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {roundOff !== 0 && (
-                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ textAlign: 'left', flex: 1 }}>{t("Round off")}</span>
-                      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center w-full mt-1.5" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: '20px', fontWeight: 'bold', paddingTop: '3px', paddingBottom: '3px', boxSizing: 'border-box' }}>
-                    <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
-                    <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>
-                  </div>
-                </>);
-
-            })()}
-          </div>
-
-          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '4px 0 6px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
-
-          {/* Secondary Currencies */}
-          {enabledCurrencies.length > 0 &&
-          <div className="text-center mt-2 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
-              <div className="mb-1">{t("Amount in Foreign Currencies:")}</div>
-              {enabledCurrencies.map((c) => {
-              const foreignAmt = Math.round(bill.total) * (c.rate / baseRate);
-              return (
-                <div key={c.code} className="flex justify-between px-6" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', paddingLeft: '24px', paddingRight: '24px', fontWeight: 'normal' }}>
-                    <span>{c.code}</span>
-                    <span>{foreignAmt.toFixed(2)}</span>
-                  </div>);
-
-            })}
-              <div style={{ borderTop: '1.5px dashed #000000', margin: '4px 0', marginTop: '6px', height: '1px', width: '100%' }}></div>
-            </div>
-          }
-
-          {/* Payment Mode & Entered Breakdown */}
-          {(() => {
-            const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
-            if (hasSplit) {
-              return (
-                <div className="my-1.5 pb-1" style={{ fontSize: '13px' }}>
-                  <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '3px' }}>
-                    {t("PAID VIA MIXED PAYMENT")}
-                  </div>
-                  <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
-                  {Number(bill.splitPayments?.cash || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
-                      <span>{t("Cash Paid:")}</span>
-                      <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(bill.splitPayments?.upi || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
-                      <span>{t("UPI Paid")} {bill.upiApp || bill.paymentMethod ? `(${bill.upiApp || bill.paymentMethod})` : ''}:</span>
-                      <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</span>
-                    </div>
-                  )}
-                  {Number(bill.splitPayments?.card || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
-                      <span>{t("Card Paid:")}</span>
-                      <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
-                </div>
-              );
-            } else if (bill.status === 'Unpaid') {
-              return (
-                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '5px', marginBottom: '4px', borderTop: '1.5px dashed #000', borderBottom: '1.5px dashed #000', padding: '4px 0' }}>
-                  {t("UNPAID (KHATA BILL)")}
-                </div>
-              );
-            } else if (bill.paymentMode === 'Cash') {
-              return (
-                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
-                  <div style={{ fontWeight: 'bold' }}>{t("Paid via Cash")}</div>
-                  {bill.amountPaid && Number(bill.amountPaid) > Number(bill.total) && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '2px', padding: '0 4px' }}>
-                      <span>{t("Tendered:")} {currencySymbol}{Number(bill.amountPaid).toFixed(2)}</span>
-                      <span>{t("Change:")} {currencySymbol}{(Number(bill.amountPaid) - Number(bill.total)).toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            } else if (bill.paymentMode) {
-              // Only show UPI app name for UPI/QR payments, not for Card
-              const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
-              const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
-              return (
-                <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
-                  {t("Paid via")} <strong style={{ fontWeight: 'bold' }}>{bill.paymentMode}</strong>{appSuffix}
-                </div>
-              );
-            }
-            return null;
-          })()}
-
-          {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) — respects whatsappShowQr toggle completely independently during WhatsApp capture */}
-          {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
-            const pa = (activeSettings.upiId || '').trim();
-            if (!pa) return null;
-
-            const isMixed = bill.paymentMode === 'Mixed';
-            const upiSplit = Number(bill.splitPayments?.upi || 0);
-
-            const am = (isMixed && upiSplit > 0)
-              ? upiSplit.toFixed(2)
-              : Number(bill.total || 0).toFixed(2);
-            
-            if (Number(am) <= 0) return null;
-
-            const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
-            const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
-            const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
-            const tr = `INV${Date.now()}`;
-            const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
-
-            const showNormally = activeSettings.enableQrPayment !== false;
-
-            return (
-              <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
-                <div className="uppercase mb-0.5" style={{ fontSize: '13px', fontWeight: 'bold', textAlign: 'center' }}>
-                  {isMixed && upiSplit > 0 ? `${t("SCAN TO PAY UPI PORTION")} (${currencySymbol}${am})` : t("SCAN TO PAY VIA UPI")}
-                </div>
-                <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1" style={{ display: 'inline-block', margin: '4px auto', textAlign: 'center' }}>
-                  <QRCodeSVG
-                    value={qrUri}
-                    size={100}
-                    level="M"
-                    includeMargin={false}
+            {/* Header */}
+            <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
+              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) &&
+                <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
+                  <img
+                    src={activeSettings.logo}
+                    alt="Restaurant Logo"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }}
+                    className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]"
                   />
                 </div>
-              
-                <div className="mt-0.5" style={{ fontSize: '13px', fontWeight: 'normal', textAlign: 'center' }}>
-                  {t("UPI ID:")} {pa}
+              }
+              <div align="center" style={{ fontSize: fontMetrics.headingSize, lineHeight: '1.15', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
+                {(activeSettings.restaurantName || 'MSBILLINGS').toUpperCase()}
+              </div>
+              <div align="center" style={{ fontSize: fontMetrics.detailSize, lineHeight: '1.25', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
+                {(activeSettings.address || '').split('\n').map((line, i) =>
+                  <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
+                )}
+                {activeSettings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{activeSettings.gstin}</div>}
+                {activeSettings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{activeSettings.phone}</div>}
+                {activeSettings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{activeSettings.fssai}</div>}
+              </div>
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            <div style={{ fontSize: fontMetrics.subHeadingSize, textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
+              {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Bill Info Grid - Table on own row, then Date+Time side-by-side, then Cashier+BillNo */}
+            {/* Row 1: Order Type / Table Name - full width, centered */}
+            {(() => {
+              const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+              let label = '';
+              if (bType === 'Delivery') {
+                const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
+                label = `DELIVERY: ${channel.toUpperCase()}${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else if (bType === 'Takeaway') {
+                label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else {
+                label = `Dine-In: ${bill.tableNo || 'Table'}`;
+              }
+              return (
+                <div style={{ width: '100%', textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
+                  {label}
+                </div>
+              );
+            })()}
+
+            {/* Row 2: Date (left) | Time 12h (right) */}
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, fontWeight: 'normal', marginBottom: '2px' }}>
+              <span>{t('Date:')}{new Date(billDateTime).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+              <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            </div>
+
+            {/* Row 3: Cashier (left) | Bill No (right) */}
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, fontWeight: 'normal', marginBottom: '2px' }}>
+              <span>{t('Cashier:')}{bill.cashierName || 'admin'}</span>
+              <span style={{ fontWeight: 'bold' }}>{t('Bill No.:')}{bill.billNumber || 'PREVIEW'}</span>
+            </div>
+            {bill.captainName && (
+              <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>{t('Assign to:')}{bill.captainName}</div>
+            )}
+            {bill.tokenNumber && (
+              <div style={{ fontWeight: 'bold', fontSize: fontMetrics.detailSize }}>{t('Token No.:')}{bill.tokenNumber}</div>
+            )}
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Items Header */}
+            <div className="flex pb-0.5" style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>
+              <div className="flex-1" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t('Item')}</div>
+              <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0 }}>{t("Qty.")}</div>
+              <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{t("Price")}</div>
+              <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t('Amount')}</div>
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '3px 0 5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Items List */}
+            <div className="mb-1 pb-1" style={{ borderBottom: '1.5px solid #000000', paddingBottom: '4px', marginBottom: '4px' }}>
+              {bill.items && bill.items.length > 0 ?
+                bill.items.filter(item => !item.isCancelled).map((item, idx) => {
+                  const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                  if (activeQty <= 0) return null;
+                  return (
+                    <div key={idx} className="flex items-start mb-1 leading-tight" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', fontSize: fontMetrics.itemSize, fontWeight: 'normal' }}>
+                      <div className="flex-1 pr-1 break-words" style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', fontSize: fontMetrics.itemSize }}>
+                        {item.name || 'Unknown Item'}
+                        {item.hsnCode ? <span style={{ fontSize: fontMetrics.detailSize }}>{t("(HSN:")}{item.hsnCode})</span> : ''}
+                      </div>
+                      <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{activeQty}</div>
+                      <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{(item.price || 0).toFixed(2)}</div>
+                      <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{(item.price * activeQty).toFixed(2)}</div>
+                    </div>
+                  );
+                }) :
+
+                <div className="text-center py-1" style={{ textAlign: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>{t("No items")}</div>
+              }
+            </div>
+
+            {/* Tax / Discount / Items summary */}
+            <div className="flex flex-col gap-0.5 mt-1" style={{ display: 'flex', flexDirection: 'column', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>
+              <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="text-left w-24" style={{ width: '96px', textAlign: 'left', flexShrink: 0 }}>{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
+                <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                  <span className="text-left" style={{ textAlign: 'left' }}>{t("Sub Total")}</span>
+                  <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
                 </div>
               </div>
-            );
-          })()}
+              {bill.discount > 0 &&
+                <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: fontMetrics.bodySize }}>
+                  <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                  <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                    <span className="text-left" style={{ textAlign: 'left', fontWeight: 'bold' }}>
+                      {t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}
+                    </span>
+                    <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold' }}>-{(bill.discount || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              }
 
-          <div className="mt-2 text-center" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '8px', marginBottom: '4px', paddingBottom: '12px', width: '100%', display: 'block' }}>
-            <p style={{ margin: 0, padding: '2px 0 6px 0', lineHeight: '1.4', display: 'block' }}>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
+              {(() => {
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+
+                let rate = totRate;
+                let taxRupees = 0;
+
+                if (bill.tax !== undefined && bill.tax !== null) {
+                  if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+                    rate = Number(bill.tax);
+                    taxRupees = taxable * rate / 100;
+                  } else {
+                    taxRupees = Number(bill.tax);
+                    rate = bill.taxRate || Math.round(taxRupees / Math.max(1, taxable) * 100) || totRate;
+                  }
+                } else if (totRate > 0) {
+                  rate = totRate;
+                  taxRupees = taxable * rate / 100;
+                }
+
+                if (taxRupees === 0 || rate === 0) return null;
+
+                const cEff = rate * (cRate / Math.max(1, totRate));
+                const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+                const sEff = rate * (sRate / Math.max(1, totRate));
+                const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+                const gEff = rate * (gRate / Math.max(1, totRate));
+                const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+
+                return (
+                  <>
+                    {cRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("CGST@")}{cEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{cAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                    {sRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("SGST@")}{sEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{sAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                    {gRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("GST@")}{gEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{gAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                  </>);
+
+              })()}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0 4px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Total & Round off */}
+            <div className="flex flex-col pb-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px' }}>
+              {(() => {
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+                let finalTotal = Number(bill.total);
+
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                  ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                  : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+
+                const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+
+                // Safeguard: If bill.total is missing, 0, NaN or <= 0 while sub > 0, compute dynamically
+                if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                  finalTotal = taxable + taxRupees + addCharges;
+                }
+
+                const roundedTotal = Math.round(finalTotal);
+                const roundOff = roundedTotal - finalTotal;
+
+                return (
+                  <>
+                    {Number(bill.deliveryCharge || 0) > 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Delivery Charge")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.deliveryCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.containerCharge || 0) > 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Container Charge")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.containerCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {roundOff !== 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Round off")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center w-full mt-1.5" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 'bold', paddingTop: '3px', paddingBottom: '3px', boxSizing: 'border-box' }}>
+                      <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
+                      <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>
+                    </div>
+                  </>);
+
+              })()}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '4px 0 6px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Secondary Currencies */}
+            {enabledCurrencies.length > 0 &&
+              <div className="text-center mt-2 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
+                <div className="mb-1">{t("Amount in Foreign Currencies:")}</div>
+                {enabledCurrencies.map((c) => {
+                  const foreignAmt = Math.round(bill.total) * (c.rate / baseRate);
+                  return (
+                    <div key={c.code} className="flex justify-between px-6" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', paddingLeft: '24px', paddingRight: '24px', fontWeight: 'normal' }}>
+                      <span>{c.code}</span>
+                      <span>{foreignAmt.toFixed(2)}</span>
+                    </div>);
+
+                })}
+                <div style={{ borderTop: '1.5px dashed #000000', margin: '4px 0', marginTop: '6px', height: '1px', width: '100%' }}></div>
+              </div>
+            }
+
+            {/* Payment Mode & Entered Breakdown */}
+            {(() => {
+              const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
+              if (hasSplit) {
+                return (
+                  <div className="my-1.5 pb-1" style={{ fontSize: '13px' }}>
+                    <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '3px' }}>
+                      {t("PAID VIA MIXED PAYMENT")}
+                    </div>
+                    <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
+                    {Number(bill.splitPayments?.cash || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("Cash Paid:")}</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.splitPayments?.upi || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("UPI Paid")} {bill.upiApp || bill.paymentMethod ? `(${bill.upiApp || bill.paymentMethod})` : ''}:</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.splitPayments?.card || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("Card Paid:")}</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
+                  </div>
+                );
+              } else if (bill.status === 'Unpaid') {
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '5px', marginBottom: '4px', borderTop: '1.5px dashed #000', borderBottom: '1.5px dashed #000', padding: '4px 0' }}>
+                    {t("UNPAID (KHATA BILL)")}
+                  </div>
+                );
+              } else if (bill.paymentMode === 'Cash') {
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: 'bold' }}>{t("Paid via Cash")}</div>
+                    {bill.amountPaid && Number(bill.amountPaid) > Number(bill.total) && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '2px', padding: '0 4px' }}>
+                        <span>{t("Tendered:")} {currencySymbol}{Number(bill.amountPaid).toFixed(2)}</span>
+                        <span>{t("Change:")} {currencySymbol}{(Number(bill.amountPaid) - Number(bill.total)).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              } else if (bill.paymentMode) {
+                // Only show UPI app name for UPI/QR payments, not for Card
+                const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
+                const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
+                    {t("Paid via")} <strong style={{ fontWeight: 'bold' }}>{bill.paymentMode}</strong>{appSuffix}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) — respects whatsappShowQr toggle completely independently during WhatsApp capture */}
+            {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
+              const pa = (activeSettings.upiId || '').trim();
+              if (!pa) return null;
+
+              const isMixed = bill.paymentMode === 'Mixed';
+              const upiSplit = Number(bill.splitPayments?.upi || 0);
+
+              const am = (isMixed && upiSplit > 0)
+                ? upiSplit.toFixed(2)
+                : Number(bill.total || 0).toFixed(2);
+
+              if (Number(am) <= 0) return null;
+
+              const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
+              const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
+              const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
+              const tr = `INV${Date.now()}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+
+              const showNormally = activeSettings.enableQrPayment !== false;
+
+              return (
+                <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
+                  <div className="uppercase mb-0.5" style={{ fontSize: '13px', fontWeight: 'bold', textAlign: 'center' }}>
+                    {isMixed && upiSplit > 0 ? `${t("SCAN TO PAY UPI PORTION")} (${currencySymbol}${am})` : t("SCAN TO PAY VIA UPI")}
+                  </div>
+                  <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1" style={{ display: 'inline-block', margin: '4px auto', textAlign: 'center' }}>
+                    <QRCodeSVG
+                      value={qrUri}
+                      size={100}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+
+                  <div className="mt-0.5" style={{ fontSize: '13px', fontWeight: 'normal', textAlign: 'center' }}>
+                    {t("UPI ID:")} {pa}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="mt-1 text-center" style={{ textAlign: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'bold', marginTop: '4px', marginBottom: '2px', paddingBottom: '2px', width: '100%', display: 'block' }}>
+              <p style={{ margin: 0, padding: '1px 0 2px 0', lineHeight: '1.3', display: 'block' }}>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
+            </div>
+
           </div>
-          
-        </div>
         )}
       </div>
 

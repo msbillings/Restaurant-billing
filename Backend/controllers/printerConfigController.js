@@ -3,7 +3,7 @@ import BillDefault from '../models/Bill.js';
 import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { sendRawToNetworkPrinter, sendRawToUSBPrinter, getAvailableUSBAndCOMPorts, scanNetworkThermalPrinters, generateESCPOSTestReceipt, printBillToPrinters, generateKOTESCPOSBuffer } from '../services/printerService.js';
-import { checkNetworkConnectivity, scanBluetoothDevices } from '../services/usbPrinterService.js';
+import { checkNetworkConnectivity, scanBluetoothDevices, sendRawToBluetoothPrinter } from '../services/usbPrinterService.js';
 
 // Get all printer configs
 export const getPrinterConfigs = async (req, res) => {
@@ -138,28 +138,39 @@ export const testPrinter = async (req, res) => {
     }
 
     if (config.connectionType === 'usb' && config.usbPort) {
-      // Dynamically verify USB is physically connected right now
-      try {
-        const availablePorts = await getAvailableUSBAndCOMPorts();
-        const isConnected = availablePorts.some(p => p.port === config.usbPort);
-        if (!isConnected) {
-          return res.status(400).json({ message: `Printer is disconnected! Please check the USB cable and power.` });
-        }
-      } catch (e) {
-        console.warn('Could not verify USB connection state before test:', e);
-      }
-
       const buffer = generateESCPOSTestReceipt(config);
       try {
-        const result = await sendRawToUSBPrinter(config.usbPort, buffer);
-        return res.status(200).json({ message: `Test receipt printed to ${config.name} on USB port ${config.usbPort}` });
+        const result = await sendRawToUSBPrinter(config.usbPort, buffer, config.deviceName || config.name);
+        const actualPort = result.actualPort || config.usbPort;
+        if (actualPort !== config.usbPort) {
+          try {
+            const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
+            await PrinterConfig.findByIdAndUpdate(config._id, { usbPort: actualPort });
+          } catch (_) {}
+        }
+        return res.status(200).json({ message: `Test receipt printed to ${config.name} on USB port ${actualPort}` });
       } catch (err) {
         return res.status(400).json({ message: `Failed to print to ${config.name} on ${config.usbPort}: ${err.message}` });
       }
     }
 
-    // Fallback response for non-network printers
-    res.status(200).json({ message: `Test command sent to ${config.name} (${config.connectionType})` });
+    if (config.connectionType === 'bluetooth') {
+      const targetDest = config.bluetoothAddress || config.deviceName || config.name;
+      if (!targetDest) {
+        return res.status(400).json({ message: `No Bluetooth address or device name configured for '${config.name}'.` });
+      }
+
+      const buffer = generateESCPOSTestReceipt(config);
+      try {
+        const result = await sendRawToBluetoothPrinter(targetDest, buffer);
+        return res.status(200).json({ message: `Test receipt printed to ${config.name} (${targetDest})` });
+      } catch (err) {
+        console.error(`[BluetoothTestPrint] Error on '${config.name}':`, err.message);
+        return res.status(400).json({ message: `Failed to print to Bluetooth printer: ${err.message}` });
+      }
+    }
+
+    return res.status(400).json({ message: `Unknown or unconfigured printer connection type: ${config.connectionType}` });
     
   } catch (error) {
     res.status(500).json({ message: 'Error testing printer', error: error.message });
@@ -169,7 +180,7 @@ export const testPrinter = async (req, res) => {
 // Print bill receipt to active network receipt printer(s)
 export const printBill = async (req, res) => {
   try {
-    const { bill, billId, printerId } = req.body;
+    const { bill, billId, printerId, rasterBufferBase64 } = req.body;
     let targetBill = bill;
 
     if (!targetBill && billId) {
@@ -181,7 +192,7 @@ export const printBill = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Bill data or billId is required to print receipt.' });
     }
 
-    const result = await printBillToPrinters(req, targetBill, printerId);
+    const result = await printBillToPrinters(req, targetBill, printerId, rasterBufferBase64);
     if (!result.success) {
       return res.status(400).json(result);
     }
@@ -195,7 +206,7 @@ export const printBill = async (req, res) => {
 // Print KOT to active network KOT / Both printer(s)
 export const printKOT = async (req, res) => {
   try {
-    const { bill, items, kotNumber, queueNumber, printerId } = req.body;
+    const { bill, items, kotNumber, queueNumber, printerId, rasterBufferBase64 } = req.body;
     const targetBill = bill || {};
     const targetItems = (items && items.length > 0) ? items : (targetBill.items || []);
     const targetKotNumber = kotNumber || 'KOT-1';
@@ -206,7 +217,7 @@ export const printKOT = async (req, res) => {
     }
 
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
-    let query = { isActive: true, connectionType: { $in: ['network', 'usb'] } };
+    let query = { isActive: true, connectionType: { $in: ['network', 'usb', 'bluetooth'] } };
     if (printerId) {
       query._id = printerId;
     } else {
@@ -217,7 +228,7 @@ export const printKOT = async (req, res) => {
     if (!printers || printers.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No active Network or USB KOT printer configured.'
+        message: 'No active Network, USB, or Bluetooth KOT printer configured.'
       });
     }
 
@@ -235,15 +246,29 @@ export const printKOT = async (req, res) => {
     for (const printer of printers) {
       const isUsb = printer.connectionType === 'usb' && printer.usbPort;
       const isNetwork = printer.connectionType === 'network' && printer.ipAddress;
-      if (!isUsb && !isNetwork) continue;
+      const isBluetooth = printer.connectionType === 'bluetooth' && (printer.bluetoothAddress || printer.deviceName || printer.name);
+      if (!isUsb && !isNetwork && !isBluetooth) continue;
 
-      const buffer = generateKOTESCPOSBuffer(targetBill, targetItems, targetKotNumber, printer, targetQueue, restaurantDetails);
-      const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : `${printer.ipAddress}:${printer.port || 9100}`;
+      let buffer;
+      if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
+        buffer = Buffer.from(rasterBufferBase64, 'base64');
+      } else {
+        buffer = generateKOTESCPOSBuffer(targetBill, targetItems, targetKotNumber, printer, targetQueue, restaurantDetails);
+      }
+      const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : isNetwork ? `${printer.ipAddress}:${printer.port || 9100}` : `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`;
       try {
         if (isUsb) {
-          await sendRawToUSBPrinter(printer.usbPort, buffer);
-        } else {
+          const res = await sendRawToUSBPrinter(printer.usbPort, buffer, printer.deviceName || printer.name);
+          if (res.actualPort && res.actualPort !== printer.usbPort) {
+            try {
+              await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
+            } catch (_) {}
+            printer.usbPort = res.actualPort;
+          }
+        } else if (isNetwork) {
           await sendRawToNetworkPrinter(printer.ipAddress, printer.port || 9100, buffer);
+        } else if (isBluetooth) {
+          await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);
         }
         results.push({
           printer: printer.name,

@@ -34,6 +34,13 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+
 // Initialize Firebase Admin for Push Notifications
 initFirebase();
 

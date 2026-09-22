@@ -10,7 +10,8 @@ import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
 import CustomTimePicker from './common/CustomTimePicker';
 import { RECEIPT_FONT_STYLES, RECEIPT_FONT_SIZES, findReceiptFont, getReceiptFontMetrics } from '../utils/receiptFonts';
-import { Type, Check } from 'lucide-react';
+import { Type, Check, UtensilsCrossed, Receipt } from 'lucide-react';
+import { getMenuItems } from '../api/menu';
 
 const formatFileSize = (bytes) => {
   if (!bytes || bytes <= 0) return '';
@@ -89,6 +90,20 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
   const [showFontSizeModal, setShowFontSizeModal] = useState(false);
   const [showFontStyleModal, setShowFontStyleModal] = useState(false);
   const [fontCategoryFilter, setFontCategoryFilter] = useState('All');
+  const [previewTab, setPreviewTab] = useState('receipt'); // 'receipt' | 'kot'
+  const [menuPreviewItems, setMenuPreviewItems] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    getMenuItems().then(items => {
+      if (isMounted && Array.isArray(items) && items.length > 0) {
+        setMenuPreviewItems(items);
+      }
+    }).catch(err => {
+      console.warn('Could not load menu items for settings preview:', err);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   const isElectron = Boolean(typeof window !== 'undefined' && window.electronAPI);
   const isAndroidApp = Boolean(
@@ -352,10 +367,21 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
     if (field === 'whatsappNumber') {
       value = value.replace(/\D/g, '').slice(0, 10);
     }
-    setSettings((prev) => ({
-      ...prev,
-      [field]: value
-    }));
+    setSettings((prev) => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      if (field === 'receiptFontFamily' || field === 'receiptFontSize' || field === 'printFormat') {
+        try {
+          const currentLocal = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          const merged = { ...currentLocal, ...updated, [field]: value };
+          localStorage.setItem('restaurantSettings', JSON.stringify(merged));
+          window.dispatchEvent(new CustomEvent('settingsUpdated', { detail: merged }));
+        } catch (e) {}
+      }
+      return updated;
+    });
     validateField(field, value);
   };
 
@@ -623,146 +649,43 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               </div>
             </div>
 
-            {/* Printers Configuration (Desktop & Android Bluetooth) */}
+            {/* Printer Configuration — moved to /bill-print (Printer & Multi-Kitchen Routing) */}
             <div className="bg-surface rounded-2xl p-4 border border-border shadow-lg">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                    <FileText className="text-primary" size={20} />
+                    <Printer className="text-primary" size={20} />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-text-main">
-                      {isAndroidApp ? t("Printers (Bluetooth & System)") : t("Desktop Printers")}
-                      <span className="text-sm font-normal text-primary"> {t("(v1.4.5)")}</span>
+                      {t("Printer & Kitchen Routing")}
                     </h2>
-                    <p className="text-xs text-text-muted mt-0.5">{t("Configure auto-printing")}</p>
+                    <p className="text-xs text-text-muted mt-0.5">{t("Configure KOT & bill receipt printers")}</p>
                   </div>
                 </div>
-                {isElectron ? (
-                  <span className="text-[10px] font-bold px-2 py-1 bg-blue-100 text-blue-700 rounded-md">
-                    {t("DESKTOP APP")}
-                  </span>
-                ) : isAndroidApp ? (
-                  <span className="text-[10px] font-bold px-2 py-1 bg-emerald-100 text-emerald-700 rounded-md flex items-center gap-1">
-                    <Bluetooth size={11} />
-                    {t("ANDROID APP")}
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold px-2 py-1 bg-amber-100 text-amber-700 rounded-md">
-                    {t("WEB APP MODE")}
-                  </span>
-                )}
+              
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    {t("Default KOT Printer")}
-                  </label>
-                  <div className="flex gap-2 items-center w-full min-w-0">
-                    <select
-                      value={settings.kotPrinter}
-                      onChange={(e) => handleInputChange('kotPrinter', e.target.value)}
-                      disabled={!isElectron && !isAndroidApp}
-                      className="flex-1 min-w-0 truncate px-3 sm:px-4 py-2.5 sm:py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm disabled:opacity-50">
-
-                      <option value="">{t("-- Select Printer --")}</option>
-                      {systemPrinters.map((p) =>
-                        <option key={p.name} value={p.name}>{p.name}</option>
-                      )}
-                    </select>
-                    {isAndroidApp && settings.kotPrinter && settings.kotPrinter.includes('Bluetooth:') && (
-                      <button
-                        type="button"
-                        onClick={() => handleTestPrint('kotPrinter')}
-                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
-                        title={t("Test Print KOT Printer")}>
-                        <Printer size={15} />
-                        <span>{t("Test")}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    {t("Default Billing Printer")}
-                  </label>
-                  <div className="flex gap-2 items-center w-full min-w-0">
-                    <select
-                      value={settings.billingPrinter}
-                      onChange={(e) => handleInputChange('billingPrinter', e.target.value)}
-                      disabled={!isElectron && !isAndroidApp}
-                      className="flex-1 min-w-0 truncate px-3 sm:px-4 py-2.5 sm:py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main text-xs sm:text-sm disabled:opacity-50">
-
-                      <option value="">{t("-- Select Printer --")}</option>
-                      {systemPrinters.map((p) =>
-                        <option key={p.name} value={p.name}>{p.name}</option>
-                      )}
-                    </select>
-                    {isAndroidApp && settings.billingPrinter && settings.billingPrinter.includes('Bluetooth:') && (
-                      <button
-                        type="button"
-                        onClick={() => handleTestPrint('billingPrinter')}
-                        className="px-2.5 sm:px-3 py-2.5 sm:py-3 bg-primary/10 text-primary hover:bg-primary/20 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
-                        title={t("Test Print Billing Printer")}>
-                        <Printer size={15} />
-                        <span>{t("Test")}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {!isElectron && !isAndroidApp && (
-                  <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-3.5 space-y-2 text-xs">
-                    <div className="flex items-start gap-2 text-amber-900 font-bold">
-                      <Printer size={16} className="text-amber-600 mt-0.5 shrink-0" />
-                      <span>{t("Web App Mode (Localhost / Browser):")}</span>
+                {/* Redirect to full printer config */}
+                <div
+                  onClick={() => { if (onNavigate) onNavigate('bill-print'); else window.location.href = '/bill-print'; }}
+                  className="flex items-center justify-between p-4 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-xl cursor-pointer group transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                      <Printer size={18} className="text-primary" />
                     </div>
-                    <p className="text-amber-800 leading-relaxed text-[12px]">
-                      {t("Direct thermal receipt & KOT printers (such as Wi-Fi/LAN network printers like FosiFlow) print directly over TCP socket via ")}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onNavigate) onNavigate('bill-print');
-                          else window.location.href = '/bill-print';
-                        }}
-                        className="font-bold underline text-primary hover:text-primary/80 cursor-pointer inline-flex items-center gap-0.5">
-                        {t("Printer & Multi-Kitchen Routing")} &rarr;
-                      </button>
-                    </p>
-                    <p className="text-amber-700/80 text-[11px]">
-                      {t("Note: Installed Windows OS USB printers (e.g. POS80) and background silent printing require the MS Billings Desktop App (run Desktop/ app). In Web App Mode, the browser uses direct network socket printing.")}
-                    </p>
+                    <div>
+                      <p className="font-bold text-sm text-text-main">{t("Printer & Multi-Kitchen Routing")}</p>
+                      <p className="text-xs text-text-muted mt-0.5">{t("Add KOT printers, bill receipt printers & kitchen stations")}</p>
+                    </div>
                   </div>
-                )}
-
-                {isAndroidApp && (
-                  <button
-                    type="button"
-                    onClick={handleScanBluetooth}
-                    disabled={isScanningBluetooth}
-                    className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-60">
-                    <Bluetooth size={16} className={isScanningBluetooth ? "animate-spin text-emerald-600" : "text-emerald-600"} />
-                    <span>{isScanningBluetooth ? t("Scanning Bluetooth Devices...") : t("Refresh / Scan Bluetooth Printers")}</span>
-                  </button>
-                )}
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-text-main flex items-center gap-2">
-                    {t("Print Format (Receipt Layout)")}
-                  </label>
-                  <select
-                    value={settings.printFormat || '80mm'}
-                    onChange={(e) => handleInputChange('printFormat', e.target.value)}
-                    className="w-full px-4 py-3 border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-background text-text-main">
-
-                    <option value="80mm">{t("Thermal 80mm (Standard Receipt)")}</option>
-                    <option value="58mm">{t("Thermal 58mm (Small Receipt)")}</option>
-                    <option value="A4">{t("A4 (Full Page Invoice)")}</option>
-                  </select>
+                  <span className="text-primary font-bold text-sm group-hover:translate-x-1 transition-transform">→</span>
                 </div>
 
-                {/* Bill & KOT Text Size Customization (Matching reference modal) */}
+
+                {/* Bill & KOT Text Size */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-semibold text-text-main flex items-center gap-2">
@@ -791,7 +714,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   </div>
                 </div>
 
-                {/* Bill & KOT Font Style Customization (15 Font Families) */}
+                {/* Bill & KOT Font Style */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-semibold text-text-main flex items-center gap-2">
@@ -825,8 +748,6 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                           </div>
                           <span className="text-xs text-text-muted group-hover:text-primary transition shrink-0">▼</span>
                         </div>
-
-                        {/* Live sample banner rendered in the actual selected font */}
                         <div
                           className="w-full px-3 py-2 rounded-lg bg-surface border border-border/70 text-xs sm:text-sm text-text-main flex items-center justify-between gap-2 overflow-hidden"
                           style={{ fontFamily: currentFont.value, ...(currentFont.previewStyle || {}) }}>
@@ -842,6 +763,7 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   </p>
                 </div>
 
+                {/* Silent Printing */}
                 <div className="flex items-center justify-between pt-2 border-t border-border mt-4">
                   <div className="space-y-0.5">
                     <label className="text-sm font-semibold text-text-main">{t("Silent Printing")}</label>
@@ -854,7 +776,6 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                       checked={settings.silentPrinting !== false}
                       onChange={(e) => handleInputChange('silentPrinting', e.target.checked)}
                       disabled={!isElectron && !isAndroidApp} />
-
                     <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${settings.silentPrinting !== false ? 'bg-primary' : 'bg-gray-300'}`}>
                       <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${settings.silentPrinting !== false ? 'translate-x-5' : 'translate-x-0'}`} />
                     </div>
@@ -865,13 +786,10 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     {t("Silent printing is only available in the Desktop App and Android Bluetooth mode. In the web version, a print dialog will always appear.")}
                   </p>
                 )}
-                {isAndroidApp && (
-                  <p className="text-xs text-emerald-700 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
-                    {t("Bluetooth thermal printers (58mm/80mm) print instantly & silently. Pair your printer in Android Bluetooth settings first, then click 'Refresh / Scan Bluetooth Printers'.")}
-                  </p>
-                )}
               </div>
             </div>
+
+
 
             {/* Restaurant Information */}
             <div className="bg-surface rounded-2xl p-4 border border-border shadow-lg">
@@ -1595,7 +1513,38 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
 
           {/* Preview Section */}
           <div className="lg:sticky lg:top-24 h-fit bg-surface rounded-2xl p-4 border border-border shadow-lg">
-            <h2 className="text-xl font-bold text-text-main mb-4">{showWhatsappSettingsModal ? t("WhatsApp Preview") : t("Receipt Preview")}</h2>
+            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+              <h2 className="text-xl font-bold text-text-main">
+                {showWhatsappSettingsModal ? t("WhatsApp Preview") : t("Live Print Preview")}
+              </h2>
+              {!showWhatsappSettingsModal && (
+                <div className="flex items-center bg-background p-1 rounded-xl gap-1 border border-border shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('receipt')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      previewTab === 'receipt'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}>
+                    <Receipt size={13} />
+                    <span>{t("Receipt")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab('kot')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      previewTab === 'kot'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-text-muted hover:text-text-main'
+                    }`}>
+                    <UtensilsCrossed size={13} />
+                    <span>{t("KOT")}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {showWhatsappSettingsModal ? (
               <div className="bg-[#e5ddd5] rounded-xl p-3 max-w-xs mx-auto shadow-sm min-h-[300px] flex flex-col gap-2">
                 <div className="bg-[#075E54] text-white rounded-t-xl -mx-3 -mt-3 px-4 py-3 flex items-center gap-3 mb-2">
@@ -1641,124 +1590,364 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
               (() => {
                 const previewFont = findReceiptFont(settings.receiptFontFamily);
                 const previewMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat || '80mm');
+                const fmt = settings.printFormat || '80mm';
+                // Paper widths: mirrors exact widths used in Invoice/KOT
+                const paperWidth = fmt === '58mm' ? 210 : fmt === 'A4' ? 360 : 280;
+                const previewLabel = fmt === '58mm' ? '58mm Thermal' : fmt === 'A4' ? 'A4 / Full Page' : '80mm Thermal';
+
+                // Dynamic sample items from restaurant menu
+                const sampleItems = (menuPreviewItems && menuPreviewItems.length > 0)
+                  ? menuPreviewItems.slice(0, 3).map((item, idx) => ({
+                      name: item.name,
+                      price: Number(item.price || (idx === 0 ? 2999 : 2799)),
+                      quantity: idx === 0 ? 1 : 1,
+                      specialNote: idx === 0 ? 'Extra spicy' : ''
+                    }))
+                  : [
+                      { name: 'AL-Mandi Mix Chowki', price: 2999, quantity: 1, specialNote: 'Extra spicy & crispy' },
+                      { name: 'Chowki - Mutton', price: 2799, quantity: 1, specialNote: '' }
+                    ];
+
+                const totalQty = sampleItems.reduce((sum, it) => sum + (it.quantity || 1), 0);
+                const subTotal = sampleItems.reduce((sum, it) => sum + (it.price * (it.quantity || 1)), 0);
+                const cgstAmt = settings.enableCgst !== false ? (subTotal * Number(settings.cgstRate !== undefined ? settings.cgstRate : 2.5)) / 100 : 0;
+                const sgstAmt = settings.enableSgst !== false ? (subTotal * Number(settings.sgstRate !== undefined ? settings.sgstRate : 2.5)) / 100 : 0;
+                const gstAmt = settings.enableGst === true ? (subTotal * Number(settings.gstRate !== undefined ? settings.gstRate : 5)) / 100 : 0;
+                const grandTotal = Math.round(subTotal + cgstAmt + sgstAmt + gstAmt);
+
                 return (
-                  <div
-                    className="bg-white border border-border rounded-xl p-4 max-w-xs mx-auto shadow-sm transition-all duration-150"
-                    style={{
-                      fontFamily: previewFont.value,
-                      ...(previewFont.previewStyle || {}),
-                      fontSize: previewMetrics.bodySize,
-                      lineHeight: previewMetrics.lineHeight
-                    }}>
-                    {/* Active Font & Size Badge in Receipt Preview */}
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100 text-[10px] text-gray-400 font-sans select-none">
-                      <span className="font-semibold text-primary">{previewFont.shortName}</span>
-                      <span>{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.label || 'Medium'} ({previewMetrics.bodySize})</span>
+                  <div className="flex flex-col items-center gap-3">
+                    {/* Format selector chips (For live testing & demo) */}
+                    <div className="flex items-center gap-1.5 w-full justify-center flex-wrap">
+                      {['58mm', '80mm', 'A4'].map(f => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => handleInputChange('printFormat', f)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            fmt === f
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-background text-text-muted border-border hover:border-primary hover:text-primary'
+                          }`}>
+                          {f === 'A4' ? 'A4' : f === '58mm' ? '58mm' : '80mm'}
+                        </button>
+                      ))}
+                      <span className="text-[10px] text-text-muted font-medium ml-1">{previewLabel}</span>
                     </div>
 
-                    {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false) &&
-                      <div className="flex justify-center mb-2">
-                        <img
-                          src={settings.logo}
-                          alt="Logo Preview"
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                          className="max-h-14 max-w-[140px] object-contain"
-                        />
-                      </div>
-                    }
+                    {/* Paper Container */}
                     <div
-                      className="text-center font-bold mb-2 uppercase"
-                      style={{ fontSize: previewMetrics.headingSize, lineHeight: '1.2' }}>
-                      {settings.restaurantName || 'Restaurant Name'}
-                    </div>
-                    <div
-                      className="text-center text-gray-600 mb-4"
-                      style={{ fontSize: previewMetrics.detailSize, lineHeight: '1.25' }}>
-                      {settings.restaurantType}<br />
-                      {settings.address && settings.address.split('\n').map((line, i) =>
-                        <div key={i}>{line}</div>
+                      className="bg-white border border-border rounded-lg shadow-sm transition-all duration-200 overflow-hidden"
+                      style={{ width: paperWidth, minWidth: paperWidth, maxWidth: paperWidth }}>
+                      {/* Paper top edge indicator */}
+                      <div className="h-1 w-full" style={{
+                        background: previewTab === 'kot' ? '#ef4444' : (fmt === '58mm' ? '#f97316' : fmt === 'A4' ? '#6366f1' : '#10b981')
+                      }} />
+
+                      {/* Info bar at top of preview */}
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-[9px] text-gray-500 font-sans select-none">
+                        <span className="font-bold text-primary truncate max-w-[55%]">{previewFont.shortName}</span>
+                        <span className="font-semibold">{RECEIPT_FONT_SIZES.find(s => s.id === (settings.receiptFontSize || 'medium'))?.label || 'Medium'} ({previewMetrics.bodySize})</span>
+                      </div>
+
+                      {/* Tab: KOT Live Preview */}
+                      {previewTab === 'kot' ? (
+                        <div
+                          className="p-3 transition-all duration-150 text-black"
+                          style={{
+                            fontFamily: previewFont.value,
+                            ...(previewFont.previewStyle || {}),
+                            fontSize: previewMetrics.bodySize,
+                            lineHeight: previewMetrics.lineHeight,
+                            color: '#000000',
+                            backgroundColor: '#ffffff'
+                          }}>
+                          {/* Header - Date & Time */}
+                          <div className="text-center mb-1">
+                            <div style={{ fontSize: previewMetrics.detailSize }}>
+                              {new Date().toLocaleDateString('en-GB')} {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                            </div>
+                            <div style={{ fontSize: previewMetrics.headingSize, fontWeight: 'bold', marginTop: '2px' }}>
+                              KOT No: 42
+                            </div>
+                            {/* Kitchen badge */}
+                            <div style={{
+                              fontSize: previewMetrics.detailSize,
+                              fontWeight: 'bold',
+                              padding: '2px 8px',
+                              border: '1.5px solid #000',
+                              display: 'inline-block',
+                              marginTop: '3px',
+                              marginBottom: '3px',
+                              letterSpacing: '0.5px'
+                            }}>
+                              [ ALL IN ONE - ALL ]
+                            </div>
+                            {/* Queue & Order Type */}
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontSize: previewMetrics.subHeadingSize,
+                              fontWeight: 'bold',
+                              marginTop: '2px',
+                              marginBottom: '2px'
+                            }}>
+                              <span>{t("Queue No:")} #1</span>
+                              <span>Dine In</span>
+                            </div>
+                            {/* Table */}
+                            <div style={{ fontSize: previewMetrics.subHeadingSize, fontWeight: 'bold', marginTop: '1px' }}>
+                              {t("Table No: Ground Floor - Table 5")}
+                            </div>
+                          </div>
+
+                          {/* Dashed line */}
+                          <div style={{ borderTop: '1.5px dashed #000', margin: '5px 0' }}></div>
+
+                          {/* Biller info */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize }}>
+                            <span>{t("Biller: admin")}</span>
+                            <span>{t("Token: #1")}</span>
+                          </div>
+
+                          {/* Dashed line */}
+                          <div style={{ borderTop: '1.5px dashed #000', margin: '5px 0' }}></div>
+
+                          {/* Items Table Header */}
+                          <div style={{ display: 'flex', width: '100%', marginBottom: '4px', borderBottom: '1px solid black', paddingBottom: '2px', fontWeight: 'bold', fontSize: previewMetrics.detailSize }}>
+                            <div style={{ flex: '2 1 0%', textAlign: 'left' }}>{t("Item")}</div>
+                            <div style={{ flex: '1.2 1 0%', textAlign: 'center' }}>{t("Special Note")}</div>
+                            <div style={{ width: '38px', textAlign: 'right', flexShrink: 0 }}>{t("Qty.")}</div>
+                          </div>
+
+                          {/* Dynamic Items from Menu */}
+                          <div style={{ marginBottom: '4px' }}>
+                            {sampleItems.map((item, idx) => (
+                              <div key={idx} style={{ width: '100%', marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e5e7eb' }}>
+                                <div style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                  <div style={{ flex: '2 1 0%', textAlign: 'left', fontWeight: 'bold', fontSize: previewMetrics.itemSize, lineHeight: '1.2', wordBreak: 'break-word', paddingRight: '4px' }}>
+                                    {item.name}
+                                  </div>
+                                  <div style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: previewMetrics.detailSize, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
+                                    {item.specialNote ? item.specialNote : '-'}
+                                  </div>
+                                  <div style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', fontSize: previewMetrics.bodySize }}>
+                                    x{item.quantity}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Dashed line */}
+                          <div style={{ borderTop: '1.5px dashed #000', margin: '5px 0' }}></div>
+
+                          {/* Total items */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.bodySize, fontWeight: 'bold' }}>
+                            <span>{t("Total Items:")}</span>
+                            <span>{totalQty}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Tab: Tax Invoice / Receipt Preview matching Invoice.jsx exactly */
+                        <div
+                          className="p-3 transition-all duration-150 text-black"
+                          style={{
+                            fontFamily: previewFont.value,
+                            ...(previewFont.previewStyle || {}),
+                            fontSize: previewMetrics.bodySize,
+                            lineHeight: previewMetrics.lineHeight,
+                            color: '#000000',
+                            backgroundColor: '#ffffff'
+                          }}>
+                          {/* Logo (if present) */}
+                          {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false) && (
+                            <div className="flex justify-center mb-1">
+                              <img
+                                src={settings.logo}
+                                alt="Logo Preview"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="object-contain"
+                                style={{ maxHeight: fmt === '58mm' ? 38 : 48, maxWidth: fmt === '58mm' ? 100 : 120 }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Restaurant Header */}
+                          <div className="text-center" style={{ textAlign: 'center', marginBottom: '4px' }}>
+                            <div style={{ fontSize: previewMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
+                              {settings.restaurantName || 'ANAND\'S RESTAURANT'}
+                            </div>
+                            <div style={{ fontSize: previewMetrics.detailSize, marginTop: '2px', lineHeight: '1.25', color: '#000000' }}>
+                              {(settings.address || '123, Flavor Avenue, Banjara Hills, Hyderabad, Telangana 500034').split('\n').map((line, i) => (
+                                <div key={i}>{line}</div>
+                              ))}
+                              {settings.gstin && <div>GSTIN: {settings.gstin}</div>}
+                              <div>PH: {settings.phone || '8328470402'}</div>
+                              {settings.fssai && <div>FSSAI: {settings.fssai}</div>}
+                            </div>
+                          </div>
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Tax Invoice Header */}
+                          <div style={{ fontSize: previewMetrics.subHeadingSize, fontWeight: 'bold', textAlign: 'center', margin: '3px 0' }}>
+                            {t("Tax Invoice")}
+                          </div>
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Table & Order Info */}
+                          <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: previewMetrics.bodySize, marginBottom: '2px' }}>
+                            {t("Dine-In: Ground Floor - Table 5")}
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize, marginBottom: '2px' }}>
+                            <span>{t("Date:")} {new Date().toLocaleDateString('en-GB')}</span>
+                            <span style={{ fontWeight: 'bold' }}>{new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize, marginBottom: '2px' }}>
+                            <span>{t("Cashier:")} {user?.username || 'admin'}</span>
+                            <span style={{ fontWeight: 'bold' }}>{t("Bill No.:")} MS0575</span>
+                          </div>
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Items Table Header */}
+                          {fmt === '58mm' ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: previewMetrics.detailSize, paddingBottom: '2px' }}>
+                              <span>ITEM</span>
+                              <span>AMT</span>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: previewMetrics.detailSize, fontWeight: 'bold', paddingBottom: '2px' }}>
+                              <div style={{ flex: '1 1 0%', textAlign: 'left' }}>{t("Item")}</div>
+                              <div style={{ width: '32px', textAlign: 'center', flexShrink: 0 }}>{t("Qty.")}</div>
+                              <div style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{t("Price")}</div>
+                              <div style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t("Amount")}</div>
+                            </div>
+                          )}
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '3px 0 5px 0', width: '100%' }}></div>
+
+                          {/* Dynamic Items List */}
+                          <div style={{ marginBottom: '4px' }}>
+                            {sampleItems.map((item, idx) => (
+                              fmt === '58mm' ? (
+                                <div key={idx} style={{ marginBottom: '4px', paddingBottom: '2px', borderBottom: '1px dashed #e0e0e0' }}>
+                                  <div style={{ fontWeight: 'bold', fontSize: previewMetrics.itemSize, textAlign: 'left', lineHeight: '1.2' }}>
+                                    {item.name}
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: previewMetrics.detailSize, marginTop: '1.5px' }}>
+                                    <span>[{item.price.toFixed(2)}] × {item.quantity}</span>
+                                    <span style={{ fontWeight: 'bold' }}>{(item.price * item.quantity).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div key={idx} style={{ display: 'flex', width: '100%', alignItems: 'flex-start', marginBottom: '4px', fontSize: previewMetrics.itemSize }}>
+                                  <div style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px' }}>
+                                    {item.name}
+                                  </div>
+                                  <div style={{ width: '32px', textAlign: 'center', flexShrink: 0 }}>{item.quantity}</div>
+                                  <div style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{item.price.toFixed(2)}</div>
+                                  <div style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold' }}>{(item.price * item.quantity).toFixed(2)}</div>
+                                </div>
+                              )
+                            ))}
+                          </div>
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Totals Summary */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: previewMetrics.detailSize, padding: '1px 0' }}>
+                            <span>{t("Total Qty:")} {totalQty}</span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <span>{t("Sub Total:")}</span>
+                              <span style={{ fontWeight: 'bold' }}>{subTotal.toFixed(2)}</span>
+                            </div>
+                          </div>
+
+                          {settings.enableCgst !== false && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize, padding: '1px 0' }}>
+                              <span>CGST ({settings.cgstRate !== undefined ? settings.cgstRate : 2.5}%)</span>
+                              <span>{cgstAmt.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {settings.enableSgst !== false && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize, padding: '1px 0' }}>
+                              <span>SGST ({settings.sgstRate !== undefined ? settings.sgstRate : 2.5}%)</span>
+                              <span>{sgstAmt.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {settings.enableGst === true && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: previewMetrics.detailSize, padding: '1px 0' }}>
+                              <span>GST ({settings.gstRate !== undefined ? settings.gstRate : 5}%)</span>
+                              <span>{gstAmt.toFixed(2)}</span>
+                            </div>
+                          )}
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Grand Total */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: previewMetrics.grandTotalSize, fontWeight: 'bold', margin: '3px 0' }}>
+                            <span>{t("Grand Total")}</span>
+                            <span>₹{grandTotal.toFixed(2)}</span>
+                          </div>
+
+                          {/* Solid Black Separator */}
+                          <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%' }}></div>
+
+                          {/* Payment mode */}
+                          <div style={{ textAlign: 'center', fontSize: previewMetrics.bodySize, fontWeight: 'bold', margin: '3px 0' }}>
+                            {t("Paid via Cash")}
+                          </div>
+
+                          {/* UPI QR Code */}
+                          {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
+                            <div style={{ textAlign: 'center', margin: '5px 0' }}>
+                              <div style={{ fontSize: '10px', fontWeight: 'bold', marginBottom: '2px' }}>
+                                {t("SCAN TO PAY VIA UPI")}
+                              </div>
+                              <div style={{ margin: '3px auto', display: 'inline-block' }}>
+                                <QRCodeSVG
+                                  value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${grandTotal}&cu=INR&tn=Bill%20Payment`}
+                                  size={fmt === '58mm' ? 74 : 84}
+                                  level="M"
+                                  includeMargin={false}
+                                />
+                              </div>
+                              <div style={{ fontSize: '9px', fontWeight: 'bold', marginTop: '2px' }}>
+                                {t("UPI ID:")} {settings.upiId.trim()}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Footer Message */}
+                          <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 'bold', marginTop: '6px', lineHeight: '1.3' }}>
+                            {settings.footerMessage || t("*** THANK YOU! VISIT AGAIN ***")}
+                          </div>
+                        </div>
                       )}
-                      {settings.phone && <>{t("Ph:")} {settings.phone}<br /></>}
-                      {settings.gstin && <>{`GSTIN: ${settings.gstin}`}<br /></>}
-                      {settings.fssai && `FSSAI: ${settings.fssai}`}
+
+                      {/* Paper bottom tear indicator */}
+                      <div className="h-4 w-full flex items-center justify-center gap-0.5 opacity-30">
+                        {Array.from({ length: Math.floor(paperWidth / 8) }).map((_, i) => (
+                          <div key={i} className="w-1 h-3 bg-gray-400 rounded-b-full" />
+                        ))}
+                      </div>
                     </div>
 
-                    <div
-                      className="border-t border-b border-dashed py-2 my-2 text-center font-bold tracking-wider"
-                      style={{ fontSize: previewMetrics.subHeadingSize }}>
-                      {t("RECEIPT")}
-                    </div>
-
-                    {/* Mock Items Details - Dynamically formatted with the chosen receipt font family */}
-                    <div className="my-3 space-y-1.5" style={{ fontSize: previewMetrics.itemSize }}>
-                      <div className="flex justify-between font-bold border-b border-dashed pb-1 mb-1">
-                        <span>ITEM</span>
-                        <span>AMT</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>1 x Chicken Biryani</span>
-                        <span>250.00</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>2 x Sweet Corn Soup</span>
-                        <span>180.00</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>1 x Butter Naan</span>
-                        <span>40.00</span>
-                      </div>
-                      <div className="flex justify-between border-t border-dashed pt-1 mt-1 font-medium">
-                        <span>Subtotal</span>
-                        <span>₹470.00</span>
-                      </div>
-                      {settings.enableCgst && (
-                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
-                          <span>CGST ({settings.cgstRate || 0}%)</span>
-                          <span>₹{((470 * Number(settings.cgstRate || 0)) / 100).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {settings.enableSgst && (
-                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
-                          <span>SGST ({settings.sgstRate || 0}%)</span>
-                          <span>₹{((470 * Number(settings.sgstRate || 0)) / 100).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {settings.enableGst && (
-                        <div className="flex justify-between text-gray-600" style={{ fontSize: previewMetrics.detailSize }}>
-                          <span>GST ({settings.gstRate || 0}%)</span>
-                          <span>₹{((470 * Number(settings.gstRate || 0)) / 100).toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div
-                        className="flex justify-between border-t border-dashed pt-1 mt-1 font-bold"
-                        style={{ fontSize: previewMetrics.grandTotalSize }}>
-                        <span>TOTAL</span>
-                        <span>₹{(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
-                      <div className="border-t border-dashed pt-3 mt-3 text-center flex flex-col items-center">
-                        <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                          {t("SCAN TO PAY VIA UPI")}
-                        </div>
-                        <div className="bg-white p-2 rounded-lg border border-gray-200 shadow-sm my-1 inline-block">
-                          <QRCodeSVG
-                            value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${(470 + (settings.enableCgst ? (470 * Number(settings.cgstRate || 0)) / 100 : 0) + (settings.enableSgst ? (470 * Number(settings.sgstRate || 0)) / 100 : 0) + (settings.enableGst ? (470 * Number(settings.gstRate || 0)) / 100 : 0)).toFixed(2)}&cu=INR&tn=Bill%20Payment`}
-                            size={96}
-                            level="M"
-                            includeMargin={true}
-                          />
-                        </div>
-                        <div className="text-[10px] font-bold text-gray-600 font-mono mt-0.5">
-                          {t("UPI ID:")} {settings.upiId.trim()}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="border-t border-dashed pt-3 mt-3 text-center text-xs font-medium">
-                      {settings.footerMessage}
-                    </div>
+                    <p className="text-[9px] text-text-muted text-center">
+                      {t("Live preview reflects your selected font, size, and layout settings.")}
+                    </p>
                   </div>
                 );
               })()
@@ -2145,13 +2334,13 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                 .filter(f => fontCategoryFilter === 'All' || f.category === fontCategoryFilter)
                 .map((font) => {
                   const currentFont = findReceiptFont(settings.receiptFontFamily);
-                  const isSelected = currentFont.id === font.id || settings.receiptFontFamily === font.value;
+                  const isSelected = currentFont.id === font.id;
 
                   return (
                     <div
                       key={font.id}
                       onClick={() => {
-                        handleInputChange('receiptFontFamily', font.value);
+                        handleInputChange('receiptFontFamily', font.id);
                         setToast({
                           message: t(`Font style updated to ${font.shortName}`),
                           type: 'success'
