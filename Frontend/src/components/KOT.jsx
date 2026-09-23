@@ -41,9 +41,12 @@ const KOT = ({ order, onClose }) => {
     return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
   }, []);
 
+  const isSettingsPage = window.location.pathname.includes('/settings');
+  const displayFormat = isSettingsPage ? settings.printFormat : '80mm';
+  
   const matchedFontObj = findReceiptFont(settings.receiptFontFamily);
   const receiptFont = matchedFontObj.value;
-  const fontMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', settings.printFormat);
+  const fontMetrics = getReceiptFontMetrics(settings.receiptFontSize || 'medium', displayFormat);
 
   const [printerConfigs, setPrinterConfigs] = useState([]);
   const [selectedDept, setSelectedDept] = useState('ALL');
@@ -92,18 +95,16 @@ const KOT = ({ order, onClose }) => {
       const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
       // 1. KOT-specific printer config
-      try {
-        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-        const kotStation = cached.find(p =>
-          p.isActive !== false &&
-          (p.type === 'kot' || p.type === 'general' || p.type === 'both') &&
-          tryMac(p.bluetoothAddress || p.deviceName || '')
-        );
-        if (kotStation) {
-          const mac = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
-          if (mac) { resolvedMacRef.current = mac; return; }
-        }
-      } catch (_) { }
+      const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+      const kotStation = list.find(p =>
+        p.isActive !== false &&
+        (p.type === 'kot' || p.type === 'general' || p.type === 'both') &&
+        tryMac(p.bluetoothAddress || p.deviceName || '')
+      );
+      if (kotStation) {
+        const mac = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
+        if (mac) { resolvedMacRef.current = mac; return; }
+      }
 
       // 2. kotPrinter setting
       const s = settings;
@@ -115,15 +116,12 @@ const KOT = ({ order, onClose }) => {
       if (mac) { resolvedMacRef.current = mac; return; }
 
       // 4. Any active BT printer
-      try {
-        const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-        const any = cached.find(p => p.isActive !== false && tryMac(p.bluetoothAddress || p.deviceName || ''));
-        if (any) { resolvedMacRef.current = tryMac(any.bluetoothAddress || any.deviceName || ''); }
-      } catch (_) { }
+      const any = list.find(p => p.isActive !== false && tryMac(p.bluetoothAddress || p.deviceName || ''));
+      if (any) { resolvedMacRef.current = tryMac(any.bluetoothAddress || any.deviceName || ''); }
     };
 
     resolveMac();
-  }, []);
+  }, [printerConfigs]);
 
   // ─── Auto-print on mount REMOVED ─────────────────────────────────────────
   // KOT only prints when user explicitly clicks Print KOT or Send to All Kitchens
@@ -134,14 +132,9 @@ const KOT = ({ order, onClose }) => {
       return [];
     }
 
-    const activePrinters = (printerConfigs && printerConfigs.length > 0)
+    const activePrinters = (printerConfigs && Array.isArray(printerConfigs))
       ? printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general' || p.type === 'both'))
-      : (() => {
-        try {
-          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          return cached.filter(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
-        } catch (_) { return []; }
-      })();
+      : [];
 
     const map = new Map();
 
@@ -300,7 +293,7 @@ const KOT = ({ order, onClose }) => {
           try {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
-              const paperWidthDots = (settings.printFormat === '58mm' || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
+              const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
               const canvas = await html2canvas(receiptNode, {
                 scale: 1.5,
                 backgroundColor: '#ffffff',
@@ -369,32 +362,29 @@ const KOT = ({ order, onClose }) => {
       } else {
         // Direct Backend KOT Printer (TCP ESC/POS or USB RAW via Node.js Backend)
         try {
-          const cached = (printerConfigs && printerConfigs.length > 0)
-            ? printerConfigs
-            : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          let list = printerConfigs;
+          if (!list || list.length === 0) {
+            try {
+              const res = await axios.get(`${getApiUrl()}/printer-configs`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` }
+              });
+              if (Array.isArray(res.data)) {
+                list = res.data;
+                setPrinterConfigs(res.data);
+              }
+            } catch (_) {}
+          }
 
           let targetPrinters = [];
           if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb' || activeStationGroup.printer.connectionType === 'bluetooth')) {
             targetPrinters = [activeStationGroup.printer];
           } else {
-            targetPrinters = cached.filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb' || c.connectionType === 'bluetooth'));
+            targetPrinters = (list || []).filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb' || c.connectionType === 'bluetooth'));
           }
 
           if (targetPrinters.length > 0) {
             let anySuccess = false;
             for (const targetBackendPrinter of targetPrinters) {
-              // Render exact UI from screen to 1-bit ESC/POS raster bit image
-              let rasterBufferBase64 = null;
-              try {
-                const kotNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
-                if (kotNode) {
-                  const dots = (targetBackendPrinter.paperWidth === '58mm' || settings.printFormat === '58mm') ? 384 : 576;
-                  rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
-                }
-              } catch (renderErr) {
-                console.warn('[KOT] Raster render error, falling back to text ESC/POS:', renderErr);
-              }
-
               const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
@@ -404,8 +394,7 @@ const KOT = ({ order, onClose }) => {
                   items: itemsToPrint,
                   kotNumber: kotNo,
                   queueNumber: qNo,
-                  printerId: targetBackendPrinter._id,
-                  rasterBufferBase64
+                  printerId: targetBackendPrinter._id
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
                 if (response.data && response.data.success) {
                   anySuccess = true;
@@ -422,13 +411,17 @@ const KOT = ({ order, onClose }) => {
               return;
             } else {
               setPrintStatus('failed');
-              showToast(t('Printer did not respond. Opening browser print...'), 'warning');
+              showToast(t('Printer did not respond. Check printer connection.'), 'error');
+              resetPrintStatus(4000);
+              return;
             }
           }
         } catch (netErr) {
           const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
           setPrintStatus('failed');
-          showToast(`${t('Network print failed')}: ${errMsg}. ${t('Opening browser print...')}`, 'warning');
+          showToast(`${t('Print failed')}: ${errMsg}`, 'error');
+          resetPrintStatus(4000);
+          return;
         }
         window.print();
         resetPrintStatus(3000);
@@ -477,7 +470,7 @@ const KOT = ({ order, onClose }) => {
           try {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
-              const paperWidthDots = (settings.printFormat === '58mm' || grp.printer?.paperWidth === '58mm') ? 384 : 576;
+              const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
               const canvas = await html2canvas(receiptNode, {
                 scale: 1.5,
                 backgroundColor: '#ffffff',
@@ -509,7 +502,7 @@ const KOT = ({ order, onClose }) => {
           try {
             const kotNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (kotNode) {
-              const dots = (grp.printer.paperWidth === '58mm' || settings.printFormat === '58mm') ? 384 : 576;
+              const dots = (grp.printer.paperWidth === '58mm' || (isSettingsPage && displayFormat === '58mm')) ? 384 : 576;
               rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
             }
           } catch (e) { }
@@ -541,7 +534,7 @@ const KOT = ({ order, onClose }) => {
   };
 
   const getFormatClasses = () => {
-    switch (settings.printFormat) {
+    switch (displayFormat) {
       case 'A4': return 'w-full max-w-[320px] print:max-w-full';
       case '58mm': return 'w-[210px] print:w-full print:max-w-full print:m-0';
       case '80mm':
@@ -555,7 +548,7 @@ const KOT = ({ order, onClose }) => {
         {`
           @media print {
             @page {
-              size: ${settings.printFormat === 'A4' ? 'A4 portrait' : settings.printFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
+              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
               margin: 0 !important;
             }
             html, body {
@@ -695,11 +688,11 @@ const KOT = ({ order, onClose }) => {
           fontWeight: 'normal',
           fontSize: fontMetrics.bodySize,
           lineHeight: fontMetrics.lineHeight,
-          width: settings.printFormat === 'A4' ? '100%' : undefined,
-          maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
+          width: displayFormat === 'A4' ? '100%' : undefined,
+          maxWidth: displayFormat === 'A4' ? '360px' : undefined
         }}>
 
-        {settings.printFormat === '58mm' ? (
+        {displayFormat === '58mm' ? (
           /* 58mm Compact Clean KOT Slip Layout (Zomato Style) */
           <div style={{ padding: '4px 4px 2px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}

@@ -63,6 +63,14 @@ const customerSchema = new mongoose.Schema({
   lastWinbackSentDate: {
     type: Date,
     default: null
+  },
+  redemptionOtp: {
+    type: String,
+    default: null
+  },
+  redemptionOtpExpiry: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

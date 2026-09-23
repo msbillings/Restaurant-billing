@@ -3,8 +3,15 @@ import { useLanguage } from "../context/LanguageContext";
 import React, { useState, useEffect, useRef } from 'react';
 import BackButton from './common/BackButton';
 import axios from 'axios';
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area } from 'recharts';
+
 import {
   Award,
+  Star,
+  BarChart2,
+  CalendarCheck,
+  TrendingDown,
+  Activity,
   Wallet,
   Gift,
   TrendingUp,
@@ -41,6 +48,7 @@ import { getMenuItems } from '../api/menu';
 const LoyaltyProgram = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
   const textareaRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('overview');
   const [enabled, setEnabled] = useState(true);
   const [loyaltyMode, setLoyaltyMode] = useState('spend'); // 'spend' | 'item' | 'both'
   const [conversionRate, setConversionRate] = useState('100'); // Rs 100 = 1 Point
@@ -86,6 +94,12 @@ const LoyaltyProgram = ({ onNavigate, onGoBack }) => {
   const [newItemName, setNewItemName] = useState('');
   const [newItemPoints, setNewItemPoints] = useState('5');
   const [availableMenuItems, setAvailableMenuItems] = useState([]);
+  const [itemSearchQuery, setItemSearchQuery] = useState('');
+  const [itemCategoryFilter, setItemCategoryFilter] = useState('All');
+  const [itemSortOption, setItemSortOption] = useState('latest');
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [bulkBonusPoints, setBulkBonusPoints] = useState('5');
+
 
   const [stats, setStats] = useState({ activeMembers: 0, pointsDistributed: 0, totalWalletBalance: 0 });
   const [loading, setLoading] = useState(true);
@@ -363,6 +377,36 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
     setNewItemPoints('5');
   };
 
+  const handleBulkAddItems = () => {
+    const points = parseInt(bulkBonusPoints, 10);
+    if (isNaN(points) || points <= 0) {
+      alert(t('Please enter valid bonus points greater than 0.'));
+      return;
+    }
+    if (selectedItemIds.length === 0) {
+      alert(t('Please select at least one item.'));
+      return;
+    }
+
+    let updatedRules = [...itemBonusRules];
+    
+    selectedItemIds.forEach(itemId => {
+      const menuItem = availableMenuItems.find(m => m._id === itemId || m.id === itemId);
+      if (menuItem) {
+        const existsIndex = updatedRules.findIndex(r => r.itemName.toLowerCase() === menuItem.name.toLowerCase());
+        if (existsIndex >= 0) {
+          updatedRules[existsIndex].bonusPoints = points;
+        } else {
+          updatedRules.push({ itemName: menuItem.name, bonusPoints: points });
+        }
+      }
+    });
+
+    setItemBonusRules(updatedRules);
+    setSelectedItemIds([]);
+    setBulkBonusPoints('5');
+  };
+
   const handleRemoveItemRule = (indexToRemove) => {
     setItemBonusRules(itemBonusRules.filter((_, idx) => idx !== indexToRemove));
   };
@@ -514,45 +558,224 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
 
       <div className={`flex-1 w-full space-y-3 sm:space-y-3.5 transition-opacity ${enabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
         
-        {/* KPI Summary Tiles */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-          <div className="bg-surface p-3.5 sm:p-4 rounded-2xl border border-border shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-text-muted uppercase tracking-wider">{t("Active Members")}</div>
-              <div className="text-xl sm:text-2xl font-black text-text-main mt-0.5">
-                {loading ? '...' : stats.activeMembers.toLocaleString()}
-              </div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-              <Users size={20} />
-            </div>
-          </div>
-
-          <div className="bg-surface p-3.5 sm:p-4 rounded-2xl border border-border shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-text-muted uppercase tracking-wider">{t("Points Issued")}</div>
-              <div className="text-xl sm:text-2xl font-black text-amber-500 mt-0.5">
-                {loading ? '...' : stats.pointsDistributed.toLocaleString()}
-              </div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-              <Award size={20} />
-            </div>
-          </div>
-
-          <div className="bg-surface p-3.5 sm:p-4 rounded-2xl border border-border shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs font-bold text-text-muted uppercase tracking-wider">{t("Customer Wallet Balances")}</div>
-              <div className="text-xl sm:text-2xl font-black text-emerald-600 font-mono mt-0.5">
-                {loading ? '...' : `₹${stats.totalWalletBalance.toLocaleString()}`}
-              </div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <Wallet size={20} />
-            </div>
-          </div>
+        {/* Navigation Tabs */}
+        <div className="flex overflow-x-auto gap-2 pb-1 scrollbar-hide">
+          {[
+            { id: 'overview', label: t('Overview') },
+            { id: 'earning', label: t('Earning Rules') },
+            { id: 'redemption', label: t('Redemption & Expiry') },
+            { id: 'tiers', label: t('Tiers & Milestones') },
+            { id: 'marketing', label: t('Marketing & Campaigns') }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
+                activeTab === tab.id
+                  ? 'bg-primary text-white shadow-md'
+                  : 'bg-surface hover:bg-surface-hover text-text-muted border border-border'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
+        {/* Tab: Overview */}
+        {activeTab === 'overview' && (
+          <div className="space-y-4">
+            {/* Row 1: 6 KPI Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-purple-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Active Members")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center shrink-0">
+                    <Users size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-text-main z-10">
+                  {loading ? '...' : (stats.activeMembers || 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-amber-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Points Issued")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center shrink-0">
+                    <Award size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-amber-500 z-10">
+                  {loading ? '...' : (stats.pointsDistributed || 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-emerald-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Wallet Balances")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+                    <Wallet size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-emerald-600 font-mono z-10">
+                  {loading ? '...' : `₹${(stats.totalWalletBalance || 0).toLocaleString()}`}
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-blue-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Total Loyalty Spend")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center shrink-0">
+                    <TrendingUp size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-blue-600 font-mono z-10">
+                  {loading ? '...' : `₹${(stats.totalLoyaltySpend || 0).toLocaleString()}`}
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-rose-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Total Visits")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-900/30 text-rose-600 flex items-center justify-center shrink-0">
+                    <CalendarCheck size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-rose-600 z-10">
+                  {loading ? '...' : (stats.totalVisits || 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div className="bg-surface p-3 sm:p-4 rounded-2xl border border-border shadow-xs flex flex-col gap-2 relative overflow-hidden group hover:border-indigo-500/50 transition-colors">
+                <div className="flex items-center justify-between z-10">
+                  <div className="text-[10px] sm:text-xs font-bold text-text-muted uppercase tracking-wider">{t("Points Redeemed")}</div>
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center shrink-0">
+                    <TrendingDown size={16} />
+                  </div>
+                </div>
+                <div className="text-lg sm:text-xl font-black text-indigo-600 z-10">
+                  {loading ? '...' : (stats.pointsRedeemed || 0).toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Charts and Graphs */}
+            <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-sm font-bold text-text-main flex items-center gap-2">
+                    <BarChart2 className="text-primary" size={16} />
+                    <span>{t("Points Issuance vs Redemption (Last 7 Days)")}</span>
+                  </h2>
+                  <p className="text-xs text-text-muted mt-0.5">Tracking loyalty engagement volume over time</p>
+                </div>
+              </div>
+              
+              <div className="w-full h-64 sm:h-72">
+                {loading ? (
+                  <div className="w-full h-full flex items-center justify-center text-xs text-text-muted">Loading chart...</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={stats.trendData || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" opacity={0.5} />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--color-text-muted)' }} />
+                      <RechartsTooltip 
+                        contentStyle={{ borderRadius: '12px', border: '1px solid var(--color-border)', backgroundColor: 'var(--color-surface)', fontSize: '12px' }}
+                        cursor={{fill: 'var(--color-primary)', opacity: 0.05}}
+                      />
+                      <Bar dataKey="pointsIssued" name={t("Points Issued")} fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="pointsRedeemed" name={t("Points Redeemed")} fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* Row 3: Leaderboard & Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+              {/* Leaderboard */}
+              <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 flex flex-col">
+                <div className="flex items-center justify-between mb-3 border-b border-border pb-3">
+                  <h2 className="text-sm font-bold text-text-main flex items-center gap-2">
+                    <Crown className="text-amber-500" size={16} />
+                    <span>{t("Top VIP Spenders")}</span>
+                  </h2>
+                </div>
+                <div className="space-y-2 flex-1">
+                  {loading ? (
+                    <div className="text-xs text-text-muted text-center py-4">Loading top customers...</div>
+                  ) : (!stats.topCustomers || stats.topCustomers.length === 0) ? (
+                    <div className="text-xs text-text-muted text-center py-4 border border-dashed border-border rounded-xl">No loyalty customers found.</div>
+                  ) : (
+                    stats.topCustomers.map((cust, idx) => (
+                      <div key={idx} className="flex items-center justify-between bg-background p-2.5 rounded-xl border border-border">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-black text-xs ${
+                            idx === 0 ? 'bg-amber-100 text-amber-600' : 
+                            idx === 1 ? 'bg-slate-100 text-slate-500' :
+                            idx === 2 ? 'bg-orange-100 text-orange-600' : 'bg-surface border border-border text-text-muted'
+                          }`}>
+                            #{idx + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-xs sm:text-sm text-text-main truncate">{cust.name || 'Anonymous'}</div>
+                            <div className="text-[10px] text-text-muted">+{cust.phone} • <span className="text-primary font-bold">{cust.tier}</span></div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-black text-emerald-600 font-mono text-sm">₹{(cust.totalSpend || 0).toLocaleString()}</div>
+                          <div className="text-[10px] text-text-muted">{cust.points} pts</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 flex flex-col">
+                <div className="flex items-center justify-between mb-3 border-b border-border pb-3">
+                  <h2 className="text-sm font-bold text-text-main flex items-center gap-2">
+                    <Activity className="text-primary" size={16} />
+                    <span>{t("Recent Activity Stream")}</span>
+                  </h2>
+                </div>
+                <div className="space-y-2 flex-1">
+                  {loading ? (
+                    <div className="text-xs text-text-muted text-center py-4">Loading recent activity...</div>
+                  ) : (!stats.recentActivity || stats.recentActivity.length === 0) ? (
+                    <div className="text-xs text-text-muted text-center py-4 border border-dashed border-border rounded-xl">No recent activity.</div>
+                  ) : (
+                    stats.recentActivity.map((act, idx) => (
+                      <div key={idx} className="flex items-center gap-3 bg-background p-2.5 rounded-xl border border-border">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Star size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-text-main">
+                            <span className="font-bold">{act.name || act.phone}</span> visited and updated balance.
+                          </div>
+                          <div className="text-[10px] text-text-muted mt-0.5">
+                            {new Date(act.updatedAt || act.lastVisit).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-xs font-bold text-amber-500">{act.points} pts</div>
+                          <div className="text-[10px] text-text-muted font-mono">Bal: ₹{act.walletBalance}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Earning Rules */}
+        {activeTab === 'earning' && (
+          <>
         {/* Section 1: Earning Mode Selector */}
         <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4">
           <div className="flex items-center justify-between mb-3">
@@ -686,43 +909,142 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
               </span>
             </div>
 
-            {/* Add New Rule Form */}
-            <div className="bg-background p-3 rounded-xl border border-border flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  list="menu-items-list"
-                  placeholder={t("Enter dish name (e.g. Biryani, Paneer Butter Masala)")}
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface border border-border rounded-xl text-xs sm:text-sm font-medium text-text-main focus:border-primary focus:outline-none"
-                />
-                <datalist id="menu-items-list">
-                  {availableMenuItems.map((item, idx) => (
-                    <option key={item._id || idx} value={item.name} />
-                  ))}
-                </datalist>
+            {/* Advanced Item Selector UI */}
+            <div className="bg-surface border border-border p-4 rounded-xl space-y-4 shadow-sm">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="flex-1 w-full relative">
+                  <input
+                    type="text"
+                    placeholder={t("Search items by name...")}
+                    value={itemSearchQuery}
+                    onChange={(e) => setItemSearchQuery(e.target.value)}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm font-medium text-text-main focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto scrollbar-hide">
+                  <select
+                    value={itemCategoryFilter}
+                    onChange={(e) => setItemCategoryFilter(e.target.value)}
+                    className="px-3 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm text-text-main focus:border-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="All">{t("All Categories")}</option>
+                    {[...new Set(availableMenuItems.map(item => typeof item.category === 'object' ? item.category?.name : item.category))].filter(Boolean).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={itemSortOption}
+                    onChange={(e) => setItemSortOption(e.target.value)}
+                    className="px-3 py-2 bg-background border border-border rounded-xl text-xs sm:text-sm text-text-main focus:border-amber-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="latest">{t("Latest Added")}</option>
+                    <option value="oldest">{t("Oldest Added")}</option>
+                    <option value="az">{t("A - Z")}</option>
+                    <option value="za">{t("Z - A")}</option>
+                    <option value="price_low">{t("Price: Low to High")}</option>
+                    <option value="price_high">{t("Price: High to Low")}</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-text-muted shrink-0">{t("Bonus:")}</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={newItemPoints}
-                  onChange={(e) => setNewItemPoints(e.target.value)}
-                  className="w-20 px-3 py-2 bg-surface border border-border rounded-xl font-bold text-center text-xs sm:text-sm text-text-main focus:border-primary focus:outline-none"
-                />
-                <span className="text-xs font-bold text-amber-500 shrink-0">{t("pts")}</span>
+              {/* Items Grid */}
+              <div className="bg-background border border-border rounded-xl h-48 overflow-y-auto p-2 scrollbar-thin">
+                {(() => {
+                  let filtered = availableMenuItems.filter(item => {
+                    const matchesSearch = item.name.toLowerCase().includes(itemSearchQuery.toLowerCase());
+                    const catName = typeof item.category === 'object' ? item.category?.name : item.category;
+                    const matchesCat = itemCategoryFilter === 'All' || catName === itemCategoryFilter;
+                    return matchesSearch && matchesCat;
+                  });
+
+                  filtered.sort((a, b) => {
+                    if (itemSortOption === 'latest') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+                    if (itemSortOption === 'oldest') return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+                    if (itemSortOption === 'az') return a.name.localeCompare(b.name);
+                    if (itemSortOption === 'za') return b.name.localeCompare(a.name);
+                    if (itemSortOption === 'price_low') return (a.price || 0) - (b.price || 0);
+                    if (itemSortOption === 'price_high') return (b.price || 0) - (a.price || 0);
+                    return 0;
+                  });
+
+                  if (filtered.length === 0) return <div className="text-center py-6 text-text-muted text-xs">{t("No items found.")}</div>;
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {filtered.map(item => {
+                        const id = item._id || item.id;
+                        const isSelected = selectedItemIds.includes(id);
+                        return (
+                          <label key={id} className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${isSelected ? 'bg-amber-500/10 border-amber-500' : 'bg-surface border-border hover:bg-surface-hover'}`}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedItemIds([...selectedItemIds, id]);
+                                else setSelectedItemIds(selectedItemIds.filter(i => i !== id));
+                              }}
+                              className="accent-amber-500 w-4 h-4 cursor-pointer rounded-sm"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold text-text-main truncate">{item.name}</div>
+                              <div className="text-[10px] text-text-muted">₹{item.price || 0}</div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
-              <button
-                type="button"
-                onClick={handleAddItemRule}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0">
-                <Plus size={15} />
-                <span>{t("Add Item Rule")}</span>
-              </button>
+              {/* Action Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-border">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedItemIds.length > 0) setSelectedItemIds([]);
+                      else {
+                        // Select all currently filtered
+                        const filtered = availableMenuItems.filter(item => {
+                          const matchesSearch = item.name.toLowerCase().includes(itemSearchQuery.toLowerCase());
+                          const catName = typeof item.category === 'object' ? item.category?.name : item.category;
+                          const matchesCat = itemCategoryFilter === 'All' || catName === itemCategoryFilter;
+                          return matchesSearch && matchesCat;
+                        });
+                        setSelectedItemIds(filtered.map(i => i._id || i.id));
+                      }
+                    }}
+                    className="text-xs font-bold text-amber-600 hover:text-amber-700 underline cursor-pointer"
+                  >
+                    {selectedItemIds.length > 0 ? t("Deselect All") : t("Select All")}
+                  </button>
+                  <div className="text-xs font-bold text-text-muted bg-background px-2 py-1 rounded-md border border-border">
+                    {selectedItemIds.length} {t("selected")}
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs font-bold text-text-muted shrink-0">{t("Bonus:")}</span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={bulkBonusPoints}
+                    onChange={(e) => setBulkBonusPoints(e.target.value)}
+                    className="w-20 px-3 py-2 bg-background border border-border rounded-xl font-bold text-center text-xs sm:text-sm text-text-main focus:border-amber-500 focus:outline-none"
+                  />
+                  <span className="text-xs font-bold text-amber-500 shrink-0">{t("pts")}</span>
+                  
+                  <button
+                    type="button"
+                    onClick={handleBulkAddItems}
+                    disabled={selectedItemIds.length === 0}
+                    className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ml-2">
+                    <Plus size={15} />
+                    <span>{t("Apply Rules")}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Existing Item Rules List */}
@@ -754,6 +1076,12 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
           </div>
         )}
 
+          </>
+        )}
+
+        {/* Tab: Redemption & Expiry */}
+        {activeTab === 'redemption' && (
+          <>
         {/* Section 4: Redemption & Automated Inactivity Expiry Engine */}
         <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
@@ -988,6 +1316,12 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
           </div>
         </div>
 
+          </>
+        )}
+
+        {/* Tab: Tiers & Milestones */}
+        {activeTab === 'tiers' && (
+          <>
         {/* Section 4.5: Reelo-Grade 3-Tier VIP Club Management */}
         <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
@@ -1149,6 +1483,12 @@ Visit us this week to enjoy delicious food and redeem your points on any order! 
           </div>
         </div>
 
+          </>
+        )}
+
+        {/* Tab: Marketing & Campaigns */}
+        {activeTab === 'marketing' && (
+          <>
         {/* Section 4.5: Promotional Loyalty Flyer & Membership Card Image */}
         <div className="bg-surface rounded-2xl shadow-xs border border-border p-3.5 sm:p-4 space-y-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1763,6 +2103,9 @@ Your current reward balance is *{points} Points* (₹{wallet}). Enjoy a complime
             </div>
           </div>
         </div>
+
+          </>
+        )}
 
         {/* Confirmation Modal Before Launching Broadcast */}
         {showConfirmModal && (

@@ -134,18 +134,18 @@ public class BluetoothPrinterHelper {
             os.write(alignCenter);
             os.write(boldOn);
             os.write(doubleHeight);
-            os.write("MS BILLINGS\n".getBytes("UTF-8"));
+            os.write("MS BILLINGS\n".getBytes("ISO-8859-1"));
             os.write(normalText);
             os.write(boldOff);
-            os.write("Bluetooth Printer Connected\n".getBytes("UTF-8"));
-            os.write("--------------------------------\n".getBytes("UTF-8"));
+            os.write("Bluetooth Printer Connected\n".getBytes("ISO-8859-1"));
+            os.write("--------------------------------\n".getBytes("ISO-8859-1"));
             os.write(alignLeft);
-            os.write(("Device MAC: " + address + "\n").getBytes("UTF-8"));
-            os.write(("Date/Time: " + new java.util.Date().toString() + "\n").getBytes("UTF-8"));
-            os.write("Status: Ready to Print Receipts & KOT\n".getBytes("UTF-8"));
-            os.write("--------------------------------\n".getBytes("UTF-8"));
+            os.write(("Device MAC: " + address + "\n").getBytes("ISO-8859-1"));
+            os.write(("Date/Time: " + new java.util.Date().toString() + "\n").getBytes("ISO-8859-1"));
+            os.write("Status: Ready to Print Receipts & KOT\n".getBytes("ISO-8859-1"));
+            os.write("--------------------------------\n".getBytes("ISO-8859-1"));
             os.write(alignCenter);
-            os.write("*** THANK YOU! ***\n".getBytes("UTF-8"));
+            os.write("*** THANK YOU! ***\n".getBytes("ISO-8859-1"));
             os.write(feedAndCut);
             os.flush();
 
@@ -220,13 +220,13 @@ public class BluetoothPrinterHelper {
 
             OutputStream os = socket.getOutputStream();
             
-            // Send in small chunks (1024 bytes) to avoid overflowing Bluetooth printer buffer
-            int chunkSize = 1024;
+            // Send in small chunks (256 bytes) with higher delay to avoid overflowing Bluetooth printer buffer
+            int chunkSize = 256;
             for (int i = 0; i < rasterBytes.length; i += chunkSize) {
                 int len = Math.min(chunkSize, rasterBytes.length - i);
                 os.write(rasterBytes, i, len);
                 os.flush();
-                Thread.sleep(15);
+                Thread.sleep(30);
             }
 
             // Feed and cut

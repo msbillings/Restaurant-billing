@@ -1,4 +1,5 @@
 import net from 'net';
+import QRCode from 'qrcode';
 import PrinterConfigDefault from '../models/PrinterConfig.js';
 import MenuDefault from '../models/Menu.js';
 import CategoryDefault from '../models/Category.js';
@@ -551,30 +552,63 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
 
 
 /**
- * Generate binary ESC/POS commands to print a native 2D QR Code on thermal receipt printers
+ * Generate a 1-bit monochrome ESC/POS raster bit image (GS v 0) for a QR Code
+ * 100% universally supported across all thermal printers (58mm & 80mm, Bluetooth & USB & Network)
  */
-export const generateESCPOSQRCode = (text, moduleSize = 6) => {
-  if (!text) return Buffer.alloc(0);
-  const dataBuffer = Buffer.from(text, 'utf-8');
-  const len = dataBuffer.length + 3;
-  const pL = len % 256;
-  const pH = Math.floor(len / 256);
+export const generateESCPOSQRCodeRaster = (text, is58mm = true) => {
+  if (!text || typeof text !== 'string') return Buffer.alloc(0);
 
-  return Buffer.concat([
-    Buffer.from(CMD.ALIGN_CENTER, 'binary'),
-    // Model 2
-    Buffer.from([0x1D, 0x28, 0x6B, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00]),
-    // Module Size
-    Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x43, moduleSize]),
-    // Error Correction Level M
-    Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x45, 0x31]),
-    // Store data in symbol storage area
-    Buffer.from([0x1D, 0x28, 0x6B, pL, pH, 0x31, 0x50, 0x30]),
-    dataBuffer,
-    // Print symbol
-    Buffer.from([0x1D, 0x28, 0x6B, 0x03, 0x00, 0x31, 0x51, 0x30]),
-    Buffer.from('\n', 'binary')
-  ]);
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
+    const moduleCount = qr.modules.size;
+    const modules = qr.modules.data;
+
+    const margin = 2; // quiet zone in modules
+    const totalModules = moduleCount + 2 * margin;
+
+    // Scale factor: 4 dots/module on 58mm (~148x148 dots), 6 dots/module on 80mm (~222x222 dots)
+    const scale = is58mm ? 4 : 6;
+    const pixelWidth = totalModules * scale;
+    const pixelHeight = pixelWidth;
+
+    const widthBytes = Math.ceil(pixelWidth / 8);
+    const dataBuffer = Buffer.alloc(widthBytes * pixelHeight, 0);
+
+    for (let y = 0; y < pixelHeight; y++) {
+      const moduleY = Math.floor(y / scale) - margin;
+      for (let x = 0; x < pixelWidth; x++) {
+        const moduleX = Math.floor(x / scale) - margin;
+
+        let isBlack = false;
+        if (moduleX >= 0 && moduleX < moduleCount && moduleY >= 0 && moduleY < moduleCount) {
+          isBlack = modules[moduleY * moduleCount + moduleX] === 1;
+        }
+
+        if (isBlack) {
+          const byteIndex = y * widthBytes + Math.floor(x / 8);
+          const bitIndex = 7 - (x % 8);
+          dataBuffer[byteIndex] |= (1 << bitIndex);
+        }
+      }
+    }
+
+    const xL = widthBytes & 0xFF;
+    const xH = (widthBytes >> 8) & 0xFF;
+    const yL = pixelHeight & 0xFF;
+    const yH = (pixelHeight >> 8) & 0xFF;
+
+    const header = Buffer.from([0x1D, 0x76, 0x30, 0x00, xL, xH, yL, yH]);
+
+    return Buffer.concat([
+      Buffer.from(CMD.ALIGN_CENTER, 'utf-8'),
+      header,
+      dataBuffer,
+      Buffer.from(CMD.LINE_FEED, 'utf-8')
+    ]);
+  } catch (err) {
+    console.error('[PrinterService] Error generating ESC/POS QR raster:', err);
+    return Buffer.alloc(0);
+  }
 };
 
 /**
@@ -866,9 +900,9 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
     content += lineDivider + CMD.LINE_FEED;
   }
 
-  // 9. UPI Scan to Pay QR Code (Exact Match to On-Screen Preview)
+  // 9. UPI Scan to Pay QR Code (Universal 1-bit Monochrome ESC/POS Raster)
   const pa = (s.upiId || '').trim();
-  let qrBuffer = Buffer.alloc(0);
+  let qrBlock = Buffer.alloc(0);
   if (s.enableQrPayment !== false && pa && roundedTotal > 0) {
     const isMixed = bill.paymentMode === 'Mixed';
     const upiSplit = Number(bill.splitPayments?.upi || 0);
@@ -882,14 +916,15 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
     let preQr = '';
     preQr += CMD.ALIGN_CENTER + CMD.BOLD_ON + 'SCAN TO PAY VIA UPI' + CMD.LINE_FEED + CMD.BOLD_OFF;
 
-    const qrCommand = generateESCPOSQRCode(qrUri, is58mm ? 4 : 6);
+    const qrRasterBuffer = generateESCPOSQRCodeRaster(qrUri, is58mm);
 
     let postQr = '';
     postQr += CMD.ALIGN_CENTER + `UPI ID: ${pa}` + CMD.LINE_FEED;
+    postQr += lineDivider + CMD.LINE_FEED;
 
-    qrBuffer = Buffer.concat([
+    qrBlock = Buffer.concat([
       Buffer.from(preQr, 'utf-8'),
-      qrCommand,
+      qrRasterBuffer,
       Buffer.from(postQr, 'utf-8')
     ]);
   }
@@ -906,7 +941,7 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
 
   return Buffer.concat([
     Buffer.from(content, 'utf-8'),
-    qrBuffer,
+    qrBlock,
     Buffer.from(footer, 'utf-8')
   ]);
 };

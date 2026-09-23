@@ -6,6 +6,7 @@ import {
   Users, Smile, Soup, Popcorn, Scroll, Beef, Cookie, Plus, Loader2, RefreshCw
 } from
   'lucide-react';
+import api from '../api/axios';
 import { getMenuItems, updateMenuItem } from '../api/menu';
 import { getCategories } from '../api/category';
 import { getCachedMenuItems, getCachedCategories } from '../db/offlineDb';
@@ -174,6 +175,7 @@ const MenuGrid = ({
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loyaltyConfig, setLoyaltyConfig] = useState(null);
   const [category, setCategory] = useState('All');
   const [internalFoodTypeFilter, setInternalFoodTypeFilter] = useState('all');
   const foodTypeFilter = externalFoodTypeFilter !== undefined ? externalFoodTypeFilter : internalFoodTypeFilter;
@@ -367,6 +369,16 @@ const MenuGrid = ({
     // 2. Background Revalidation with fresh data
     fetchCategories();
     fetchItems(true);
+    
+    const fetchLoyaltyConfig = async () => {
+      try {
+        const res = await api.get('/loyalty/config');
+        setLoyaltyConfig(res.data);
+      } catch (err) {
+        console.warn('Failed to fetch loyalty config', err);
+      }
+    };
+    fetchLoyaltyConfig();
 
     // 3. Real-time menu synchronization (when items are added, updated, or imported)
     const handleMenuUpdated = () => {
@@ -924,7 +936,20 @@ const MenuGrid = ({
                     }}>
 
                     <div className={`flex items-start justify-between w-full h-4 z-[2] absolute ${showImages ? 'top-2.5 left-0 px-2.5' : 'top-3 left-0 px-3'}`}>
-                      <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
+                      {(() => {
+                        const loyaltyRule = loyaltyConfig?.itemBonusRules?.find(r => r.itemName?.trim().toLowerCase() === item.name?.trim().toLowerCase());
+                        return (
+                          <div className="flex gap-1 items-center">
+                            <div className={`w-3 h-3 rounded-full ${dotColor} shrink-0 shadow-sm ${showImages ? 'border border-white' : ''}`} title={item.type === 'veg' ? 'Veg' : 'Non-Veg'}></div>
+                            {loyaltyRule && (
+                              <div className="flex items-center gap-0.5 bg-amber-500/95 backdrop-blur-md text-white px-1.5 py-0.5 rounded shadow-sm border border-amber-400" title={`Loyalty Bonus: +${loyaltyRule.bonusPoints} pts`}>
+                                <Star size={9} className="fill-white" />
+                                <span className="text-[9px] font-black leading-none">+{loyaltyRule.bonusPoints} pts</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex gap-1.5 items-center">
                         {!isAvailable && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-md shadow-sm ${showImages ? 'text-white bg-red-500/90 backdrop-blur-sm' : 'text-red-500 bg-red-50'}`}>{t("Out of Stock")}</span>}

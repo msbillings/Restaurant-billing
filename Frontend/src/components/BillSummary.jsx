@@ -6,6 +6,7 @@ import { getCachedMenuItems } from '../db/offlineDb';
 import { useLanguage } from '../context/LanguageContext';
 import { Trash2, Plus, Minus, Search, User, Users, Clipboard, X, CheckCircle, UserCheck, ChevronUp, ChevronDown, PieChart, Loader2, Gift, Tags, Clock, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
 import { getOfferCategoryMeta, OFFER_CATEGORIES } from './DiscountConfig';
+import LoyaltyRedemptionModal from './LoyaltyRedemptionModal';
 
 const BillSummary = ({
   orderId,
@@ -66,6 +67,21 @@ const BillSummary = ({
 
   const cartEndRef = React.useRef(null);
   useEffect(() => {
+    const fetchLoyaltyConfig = async () => {
+      try {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        const res = await axios.get(`${getApiUrl()}/loyalty/config`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setLoyaltyConfig(res.data);
+      } catch (err) {
+        console.warn('Failed to fetch loyalty config', err);
+      }
+    };
+    fetchLoyaltyConfig();
+  }, []);
+
+  useEffect(() => {
     if (cartEndRef.current) {
       cartEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -104,6 +120,10 @@ const BillSummary = ({
     }
   });
   const [showPlatformModal, setShowPlatformModal] = useState(false);
+  const [loyaltyConfig, setLoyaltyConfig] = useState(null);
+  const [showLoyaltyModal, setShowLoyaltyModal] = useState(false);
+  const [loyaltyDiscount, setLoyaltyDiscount] = useState(0);
+  const [loyaltyPointsDeducted, setLoyaltyPointsDeducted] = useState(0);
   const [newPlatformName, setNewPlatformName] = useState('');
 
   const handleAddPlatform = (e) => {
@@ -940,6 +960,16 @@ const BillSummary = ({
                 <div className="flex items-center gap-1 flex-wrap">
                   <span className={`text-[11px] text-gray-700 font-medium leading-tight ${item.isCancelled ? 'line-through' : ''}`}>{(language !== 'en' && item.nameTranslations?.[language]) || item.name}</span>
                   {(() => {
+                    const loyaltyRule = loyaltyConfig?.itemBonusRules?.find(r => r.itemName?.trim().toLowerCase() === item.name?.trim().toLowerCase());
+                    if (!loyaltyRule) return null;
+                    return (
+                      <div className="flex items-center gap-0.5 bg-amber-50 text-amber-600 px-1 py-0.5 rounded shadow-xs border border-amber-200" title={`Loyalty Bonus: +${loyaltyRule.bonusPoints} pts`}>
+                        <Sparkles size={8} />
+                        <span className="text-[9px] font-black leading-none">+{loyaltyRule.bonusPoints} pts</span>
+                      </div>
+                    );
+                  })()}
+                  {(() => {
                     const rawQty = parseInt(item.quantity || 0, 10) || 0;
                     const cancelledQty = parseInt(item.cancelledQuantity || 0, 10) || 0;
                     const effectiveQty = Math.max(0, rawQty - cancelledQty);
@@ -1442,6 +1472,16 @@ const BillSummary = ({
         <div className="px-3 py-1.5 bg-gray-50/80 border-b border-gray-100 flex flex-col gap-1 text-[11px] animate-in fade-in duration-200">
           {/* Status Indicators */}
           <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            {customerPhone && (
+              <button
+                type="button"
+                onClick={() => setShowLoyaltyModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95"
+              >
+                <Sparkles size={12} className="shrink-0" />
+                Redeem Loyalty
+              </button>
+            )}
             {/* WhatsApp Status Badge */}
             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
               isWhatsAppConnected
@@ -2365,8 +2405,20 @@ const BillSummary = ({
           document.body
         )}
 
+      {/* Loyalty Redemption Modal */}
+      <LoyaltyRedemptionModal
+        isOpen={showLoyaltyModal}
+        onClose={() => setShowLoyaltyModal(false)}
+        customer={{ ...(customerInfo || {}), phone: customerPhone, name: customerName }}
+        billAmount={Number(total)}
+        onRedeemSuccess={(discountAmt, pointsDed) => {
+          setLoyaltyDiscount(discountAmt);
+          setLoyaltyPointsDeducted(pointsDed);
+        }}
+      />
+
     </div>
   );
 };
 
-export default BillSummary;
+export default BillSummary;

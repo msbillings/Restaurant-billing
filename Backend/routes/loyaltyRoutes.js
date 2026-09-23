@@ -9,7 +9,9 @@ import {
   getCampaignAudience,
   sendLoyaltyCampaign,
   getExpiryStats,
-  runLoyaltyExpiryAudit
+  runLoyaltyExpiryAudit,
+  generateOtp,
+  verifyOtp
 } from '../controllers/loyaltyController.js';
 import { authenticateToken as protect, requireAdmin as admin, optionalAuthenticateToken } from '../middleware/auth.js';
 
@@ -42,5 +44,12 @@ router.route('/campaign/audience')
 
 router.route('/campaign/send')
   .post(protect, admin, sendLoyaltyCampaign);
+
+
+router.route('/generate-otp')
+  .post(protect, generateOtp);
+
+router.route('/verify-otp')
+  .post(protect, verifyOtp);
 
 export default router;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
@@ -238,15 +238,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const matchedFontObj = findReceiptFont(activeFontFamilyVal);
   const receiptFont = matchedFontObj.value;
   const activeFontSize = settings.receiptFontSize || activeSettings.receiptFontSize || 'medium';
-  const fontMetrics = getReceiptFontMetrics(activeFontSize, activeSettings.printFormat);
+  const isSettingsPage = window.location.pathname.includes('/settings');
+  const displayFormat = isSettingsPage ? activeSettings.printFormat : '80mm';
+  const fontMetrics = getReceiptFontMetrics(activeFontSize, displayFormat);
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
-  const [printerConfigs, setPrinterConfigs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-    } catch (_) {
-      return [];
-    }
-  });
+  const [printerConfigs, setPrinterConfigs] = useState([]);
 
   useEffect(() => {
     const fetchPrinters = async () => {
@@ -254,31 +250,20 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         const res = await api.get('/printer-configs');
         if (Array.isArray(res.data)) {
           setPrinterConfigs(res.data);
-          try {
-            localStorage.setItem('msbillings_printer_configs', JSON.stringify(res.data));
-          } catch (_) {}
         }
       } catch (_) {}
     };
     fetchPrinters();
   }, []);
 
-  const activeReceiptPrinter = (() => {
-    const list = (printerConfigs && printerConfigs.length > 0)
-      ? printerConfigs
-      : (() => {
-          try {
-            return JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-          } catch (_) {
-            return [];
-          }
-        })();
+  const activeReceiptPrinter = useMemo(() => {
+    const list = Array.isArray(printerConfigs) ? printerConfigs : [];
     return list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
       (c.connectionType === 'usb' && c.usbPort) ||
       (c.connectionType === 'network' && c.ipAddress) ||
       (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
     )) || null;
-  })();
+  }, [printerConfigs]);
 
   const handlePrint = async (forceBrowserPrint = false) => {
     // 1. Explicit request to use standard browser print (e.g. Save to PDF)
@@ -287,14 +272,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       return;
     }
 
-    // Guard: block duplicate prints while a Bluetooth render is in progress
+    // Guard: block duplicate prints while a print is in progress
     if (isPrinting) return;
 
     // ── IMMEDIATE UI FEEDBACK ── set state BEFORE any async work
     setIsPrinting(true);
     setPrintStatus('printing');
 
-    // ⚡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
+    // ⚡ CRITICAL: Allow React to flush DOM and browser to paint the button immediately
     await new Promise(res => setTimeout(res, 80));
 
     try {
@@ -321,13 +306,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
         let macAddress = tryMac(activeSettings.billingPrinter || '');
 
-        // Check if a Receipt printer station is configured in Printer & Multi-Kitchen Routing
-        if (!macAddress) {
-          try {
-            const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-            const receiptStation = cached.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && tryMac(c.bluetoothAddress || c.deviceName || ''));
-            if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
-          } catch (_) { }
+        // Check live printer configs from database
+        if (!macAddress && Array.isArray(printerConfigs)) {
+          const receiptStation = printerConfigs.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && tryMac(c.bluetoothAddress || c.deviceName || ''));
+          if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
         }
 
         // ── CONNECTION CHECK: Show error immediately if no printer found
@@ -342,7 +324,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           try {
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
-              const paperWidthDots = (activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
+              const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
               const canvas = await html2canvas(receiptNode, {
                 scale: 1.5,
                 backgroundColor: '#ffffff',
@@ -407,12 +389,20 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         return;
       }
 
-      // 5. Direct Thermal Receipt Printer (USB RAW or TCP ESC/POS via Node.js Backend)
+      // 5. Direct Thermal Receipt Printer (USB RAW, Bluetooth, or TCP ESC/POS via Backend)
       try {
-        const list = (printerConfigs && printerConfigs.length > 0)
-          ? printerConfigs
-          : JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-        const receiptPrinter = list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+        let list = printerConfigs;
+        if (!list || list.length === 0) {
+          try {
+            const res = await api.get('/printer-configs');
+            if (Array.isArray(res.data)) {
+              list = res.data;
+              setPrinterConfigs(res.data);
+            }
+          } catch (_) {}
+        }
+
+        const receiptPrinter = (list || []).find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
           (c.connectionType === 'usb' && c.usbPort) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
@@ -426,24 +416,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               : `${receiptPrinter.ipAddress}`;
           setToast({ message: `🖨️ ${t("Printing receipt to")} ${receiptPrinter.name} (${destName})...`, type: 'info' });
 
-          // Render exact UI from screen to 1-bit ESC/POS raster bit image
-          let rasterBufferBase64 = null;
-          try {
-            const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area') || document.querySelector('.receipt-print');
-            if (receiptNode) {
-              const dots = (receiptPrinter.paperWidth === '58mm' || activeSettings.printFormat === '58mm' || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              rasterBufferBase64 = await renderElementToESCPOSRaster(receiptNode, dots);
-            }
-          } catch (renderErr) {
-            console.warn('[Invoice] Raster render error, falling back to text ESC/POS:', renderErr);
-          }
-
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           const response = await api.post('/printer-configs/print-bill', {
             bill: billPayload,
             billId: bill?._id,
-            printerId: receiptPrinter._id,
-            rasterBufferBase64
+            printerId: receiptPrinter._id
           });
           if (response.data && response.data.success) {
             setPrintStatus('success');
@@ -453,12 +430,16 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           } else {
             setPrintStatus('failed');
             setToast({ message: response.data?.message || `Failed to print to ${receiptPrinter.name}`, type: 'warning' });
+            resetPrintStatus(4000);
+            return;
           }
         }
       } catch (netErr) {
         const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
         setPrintStatus('failed');
-        setToast({ message: `⚠️ ${errMsg}. ${t("Opening browser print...")}`, type: 'warning' });
+        setToast({ message: `⚠️ ${errMsg}`, type: 'error' });
+        resetPrintStatus(4000);
+        return;
       }
 
       // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
@@ -850,7 +831,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
 
   const getFormatClasses = () => {
-    switch (activeSettings.printFormat) {
+    switch (displayFormat) {
       case 'A4': return 'w-full max-w-sm print:max-w-full';
       case '58mm': return 'w-[210px] print:w-full print:max-w-full print:m-0';
       case '80mm':
@@ -864,7 +845,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         {`
           @media print {
             @page {
-              size: ${activeSettings.printFormat === 'A4' ? 'A4 portrait' : activeSettings.printFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
+              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
               margin: 0 !important;
             }
             html, body {
@@ -1280,13 +1261,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           fontWeight: 'normal',
           fontSize: fontMetrics.bodySize,
           lineHeight: fontMetrics.lineHeight,
-          width: activeSettings.printFormat === 'A4' ? '100%' : undefined,
-          maxWidth: activeSettings.printFormat === 'A4' ? '360px' : undefined,
+          width: displayFormat === 'A4' ? '100%' : undefined,
+          maxWidth: displayFormat === 'A4' ? '360px' : undefined,
           overflow: 'visible',
           boxSizing: 'border-box'
         }}>
 
-        {activeSettings.printFormat === '58mm' ? (
+        {displayFormat === '58mm' ? (
           /* 58mm Compact Clean Receipt Layout (Zomato Style) */
           <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
             {/* Header */}

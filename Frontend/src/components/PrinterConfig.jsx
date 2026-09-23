@@ -197,9 +197,6 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       });
       const configsList = response.data || [];
       setConfigs(configsList);
-      try {
-        localStorage.setItem('msbillings_printer_configs', JSON.stringify(configsList));
-      } catch (_) {}
     } catch (error) {
       console.error('Error fetching printer configs', error);
     } finally {
