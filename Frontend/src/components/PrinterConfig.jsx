@@ -5,7 +5,7 @@ import axios from 'axios';
 import { 
   ArrowLeft, Printer, Save, CheckCircle, Network, Usb, Bluetooth, 
   ReceiptText, ChefHat, Plus, Trash2, Edit, X, Search, Check, 
-  AlertTriangle, Layers, Utensils, MapPin, ChevronDown, ChevronUp, RefreshCw, Loader2
+  AlertTriangle, Layers, Utensils, MapPin, ChevronDown, ChevronUp, RefreshCw, Loader2, Battery
 } from 'lucide-react';
 import BackButton from './common/BackButton';
 
@@ -160,6 +160,41 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       setBtAvailable(false);
     } finally {
       setIsScanningBluetooth(false);
+    }
+  };
+
+  // Live battery checking state
+  const [liveBatteryLevel, setLiveBatteryLevel] = useState(null);
+  const [isCheckingBattery, setIsCheckingBattery] = useState(false);
+
+  const checkPrinterBattery = async () => {
+    if (!formData.bluetoothAddress) return;
+    setIsCheckingBattery(true);
+    setLiveBatteryLevel(null);
+    try {
+      if (typeof window !== 'undefined' && window.AndroidBluetooth?.getBatteryLevel) {
+        const resStr = window.AndroidBluetooth.getBatteryLevel(formData.bluetoothAddress);
+        const res = JSON.parse(resStr || '{}');
+        if (res.success && res.batteryLevel !== undefined && res.batteryLevel !== null) {
+          setLiveBatteryLevel(res.batteryLevel);
+        } else {
+          alert(res.error || t('Battery level not supported by this printer.'));
+        }
+      } else {
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+        const res = await axios.get(`${getApiUrl()}/printer-configs/bluetooth-battery/${encodeURIComponent(formData.bluetoothAddress)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.data && res.data.success && res.data.batteryLevel !== undefined && res.data.batteryLevel !== null) {
+          setLiveBatteryLevel(res.data.batteryLevel);
+        } else {
+          alert(res.data?.message || res.data?.error || t('Battery polling not supported on this platform/printer.'));
+        }
+      }
+    } catch (err) {
+      alert(t('Failed to check battery status.'));
+    } finally {
+      setIsCheckingBattery(false);
     }
   };
 
@@ -1205,16 +1240,47 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           {/* Thermal printers first */}
                           {bluetoothDevices.filter(d => d.isThermal).map(d => (
                             <option key={d.address || d.name} value={d.address}>
-                              ★ {d.name}{d.address ? ` (${d.address})` : ''} — Thermal Printer
+                              ★ {d.name}{d.address ? ` (${d.address})` : ''} {d.batteryLevel !== undefined ? `— 🔋 ${d.batteryLevel}%` : ''} — Thermal Printer
                             </option>
                           ))}
                           {bluetoothDevices.filter(d => !d.isThermal).map(d => (
                             <option key={d.address || d.name} value={d.address}>
-                              {d.name}{d.address ? ` (${d.address})` : ''}
+                              {d.name}{d.address ? ` (${d.address})` : ''} {d.batteryLevel !== undefined ? `— 🔋 ${d.batteryLevel}%` : ''}
                             </option>
                           ))}
                         </select>
                         <ChevronDown size={15} className="absolute right-3 top-2.5 text-gray-400 pointer-events-none" />
+                      </div>
+                    )}
+
+                    {/* Show selected device battery if available */}
+                    {formData.bluetoothAddress && (
+                      <div className="flex items-center gap-3 mt-2">
+                        {/* Auto-detected battery level from getPairedDevices */}
+                        {bluetoothDevices.find(d => d.address === formData.bluetoothAddress)?.batteryLevel !== undefined && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-[11px] font-bold">
+                            <Battery size={14} className="text-emerald-600" />
+                            <span>{t("Initial Battery:")} {bluetoothDevices.find(d => d.address === formData.bluetoothAddress).batteryLevel}%</span>
+                          </div>
+                        )}
+                        
+                        {/* Live polled battery level */}
+                        {liveBatteryLevel !== null && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-[11px] font-bold">
+                            <Battery size={14} className="text-blue-600" />
+                            <span>{t("Live Battery:")} {liveBatteryLevel}%</span>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={checkPrinterBattery}
+                          disabled={isCheckingBattery}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          {isCheckingBattery ? <RefreshCw size={12} className="animate-spin text-gray-500" /> : <Battery size={12} className="text-gray-500" />}
+                          {isCheckingBattery ? t("Checking...") : t("Check Battery")}
+                        </button>
                       </div>
                     )}
 

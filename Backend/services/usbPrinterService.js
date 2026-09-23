@@ -157,6 +157,17 @@ export async function getAvailableUSBAndCOMPorts() {
 }
 
 /**
+ * Attempt to get the battery status of a Bluetooth SPP device.
+ * For most generic printers, this is unsupported unless they broadcast it
+ * or support a proprietary ESC/POS status command.
+ */
+export async function getPrinterBatteryStatus(address) {
+  // Currently, desktop Node.js Bluetooth SPP cannot easily poll battery
+  // without disrupting print flows or knowing the specific vendor ESC command.
+  return { success: false, message: 'Battery polling over Desktop SPP is not supported by printer hardware.' };
+}
+
+/**
  * Send raw binary ESC/POS buffer directly to a USB or COM port
  */
 export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {

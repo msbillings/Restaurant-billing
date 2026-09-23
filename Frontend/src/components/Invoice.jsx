@@ -325,25 +325,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              const canvas = await html2canvas(receiptNode, {
-                scale: 1.5,
-                backgroundColor: '#ffffff',
-                useCORS: true,
-                logging: false,
-                imageTimeout: 0,
-                onclone: (clonedDoc) => {
-                  const receipt = clonedDoc.querySelector('.receipt-print');
-                  if (receipt) {
-                    receipt.style.boxShadow = 'none';
-                    receipt.style.filter = 'none';
-                    receipt.style.backgroundColor = '#ffffff';
-                  }
-                }
-              });
-              const trimmedCanvas = autoTrimCanvasBottom(canvas);
-              const base64Png = trimmedCanvas.toDataURL('image/png', 0.95);
+              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              if (!escposBase64) throw new Error("Failed to generate printer raster data");
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printImage(macAddress, base64Png, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
                 setPrintStatus('success');

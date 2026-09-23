@@ -3,7 +3,7 @@ import BillDefault from '../models/Bill.js';
 import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { sendRawToNetworkPrinter, sendRawToUSBPrinter, getAvailableUSBAndCOMPorts, scanNetworkThermalPrinters, generateESCPOSTestReceipt, printBillToPrinters, generateKOTESCPOSBuffer } from '../services/printerService.js';
-import { checkNetworkConnectivity, scanBluetoothDevices, sendRawToBluetoothPrinter } from '../services/usbPrinterService.js';
+import { checkNetworkConnectivity, scanBluetoothDevices, sendRawToBluetoothPrinter, getPrinterBatteryStatus } from '../services/usbPrinterService.js';
 import { emitSocketEvent } from '../utils/socket.js';
 
 // Get all printer configs
@@ -104,6 +104,17 @@ export const getBluetoothDevices = async (req, res) => {
   } catch (error) {
     console.error('Error scanning Bluetooth devices:', error);
     res.status(500).json({ success: false, message: 'Error scanning Bluetooth devices', error: error.message });
+  }
+};
+
+export const getBluetoothBattery = async (req, res) => {
+  try {
+    const { address } = req.params;
+    if (!address) return res.status(400).json({ success: false, message: 'Bluetooth address required' });
+    const result = await getPrinterBatteryStatus(address);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error checking battery', error: error.message });
   }
 };
 

@@ -165,6 +165,45 @@ public class BluetoothPrinterHelper {
     }
 
     /**
+     * Gets the battery level of a paired device (Requires Android 9+ and device support)
+     */
+    public String getBatteryLevel(String address) {
+        JSONObject response = new JSONObject();
+        try {
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (adapter == null || !adapter.isEnabled()) {
+                response.put("success", false);
+                response.put("error", "Bluetooth disabled");
+                return response.toString();
+            }
+
+            BluetoothDevice device = adapter.getRemoteDevice(address);
+            int level = -1;
+            try {
+                // getBatteryLevel is available on API 28+ (Android 9)
+                java.lang.reflect.Method method = device.getClass().getMethod("getBatteryLevel");
+                level = (Integer) method.invoke(device);
+            } catch (Exception e) {
+                Log.w(TAG, "getBatteryLevel not supported via reflection: " + e.getMessage());
+            }
+
+            response.put("success", true);
+            if (level != -1) {
+                response.put("batteryLevel", level);
+            } else {
+                // If standard Android API fails, printer doesn't support generic battery broadcast
+                response.put("error", "Not supported by hardware");
+            }
+        } catch (Exception e) {
+            try {
+                response.put("success", false);
+                response.put("error", e.getMessage());
+            } catch (Exception ignored) {}
+        }
+        return response.toString();
+    }
+
+    /**
      * Converts a base64 encoded PNG image of the receipt into ESC/POS raster and prints it
      */
     public String printImage(String address, String base64Png, int paperWidthDots) {

@@ -1,5 +1,5 @@
 import express from 'express';
-import { getPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig, testPrinter, printBill, printKOT, getAvailablePorts, getAvailableNetworkPrinters, getNetworkStatus, getBluetoothDevices } from '../controllers/printerConfigController.js';
+import { getPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig, testPrinter, printBill, printKOT, getAvailablePorts, getAvailableNetworkPrinters, getNetworkStatus, getBluetoothDevices, getBluetoothBattery } from '../controllers/printerConfigController.js';
 
 import { authenticateToken as protect, requireAdmin as admin } from '../middleware/auth.js';
 
@@ -23,6 +23,9 @@ router.route('/network-status')
 
 router.route('/bluetooth-devices')
   .get(protect, getBluetoothDevices);
+
+router.route('/bluetooth-battery/:address')
+  .get(protect, getBluetoothBattery);
 
 router.route('/print-bill')
   .post(protect, printBill);
