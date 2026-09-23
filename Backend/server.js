@@ -27,6 +27,7 @@ import fs from 'fs';
 import compression from 'compression';
 import { execSync } from 'child_process';
 import { initFirebase } from './utils/firebase.js';
+import { prewarmBluetoothCache } from './services/usbPrinterService.js';
 
 // __dirname is not available in ES modules — polyfill it
 const __filename = fileURLToPath(import.meta.url);
@@ -602,6 +603,9 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
     // Auto-detect tenant→cluster mappings from master registry
     // This runs non-blocking — server starts immediately, cache warms in background
     buildTenantClusterMap().catch(e => console.warn('[tenantManager] buildTenantClusterMap:', e.message));
+
+    // Pre-warm Bluetooth COM port cache so the first print is instant (runs in background)
+    prewarmBluetoothCache().catch(e => console.warn('[BluetoothPrinter] prewarm error:', e.message));
 
     // For Desktop EXE: register the known tenant DB so the first request resolves instantly
     // The correct cluster will be determined by buildTenantClusterMap() or resolveClusterConnection()

@@ -10,6 +10,58 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * In-memory cache: Bluetooth MAC/name → Windows COM port string (e.g. 'COM5')
+ * Avoids running the expensive Get-PnpDevice scan on every print job.
+ * Cache is cleared per entry if the port becomes unreachable.
+ */
+const btComPortCache = new Map();
+
+/**
+ * Pre-warm the Bluetooth COM port cache at server startup.
+ * Runs a single Get-PnpDevice scan and stores ALL paired BT printer COM ports.
+ * Call this once on startup (non-blocking) so the first print is instant.
+ */
+export async function prewarmBluetoothCache() {
+  if (process.platform !== 'win32') return;
+  try {
+    const scanScript = `
+      $ErrorActionPreference = 'SilentlyContinue'
+      $allPorts = Get-PnpDevice -Class 'Ports' -Status 'OK' -ErrorAction SilentlyContinue |
+        Select-Object FriendlyName, InstanceId
+      $result = @()
+      foreach ($p in $allPorts) {
+        if ($p.InstanceId -match 'BTHENUM.*DEV_([0-9A-Fa-f]{12})' -or $p.InstanceId -match 'DEV_([0-9A-Fa-f]{12})') {
+          $mac = $matches[1].ToUpper()
+          if ($p.FriendlyName -match 'COM(\\d+)') {
+            $result += "$mac=COM$($matches[1])"
+          }
+        }
+      }
+      if ($result.Count -gt 0) { $result -join '|' } else { '' }
+    `;
+    const encoded = Buffer.from(scanScript, 'utf16le').toString('base64');
+    const { stdout } = await execPromise(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
+      { timeout: 15000 }
+    );
+    const raw = (stdout || '').trim();
+    if (raw) {
+      raw.split('|').forEach(entry => {
+        const [mac, port] = entry.split('=');
+        if (mac && port) {
+          btComPortCache.set(mac.trim().toUpperCase(), port.trim());
+          console.log(`[BluetoothPrinter] ⚡ Pre-warmed cache: ${mac.trim()} → ${port.trim()}`);
+        }
+      });
+    } else {
+      console.log('[BluetoothPrinter] Pre-warm: no paired Bluetooth COM ports found.');
+    }
+  } catch (e) {
+    console.warn('[BluetoothPrinter] Pre-warm scan failed (non-critical):', e.message);
+  }
+}
+
+/**
  * Scan and return all available USB and Virtual COM printer ports on the system
  */
 export async function getAvailableUSBAndCOMPorts() {
@@ -435,6 +487,7 @@ export async function scanBluetoothDevices() {
 
 /**
  * Send raw binary ESC/POS buffer directly to a paired Bluetooth thermal printer on Windows or Linux
+ * Uses an in-memory COM port cache to skip the expensive PnP scan after the first print.
  */
 export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
   if (!addressOrName || typeof addressOrName !== 'string') {
@@ -446,19 +499,69 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
 
   if (process.platform === 'win32') {
     const cleanAddress = addressOrName.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    const cacheKey = cleanAddress || addressOrName.trim().toLowerCase();
+
     const tempDir = path.join(os.tmpdir(), 'msbillings_print');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
     }
     const tempBin = path.join(tempDir, `bt_print_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.bin`);
     fs.writeFileSync(tempBin, buffer);
+    const tempBinEscaped = tempBin.replace(/\\/g, '\\\\');
 
-    const psScript = `
+    // -----------------------------------------------------------------
+    // FAST PATH: COM port already cached — skip the PnP scan entirely
+    // -----------------------------------------------------------------
+    const cachedPort = btComPortCache.get(cacheKey);
+    if (cachedPort) {
+      const fastScript = `
+        $ErrorActionPreference = 'Stop'
+        $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
+        $sp = New-Object System.IO.Ports.SerialPort '${cachedPort}', 115200, 'None', 8, 'One'
+        $sp.WriteTimeout = 6000
+        $sp.ReadTimeout = 500
+        try {
+          $sp.Open()
+          $sp.Write($rawBytes, 0, $rawBytes.Length)
+          Start-Sleep -Milliseconds 100
+          $sp.Close()
+          Write-Output "SUCCESS:${cachedPort}"
+        } catch {
+          if ($sp.IsOpen) { $sp.Close() }
+          Write-Error "PORT_FAILED: $($_.Exception.Message)"
+          exit 1
+        }
+      `;
+      try {
+        const encoded = Buffer.from(fastScript, 'utf16le').toString('base64');
+        const { stdout } = await execPromise(
+          `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
+          { timeout: 12000 }
+        );
+        try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+        const out = (stdout || '').trim();
+        if (out.startsWith('SUCCESS:')) {
+          return { success: true, message: `Printed to Bluetooth ${cachedPort} (${addressOrName})` };
+        }
+      } catch (fastErr) {
+        // Cached port failed (printer was repaired/port changed) — clear cache and fall through to full scan
+        console.warn(`[BluetoothPrinter] Cached port ${cachedPort} failed: ${fastErr.message}. Re-scanning…`);
+        btComPortCache.delete(cacheKey);
+        try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+        // Re-write tempBin for the full scan path below
+        fs.writeFileSync(tempBin, buffer);
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // FULL SCAN PATH: Find the COM port via PnP, cache it, then print
+    // -----------------------------------------------------------------
+    const fullScript = `
       $ErrorActionPreference = 'Stop'
       $cleanMac = '${cleanAddress}'
       $targetName = '${addressOrName.replace(/'/g, "''")}'
 
-      # 1. Find assigned COM port for this Bluetooth device
+      # Find assigned COM port for this Bluetooth device
       $allPorts = Get-PnpDevice -Class 'Ports' -Status 'OK' -ErrorAction SilentlyContinue |
         Select-Object FriendlyName, InstanceId
 
@@ -484,21 +587,20 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       }
 
       if (-not $matchedPort) {
-        Write-Error "No active COM port found for Bluetooth printer $targetName ($cleanMac). Ensure printer is ON and paired in Windows Settings."
+        Write-Error "PRINTER_OFFLINE: Printer '$targetName' is not reachable. Please make sure the printer is turned ON and paired in Windows Bluetooth Settings, then try again."
         exit 1
       }
 
-      # 2. Open serial port and transmit raw bytes
-      $rawBytes = [System.IO.File]::ReadAllBytes('${tempBin.replace(/\\/g, '\\\\')}')
-      $sp = New-Object System.IO.Ports.SerialPort $matchedPort, 9600, 'None', 8, 'One'
-      $sp.WriteTimeout = 15000
-      $sp.ReadTimeout = 3000
+      $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
+      $sp = New-Object System.IO.Ports.SerialPort $matchedPort, 115200, 'None', 8, 'One'
+      $sp.WriteTimeout = 6000
+      $sp.ReadTimeout = 500
       try {
         $sp.Open()
         $sp.Write($rawBytes, 0, $rawBytes.Length)
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 100
         $sp.Close()
-        Write-Output "SUCCESS: Printed raw data over Bluetooth $matchedPort ($targetName)"
+        Write-Output "SUCCESS:$matchedPort"
       } catch {
         if ($sp.IsOpen) { $sp.Close() }
         Write-Error "Failed to send data to Bluetooth port $matchedPort : $($_.Exception.Message)"
@@ -507,17 +609,47 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
     `;
 
     try {
-      const encoded = Buffer.from(psScript, 'utf16le').toString('base64');
-      const { stdout, stderr } = await execPromise(
+      const encoded = Buffer.from(fullScript, 'utf16le').toString('base64');
+      const { stdout } = await execPromise(
         `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
         { timeout: 25000 }
       );
       try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
-      return { success: true, message: (stdout || '').trim() || `Printed to Bluetooth port for ${addressOrName}` };
+
+      const out = (stdout || '').trim();
+      // Cache the discovered COM port for all future prints
+      const portMatch = out.match(/SUCCESS:(.+)/i);
+      if (portMatch && portMatch[1]) {
+        const discoveredPort = portMatch[1].trim();
+        btComPortCache.set(cacheKey, discoveredPort);
+        console.log(`[BluetoothPrinter] COM port cached: ${cacheKey} → ${discoveredPort}`);
+      }
+      return { success: true, message: out || `Printed to Bluetooth port for ${addressOrName}` };
     } catch (err) {
       try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
-      const errMsg = err.stderr || err.stdout || err.message;
-      throw new Error(errMsg.replace(/powershell.*?:/i, '').trim());
+      const rawMsg = (err.stderr || err.stdout || err.message || '');
+
+      const offlineMatch = rawMsg.match(/PRINTER_OFFLINE:\s*(.+)/i);
+      if (offlineMatch) throw new Error(offlineMatch[1].trim());
+
+      const writeErrMatch = rawMsg.match(/Write-Error[^:]*:\s*(.+)/i);
+      if (writeErrMatch) throw new Error(writeErrMatch[1].trim());
+
+      const cleaned = rawMsg
+        .split('\n')
+        .map(l => l.trim())
+        .filter(l =>
+          l.length > 0 &&
+          !/^At line:/i.test(l) &&
+          !/^\+/i.test(l) &&
+          !/FullyQualifiedErrorId/i.test(l) &&
+          !/CategoryInfo/i.test(l) &&
+          !/powershell/i.test(l)
+        )
+        .join(' ')
+        .trim();
+
+      throw new Error(cleaned || `Bluetooth printer '${addressOrName}' is not connected or not responding.`);
     }
   }
 

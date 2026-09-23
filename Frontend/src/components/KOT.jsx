@@ -15,7 +15,7 @@ const KOT = ({ order, onClose }) => {
     try {
       const saved = localStorage.getItem('restaurantSettings');
       if (saved) return { restaurantName: 'msbillings', ...JSON.parse(saved) };
-    } catch (_) {}
+    } catch (_) { }
     return { restaurantName: 'msbillings' };
   });
 
@@ -24,7 +24,7 @@ const KOT = ({ order, onClose }) => {
       try {
         const saved = localStorage.getItem('restaurantSettings');
         if (saved) setSettings(prev => ({ ...prev, ...JSON.parse(saved) }));
-      } catch (_) {}
+      } catch (_) { }
     };
     updateLocalSettings();
     axios.get(`${getApiUrl()}/config/info`).then(res => {
@@ -34,9 +34,9 @@ const KOT = ({ order, onClose }) => {
         try {
           const local = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           localStorage.setItem('restaurantSettings', JSON.stringify({ ...local, ...incoming }));
-        } catch (_) {}
+        } catch (_) { }
       }
-    }).catch(() => {});
+    }).catch(() => { });
     window.addEventListener('settingsUpdated', updateLocalSettings);
     return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
   }, []);
@@ -79,7 +79,7 @@ const KOT = ({ order, onClose }) => {
       headers: { Authorization: `Bearer ${token}` }
     }).then(res => {
       setPrinterConfigs(res.data || []);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   // Pre-resolve the Bluetooth MAC address once on mount so print is instant
@@ -103,7 +103,7 @@ const KOT = ({ order, onClose }) => {
           const mac = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
           if (mac) { resolvedMacRef.current = mac; return; }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       // 2. kotPrinter setting
       const s = settings;
@@ -119,7 +119,7 @@ const KOT = ({ order, onClose }) => {
         const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
         const any = cached.find(p => p.isActive !== false && tryMac(p.bluetoothAddress || p.deviceName || ''));
         if (any) { resolvedMacRef.current = tryMac(any.bluetoothAddress || any.deviceName || ''); }
-      } catch (_) {}
+      } catch (_) { }
     };
 
     resolveMac();
@@ -137,11 +137,11 @@ const KOT = ({ order, onClose }) => {
     const activePrinters = (printerConfigs && printerConfigs.length > 0)
       ? printerConfigs.filter(p => p.isActive && (p.type === 'kot' || p.type === 'general' || p.type === 'both'))
       : (() => {
-          try {
-            const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
-            return cached.filter(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
-          } catch (_) { return []; }
-        })();
+        try {
+          const cached = JSON.parse(localStorage.getItem('msbillings_printer_configs') || '[]');
+          return cached.filter(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both'));
+        } catch (_) { return []; }
+      })();
 
     const map = new Map();
 
@@ -222,7 +222,7 @@ const KOT = ({ order, onClose }) => {
     if (!order?.items) return [];
     if (selectedDept === 'ALL') return order.items;
     if (activeStationGroup) return activeStationGroup.items;
-    return order.items.filter(item => 
+    return order.items.filter(item =>
       (item.department || '').trim().toLowerCase() === selectedDept.trim().toLowerCase()
     );
   }, [order?.items, selectedDept, activeStationGroup]);
@@ -284,7 +284,7 @@ const KOT = ({ order, onClose }) => {
               tryMac(p.bluetoothAddress || p.deviceName || '')
             );
             if (kotStation) macAddress = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
-          } catch (_) {}
+          } catch (_) { }
         }
         if (!macAddress) macAddress = tryMac(settings.kotPrinter || '') || tryMac(settings.billingPrinter || '');
 
@@ -394,7 +394,7 @@ const KOT = ({ order, onClose }) => {
               } catch (renderErr) {
                 console.warn('[KOT] Raster render error, falling back to text ESC/POS:', renderErr);
               }
-              
+
               const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
@@ -469,7 +469,7 @@ const KOT = ({ order, onClose }) => {
             const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             const raw = s.kotPrinter || s.billingPrinter || '';
             match = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
-          } catch (_) {}
+          } catch (_) { }
         }
         const macAddress = match ? match[0] : null;
 
@@ -512,7 +512,7 @@ const KOT = ({ order, onClose }) => {
               const dots = (grp.printer.paperWidth === '58mm' || settings.printFormat === '58mm') ? 384 : 576;
               rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
             }
-          } catch (e) {}
+          } catch (e) { }
 
           const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
           const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
@@ -586,11 +586,10 @@ const KOT = ({ order, onClose }) => {
             <button
               type="button"
               onClick={() => setSelectedDept('ALL')}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                selectedDept === 'ALL'
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${selectedDept === 'ALL'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
-              }`}>
+                }`}>
               <Layers size={13} />
               <span>{t("All Kitchens")} ({order.items?.length || 0})</span>
             </button>
@@ -601,17 +600,15 @@ const KOT = ({ order, onClose }) => {
                   key={grp.key}
                   type="button"
                   onClick={() => setSelectedDept(grp.key)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    isSelected
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${isSelected
                       ? 'bg-red-600 text-white shadow-sm'
                       : 'text-gray-600 hover:text-gray-900'
-                  }`}>
+                    }`}>
                   <ChefHat size={13} />
                   <span>{grp.name}</span>
                   {grp.location && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+                      }`}>
                       {grp.location}
                     </span>
                   )}
@@ -638,8 +635,7 @@ const KOT = ({ order, onClose }) => {
           <button
             onClick={handlePrintCurrent}
             disabled={isPrinting}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-white rounded-xl transition-colors duration-100 shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer min-w-[130px] justify-center ${
-              printStatus === 'success'
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-white rounded-xl transition-colors duration-100 shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer min-w-[130px] justify-center ${printStatus === 'success'
                 ? 'bg-emerald-600 hover:bg-emerald-700'
                 : printStatus === 'failed'
                   ? 'bg-red-600 hover:bg-red-700'
@@ -648,7 +644,7 @@ const KOT = ({ order, onClose }) => {
                     : printStatus === 'printing'
                       ? 'bg-blue-600 opacity-90 cursor-not-allowed'
                       : 'bg-gray-900 hover:bg-black'
-            }`}>
+              }`}>
             {printStatus === 'printing' && (
               <svg className="animate-spin shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
             )}
@@ -659,11 +655,11 @@ const KOT = ({ order, onClose }) => {
             <span>
               {printStatus === 'printing' ? t('Printing...')
                 : printStatus === 'success' ? t('Printed! ✓')
-                : printStatus === 'failed' ? t('Print Failed')
-                : printStatus === 'not_connected' ? t('Not Connected')
-                : stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
-                  ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}`
-                  : t('Print KOT')}
+                  : printStatus === 'failed' ? t('Print Failed')
+                    : printStatus === 'not_connected' ? t('Not Connected')
+                      : stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
+                        ? `Print KOT: ${activeStationGroup.name}${activeStationGroup.location ? ` (${activeStationGroup.location})` : ''}`
+                        : t('Print KOT')}
             </span>
           </button>
 
@@ -677,12 +673,11 @@ const KOT = ({ order, onClose }) => {
 
         {/* Toast Notification */}
         {toast && (
-          <div className={`w-full mt-1 px-3 py-2 rounded-xl text-xs font-bold text-center transition-all ${
-            toast.type === 'success' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-            : toast.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200'
-            : toast.type === 'warning' ? 'bg-amber-100 text-amber-800 border border-amber-200'
-            : 'bg-blue-100 text-blue-800 border border-blue-200'
-          }`}>
+          <div className={`w-full mt-1 px-3 py-2 rounded-xl text-xs font-bold text-center transition-all ${toast.type === 'success' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+              : toast.type === 'error' ? 'bg-red-100 text-red-800 border border-red-200'
+                : toast.type === 'warning' ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+            }`}>
             {toast.message}
           </div>
         )}
@@ -703,7 +698,7 @@ const KOT = ({ order, onClose }) => {
           width: settings.printFormat === 'A4' ? '100%' : undefined,
           maxWidth: settings.printFormat === 'A4' ? '360px' : undefined
         }}>
-        
+
         {settings.printFormat === '58mm' ? (
           /* 58mm Compact Clean KOT Slip Layout (Zomato Style) */
           <div style={{ padding: '4px 4px 2px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
@@ -730,7 +725,7 @@ const KOT = ({ order, onClose }) => {
               {(() => {
                 const stationToDisplay = activeStationGroup || (stationGroups.length === 1 && stationGroups[0].name !== 'Kitchen' ? stationGroups[0] : null);
                 if (!stationToDisplay && selectedDept === 'ALL') return null;
-                const title = stationToDisplay 
+                const title = stationToDisplay
                   ? `${stationToDisplay.name.toUpperCase()}${stationToDisplay.location ? ` - ${stationToDisplay.location.toUpperCase()}` : ''}`
                   : selectedDept.toUpperCase();
                 return (
@@ -875,146 +870,146 @@ const KOT = ({ order, onClose }) => {
             lineHeight: fontMetrics.lineHeight,
             color: '#000000'
           }}>
-            
+
             {/* Header - Centered */}
-          <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
-            <div>
-              {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-            </div>
-            <div className="font-bold" style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold' }}>
-              {(() => {
-                const raw = (order.kotNumber || order.billNumber || '').toString().trim();
-                if (!raw) return 'KOT PREVIEW';
-                if (raw.toUpperCase().includes('UPDATE')) return raw;
-                if (raw.toUpperCase().startsWith('CANCEL')) {
-                  const num = raw.replace(/^[A-Z]+-?/i, '');
-                  return num ? `CANCEL KOT No: ${num}` : raw;
-                }
-                const num = raw.replace(/^KOT-?/i, '').trim();
-                return num ? `KOT No: ${num}` : raw;
-              })()}
-            </div>
-
-            {/* Kitchen Station Header Badge on Slip */}
-            {(() => {
-              const stationToDisplay = activeStationGroup || (stationGroups.length === 1 && stationGroups[0].name !== 'Kitchen' ? stationGroups[0] : null);
-              if (!stationToDisplay && selectedDept === 'ALL') return null;
-              const title = stationToDisplay 
-                ? `${stationToDisplay.name.toUpperCase()}${stationToDisplay.location ? ` - ${stationToDisplay.location.toUpperCase()}` : ''}`
-                : selectedDept.toUpperCase();
-              return (
-                <div style={{
-                  fontSize: fontMetrics.detailSize,
-                  fontWeight: 'bold',
-                  padding: '3px 10px',
-                  border: '1.5px solid #000',
-                  display: 'inline-block',
-                  marginTop: '3px',
-                  marginBottom: '3px',
-                  letterSpacing: '0.5px'
-                }}>
-                  [ {title} ]
-                </div>
-              );
-            })()}
-
-            {/* Single Row: Queue Number and Dine In / Delivery / Takeaway */}
-            {(() => {
-              const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
-              const partner = (order.orderSource || '').trim();
-              const typeText = bType === 'Delivery' 
-                ? `DELIVERY${partner ? `: ${partner.toUpperCase()}` : ''}`
-                : (bType === 'Takeaway' ? 'TAKEAWAY' : 'Dine In');
-              const typeColor = bType === 'Delivery' ? '#dc2626' : (bType === 'Takeaway' ? '#2563eb' : '#111827');
-              const qNo = order.queueNumber || order.tokenNo || '1';
-
-              return (
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: fontMetrics.subHeadingSize,
-                  fontWeight: 'bold',
-                  marginTop: '3px',
-                  marginBottom: '3px'
-                }}>
-                  <span>{t("Queue No:")} #{qNo}</span>
-                  <span style={{ color: typeColor }}>{typeText}</span>
-                </div>
-              );
-            })()}
-
-            {/* Table Number Line (Centered) */}
-            {(() => {
-              const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
-              let tNo = (order.tableNo || '').trim();
-              if (bType === 'Delivery') {
-                return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo || 'DEL'}</div>;
-              } else if (bType === 'Takeaway') {
-                return order.tableNo ? <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo}</div> : null;
-              } else {
-                const cleanT = tNo.replace(/^Table\s*/i, '');
-                return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
-              }
-            })()}
-
-            {order.customerName && (
-              <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'bold', marginTop: '2px' }}>
-                Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
+            <div className="text-center mb-1" style={{ textAlign: 'center', marginBottom: '4px' }}>
+              <div>
+                {new Date(order.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '/')} {new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
               </div>
-            )}
-          </div>
+              <div className="font-bold" style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold' }}>
+                {(() => {
+                  const raw = (order.kotNumber || order.billNumber || '').toString().trim();
+                  if (!raw) return 'KOT PREVIEW';
+                  if (raw.toUpperCase().includes('UPDATE')) return raw;
+                  if (raw.toUpperCase().startsWith('CANCEL')) {
+                    const num = raw.replace(/^[A-Z]+-?/i, '');
+                    return num ? `CANCEL KOT No: ${num}` : raw;
+                  }
+                  const num = raw.replace(/^KOT-?/i, '').trim();
+                  return num ? `KOT No: ${num}` : raw;
+                })()}
+              </div>
 
-          <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
-
-          {/* Info - Left aligned */}
-          <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left', fontSize: fontMetrics.detailSize, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>{t("Biller:")} {order.cashierName || order.billerName || 'admin'}</div>
-            {order.captainName && <div>{t("Assign to:")} {order.captainName}</div>}
-          </div>
-          
-          <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
-
-          {/* Items Header - 3 Column Layout */}
-          <div className="flex w-full mb-1 font-bold border-b border-black pb-1 text-xs sm:text-sm" style={{ display: 'flex', width: '100%', marginBottom: '4px', borderBottom: '1px solid black', paddingBottom: '2px', fontWeight: 'bold' }}>
-            <div className="text-left pr-1" style={{ flex: '2 1 0%', textAlign: 'left', paddingRight: '4px' }}>{t("Item")}</div>
-            <div className="text-center px-1" style={{ flex: '1.2 1 0%', textAlign: 'center', paddingLeft: '2px', paddingRight: '2px' }}>{t("Special Note")}</div>
-            <div className="text-right shrink-0" style={{ width: '38px', textAlign: 'right', flexShrink: 0 }}>{t("Qty.")}</div>
-          </div>
-
-          {/* Items List */}
-          <div className="mb-1" style={{ marginBottom: '4px' }}>
-            {displayedItems && displayedItems.length > 0 ? (
-              displayedItems.map((item, idx) => {
-                const isCancelled = item.status === 'Cancelled' || item.isCancelled;
-                const isReduced = !isCancelled && (item.reducedQuantity > 0);
-                const cancelCount = item.cancelledQuantity || item.quantity || 1;
+              {/* Kitchen Station Header Badge on Slip */}
+              {(() => {
+                const stationToDisplay = activeStationGroup || (stationGroups.length === 1 && stationGroups[0].name !== 'Kitchen' ? stationGroups[0] : null);
+                if (!stationToDisplay && selectedDept === 'ALL') return null;
+                const title = stationToDisplay
+                  ? `${stationToDisplay.name.toUpperCase()}${stationToDisplay.location ? ` - ${stationToDisplay.location.toUpperCase()}` : ''}`
+                  : selectedDept.toUpperCase();
                 return (
-                  <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
-                    <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                      <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
-                        {item.name || 'Unknown Item'}
-                        {isCancelled && <span className="ml-1 font-black text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
-                        {isReduced && <span className="ml-1 font-black text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
-                      </div>
-                      <div className="text-center px-1 break-words" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: fontMetrics.detailSize, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
-                        {item.specialNote ? item.specialNote : '-'}
-                      </div>
-                      <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
-                        {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
-                      </div>
-                    </div>
+                  <div style={{
+                    fontSize: fontMetrics.detailSize,
+                    fontWeight: 'bold',
+                    padding: '3px 10px',
+                    border: '1.5px solid #000',
+                    display: 'inline-block',
+                    marginTop: '3px',
+                    marginBottom: '3px',
+                    letterSpacing: '0.5px'
+                  }}>
+                    [ {title} ]
                   </div>
                 );
-              })
-            ) : (
-              <div className="text-center py-2 text-gray-500" style={{ textAlign: 'center', padding: '8px 0' }}>
-                {t("No items for this kitchen")}
-              </div>
-            )}
+              })()}
+
+              {/* Single Row: Queue Number and Dine In / Delivery / Takeaway */}
+              {(() => {
+                const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+                const partner = (order.orderSource || '').trim();
+                const typeText = bType === 'Delivery'
+                  ? `DELIVERY${partner ? `: ${partner.toUpperCase()}` : ''}`
+                  : (bType === 'Takeaway' ? 'TAKEAWAY' : 'Dine In');
+                const typeColor = bType === 'Delivery' ? '#dc2626' : (bType === 'Takeaway' ? '#2563eb' : '#111827');
+                const qNo = order.queueNumber || order.tokenNo || '1';
+
+                return (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: fontMetrics.subHeadingSize,
+                    fontWeight: 'bold',
+                    marginTop: '3px',
+                    marginBottom: '3px'
+                  }}>
+                    <span>{t("Queue No:")} #{qNo}</span>
+                    <span style={{ color: typeColor }}>{typeText}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Table Number Line (Centered) */}
+              {(() => {
+                const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
+                let tNo = (order.tableNo || '').trim();
+                if (bType === 'Delivery') {
+                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo || 'DEL'}</div>;
+                } else if (bType === 'Takeaway') {
+                  return order.tableNo ? <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo}</div> : null;
+                } else {
+                  const cleanT = tNo.replace(/^Table\s*/i, '');
+                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
+                }
+              })()}
+
+              {order.customerName && (
+                <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'bold', marginTop: '2px' }}>
+                  Customer: {order.customerName} {order.customerPhone ? `(${order.customerPhone})` : ''}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
+
+            {/* Info - Left aligned */}
+            <div className="mb-1 text-left" style={{ marginBottom: '4px', textAlign: 'left', fontSize: fontMetrics.detailSize, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>{t("Biller:")} {order.cashierName || order.billerName || 'admin'}</div>
+              {order.captainName && <div>{t("Assign to:")} {order.captainName}</div>}
+            </div>
+
+            <div className="border-t-[1.5px] border-dashed border-black my-1" style={{ borderTop: '1.5px dashed black', margin: '4px 0' }}></div>
+
+            {/* Items Header - 3 Column Layout */}
+            <div className="flex w-full mb-1 font-bold border-b border-black pb-1 text-xs sm:text-sm" style={{ display: 'flex', width: '100%', marginBottom: '4px', borderBottom: '1px solid black', paddingBottom: '2px', fontWeight: 'bold' }}>
+              <div className="text-left pr-1" style={{ flex: '2 1 0%', textAlign: 'left', paddingRight: '4px' }}>{t("Item")}</div>
+              <div className="text-center px-1" style={{ flex: '1.2 1 0%', textAlign: 'center', paddingLeft: '2px', paddingRight: '2px' }}>{t("Special Note")}</div>
+              <div className="text-right shrink-0" style={{ width: '38px', textAlign: 'right', flexShrink: 0 }}>{t("Qty.")}</div>
+            </div>
+
+            {/* Items List */}
+            <div className="mb-1" style={{ marginBottom: '4px' }}>
+              {displayedItems && displayedItems.length > 0 ? (
+                displayedItems.map((item, idx) => {
+                  const isCancelled = item.status === 'Cancelled' || item.isCancelled;
+                  const isReduced = !isCancelled && (item.reducedQuantity > 0);
+                  const cancelCount = item.cancelledQuantity || item.quantity || 1;
+                  return (
+                    <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
+                      <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
+                          {item.name || 'Unknown Item'}
+                          {isCancelled && <span className="ml-1 font-black text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
+                          {isReduced && <span className="ml-1 font-black text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
+                        </div>
+                        <div className="text-center px-1 break-words" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: fontMetrics.detailSize, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
+                          {item.specialNote ? item.specialNote : '-'}
+                        </div>
+                        <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
+                          {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-2 text-gray-500" style={{ textAlign: 'center', padding: '8px 0' }}>
+                  {t("No items for this kitchen")}
+                </div>
+              )}
+            </div>
+
           </div>
-          
-        </div>
         )}
       </div>
     </div>

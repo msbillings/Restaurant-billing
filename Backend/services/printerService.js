@@ -191,6 +191,9 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     content += CMD.LINE_SPACING_DEFAULT;
   }
 
+  // Apply global BOLD_ON for darker print in a single thermal pass (no double-strike speed penalty)
+  content += CMD.BOLD_ON;
+
   // 1. Date & Time Centered
   content += CMD.ALIGN_CENTER;
   const d = new Date(bill.createdAt || Date.now());
@@ -516,10 +519,23 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
         );
       } catch (err) {
         console.error(`[PrinterService] Error on '${printer.name}' (${targetDestination}): ${err.message}`);
+
+        // Build a clean, user-friendly error message
+        let friendlyMsg = err.message || 'Unknown error';
+        if (/PRINTER_OFFLINE|no active COM|not reachable|not connected|not responding/i.test(friendlyMsg)) {
+          friendlyMsg = `Printer "${printer.name}" is OFF or not connected. Please turn it ON and try again.`;
+        } else if (/timeout|timed out/i.test(friendlyMsg)) {
+          friendlyMsg = `Printer "${printer.name}" is not responding. Check the connection and try again.`;
+        } else if (/TCP connection failed|ECONNREFUSED/i.test(friendlyMsg)) {
+          friendlyMsg = `Cannot reach printer "${printer.name}" on the network. Check the IP address and connection.`;
+        } else if (friendlyMsg.length > 120) {
+          friendlyMsg = friendlyMsg.substring(0, 120).trim() + '…';
+        }
+
         emitNotification(
           req,
-          '⚠️ Printer Offline',
-          `Could not print KOT #${kotNumber} to ${printer.name} (${targetDestination}): ${err.message}`,
+          '🖨️ Printer Not Connected',
+          friendlyMsg,
           'warning',
           ['Admin', 'Captain', 'Manager']
         );
@@ -604,6 +620,9 @@ export const generateESCPOSBillReceipt = (bill, printerConfig = {}, restaurantDe
   } else {
     content += CMD.LINE_SPACING_DEFAULT;
   }
+
+  // Apply global BOLD_ON for darker print in a single thermal pass (no double-strike speed penalty)
+  content += CMD.BOLD_ON;
 
   // 1. Header - Restaurant Branding
   content += CMD.ALIGN_CENTER;
@@ -1063,17 +1082,31 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
         );
       } catch (err) {
         console.error(`[PrinterService] Bill print error on '${printer.name}' (${targetDestination}): ${err.message}`);
+
+        // Build a clean, user-friendly error message (hide raw PowerShell/system noise)
+        let friendlyMsg = err.message || 'Unknown error';
+        if (/PRINTER_OFFLINE|no active COM|not reachable|not connected|not responding/i.test(friendlyMsg)) {
+          friendlyMsg = `Printer "${printer.name}" is OFF or not connected. Please turn it ON and try again.`;
+        } else if (/timeout|timed out/i.test(friendlyMsg)) {
+          friendlyMsg = `Printer "${printer.name}" is not responding. Check the connection and try again.`;
+        } else if (/TCP connection failed|ECONNREFUSED/i.test(friendlyMsg)) {
+          friendlyMsg = `Cannot reach printer "${printer.name}" on the network. Check the IP address and connection.`;
+        } else if (friendlyMsg.length > 120) {
+          // Truncate very long raw technical messages
+          friendlyMsg = friendlyMsg.substring(0, 120).trim() + '…';
+        }
+
         results.push({
           printer: printer.name,
           ip: printer.ipAddress || null,
           usbPort: printer.usbPort || null,
           success: false,
-          message: `Failed to print to ${printer.name} (${targetDestination}): ${err.message}`
+          message: `Failed to print to ${printer.name}: ${friendlyMsg}`
         });
         emitNotification(
           req,
-          '⚠️ Printer Error',
-          `Could not print Bill to ${printer.name} (${targetDestination}): ${err.message}`,
+          '🖨️ Printer Not Connected',
+          friendlyMsg,
           'warning',
           ['Admin', 'Cashier', 'Manager']
         );
