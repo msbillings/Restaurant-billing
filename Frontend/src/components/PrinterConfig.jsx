@@ -941,9 +941,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       value={formData.connectionType}
                       onChange={handleInputChange}
                       className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium bg-white">
-                      <option value="network">{t("LAN / WiFi (Network IP)")}</option>
-                      <option value="usb">{t("USB Thermal Printer")}</option>
-                      <option value="bluetooth">{t("Bluetooth")}</option>
+                      <option value="network">{t("LAN / WiFi (Network IP) — Mobile & Desktop")}</option>
+                      <option value="bluetooth">{t("Bluetooth — Mobile & Desktop")}</option>
+                      <option value="usb">{t("USB Thermal Printer — Desktop Only")}</option>
                     </select>
                   </div>
                   <div>
@@ -1069,7 +1069,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                     <div className="p-2.5 bg-blue-100/60 rounded-lg border border-blue-200/80 text-[11px] text-blue-900 flex items-start gap-2">
                       <CheckCircle size={14} className="text-blue-600 shrink-0 mt-0.5" />
                       <span>
-                        {t("LAN / WiFi: Scans your local network for printers on port 9100. If only one is found, it is auto-selected. For multiple printers, choose from the dropdown or enter the IP manually.")}
+                        {t("LAN / WiFi (Network IP): Fully supported on both Mobile and Desktop. Print jobs fired by Captains or Cashiers from their phones on your restaurant Wi-Fi will automatically print to this station.")}
                       </span>
                     </div>
                   </div>
@@ -1131,6 +1131,13 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                         onChange={handleInputChange}
                         className="w-full px-3 py-1.5 text-xs font-mono border border-emerald-200 rounded-lg bg-white"
                       />
+                    </div>
+
+                    <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+                      <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                      <span>
+                        {t("Desktop Only: Physical USB printers are for the main computer. Mobile phones (Captain / Cashier) cannot use USB cables and will print via LAN / WiFi or Bluetooth.")}
+                      </span>
                     </div>
 
                     <div className="p-2.5 bg-emerald-100/60 rounded-lg border border-emerald-200/80 text-[11px] text-emerald-900 flex items-start gap-2">

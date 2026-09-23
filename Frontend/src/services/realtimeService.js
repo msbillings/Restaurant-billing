@@ -101,7 +101,9 @@ class RealtimeService {
       'settingsUpdated',
       'securitySettingsUpdated',
       'spacesUpdated',
-      'menuUpdated'
+      'menuUpdated',
+      'relayPrintKOT',
+      'relayPrintBill'
     ];
 
     events.forEach(eventName => {
@@ -124,6 +126,11 @@ class RealtimeService {
         return;
       }
 
+      // Handle print relay on local desktop station
+      if (eventName === 'relayPrintKOT' || eventName === 'relayPrintBill') {
+        this.handleLocalStationPrintRelay(eventName, data);
+      }
+
       // Cache synchronization in background
       this.handleAutoCacheSync(eventName, data);
 
@@ -133,6 +140,59 @@ class RealtimeService {
       // Global DOM window event for loose coupling
       window.dispatchEvent(new CustomEvent(`realtime:${eventName}`, { detail: data }));
     });
+  }
+
+  /**
+   * Dispatches print jobs relayed from remote mobile devices to the local station's thermal printer
+   */
+  async handleLocalStationPrintRelay(eventName, job) {
+    if (!job || !job.printer) return;
+
+    // Only desktop stations or devices with local backend/Electron should act as the printer gateway
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+    if (isMobile) return;
+
+    // Deduplicate jobs by jobId
+    if (job.jobId) {
+      if (!this.handledRelayJobs) this.handledRelayJobs = new Set();
+      if (this.handledRelayJobs.has(job.jobId)) return;
+      this.handledRelayJobs.add(job.jobId);
+      if (this.handledRelayJobs.size > 100) this.handledRelayJobs.clear();
+    }
+
+    console.log(`[RealtimeService] 🖨️ Dispatching relayed ${eventName} to local printer:`, job.printer?.name);
+
+    try {
+      const endpoint = eventName === 'relayPrintKOT' ? '/printer-configs/print-kot' : '/printer-configs/print-bill';
+      const localBackend = 'http://127.0.0.1:5002/api';
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      
+      const payload = eventName === 'relayPrintKOT' ? {
+        bill: job.bill,
+        items: job.items,
+        kotNumber: job.kotNumber,
+        queueNumber: job.queueNumber,
+        printerId: job.printer?._id,
+        rasterBufferBase64: job.rasterBufferBase64
+      } : {
+        bill: job.bill,
+        printerId: job.printer?._id,
+        rasterBufferBase64: job.rasterBufferBase64
+      };
+
+      await fetch(`${localBackend}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      console.log(`[RealtimeService] ✅ Successfully printed relayed job to local printer`);
+    } catch (err) {
+      console.warn(`[RealtimeService] Local station print relay note:`, err.message);
+    }
   }
 
   /**

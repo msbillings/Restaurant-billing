@@ -375,11 +375,18 @@ const KOT = ({ order, onClose }) => {
             } catch (_) {}
           }
 
+          // Mobile detection: Mobile devices (Captain/Cashier) allow Wi-Fi & Bluetooth, EXCLUDE USB
+          const isMobile = typeof window !== 'undefined' && (
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+            (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
+          );
+          const allowedTypes = isMobile ? ['network', 'bluetooth'] : ['network', 'usb', 'bluetooth'];
+
           let targetPrinters = [];
-          if (activeStationGroup?.printer && (activeStationGroup.printer.connectionType === 'network' || activeStationGroup.printer.connectionType === 'usb' || activeStationGroup.printer.connectionType === 'bluetooth')) {
+          if (activeStationGroup?.printer && allowedTypes.includes(activeStationGroup.printer.connectionType)) {
             targetPrinters = [activeStationGroup.printer];
           } else {
-            targetPrinters = (list || []).filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (c.connectionType === 'network' || c.connectionType === 'usb' || c.connectionType === 'bluetooth'));
+            targetPrinters = (list || []).filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && allowedTypes.includes(c.connectionType));
           }
 
           if (targetPrinters.length > 0) {
@@ -396,7 +403,7 @@ const KOT = ({ order, onClose }) => {
                   queueNumber: qNo,
                   printerId: targetBackendPrinter._id
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
-                if (response.data && response.data.success) {
+                if (response.data && (response.data.success || response.data.relayed)) {
                   anySuccess = true;
                 }
               } catch (singleErr) {
@@ -410,17 +417,24 @@ const KOT = ({ order, onClose }) => {
               resetPrintStatus(3000);
               return;
             } else {
+              // Graceful fallback for mobile: If direct network call did not succeed, open system/AirPrint
               setPrintStatus('failed');
-              showToast(t('Printer did not respond. Check printer connection.'), 'error');
-              resetPrintStatus(4000);
+              showToast(t('Printer did not respond. Opening system print...'), 'warning');
+              setTimeout(() => {
+                window.print();
+                resetPrintStatus(3000);
+              }, 600);
               return;
             }
           }
         } catch (netErr) {
           const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
           setPrintStatus('failed');
-          showToast(`${t('Print failed')}: ${errMsg}`, 'error');
-          resetPrintStatus(4000);
+          showToast(`${t('Print note')}: ${errMsg}. Opening system print...`, 'warning');
+          setTimeout(() => {
+            window.print();
+            resetPrintStatus(3000);
+          }, 600);
           return;
         }
         window.print();
@@ -496,17 +510,12 @@ const KOT = ({ order, onClose }) => {
             console.warn('[KOT] Multi-station Bluetooth print error:', e);
           }
         }
-      } else if (grp.printer && (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb' || grp.printer.connectionType === 'bluetooth')) {
+      } else if (grp.printer && (
+        (typeof window !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))))
+          ? (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'bluetooth')
+          : (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb' || grp.printer.connectionType === 'bluetooth')
+      )) {
         try {
-          let rasterBufferBase64 = null;
-          try {
-            const kotNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
-            if (kotNode) {
-              const dots = (grp.printer.paperWidth === '58mm' || (isSettingsPage && displayFormat === '58mm')) ? 384 : 576;
-              rasterBufferBase64 = await renderElementToESCPOSRaster(kotNode, dots);
-            }
-          } catch (e) { }
-
           const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
           const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
           const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
@@ -515,8 +524,7 @@ const KOT = ({ order, onClose }) => {
             items: grp.items,
             kotNumber: kotNo,
             queueNumber: qNo,
-            printerId: grp.printer._id,
-            rasterBufferBase64
+            printerId: grp.printer._id
           }, {
             headers: { Authorization: `Bearer ${token}` }
           });

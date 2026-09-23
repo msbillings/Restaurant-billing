@@ -402,8 +402,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           } catch (_) {}
         }
 
+        const isMobile = typeof window !== 'undefined' && (
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+          (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
+        );
+
         const receiptPrinter = (list || []).find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
-          (c.connectionType === 'usb' && c.usbPort) ||
+          (!isMobile && c.connectionType === 'usb' && c.usbPort) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
         ));
@@ -422,23 +427,29 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             billId: bill?._id,
             printerId: receiptPrinter._id
           });
-          if (response.data && response.data.success) {
+          if (response.data && (response.data.success || response.data.relayed)) {
             setPrintStatus('success');
             setToast({ message: `✅ ${t("Bill printed to")} ${receiptPrinter.name}!`, type: 'success' });
             resetPrintStatus(3000);
-            return; // ⚡ Immediate return: Prints directly to hardware, never opening browser dialog!
+            return;
           } else {
             setPrintStatus('failed');
-            setToast({ message: response.data?.message || `Failed to print to ${receiptPrinter.name}`, type: 'warning' });
-            resetPrintStatus(4000);
+            setToast({ message: response.data?.message || `Failed to print to ${receiptPrinter.name}. Opening system print...`, type: 'warning' });
+            setTimeout(() => {
+              window.print();
+              resetPrintStatus(3000);
+            }, 600);
             return;
           }
         }
       } catch (netErr) {
         const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
         setPrintStatus('failed');
-        setToast({ message: `⚠️ ${errMsg}`, type: 'error' });
-        resetPrintStatus(4000);
+        setToast({ message: `⚠️ ${errMsg}. Opening system print...`, type: 'warning' });
+        setTimeout(() => {
+          window.print();
+          resetPrintStatus(3000);
+        }, 600);
         return;
       }
 

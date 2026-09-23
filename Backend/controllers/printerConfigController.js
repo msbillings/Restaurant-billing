@@ -4,6 +4,7 @@ import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { sendRawToNetworkPrinter, sendRawToUSBPrinter, getAvailableUSBAndCOMPorts, scanNetworkThermalPrinters, generateESCPOSTestReceipt, printBillToPrinters, generateKOTESCPOSBuffer } from '../services/printerService.js';
 import { checkNetworkConnectivity, scanBluetoothDevices, sendRawToBluetoothPrinter } from '../services/usbPrinterService.js';
+import { emitSocketEvent } from '../utils/socket.js';
 
 // Get all printer configs
 export const getPrinterConfigs = async (req, res) => {
@@ -256,6 +257,49 @@ export const printKOT = async (req, res) => {
         buffer = generateKOTESCPOSBuffer(targetBill, targetItems, targetKotNumber, printer, targetQueue, restaurantDetails);
       }
       const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : isNetwork ? `${printer.ipAddress}:${printer.port || 9100}` : `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`;
+      
+      // If running on cloud (Render or Vercel) and printer is on a private local Wi-Fi/LAN IP:
+      // The cloud server cannot reach the local LAN IP directly via TCP. Relay the print job via Socket.IO to local station.
+      const isPrivateLanIp = isNetwork && /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/i.test(printer.ipAddress);
+      const isCloudEnv = !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || (process.env.NODE_ENV === 'production' && !process.env.APP_USER_DATA_PATH));
+
+      if (isNetwork && isPrivateLanIp && isCloudEnv) {
+        const relayPayload = {
+          jobId: `kot_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+          bill: targetBill,
+          items: targetItems,
+          kotNumber: targetKotNumber,
+          queueNumber: targetQueue,
+          printer: {
+            _id: printer._id,
+            name: printer.name,
+            connectionType: printer.connectionType,
+            ipAddress: printer.ipAddress,
+            port: printer.port || 9100,
+            paperWidth: printer.paperWidth,
+            location: printer.location,
+            bluetoothAddress: printer.bluetoothAddress,
+            deviceName: printer.deviceName,
+            usbPort: printer.usbPort
+          },
+          rasterBufferBase64: (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') ? rasterBufferBase64 : (buffer ? buffer.toString('base64') : null),
+          restaurantDetails,
+          timestamp: Date.now()
+        };
+
+        emitSocketEvent(req, 'relayPrintKOT', relayPayload);
+        console.log(`[PrinterService] ⚡ Relayed KOT #${targetKotNumber} via Socket.IO to local station for '${printer.name}' (${targetDestination})`);
+
+        results.push({
+          printer: printer.name,
+          destination: targetDestination,
+          success: true,
+          relayed: true,
+          message: `KOT #${targetKotNumber} sent to ${printer.name} via local Wi-Fi print station`
+        });
+        continue;
+      }
+
       try {
         if (isUsb) {
           const res = await sendRawToUSBPrinter(printer.usbPort, buffer, printer.deviceName || printer.name);
@@ -278,6 +322,31 @@ export const printKOT = async (req, res) => {
         });
       } catch (err) {
         console.error(`[PrinterService] KOT print error on '${printer.name}' (${targetDestination}):`, err.message);
+
+        // Fallback: If direct send failed on local station, relay via socket in case another station is connected to printer
+        if (isNetwork) {
+          try {
+            emitSocketEvent(req, 'relayPrintKOT', {
+              jobId: `kot_fb_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+              bill: targetBill,
+              items: targetItems,
+              kotNumber: targetKotNumber,
+              queueNumber: targetQueue,
+              printer,
+              rasterBufferBase64: (buffer ? buffer.toString('base64') : null),
+              restaurantDetails
+            });
+            results.push({
+              printer: printer.name,
+              destination: targetDestination,
+              success: true,
+              relayed: true,
+              message: `KOT #${targetKotNumber} relayed to Wi-Fi network print station`
+            });
+            continue;
+          } catch (_) {}
+        }
+
         results.push({
           printer: printer.name,
           destination: targetDestination,

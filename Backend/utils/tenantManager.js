@@ -83,15 +83,16 @@ export const getClusterConnection = async (clusterName = 'cluster0') => {
   const uri = process.env[envKey];
 
   if (!uri) {
-    console.warn(`[tenantManager] No environment variable found for ${normalized} (${envKey}). Falling back to primary cluster.`);
-    return mongoose.connection;
+    const errorMsg = `[tenantManager] No environment variable found for cluster '${normalized}' (${envKey}). Refusing to fall back to primary cluster to protect tenant data isolation!`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   const initPromise = (async () => {
     try {
       const conn = mongoose.createConnection(uri, {
         maxPoolSize: 20,
-        serverSelectionTimeoutMS: 10000
+        serverSelectionTimeoutMS: 15000
       });
       await conn.asPromise();
       console.log(`[tenantManager] Connected to ${normalized} pool successfully`);
@@ -100,7 +101,9 @@ export const getClusterConnection = async (clusterName = 'cluster0') => {
     } catch (err) {
       console.error(`[tenantManager] Failed to connect to ${normalized} pool:`, err.message);
       clusterInitPromises.delete(normalized);
-      return mongoose.connection;
+      // DO NOT fallback to primary mongoose.connection if an explicit tenant cluster is specified!
+      // Silently falling back to cluster0 corrupts tenant data and isolation.
+      throw err;
     }
   })();
 
@@ -157,6 +160,12 @@ export const buildTenantClusterMap = async () => {
     } else {
       console.log('[tenantManager] No tenant registrations found in master registry (or already cached)');
     }
+
+    // Pre-warm non-cluster0 pools in parallel so first requests are instant
+    const clustersToWarm = Array.from(new Set(tenantClusterCache.values())).filter(c => c !== 'cluster0');
+    await Promise.all(clustersToWarm.map(c => getClusterConnection(c).catch(err => {
+      console.warn(`[tenantManager] Warning pre-warming ${c}:`, err.message);
+    })));
   } catch (e) {
     console.warn('[tenantManager] buildTenantClusterMap error:', e.message);
   }
@@ -237,8 +246,9 @@ const resolveClusterConnection = async (databaseName) => {
     }
   }
 
-  console.warn(`[tenantManager] Could not resolve cluster for '${databaseName}' — falling back to primary`);
-  return mongoose.connection;
+  const errorMsg = `[tenantManager] FATAL: Could not resolve cluster for tenant '${databaseName}'! Refusing to fall back to primary cluster to protect tenant data isolation.`;
+  console.error(errorMsg);
+  throw new Error(errorMsg);
 };
 
 export const getTenantModels = async (databaseName) => {

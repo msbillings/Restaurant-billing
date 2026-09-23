@@ -27,6 +27,7 @@ import fs from 'fs';
 import compression from 'compression';
 import { execSync } from 'child_process';
 import { initFirebase } from './utils/firebase.js';
+import { initLocalPrintRelay } from './services/localPrintRelay.js';
 
 
 // __dirname is not available in ES modules — polyfill it
@@ -559,6 +560,11 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   const startListening = () => {
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`Server & Socket.io running on 0.0.0.0:${PORT}`);
+      try {
+        initLocalPrintRelay();
+      } catch (err) {
+        console.warn('[Server] Could not initialize local print relay:', err.message);
+      }
     });
   };
 
@@ -600,9 +606,8 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
   });
 
   connectDB().then(async () => {
-    // Auto-detect tenant→cluster mappings from master registry
-    // This runs non-blocking — server starts immediately, cache warms in background
-    buildTenantClusterMap().catch(e => console.warn('[tenantManager] buildTenantClusterMap:', e.message));
+    // Auto-detect tenant→cluster mappings and pre-warm connections from master registry
+    await buildTenantClusterMap().catch(e => console.warn('[tenantManager] buildTenantClusterMap:', e.message));
 
     // Pre-warm Bluetooth COM port cache so the first print is instant (runs in background)
 

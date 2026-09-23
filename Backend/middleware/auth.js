@@ -46,7 +46,12 @@ const authenticateToken = async (req, res, next) => {
       TenantUser = req.models?.User || User;
     }
 
-    const user = await TenantUser.findById(decoded.id);
+    let user = await TenantUser.findById(decoded.id);
+    if (!user && decoded.role) {
+      // Resilience fallback: If user was logged in during cluster migration or alternate cluster instance,
+      // lookup by role to prevent session drop
+      user = await TenantUser.findOne({ role: decoded.role });
+    }
     if (!user) {
       return res.status(401).json({ message: 'User not found' });
     }

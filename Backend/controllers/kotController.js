@@ -504,11 +504,6 @@ export const generateKOT = async (req, res) => {
         orderId: bill._id,
         type: 'kot_fired'
       });
-
-      // Trigger physical network thermal printing to configured IP printers
-      printKOTToPrinters(req, bill, kotPayload.kotNumber, kotItems, queueNumber).catch(err => {
-        console.error('[KOT Print Error]:', err.message);
-      });
     } else if (hadQuantityReductions || noteUpdatedItems.length > 0) {
       emitSocketEvent(req, 'kotQuantityUpdated', { 
         tableNo: bill.tableNo, 
