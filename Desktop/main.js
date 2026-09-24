@@ -457,7 +457,6 @@ ipcMain.handle('silent-print', async (event, { htmlContent, printerName, silent 
                Overriding it here would silently ignore the Bill & KOT Font Style setting. */
           }
           @page {
-            size: 72mm 297mm;
             margin: 0 !important;
           }
           @media print {
@@ -512,13 +511,10 @@ ipcMain.handle('silent-print', async (event, { htmlContent, printerName, silent 
       const printOptions = {
         silent: silent,
         margins: { marginType: 'none' },
+        pageSize: { width: 80000, height: 297000 },
         landscape: false,
         printBackground: true,
-        color: false,
-        pageSize: {
-          width: 72000,
-          height: 297000
-        }
+        color: false
       };
       if (printerName && typeof printerName === 'string' && printerName.trim()) {
         try {

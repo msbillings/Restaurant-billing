@@ -9,7 +9,7 @@ import html2canvas from 'html2canvas-pro';
 import api from '../api/axios';
 import { formatTime12 } from '../utils/timeFormat';
 import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
-import { renderElementToESCPOSRaster, autoTrimCanvasBottom } from '../utils/escposRaster';
+import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBottom } from '../utils/escposRaster';
 
 const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
   const { t } = useLanguage();
@@ -284,7 +284,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     try {
       // 2. Desktop Electron App
-      if (window.electronAPI) {
+      if (window.electronAPI && !activeReceiptPrinter) {
         const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
         const printAreaNode = document.getElementById('invoice-print-area');
         const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
@@ -333,10 +333,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
-              if (!escposBase64) throw new Error("Failed to generate printer raster data");
+              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+              if (!pngBase64) throw new Error("Failed to generate printer raster data");
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
                 // Realistic delay to guarantee the paper has physically printed before showing success
@@ -417,10 +417,24 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
           for (const rp of receiptPrinters) {
             try {
+              let escposBase64 = null;
+              if (activeSettings.enableGraphicalPrinting !== false) {
+                try {
+                  const receiptNode = document.querySelector('.receipt-print');
+                  if (receiptNode) {
+                    const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || rp?.paperWidth === '58mm') ? 384 : 576;
+                    escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                  }
+                } catch (err) {
+                  console.warn('Failed to rasterize Bill:', err);
+                }
+              }
+
               const response = await api.post('/printer-configs/print-bill', {
                 bill: billPayload,
                 billId: bill?._id,
-                printerId: rp._id
+                printerId: rp._id,
+                rasterBufferBase64: escposBase64 || null
               });
               if (response.data && (response.data.success || response.data.relayed)) {
                 anySuccess = true;
@@ -1277,8 +1291,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           fontWeight: 'normal',
           fontSize: fontMetrics.bodySize,
           lineHeight: fontMetrics.lineHeight,
-          width: displayFormat === 'A4' ? '100%' : undefined,
-          maxWidth: displayFormat === 'A4' ? '360px' : undefined,
+          width: displayFormat === 'A4' ? '100%' : (displayFormat === '58mm' ? '210px' : '280px'),
+          maxWidth: displayFormat === 'A4' ? '360px' : (displayFormat === '58mm' ? '210px' : '280px'),
           overflow: 'visible',
           boxSizing: 'border-box'
         }}>

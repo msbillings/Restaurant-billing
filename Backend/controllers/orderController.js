@@ -43,43 +43,54 @@ const toValidObjectId = (val) => {
 
 export const generateUniqueBillNumber = async (BillModel) => {
   try {
-    const [latestCreated, latestLexical] = await Promise.all([
-      BillModel.find(
-        { billNumber: { $exists: true, $ne: null } },
-        { billNumber: 1 }
-      )
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean()
-        .catch(() => []),
-      BillModel.find(
+    const result = await BillModel.aggregate([
+      { $match: { billNumber: /^ms\d+$/i } },
+      { 
+        $project: { 
+          billNumber: 1,
+          strLen: { $strLenCP: "$billNumber" }
+        } 
+      },
+      // Sort by length first (MS1000 > MS999), then lexically for ties
+      { $sort: { strLen: -1, billNumber: -1 } },
+      { $limit: 1 }
+    ]).allowDiskUse(true);
+
+    let maxNum = 0n; // Use BigInt to support infinite digits (e.g., 20+ digits)
+    if (result && result.length > 0 && result[0].billNumber) {
+      const digits = String(result[0].billNumber).replace(/\D/g, '');
+      if (digits) {
+        maxNum = BigInt(digits);
+      }
+    }
+    
+    return `MS${(maxNum + 1n).toString().padStart(4, '0')}`;
+  } catch (err) {
+    console.error('Error in generateUniqueBillNumber aggregation:', err);
+    try {
+      // Fallback: fetch all matching bills and find max in memory using BigInt
+      const candidateBills = await BillModel.find(
         { billNumber: /^ms\d+$/i },
         { billNumber: 1 }
-      )
-        .sort({ billNumber: -1 })
-        .limit(50)
-        .lean()
-        .catch(() => [])
-    ]);
-
-    const candidateBills = [...(latestCreated || []), ...(latestLexical || [])];
-    let maxNum = 0;
-    for (const b of candidateBills) {
-      if (b && b.billNumber) {
-        const digits = String(b.billNumber).replace(/\D/g, '');
-        if (digits) {
-          const num = parseInt(digits, 10);
-          if (!isNaN(num) && num > maxNum) {
-            maxNum = num;
+      ).lean();
+      
+      let maxNum = 0n;
+      for (const b of candidateBills) {
+        if (b && b.billNumber) {
+          const digits = String(b.billNumber).replace(/\D/g, '');
+          if (digits) {
+            const num = BigInt(digits);
+            if (num > maxNum) {
+              maxNum = num;
+            }
           }
         }
       }
+      return `MS${(maxNum + 1n).toString().padStart(4, '0')}`;
+    } catch (fallbackErr) {
+      console.error('Fallback generation failed:', fallbackErr);
+      return `MS${Date.now().toString().slice(-4)}`;
     }
-
-    return `MS${(maxNum + 1).toString().padStart(4, '0')}`;
-  } catch (err) {
-    console.error('Error in generateUniqueBillNumber:', err);
-    return `MS${Date.now().toString().slice(-4)}`;
   }
 };
 

@@ -22,45 +22,65 @@ export async function renderElementToESCPOSRaster(element, targetWidthDots = 576
       ? element
       : (element.querySelector?.('.receipt-print') || element.querySelector?.('#kot-receipt-slip') || element);
 
-    // 1. Capture DOM element using html2canvas-pro at high scale for crisp text
-    const canvas = await html2canvas(targetElement, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      logging: false,
-      imageTimeout: 0,
-      onclone: (clonedDoc) => {
-        const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip') || clonedDoc.body;
-        if (receipt) {
-          receipt.style.boxShadow = 'none';
-          receipt.style.filter = 'none';
-          receipt.style.backgroundColor = '#ffffff';
-          receipt.style.color = '#000000';
-          receipt.style.border = 'none';
-          receipt.style.margin = '0';
+    let canvas;
+    let targetWidth = targetWidthDots;
+    let targetHeight;
+    let imgData;
+    let attempt = 1;
+
+    while (attempt <= 2) {
+      try {
+        const canvasOptions = {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: attempt === 1,
+          logging: false,
+          imageTimeout: 0,
+          onclone: (clonedDoc) => {
+            const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip') || clonedDoc.body;
+            if (receipt) {
+              receipt.style.boxShadow = 'none';
+              receipt.style.filter = 'none';
+              receipt.style.backgroundColor = '#ffffff';
+              receipt.style.color = '#000000';
+              receipt.style.border = 'none';
+              receipt.style.margin = '0';
+            }
+          }
+        };
+
+        // 1. Capture DOM element using html2canvas-pro at high scale for crisp text
+        canvas = await html2canvas(targetElement, canvasOptions);
+
+        // 2. Scale canvas to exact printer dot width (384 for 58mm or 576 for 80mm)
+        const aspectRatio = canvas.height / canvas.width;
+        targetHeight = Math.round(targetWidth * aspectRatio);
+
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = targetWidth;
+        scaledCanvas.height = targetHeight;
+        const ctx = scaledCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Pure white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+        // 3. Extract RGBA pixel data (will throw DOMException if canvas is tainted)
+        imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+        break; // Success
+      } catch (err) {
+        if (attempt === 1) {
+          console.warn('[escposRaster] Capture or getImageData failed (likely tainted canvas on file://). Retrying without CORS...', err);
+          attempt++;
+        } else {
+          throw err;
         }
       }
-    });
+    }
 
-    // 2. Scale canvas to exact printer dot width (384 for 58mm or 576 for 80mm)
-    const targetWidth = targetWidthDots;
-    const aspectRatio = canvas.height / canvas.width;
-    const targetHeight = Math.round(targetWidth * aspectRatio);
-
-    const scaledCanvas = document.createElement('canvas');
-    scaledCanvas.width = targetWidth;
-    scaledCanvas.height = targetHeight;
-    const ctx = scaledCanvas.getContext('2d', { willReadFrequently: true });
-
-    // Pure white background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, targetWidth, targetHeight);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
-
-    // 3. Extract RGBA pixel data
-    const imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const pixels = imgData.data;
 
     // Auto-detect the last row containing visible text/content (non-white)
@@ -218,5 +238,113 @@ export function autoTrimCanvasBottom(canvas) {
   } catch (err) {
     console.warn('[autoTrimCanvasBottom] Fallback to original canvas:', err);
     return canvas;
+  }
+}
+
+/**
+ * Converts a rendered DOM receipt element into a cropped Base64 PNG string.
+ * This is used for Android native Bluetooth printing which expects a PNG image to decode via BitmapFactory.
+ * 
+ * @param {HTMLElement} element - The DOM node to capture (.receipt-print)
+ * @param {number} targetWidthDots - 384 for 58mm (2-inch), 576 for 80mm (3-inch)
+ * @returns {Promise<string>} Base64-encoded PNG data URL string
+ */
+export async function renderElementToPNGBase64(element, targetWidthDots = 576) {
+  if (!element) return null;
+
+  try {
+    const targetElement = element.classList?.contains('receipt-print')
+      ? element
+      : (element.querySelector?.('.receipt-print') || element.querySelector?.('#kot-receipt-slip') || element);
+
+    let canvas;
+    let targetWidth = targetWidthDots;
+    let targetHeight;
+    let imgData;
+    let scaledCanvas;
+    let attempt = 1;
+
+    while (attempt <= 2) {
+      try {
+        const canvasOptions = {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: attempt === 1,
+          logging: false,
+          imageTimeout: 0,
+          onclone: (clonedDoc) => {
+            const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip') || clonedDoc.body;
+            if (receipt) {
+              receipt.style.boxShadow = 'none';
+              receipt.style.filter = 'none';
+              receipt.style.backgroundColor = '#ffffff';
+              receipt.style.color = '#000000';
+              receipt.style.border = 'none';
+              receipt.style.margin = '0';
+            }
+          }
+        };
+
+        canvas = await html2canvas(targetElement, canvasOptions);
+        const aspectRatio = canvas.height / canvas.width;
+        targetHeight = Math.round(targetWidth * aspectRatio);
+
+        scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = targetWidth;
+        scaledCanvas.height = targetHeight;
+        const ctx = scaledCanvas.getContext('2d', { willReadFrequently: true });
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+        imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+        break; // Success
+      } catch (err) {
+        if (attempt === 1) {
+          console.warn('[renderElementToPNGBase64] Capture failed. Retrying without CORS...', err);
+          attempt++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const pixels = imgData.data;
+    let lastContentY = 0;
+    for (let y = targetHeight - 1; y >= 0; y--) {
+      let hasContentOnRow = false;
+      for (let x = 0; x < targetWidth; x++) {
+        const idx = (y * targetWidth + x) * 4;
+        if (pixels[idx + 3] > 50) {
+          const luminance = pixels[idx] * 0.299 + pixels[idx + 1] * 0.587 + pixels[idx + 2] * 0.114;
+          if (luminance < 205) {
+            hasContentOnRow = true;
+            break;
+          }
+        }
+      }
+      if (hasContentOnRow) {
+        lastContentY = y;
+        break;
+      }
+    }
+
+    const activeHeight = lastContentY > 0 ? Math.min(targetHeight, lastContentY + 6) : targetHeight;
+
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = targetWidth;
+    croppedCanvas.height = activeHeight;
+    const croppedCtx = croppedCanvas.getContext('2d');
+    croppedCtx.fillStyle = '#ffffff';
+    croppedCtx.fillRect(0, 0, targetWidth, activeHeight);
+    croppedCtx.drawImage(scaledCanvas, 0, 0, targetWidth, activeHeight, 0, 0, targetWidth, activeHeight);
+
+    return croppedCanvas.toDataURL('image/png');
+  } catch (error) {
+    console.error('Error generating PNG base64:', error);
+    return null;
   }
 }

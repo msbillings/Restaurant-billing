@@ -5,7 +5,7 @@ import axios from 'axios';
 import { getApiUrl } from '../config';
 import html2canvas from 'html2canvas-pro';
 import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
-import { renderElementToESCPOSRaster, autoTrimCanvasBottom } from '../utils/escposRaster';
+import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBottom } from '../utils/escposRaster';
 
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
@@ -240,7 +240,14 @@ const KOT = ({ order, onClose }) => {
     try {
       const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
 
-      if (window.electronAPI) {
+      const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+      const hasBackendKOTPrinter = list.some(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (
+        (c.connectionType === 'usb' && c.usbPort) ||
+        (c.connectionType === 'network' && c.ipAddress) ||
+        (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+      ));
+
+      if (window.electronAPI && !targetStation?.printer && !hasBackendKOTPrinter) {
         const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
         const printAreaNode = document.getElementById('kot-receipt-slip');
         const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
@@ -301,11 +308,11 @@ const KOT = ({ order, onClose }) => {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
-              if (!escposBase64) throw new Error("Failed to generate printer raster data");
+              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+              if (!pngBase64) throw new Error("Failed to generate printer raster data");
               // Yield a brief moment so UI remains fluid before native bridge
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
                 await new Promise(res => setTimeout(res, 1500));
@@ -391,13 +398,27 @@ const KOT = ({ order, onClose }) => {
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
               try {
+                let escposBase64 = null;
+                if (activeSettings.enableGraphicalPrinting !== false) {
+                  try {
+                    const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+                    if (receiptNode) {
+                      const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
+                      escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                    }
+                  } catch (err) {
+                    console.warn('Failed to rasterize KOT:', err);
+                  }
+                }
+                
                 const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
                   bill: order,
                   items: itemsToPrint,
                   kotNumber: kotNo,
                   queueNumber: qNo,
                   printerId: targetBackendPrinter._id,
-                  restaurantDetails: activeSettings
+                  restaurantDetails: activeSettings,
+                  rasterBufferBase64: escposBase64 || null
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
                 if (response.data && (response.data.success || response.data.relayed)) {
                   anySuccess = true;
@@ -441,6 +462,11 @@ const KOT = ({ order, onClose }) => {
       setPrintStatus('failed');
       showToast(`${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, 'error');
       resetPrintStatus(4000);
+    } finally {
+      setIsPrinting(false);
+      if (stationGroups.length <= 1) {
+        setIsPrintingAll(false);
+      }
     }
   };
 
@@ -454,75 +480,121 @@ const KOT = ({ order, onClose }) => {
     setIsPrintingAll(true);
     for (let i = 0; i < stationGroups.length; i++) {
       const grp = stationGroups[i];
+      if (grp.name === 'ALL') continue;
       setSelectedDept(grp.key);
-      // Allow DOM to re-render with the station's items and title badge
-      await new Promise(res => setTimeout(res, 280));
+      await new Promise(res => setTimeout(res, 280)); // wait for UI update
 
-      if (window.electronAPI) {
-        const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
-        const htmlContent = receiptNode ? receiptNode.outerHTML : '';
-        const isSilent = settings.silentPrinting !== false;
+      try {
+        const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+        const hasBackendKOTPrinter = list.some(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (
+          (c.connectionType === 'usb' && c.usbPort) ||
+          (c.connectionType === 'network' && c.ipAddress) ||
+          (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+        ));
 
-        const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
-        window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
-      } else if (window.AndroidBluetooth && (grp.printer?.connectionType === 'bluetooth' || (!grp.printer && (settings.kotPrinter || settings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
-        let chosenPrinter = grp.printer?.bluetoothAddress || grp.printer?.deviceName || settings.kotPrinter || settings.billingPrinter || '';
-        let match = chosenPrinter.match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i);
-        if (!match) {
-          try {
-            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-            const raw = s.kotPrinter || s.billingPrinter || '';
-            match = raw.match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i);
-          } catch (_) { }
-        }
-        const macAddress = match ? match[0] : null;
+        if (window.electronAPI && !grp.printer && !hasBackendKOTPrinter) {
+          const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+          const printAreaNode = document.getElementById('kot-receipt-slip');
+          const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
+          const settings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          const isSilent = settings.silentPrinting !== false;
+          const chosenPrinter = settings.kotPrinter || '';
+          window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
+        } else if (grp.printer && grp.printer.connectionType !== 'usb' && grp.printer.connectionType !== 'network' && grp.printer.connectionType !== 'bluetooth' && window.electronAPI) {
+          const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+          const htmlContent = receiptNode?.outerHTML || '';
+          const settings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          const isSilent = settings.silentPrinting !== false;
+          const chosenPrinter = grp.printer.deviceName || settings.kotPrinter || '';
+          window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
+        } else if (window.AndroidBluetooth && (grp.printer?.connectionType === 'bluetooth' || (!grp.printer && (settings.kotPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
+          const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
+          const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
+          let macAddress = null;
+          if (grp.printer) {
+            macAddress = tryMac(grp.printer.bluetoothAddress || grp.printer.deviceName || '');
+          }
+          if (!macAddress) {
+            try {
+              const kotStation = list.find(p => p.isActive !== false && (p.type === 'kot' || p.type === 'general' || p.type === 'both') && tryMac(p.bluetoothAddress || p.deviceName || ''));
+              if (kotStation) macAddress = tryMac(kotStation.bluetoothAddress || kotStation.deviceName || '');
+            } catch (_) { }
+          }
+          if (!macAddress) macAddress = tryMac(settings.kotPrinter || '') || tryMac(settings.billingPrinter || '');
 
-        if (macAddress && window.AndroidBluetooth.printImage) {
-          try {
-            const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
-            if (receiptNode) {
-              const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
-              if (escposBase64) {
-                await new Promise(res => setTimeout(res, 20));
-                const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
-                const res = JSON.parse(resStr || '{}');
-                if (res.success) {
-                  await new Promise(res => setTimeout(res, 1500));
+          if (macAddress && window.AndroidBluetooth.printImage) {
+            try {
+              const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+              if (receiptNode) {
+                const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
+                const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+                if (pngBase64) {
+                  await new Promise(res => setTimeout(res, 20));
+                  const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+                  const res = JSON.parse(resStr || '{}');
+                  if (res.success) {
+                    await new Promise(res => setTimeout(res, 1500));
+                  }
                 }
               }
+            } catch (e) {
+              console.warn('[KOT] Multi-station Bluetooth print error:', e);
             }
-          } catch (e) {
-            console.warn('[KOT] Multi-station Bluetooth print error:', e);
+          }
+        } else {
+          // Mobile/Backend logic
+          const isMobile = (typeof window !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) || (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0)));
+          const allowedTypes = isMobile ? ['network', 'bluetooth'] : ['network', 'usb', 'bluetooth'];
+          
+          let targetPrinters = [];
+          if (grp.printer && allowedTypes.includes(grp.printer.connectionType)) {
+            targetPrinters = [grp.printer];
+          } else {
+            targetPrinters = (list || []).filter(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && allowedTypes.includes(c.connectionType));
+          }
+
+          if (targetPrinters.length > 0) {
+            let anySuccess = false;
+            const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            
+            for (const targetBackendPrinter of targetPrinters) {
+              const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
+              const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+              try {
+                let escposBase64 = null;
+                if (activeSettings.enableGraphicalPrinting !== false) {
+                  const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+                  if (receiptNode) {
+                    const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
+                    escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                  }
+                }
+                const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
+                  bill: order,
+                  items: grp.items,
+                  kotNumber: kotNo,
+                  queueNumber: qNo,
+                  printerId: targetBackendPrinter._id,
+                  restaurantDetails: activeSettings,
+                  rasterBufferBase64: escposBase64 || null
+                }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
+                
+                if (response.data && (response.data.success || response.data.relayed)) {
+                  anySuccess = true;
+                }
+              } catch (singleErr) {
+                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
+              }
+            }
+            if (!anySuccess) {
+              window.print();
+            }
+          } else {
+            window.print();
           }
         }
-      } else if (grp.printer && (
-        (typeof window !== 'undefined' && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))))
-          ? (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'bluetooth')
-          : (grp.printer.connectionType === 'network' || grp.printer.connectionType === 'usb' || grp.printer.connectionType === 'bluetooth')
-      )) {
-        try {
-          const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-          const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
-          const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
-          const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-
-          await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
-            bill: order,
-            items: grp.items,
-            kotNumber: kotNo,
-            queueNumber: qNo,
-            printerId: grp.printer._id,
-            restaurantDetails: activeSettings
-          }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (netErr) {
-          console.warn('[KOT] Multi-station network print error:', netErr);
-          window.print();
-        }
-      } else {
-        window.print();
+      } catch (err) {
+        console.error('[KOT] Multi-station print error:', err);
       }
       await new Promise(res => setTimeout(res, 350));
     }
@@ -685,8 +757,8 @@ const KOT = ({ order, onClose }) => {
           fontWeight: 'normal',
           fontSize: fontMetrics.bodySize,
           lineHeight: fontMetrics.lineHeight,
-          width: displayFormat === 'A4' ? '100%' : undefined,
-          maxWidth: displayFormat === 'A4' ? '360px' : undefined
+          width: displayFormat === 'A4' ? '100%' : (displayFormat === '58mm' ? '210px' : '280px'),
+          maxWidth: displayFormat === 'A4' ? '360px' : (displayFormat === '58mm' ? '210px' : '280px')
         }}>
 
         {displayFormat === '58mm' ? (
