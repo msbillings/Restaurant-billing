@@ -10,7 +10,7 @@ import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBo
 const KOT = ({ order, onClose }) => {
   const { t } = useLanguage();
 
-  // ─── Settings – load synchronously from localStorage to avoid flash ──────
+  // â”€â”€â”€ Settings â€“ load synchronously from localStorage to avoid flash â”€â”€â”€â”€â”€â”€
   const [settings, setSettings] = useState(() => {
     try {
       const saved = localStorage.getItem('restaurantSettings');
@@ -51,13 +51,13 @@ const KOT = ({ order, onClose }) => {
   const [printerConfigs, setPrinterConfigs] = useState([]);
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [isPrintingAll, setIsPrintingAll] = useState(false);
-  // ─── Print status for dynamic button feedback ─────────────────────────────
+  // â”€â”€â”€ Print status for dynamic button feedback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // null | 'printing' | 'success' | 'failed' | 'not_connected'
   const [printStatus, setPrintStatus] = useState(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // ─── Pre-resolved BT MAC cache – computed once on mount, reused on every print
+  // â”€â”€â”€ Pre-resolved BT MAC cache â€“ computed once on mount, reused on every print
   const resolvedMacRef = useRef(null);
   const macResolvedRef = useRef(false);
 
@@ -123,7 +123,7 @@ const KOT = ({ order, onClose }) => {
     resolveMac();
   }, [printerConfigs]);
 
-  // ─── Auto-print on mount REMOVED ─────────────────────────────────────────
+  // â”€â”€â”€ Auto-print on mount REMOVED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // KOT only prints when user explicitly clicks Print KOT or Send to All Kitchens
 
   // Group items dynamically by Kitchen Station / Printer Config
@@ -220,7 +220,7 @@ const KOT = ({ order, onClose }) => {
     );
   }, [order?.items, selectedDept, activeStationGroup]);
 
-  // ─── Print current active tab/kitchen ────────────────────────────────────
+  // â”€â”€â”€ Print current active tab/kitchen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handlePrintCurrent = async () => {
     // Guard: block duplicate prints (user tapping multiple times)
     if (isPrinting || isPrintingAll) return;
@@ -230,11 +230,11 @@ const KOT = ({ order, onClose }) => {
       return handlePrintAllKitchens();
     }
 
-    // ── IMMEDIATE UI FEEDBACK ── set state BEFORE any async work
+    // â”€â”€ IMMEDIATE UI FEEDBACK â”€â”€ set state BEFORE any async work
     setIsPrinting(true);
     setPrintStatus('printing');
 
-    // ⚡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
+    // âš¡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
     await new Promise(res => setTimeout(res, 80));
 
     try {
@@ -270,7 +270,7 @@ const KOT = ({ order, onClose }) => {
         const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
         const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
-        // Use pre-resolved MAC first (fastest path — no loops on every print)
+        // Use pre-resolved MAC first (fastest path â€” no loops on every print)
         let macAddress = resolvedMacRef.current;
 
         // Station-specific override or first available station group (e.g. "All in One" when viewing ALL)
@@ -295,7 +295,7 @@ const KOT = ({ order, onClose }) => {
         }
         if (!macAddress) macAddress = tryMac(settings.kotPrinter || '') || tryMac(settings.billingPrinter || '');
 
-        // ── CONNECTION CHECK: Show error immediately if no printer found
+        // â”€â”€ CONNECTION CHECK: Show error immediately if no printer found
         if (!macAddress) {
           setPrintStatus('not_connected');
           showToast(t('Printer not connected. Please pair a Bluetooth printer in Printer & Kitchen Routing settings.'), 'error');
@@ -312,7 +312,8 @@ const KOT = ({ order, onClose }) => {
               if (!escposBase64) throw new Error("Failed to generate printer raster data");
               // Yield a brief moment so UI remains fluid before native bridge
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printRawBase64 ? window.AndroidBluetooth.printRawBase64(macAddress, escposBase64) : window.AndroidBluetooth.printImage(macAddress, await renderElementToPNGBase64(receiptNode, paperWidthDots), paperWidthDots);
+              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+                const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
                 setPrintStatus('success');
@@ -532,7 +533,8 @@ const KOT = ({ order, onClose }) => {
                 const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
                 if (escposBase64) {
                   await new Promise(res => setTimeout(res, 20));
-                  const resStr = window.AndroidBluetooth.printRawBase64 ? window.AndroidBluetooth.printRawBase64(macAddress, escposBase64) : window.AndroidBluetooth.printImage(macAddress, await renderElementToPNGBase64(receiptNode, paperWidthDots), paperWidthDots);
+                  const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+                const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
                   const res = JSON.parse(resStr || '{}');
                   if (res.success) {
                     // Success without delay
@@ -695,7 +697,7 @@ const KOT = ({ order, onClose }) => {
             </button>
           )}
 
-          {/* Dynamic Print Button — shows instant status feedback */}
+          {/* Dynamic Print Button â€” shows instant status feedback */}
           <button
             onClick={handlePrintCurrent}
             disabled={isPrinting}
@@ -718,7 +720,7 @@ const KOT = ({ order, onClose }) => {
             {!printStatus && <Printer size={15} className="shrink-0" />}
             <span>
               {printStatus === 'printing' ? t('Printing...')
-                : printStatus === 'success' ? t('Printed! ✓')
+                : printStatus === 'success' ? t('Printed! âœ“')
                   : printStatus === 'failed' ? t('Print Failed')
                     : printStatus === 'not_connected' ? t('Not Connected')
                       : stationGroups.length > 1 && selectedDept !== 'ALL' && activeStationGroup
