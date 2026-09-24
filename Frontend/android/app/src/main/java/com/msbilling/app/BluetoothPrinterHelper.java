@@ -260,12 +260,12 @@ public class BluetoothPrinterHelper {
             OutputStream os = socket.getOutputStream();
             
             // Send in chunks (1024 bytes) with tiny delay to avoid overflowing Bluetooth printer buffer
-            int chunkSize = 1024;
+            int chunkSize = 256;
             for (int i = 0; i < rasterBytes.length; i += chunkSize) {
                 int len = Math.min(chunkSize, rasterBytes.length - i);
                 os.write(rasterBytes, i, len);
                 os.flush();
-                Thread.sleep(5);
+                Thread.sleep(15);
             }
 
             // Feed and cut
@@ -415,12 +415,12 @@ public class BluetoothPrinterHelper {
             // Blast bytes to printer. RFCOMM handles flow control.
             // Sending in 1024 byte chunks with a 5ms sleep balances lightning speed 
             // and guarantees we don't overflow the hardware buffer of cheap printers
-            int chunkSize = 1024;
+            int chunkSize = 256;
             for (int i = 0; i < decodedBytes.length; i += chunkSize) {
                 int len = Math.min(chunkSize, decodedBytes.length - i);
                 os.write(decodedBytes, i, len);
                 os.flush();
-                Thread.sleep(5); 
+                Thread.sleep(15);
             }
 
             Thread.sleep(200);

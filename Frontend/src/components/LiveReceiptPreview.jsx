@@ -1,5 +1,5 @@
 import React from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { findReceiptFont, getReceiptFontMetrics, RECEIPT_FONT_SIZES } from '../utils/receiptFonts';
 
 const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, onChangeFormat }) => {
@@ -313,10 +313,10 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
                   {t("SCAN TO PAY VIA UPI")}
                 </div>
                 <div style={{ margin: '3px auto', display: 'inline-block' }}>
-                  <QRCodeSVG
-                    value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${grandTotal}&cu=INR&tn=Bill%20Payment`}
-                    size={fmt === '58mm' ? 74 : 84}
-                    level="M"
+                  <QRCodeCanvas
+                    value={`upi://pay?pa=${settings.upiId.trim()}&pn=${encodeURIComponent(settings.restaurantName || 'Restaurant')}&am=${grandTotal}&cu=INR`}
+                    size={fmt === '58mm' ? 130 : 140}
+                    level="L"
                     includeMargin={false}
                   />
                 </div>

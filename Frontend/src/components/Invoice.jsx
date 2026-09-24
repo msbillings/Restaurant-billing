@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import Toast from './Toast';
 import { sendWhatsAppBill } from '../api/whatsapp';
 import html2canvas from 'html2canvas-pro';
@@ -13,7 +13,7 @@ import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBo
 
 const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
   const { t } = useLanguage();
-  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : 'â‚¹';
+  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
   const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
   let enabledCurrencies = [];
   let baseRate = 1.0;
@@ -500,7 +500,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         if (qty <= 0) return null;
         const price = (item.price || 0).toFixed(2);
         const itemTot = ((item.price || 0) * qty).toFixed(2);
-        return `â€¢ ${item.name} x ${qty} @ â‚¹${price} = â‚¹${itemTot}`;
+        return `â€¢ ${item.name} x ${qty} @ ₹${price} = ₹${itemTot}`;
       })
       .filter(Boolean)
       .join('\n');
@@ -509,7 +509,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     const sub = Number(bill?.subtotal || bill?.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0);
     const subtotal = sub.toFixed(2);
     const disc = Number(bill?.discount || 0);
-    const discount = disc > 0 ? `\nâ€¢ *Discount:* -â‚¹${disc.toFixed(2)}` : '';
+    const discount = disc > 0 ? `\nâ€¢ *Discount:* -₹${disc.toFixed(2)}` : '';
     const taxable = Math.max(0, sub - disc);
 
     // Dynamic tax calculation identical to printed receipt invoice
@@ -541,19 +541,19 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         const cAmt = taxRupees * (cRate / Math.max(1, totRate));
         const sEff = rate * (sRate / Math.max(1, totRate));
         const sAmt = taxRupees * (sRate / Math.max(1, totRate));
-        taxBreakdown += `\nâ€¢ *CGST (${cEff.toFixed(1)}%):* +â‚¹${cAmt.toFixed(2)}`;
-        taxBreakdown += `\nâ€¢ *SGST (${sEff.toFixed(1)}%):* +â‚¹${sAmt.toFixed(2)}`;
+        taxBreakdown += `\nâ€¢ *CGST (${cEff.toFixed(1)}%):* +₹${cAmt.toFixed(2)}`;
+        taxBreakdown += `\nâ€¢ *SGST (${sEff.toFixed(1)}%):* +₹${sAmt.toFixed(2)}`;
       } else if (gRate > 0) {
         const gEff = rate * (gRate / Math.max(1, totRate));
         const gAmt = taxRupees * (gRate / Math.max(1, totRate));
-        taxBreakdown += `\nâ€¢ *GST (${gEff.toFixed(1)}%):* +â‚¹${gAmt.toFixed(2)}`;
+        taxBreakdown += `\nâ€¢ *GST (${gEff.toFixed(1)}%):* +₹${gAmt.toFixed(2)}`;
       } else {
-        taxBreakdown += `\nâ€¢ *GST/Tax (${rate}%):* +â‚¹${taxRupees.toFixed(2)}`;
+        taxBreakdown += `\nâ€¢ *GST/Tax (${rate}%):* +₹${taxRupees.toFixed(2)}`;
       }
     }
 
-    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\nâ€¢ *Delivery Charge:* +â‚¹${Number(bill.deliveryCharge).toFixed(2)}` : '';
-    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\nâ€¢ *Container Charge:* +â‚¹${Number(bill.containerCharge).toFixed(2)}` : '';
+    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\nâ€¢ *Delivery Charge:* +₹${Number(bill.deliveryCharge).toFixed(2)}` : '';
+    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\nâ€¢ *Container Charge:* +₹${Number(bill.containerCharge).toFixed(2)}` : '';
 
     let finalTotal = Number(bill?.total || 0);
     const addCharges = Number(bill?.deliveryCharge || 0) + Number(bill?.containerCharge || 0);
@@ -562,15 +562,15 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     }
     const roundedTotal = Math.round(finalTotal);
     const roundOff = roundedTotal - finalTotal;
-    const roundOffText = roundOff !== 0 ? `\nâ€¢ *Round Off:* ${roundOff > 0 ? '+' : ''}â‚¹${roundOff.toFixed(2)}` : '';
+    const roundOffText = roundOff !== 0 ? `\nâ€¢ *Round Off:* ${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}` : '';
     const total = finalTotal.toFixed(2);
 
     let paymentInfo = bill?.paymentMethod || 'Cash';
     if (bill?.paymentBreakdown && (bill.paymentBreakdown.cash > 0 || bill.paymentBreakdown.upi > 0 || bill.paymentBreakdown.card > 0)) {
       const parts = [];
-      if (bill.paymentBreakdown.cash > 0) parts.push(`Cash: â‚¹${bill.paymentBreakdown.cash}`);
-      if (bill.paymentBreakdown.upi > 0) parts.push(`UPI: â‚¹${bill.paymentBreakdown.upi}`);
-      if (bill.paymentBreakdown.card > 0) parts.push(`Card: â‚¹${bill.paymentBreakdown.card}`);
+      if (bill.paymentBreakdown.cash > 0) parts.push(`Cash: ₹${bill.paymentBreakdown.cash}`);
+      if (bill.paymentBreakdown.upi > 0) parts.push(`UPI: ₹${bill.paymentBreakdown.upi}`);
+      if (bill.paymentBreakdown.card > 0) parts.push(`Card: ₹${bill.paymentBreakdown.card}`);
       paymentInfo = parts.join(' | ');
     }
 
@@ -609,13 +609,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       `ðŸ›’ *ITEMS ORDERED (${totalQty} Qty):*\n` +
       `${itemsList}\n` +
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
-      `â€¢ *Subtotal:* â‚¹${subtotal}` +
+      `â€¢ *Subtotal:* ₹${subtotal}` +
       discount +
       taxBreakdown +
       deliveryCharge +
       containerCharge +
       roundOffText +
-      `\nâ€¢ *GRAND TOTAL:* *â‚¹${total}*\n` +
+      `\nâ€¢ *GRAND TOTAL:* *₹${total}*\n` +
       `â€¢ *Payment Mode:* ${paymentInfo}\n` +
       (s.whatsappShowQr !== false && s.upiId ? `â€¢ *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
@@ -1134,7 +1134,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">{t("Total Amount:")}</span>
-                  <span className="font-bold text-emerald-600 font-mono">â‚¹{Number(bill?.total || 0).toFixed(2)}</span>
+                  <span className="font-bold text-emerald-600 font-mono">₹{Number(bill?.total || 0).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1596,9 +1596,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               if (Number(am) <= 0) return null;
               const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
-              const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
-              const tr = `INV${Date.now()}`;
-              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
               const showNormally = activeSettings.enableQrPayment !== false;
 
@@ -1606,7 +1604,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 <div className="receipt-qr-wrapper" style={{ display: showNormally ? 'block' : 'none', textAlign: 'center', margin: '5px 0' }}>
                   <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{t("SCAN TO PAY VIA UPI")}</div>
                   <div style={{ margin: '3px auto', display: 'inline-block' }}>
-                    <QRCodeSVG value={qrUri} size={84} level="M" includeMargin={false} />
+                    <QRCodeCanvas value={qrUri} size={130} level="L" includeMargin={false} />
                   </div>
                   <div style={{ fontSize: '9px' }}>{pa}</div>
                 </div>
@@ -1976,9 +1974,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
               const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
-              const tn = noteText.replace(/[^a-zA-Z0-9 .#-]/g, '');
-              const tr = `INV${Date.now()}`;
-              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR&tn=${encodeURIComponent(tn)}&tr=${tr}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
               const showNormally = activeSettings.enableQrPayment !== false;
 
@@ -1988,10 +1984,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                     {isMixed && upiSplit > 0 ? `${t("SCAN TO PAY UPI PORTION")} (${currencySymbol}${am})` : t("SCAN TO PAY VIA UPI")}
                   </div>
                   <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1" style={{ display: 'inline-block', margin: '4px auto', textAlign: 'center' }}>
-                    <QRCodeSVG
+                    <QRCodeCanvas
                       value={qrUri}
-                      size={100}
-                      level="M"
+                      size={140}
+                      level="L"
                       includeMargin={false}
                     />
                   </div>

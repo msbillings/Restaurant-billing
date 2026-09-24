@@ -6,6 +6,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 
 const execPromise = util.promisify(exec);
+const btComPortCache = new Map();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -441,7 +442,7 @@ export async function scanBluetoothDevices() {
     }
   }
 
-  // macOS / unsupported – return unavailable
+  // macOS / unsupported â€“ return unavailable
   return { btAvailable: false, devices: [] };
 }
 
@@ -514,11 +515,11 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       $sp.ReadTimeout = 500
       try {
         $sp.Open()
-        $chunkSize = 8192
+        $chunkSize = 256
         for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
           $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
           $sp.Write($rawBytes, $offset, $count)
-          Start-Sleep -Milliseconds 5
+          Start-Sleep -Milliseconds 15
         }
         Start-Sleep -Milliseconds 200
         $sp.Close()
@@ -543,6 +544,7 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       if (portMatch && portMatch[1]) {
         const discoveredPort = portMatch[1].trim();
         console.log(`[BluetoothPrinter] COM port detected: ${discoveredPort}`);
+        btComPortCache.set(cacheKey, discoveredPort);
       }
       return { success: true, message: out || `Printed to Bluetooth port for ${addressOrName}` };
     } catch (err) {

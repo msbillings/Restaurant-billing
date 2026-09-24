@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { getOpenOrders, mergeTableOrders, apiGenerateKOT, getDailyStats } from '../api/billing';
 import { cacheFloors, getCachedFloors, getCachedOpenOrders } from '../db/offlineDb';
 import { getMenuItems } from '../api/menu';
-import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2, Users, Lock, Unlock } from 'lucide-react';
+import { Plus, Coffee, Home, Trash2, Sofa, Utensils, CheckCircle, Clock, RefreshCw, Printer, Eye, Edit2, X, Receipt, Image as ImageIcon, Ban, Loader2, Users, Lock, Unlock, Palette
+ } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import realtimeService from '../services/realtimeService';
 import Toast from './Toast';
@@ -108,8 +109,94 @@ const normalizeFloors = (list) => {
   }));
 };
 
+
+const getThemeColors = (theme, status, isJustCleared) => {
+  const themes = {
+    pastel: {
+      available: { bg: 'bg-emerald-100/60', border: 'border-emerald-200', text: 'text-emerald-600', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-700', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-emerald-600' },
+      running: { bg: 'bg-blue-100/60', border: 'border-blue-300', text: 'text-blue-600', badgeBg: 'bg-blue-200', badgeText: 'text-blue-800', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-blue-600' },
+      printed: { bg: 'bg-orange-100/60', border: 'border-orange-300', text: 'text-orange-600', badgeBg: 'bg-orange-200', badgeText: 'text-orange-800', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-orange-600' },
+      paid: { bg: 'bg-gray-100/60', border: 'border-gray-300', text: 'text-gray-600', badgeBg: 'bg-gray-200', badgeText: 'text-gray-800', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-gray-600' },
+      seated: { bg: 'bg-teal-50/80', border: 'border-teal-300', text: 'text-teal-700', badgeBg: 'bg-teal-200', badgeText: 'text-teal-800', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-teal-700' },
+      reserved: { bg: 'bg-amber-100/60', border: 'border-amber-300', text: 'text-amber-600', badgeBg: 'bg-amber-200', badgeText: 'text-amber-800', nameText: 'text-gray-800', seatsBg: 'bg-white/90', seatsText: 'text-gray-500', iconCircle: 'bg-white text-amber-600' },
+    },
+    solid: {
+      available: { bg: 'bg-emerald-600', border: 'border-emerald-700', text: 'text-white', badgeBg: 'bg-emerald-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-emerald-600' },
+      running: { bg: 'bg-blue-600', border: 'border-blue-700', text: 'text-white', badgeBg: 'bg-blue-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-blue-600' },
+      printed: { bg: 'bg-orange-600', border: 'border-orange-700', text: 'text-white', badgeBg: 'bg-orange-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-orange-600' },
+      paid: { bg: 'bg-gray-600', border: 'border-gray-700', text: 'text-white', badgeBg: 'bg-gray-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-gray-600' },
+      seated: { bg: 'bg-teal-600', border: 'border-teal-700', text: 'text-white', badgeBg: 'bg-teal-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-teal-600' },
+      reserved: { bg: 'bg-amber-600', border: 'border-amber-700', text: 'text-white', badgeBg: 'bg-amber-700', badgeText: 'text-white', nameText: 'text-white', seatsBg: 'bg-white/20', seatsText: 'text-white', iconCircle: 'bg-white text-amber-600' },
+    },
+    night: {
+      available: { bg: 'bg-gray-900', border: 'border-emerald-500/50', text: 'text-emerald-400', badgeBg: 'bg-gray-800', badgeText: 'text-emerald-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-emerald-400' },
+      running: { bg: 'bg-gray-900', border: 'border-blue-500/50', text: 'text-blue-400', badgeBg: 'bg-gray-800', badgeText: 'text-blue-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-blue-400' },
+      printed: { bg: 'bg-gray-900', border: 'border-orange-500/50', text: 'text-orange-400', badgeBg: 'bg-gray-800', badgeText: 'text-orange-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-orange-400' },
+      paid: { bg: 'bg-gray-900', border: 'border-gray-500/50', text: 'text-gray-400', badgeBg: 'bg-gray-800', badgeText: 'text-gray-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-gray-400' },
+      seated: { bg: 'bg-gray-900', border: 'border-teal-500/50', text: 'text-teal-400', badgeBg: 'bg-gray-800', badgeText: 'text-teal-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-teal-400' },
+      reserved: { bg: 'bg-gray-900', border: 'border-amber-500/50', text: 'text-amber-400', badgeBg: 'bg-gray-800', badgeText: 'text-amber-400', nameText: 'text-gray-100', seatsBg: 'bg-gray-800', seatsText: 'text-gray-300', iconCircle: 'bg-gray-800 text-amber-400' },
+    },
+    ocean: {
+      available: { bg: 'bg-cyan-100', border: 'border-cyan-300', text: 'text-cyan-700', badgeBg: 'bg-cyan-200', badgeText: 'text-cyan-800', nameText: 'text-cyan-900', seatsBg: 'bg-cyan-50', seatsText: 'text-cyan-700', iconCircle: 'bg-white text-cyan-600' },
+      running: { bg: 'bg-sky-200', border: 'border-sky-400', text: 'text-sky-800', badgeBg: 'bg-sky-300', badgeText: 'text-sky-900', nameText: 'text-sky-950', seatsBg: 'bg-sky-100', seatsText: 'text-sky-800', iconCircle: 'bg-white text-sky-600' },
+      printed: { bg: 'bg-blue-300', border: 'border-blue-400', text: 'text-blue-800', badgeBg: 'bg-blue-400', badgeText: 'text-blue-900', nameText: 'text-blue-950', seatsBg: 'bg-blue-200', seatsText: 'text-blue-800', iconCircle: 'bg-white text-blue-600' },
+      paid: { bg: 'bg-slate-200', border: 'border-slate-300', text: 'text-slate-700', badgeBg: 'bg-slate-300', badgeText: 'text-slate-800', nameText: 'text-slate-900', seatsBg: 'bg-slate-100', seatsText: 'text-slate-600', iconCircle: 'bg-white text-slate-600' },
+      seated: { bg: 'bg-indigo-200', border: 'border-indigo-400', text: 'text-indigo-800', badgeBg: 'bg-indigo-300', badgeText: 'text-indigo-900', nameText: 'text-indigo-950', seatsBg: 'bg-indigo-100', seatsText: 'text-indigo-700', iconCircle: 'bg-white text-indigo-600' },
+      reserved: { bg: 'bg-teal-200', border: 'border-teal-400', text: 'text-teal-800', badgeBg: 'bg-teal-300', badgeText: 'text-teal-900', nameText: 'text-teal-950', seatsBg: 'bg-teal-100', seatsText: 'text-teal-700', iconCircle: 'bg-white text-teal-600' },
+    },
+    sunset: {
+      available: { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-700', badgeBg: 'bg-amber-200', badgeText: 'text-amber-800', nameText: 'text-amber-900', seatsBg: 'bg-white/80', seatsText: 'text-amber-700', iconCircle: 'bg-white text-amber-600' },
+      running: { bg: 'bg-rose-200', border: 'border-rose-400', text: 'text-rose-800', badgeBg: 'bg-rose-300', badgeText: 'text-rose-900', nameText: 'text-rose-950', seatsBg: 'bg-white/80', seatsText: 'text-rose-700', iconCircle: 'bg-white text-rose-600' },
+      printed: { bg: 'bg-orange-300', border: 'border-orange-400', text: 'text-orange-800', badgeBg: 'bg-orange-400', badgeText: 'text-orange-900', nameText: 'text-orange-950', seatsBg: 'bg-white/80', seatsText: 'text-orange-800', iconCircle: 'bg-white text-orange-600' },
+      paid: { bg: 'bg-stone-200', border: 'border-stone-300', text: 'text-stone-700', badgeBg: 'bg-stone-300', badgeText: 'text-stone-800', nameText: 'text-stone-900', seatsBg: 'bg-white/80', seatsText: 'text-stone-600', iconCircle: 'bg-white text-stone-600' },
+      seated: { bg: 'bg-pink-200', border: 'border-pink-400', text: 'text-pink-800', badgeBg: 'bg-pink-300', badgeText: 'text-pink-900', nameText: 'text-pink-950', seatsBg: 'bg-white/80', seatsText: 'text-pink-700', iconCircle: 'bg-white text-pink-600' },
+      reserved: { bg: 'bg-yellow-200', border: 'border-yellow-400', text: 'text-yellow-800', badgeBg: 'bg-yellow-300', badgeText: 'text-yellow-900', nameText: 'text-yellow-950', seatsBg: 'bg-white/80', seatsText: 'text-yellow-700', iconCircle: 'bg-white text-yellow-600' },
+    },
+    forest: {
+      available: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badgeBg: 'bg-emerald-100', badgeText: 'text-emerald-800', nameText: 'text-emerald-900', seatsBg: 'bg-emerald-100', seatsText: 'text-emerald-700', iconCircle: 'bg-emerald-100 text-emerald-600' },
+      running: { bg: 'bg-green-200', border: 'border-green-300', text: 'text-green-800', badgeBg: 'bg-green-300', badgeText: 'text-green-900', nameText: 'text-green-950', seatsBg: 'bg-green-100', seatsText: 'text-green-800', iconCircle: 'bg-green-100 text-green-700' },
+      printed: { bg: 'bg-lime-200', border: 'border-lime-300', text: 'text-lime-800', badgeBg: 'bg-lime-300', badgeText: 'text-lime-900', nameText: 'text-lime-950', seatsBg: 'bg-lime-100', seatsText: 'text-lime-800', iconCircle: 'bg-lime-100 text-lime-700' },
+      paid: { bg: 'bg-stone-100', border: 'border-stone-300', text: 'text-stone-600', badgeBg: 'bg-stone-200', badgeText: 'text-stone-700', nameText: 'text-stone-800', seatsBg: 'bg-stone-200', seatsText: 'text-stone-600', iconCircle: 'bg-stone-100 text-stone-600' },
+      seated: { bg: 'bg-teal-200', border: 'border-teal-300', text: 'text-teal-800', badgeBg: 'bg-teal-300', badgeText: 'text-teal-900', nameText: 'text-teal-950', seatsBg: 'bg-teal-100', seatsText: 'text-teal-800', iconCircle: 'bg-teal-100 text-teal-700' },
+      reserved: { bg: 'bg-green-100', border: 'border-green-200', text: 'text-green-700', badgeBg: 'bg-green-200', badgeText: 'text-green-800', nameText: 'text-green-900', seatsBg: 'bg-green-200', seatsText: 'text-green-700', iconCircle: 'bg-green-100 text-green-600' },
+    },
+    minimal: {
+      available: { bg: 'bg-white', border: 'border-emerald-200', text: 'text-gray-800', badgeBg: 'bg-gray-100', badgeText: 'text-gray-800', nameText: 'text-gray-900', seatsBg: 'bg-gray-50', seatsText: 'text-gray-500', iconCircle: 'bg-gray-50 text-gray-800' },
+      running: { bg: 'bg-gray-50', border: 'border-blue-300', text: 'text-gray-800', badgeBg: 'bg-gray-200', badgeText: 'text-gray-900', nameText: 'text-gray-900', seatsBg: 'bg-white', seatsText: 'text-gray-600', iconCircle: 'bg-white text-gray-800' },
+      printed: { bg: 'bg-gray-100', border: 'border-orange-300', text: 'text-gray-800', badgeBg: 'bg-gray-200', badgeText: 'text-gray-900', nameText: 'text-gray-900', seatsBg: 'bg-white', seatsText: 'text-gray-600', iconCircle: 'bg-white text-gray-800' },
+      paid: { bg: 'bg-white', border: 'border-gray-200', text: 'text-gray-500', badgeBg: 'bg-gray-100', badgeText: 'text-gray-500', nameText: 'text-gray-500', seatsBg: 'bg-gray-50', seatsText: 'text-gray-400', iconCircle: 'bg-gray-50 text-gray-400' },
+      seated: { bg: 'bg-gray-50', border: 'border-teal-300', text: 'text-gray-800', badgeBg: 'bg-gray-200', badgeText: 'text-gray-900', nameText: 'text-gray-900', seatsBg: 'bg-white', seatsText: 'text-gray-600', iconCircle: 'bg-white text-gray-800' },
+      reserved: { bg: 'bg-white', border: 'border-amber-300', text: 'text-gray-800', badgeBg: 'bg-gray-100', badgeText: 'text-gray-800', nameText: 'text-gray-900', seatsBg: 'bg-gray-50', seatsText: 'text-gray-500', iconCircle: 'bg-gray-50 text-gray-800' },
+    },
+    neon: {
+      available: { bg: 'bg-black', border: 'border-lime-400', text: 'text-lime-400', badgeBg: 'bg-lime-400', badgeText: 'text-black', nameText: 'text-lime-400', seatsBg: 'bg-lime-900/40', seatsText: 'text-lime-400', iconCircle: 'bg-black text-lime-400 ring-1 ring-lime-400' },
+      running: { bg: 'bg-black', border: 'border-cyan-400', text: 'text-cyan-400', badgeBg: 'bg-cyan-400', badgeText: 'text-black', nameText: 'text-cyan-400', seatsBg: 'bg-cyan-900/40', seatsText: 'text-cyan-400', iconCircle: 'bg-black text-cyan-400 ring-1 ring-cyan-400' },
+      printed: { bg: 'bg-black', border: 'border-pink-400', text: 'text-pink-400', badgeBg: 'bg-pink-400', badgeText: 'text-black', nameText: 'text-pink-400', seatsBg: 'bg-pink-900/40', seatsText: 'text-pink-400', iconCircle: 'bg-black text-pink-400 ring-1 ring-pink-400' },
+      paid: { bg: 'bg-black', border: 'border-gray-500', text: 'text-gray-400', badgeBg: 'bg-gray-700', badgeText: 'text-gray-300', nameText: 'text-gray-400', seatsBg: 'bg-gray-900/60', seatsText: 'text-gray-400', iconCircle: 'bg-black text-gray-400 ring-1 ring-gray-600' },
+      seated: { bg: 'bg-black', border: 'border-fuchsia-400', text: 'text-fuchsia-400', badgeBg: 'bg-fuchsia-400', badgeText: 'text-black', nameText: 'text-fuchsia-400', seatsBg: 'bg-fuchsia-900/40', seatsText: 'text-fuchsia-400', iconCircle: 'bg-black text-fuchsia-400 ring-1 ring-fuchsia-400' },
+      reserved: { bg: 'bg-black', border: 'border-yellow-400', text: 'text-yellow-400', badgeBg: 'bg-yellow-400', badgeText: 'text-black', nameText: 'text-yellow-400', seatsBg: 'bg-yellow-900/40', seatsText: 'text-yellow-400', iconCircle: 'bg-black text-yellow-400 ring-1 ring-yellow-400' },
+    },
+    classic: {
+      available: { bg: 'bg-white', border: 'border-l-4 border-l-emerald-500 border-y-gray-200 border-r-gray-200', text: 'text-emerald-600', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700', nameText: 'text-gray-800', seatsBg: 'bg-gray-100', seatsText: 'text-gray-600', iconCircle: 'bg-emerald-50 text-emerald-600' },
+      running: { bg: 'bg-white', border: 'border-l-4 border-l-blue-500 border-y-gray-200 border-r-gray-200', text: 'text-blue-600', badgeBg: 'bg-blue-50', badgeText: 'text-blue-700', nameText: 'text-gray-800', seatsBg: 'bg-gray-100', seatsText: 'text-gray-600', iconCircle: 'bg-blue-50 text-blue-600' },
+      printed: { bg: 'bg-white', border: 'border-l-4 border-l-orange-500 border-y-gray-200 border-r-gray-200', text: 'text-orange-600', badgeBg: 'bg-orange-50', badgeText: 'text-orange-700', nameText: 'text-gray-800', seatsBg: 'bg-gray-100', seatsText: 'text-gray-600', iconCircle: 'bg-orange-50 text-orange-600' },
+      paid: { bg: 'bg-gray-50', border: 'border-l-4 border-l-gray-400 border-y-gray-200 border-r-gray-200', text: 'text-gray-500', badgeBg: 'bg-gray-200', badgeText: 'text-gray-700', nameText: 'text-gray-600', seatsBg: 'bg-gray-200', seatsText: 'text-gray-500', iconCircle: 'bg-gray-100 text-gray-500' },
+      seated: { bg: 'bg-white', border: 'border-l-4 border-l-teal-500 border-y-gray-200 border-r-gray-200', text: 'text-teal-600', badgeBg: 'bg-teal-50', badgeText: 'text-teal-700', nameText: 'text-gray-800', seatsBg: 'bg-gray-100', seatsText: 'text-gray-600', iconCircle: 'bg-teal-50 text-teal-600' },
+      reserved: { bg: 'bg-white', border: 'border-l-4 border-l-amber-500 border-y-gray-200 border-r-gray-200', text: 'text-amber-600', badgeBg: 'bg-amber-50', badgeText: 'text-amber-700', nameText: 'text-gray-800', seatsBg: 'bg-gray-100', seatsText: 'text-gray-600', iconCircle: 'bg-amber-50 text-amber-600' },
+    }
+  };
+
+  const t = themes[theme] || themes.pastel;
+  if (isJustCleared) {
+    return { ...t[status], bg: t[status].bg, border: 'border-emerald-300 ring-1 ring-emerald-300/40' };
+  }
+  return t[status];
+};
+
 const FloorManagement = ({ onNavigate, onGoBack }) => {
+
   const { t } = useLanguage();
+  const [floorTheme, setFloorTheme] = useState(() => localStorage.getItem('ms_floor_theme') || 'pastel');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -1108,10 +1195,8 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
       : null;
     const isJustCleared = Boolean(clearedInfo && clearedInfo.isRecent);
 
-    let statusColorClass = 'text-emerald-600';
-    let statusBgClass = 'bg-emerald-100/60';
-    let statusBorderClass = 'border-emerald-200';
-    let statusBadgeClass = 'bg-emerald-100 text-emerald-700';
+    
+    let status = 'available';
     let statusText = t('Available');
     let Icon = null;
     let SmallIcon = CheckCircle;
@@ -1124,24 +1209,15 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
     if (isOccupied && activeOrder) {
       if (activeOrder.status === 'Open') {
-        statusBgClass = 'bg-blue-100/60';
-        statusBorderClass = 'border-blue-300';
-        statusColorClass = 'text-blue-600';
-        statusBadgeClass = 'bg-blue-200 text-blue-800';
+        status = 'running';
         statusText = 'Running';
         SmallIcon = Clock;
       } else if (activeOrder.status === 'Billed') {
-        statusBgClass = 'bg-orange-100/60';
-        statusBorderClass = 'border-orange-300';
-        statusColorClass = 'text-orange-600';
-        statusBadgeClass = 'bg-orange-200 text-orange-800';
+        status = 'printed';
         statusText = 'Printed';
         SmallIcon = Printer;
       } else if (activeOrder.status === 'Paid') {
-        statusBgClass = 'bg-gray-100/60';
-        statusBorderClass = 'border-gray-300';
-        statusColorClass = 'text-gray-600';
-        statusBadgeClass = 'bg-gray-200 text-gray-800';
+        status = 'paid';
         statusText = 'Paid';
         SmallIcon = CheckCircle;
       }
@@ -1193,13 +1269,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
     if (!isOccupied && (activeReservation || item.status === 'Reserved')) {
       const isSeated = activeReservation?.status === 'seated';
-      statusBgClass = isSeated ? 'bg-teal-50/80' : 'bg-amber-100/60';
-      statusBorderClass = isSeated ? 'border-teal-300' : 'border-amber-300';
-      statusColorClass = isSeated ? 'text-teal-700' : 'text-amber-600';
-      statusBadgeClass = isSeated ? 'bg-teal-200 text-teal-800' : 'bg-amber-200 text-amber-800';
+      status = isSeated ? 'seated' : 'reserved';
       statusText = isSeated ? 'Seated' : (activeReservation?.status === 'confirmed' ? 'Confirmed' : 'Reserved');
       SmallIcon = Clock;
     }
+
+    const tColors = getThemeColors(floorTheme, status, isJustCleared);
+    const statusBgClass = tColors.bg;
+    const statusBorderClass = tColors.border;
+    const statusColorClass = tColors.text;
+    const statusBadgeClass = `${tColors.badgeBg} ${tColors.badgeText}`;
+    
 
     // AI Insight logic
     let insightBadge = null;
@@ -1236,17 +1316,17 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
         )}
 
         <div className="flex flex-col items-center gap-0.5 sm:gap-1 w-full h-full justify-between">
-          <div className={`p-1 ${isJustCleared ? 'sm:p-1' : 'sm:p-1.5'} rounded-full bg-white shadow-xs ${statusColorClass} mt-0.5`}>
+          <div className={`p-1 ${isJustCleared ? 'sm:p-1' : 'sm:p-1.5'} rounded-full shadow-xs ${tColors?.iconCircle} mt-0.5`}>
             <Icon size={14} strokeWidth={2.5} className="sm:hidden" />
             <Icon size={isJustCleared ? 16 : 20} strokeWidth={2.5} className="hidden sm:block" />
           </div>
 
           <div className="flex flex-col items-center w-full px-0.5">
-            <h3 className={`font-black text-gray-800 text-center w-full truncate ${isJustCleared ? 'text-[11px] sm:text-[13px] leading-none' : 'text-[11px] sm:text-base leading-tight'}`}>
+            <h3 className={`font-black ${tColors?.nameText} text-center w-full truncate ${isJustCleared ? 'text-[11px] sm:text-[13px] leading-none' : 'text-[11px] sm:text-base leading-tight'}`}>
               {item.name}
             </h3>
             {!isJustCleared && (
-              <div className="inline-flex items-center gap-1 text-[9px] sm:text-[10.5px] font-bold text-gray-500 bg-white/90 px-2 py-0.5 rounded-full mt-0.5 border border-gray-200/70 shadow-2xs" title={`${item.capacity || (type === 'cabin' ? 6 : 4)} ${t("Seats")}`}>
+              <div className="inline-flex items-center gap-1 text-[9px] sm:text-[10.5px] font-bold ${tColors?.seatsText} ${tColors?.seatsBg} px-2 py-0.5 rounded-full mt-0.5 border border-white/20 shadow-2xs" title={`${item.capacity || (type === 'cabin' ? 6 : 4)} ${t("Seats")}`}>
                 <Users size={10} className="text-gray-400 shrink-0" />
                 <span>{item.capacity || (type === 'cabin' ? 6 : 4)} {t("Seats")}</span>
               </div>
@@ -1254,7 +1334,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           </div>
 
           {!isOccupied && activeReservation ? (
-            <div className={`px-1.5 py-0.5 rounded-xl text-[9px] sm:text-[10px] font-bold tracking-tight bg-white shadow-xs ${statusColorClass} mb-0.5 flex flex-col items-center leading-[1.1]`}>
+            <div className={`px-1.5 py-0.5 rounded-xl text-[9px] sm:text-[10px] font-bold tracking-tight shadow-xs ${tColors?.badgeBg} ${tColors?.badgeText} mb-0.5 flex flex-col items-center leading-[1.1]`}>
               <span className="uppercase tracking-wider">{statusText}</span>
               <span className="text-[8.5px] font-mono lowercase tracking-normal text-amber-800">
                 {formatTime12Hour(activeReservation.time)} - {formatTime12Hour(activeReservation.endTime)}
@@ -1302,7 +1382,7 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               </div>
             </div>
           ) : !isOccupied ? (
-            <div className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-white shadow-xs ${statusColorClass} mb-0.5`}>
+            <div className={`px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shadow-xs ${tColors?.badgeBg} ${tColors?.badgeText} mb-0.5`}>
               {statusText}
             </div>
           ) : (
@@ -1388,6 +1468,23 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
               className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-xs transition-colors text-xs font-bold flex items-center gap-1.5 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
               {t("✨ AI Predictor")}
             </button>
+            <div className="relative group">
+              <select
+                value={floorTheme}
+                onChange={(e) => {
+                  setFloorTheme(e.target.value);
+                  localStorage.setItem('ms_floor_theme', e.target.value);
+                }}
+                className="appearance-none px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg shadow-xs transition-colors text-xs font-bold outline-none cursor-pointer border border-emerald-200 bg-emerald-50 text-emerald-800 pr-7"
+              >
+                <option value="pastel">Pastel (Default)</option>
+                                                <option value="ocean">Ocean</option>
+                <option value="sunset">Sunset</option>
+                <option value="forest">Forest</option>
+                                                              </select>
+              <Palette size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+            </div>
+
             <button onClick={() => { setLoading(true); fetchOrders(); syncSpaces(); }} className="p-1 sm:p-1.5 text-gray-700 font-bold hover:bg-gray-100 rounded-lg transition-colors flex items-center justify-center" title={t("Refresh")}>
               <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
             </button>
@@ -1423,6 +1520,23 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
             className={`px-2.5 py-1.5 rounded-lg shadow-xs transition-colors text-[11px] font-bold flex items-center gap-1 whitespace-nowrap shrink-0 ${showAIInsights ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700'}`}>
             {t("✨ AI Predictor")}
           </button>
+          <div className="relative shrink-0">
+            <select
+              value={floorTheme}
+              onChange={(e) => {
+                setFloorTheme(e.target.value);
+                localStorage.setItem('ms_floor_theme', e.target.value);
+              }}
+              className="appearance-none px-2.5 py-1.5 rounded-lg shadow-xs transition-colors text-[11px] font-bold outline-none cursor-pointer border border-emerald-200 bg-emerald-50 text-emerald-800 pr-7"
+            >
+              <option value="pastel">Pastel</option>
+                                          <option value="ocean">Ocean</option>
+              <option value="sunset">Sunset</option>
+              <option value="forest">Forest</option>
+                                                      </select>
+            <Palette size={13} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-emerald-600 pointer-events-none" />
+          </div>
+
           <button onClick={() => setMergeModal({ isOpen: true, targetSpace: '', sourceSpaces: [] })} className="px-2.5 py-1.5 bg-amber-500 text-white font-bold rounded-lg shadow-xs text-[11px] whitespace-nowrap shrink-0">
             {t("Merge Bills")}
           </button>
@@ -1512,39 +1626,39 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
 
           return (
             <>
-              {/* 1) Available (green dot) */}
-              <div className="flex items-center gap-1.5 whitespace-nowrap bg-emerald-50/70 px-2.5 py-1 rounded-full border border-emerald-200 text-emerald-950 font-bold shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+              {/* 1) Available */}
+              <div className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full border ${getThemeColors(floorTheme, 'available', false).badgeBg} ${getThemeColors(floorTheme, 'available', false).border} ${getThemeColors(floorTheme, 'available', false).nameText} font-bold shadow-2xs`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getThemeColors(floorTheme, 'available', false).text.replace('text-', 'bg-')} shrink-0`}></span>
                 <span>{t("Available")}</span>
-                <span className="bg-emerald-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{availableCount}</span>
+                <span className={`${getThemeColors(floorTheme, 'available', false).text.replace('text-', 'bg-')} text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5`}>{availableCount}</span>
               </div>
 
-              {/* 2) Running Table (blue dot) */}
-              <div className="flex items-center gap-1.5 whitespace-nowrap bg-blue-50/70 px-2.5 py-1 rounded-full border border-blue-200 text-blue-950 font-bold shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+              {/* 2) Running Table */}
+              <div className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full border ${getThemeColors(floorTheme, 'running', false).badgeBg} ${getThemeColors(floorTheme, 'running', false).border} ${getThemeColors(floorTheme, 'running', false).nameText} font-bold shadow-2xs`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getThemeColors(floorTheme, 'running', false).text.replace('text-', 'bg-')} shrink-0`}></span>
                 <span>{t("Running Table")}</span>
-                <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{runningCount}</span>
+                <span className={`${getThemeColors(floorTheme, 'running', false).text.replace('text-', 'bg-')} text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5`}>{runningCount}</span>
               </div>
 
-              {/* 3) Printed Table (orange dot) */}
-              <div className="flex items-center gap-1.5 whitespace-nowrap bg-orange-50/70 px-2.5 py-1 rounded-full border border-orange-200 text-orange-950 font-bold shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0"></span>
+              {/* 3) Printed Table */}
+              <div className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full border ${getThemeColors(floorTheme, 'printed', false).badgeBg} ${getThemeColors(floorTheme, 'printed', false).border} ${getThemeColors(floorTheme, 'printed', false).nameText} font-bold shadow-2xs`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getThemeColors(floorTheme, 'printed', false).text.replace('text-', 'bg-')} shrink-0`}></span>
                 <span>{t("Printed Table")}</span>
-                <span className="bg-orange-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{printedCount}</span>
+                <span className={`${getThemeColors(floorTheme, 'printed', false).text.replace('text-', 'bg-')} text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5`}>{printedCount}</span>
               </div>
 
-              {/* 4) Paid Table (gray dot - shows total settled bills today) */}
-              <div className="flex items-center gap-1.5 whitespace-nowrap bg-gray-100 px-2.5 py-1 rounded-full border border-gray-300 text-gray-800 font-bold shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-gray-400 shrink-0"></span>
+              {/* 4) Paid Table */}
+              <div className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full border ${getThemeColors(floorTheme, 'paid', false).badgeBg} ${getThemeColors(floorTheme, 'paid', false).border} ${getThemeColors(floorTheme, 'paid', false).nameText} font-bold shadow-2xs`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getThemeColors(floorTheme, 'paid', false).text.replace('text-', 'bg-')} shrink-0`}></span>
                 <span>{t("Paid Table")}</span>
-                <span className="bg-gray-700 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{settledBillsToday}</span>
+                <span className={`${getThemeColors(floorTheme, 'paid', false).text.replace('text-', 'bg-')} text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5`}>{settledBillsToday}</span>
               </div>
 
-              {/* 5) Reserved Table (amber dot) */}
-              <div className="flex items-center gap-1.5 whitespace-nowrap bg-amber-50/70 px-2.5 py-1 rounded-full border border-amber-200 text-amber-950 font-bold shadow-2xs">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+              {/* 5) Reserved Table */}
+              <div className={`flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-full border ${getThemeColors(floorTheme, 'reserved', false).badgeBg} ${getThemeColors(floorTheme, 'reserved', false).border} ${getThemeColors(floorTheme, 'reserved', false).nameText} font-bold shadow-2xs`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${getThemeColors(floorTheme, 'reserved', false).text.replace('text-', 'bg-')} shrink-0`}></span>
                 <span>{t("Reserved Table")}</span>
-                <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5">{reservedCount}</span>
+                <span className={`${getThemeColors(floorTheme, 'reserved', false).text.replace('text-', 'bg-')} text-white text-[10px] px-1.5 py-0.2 rounded-full font-black min-w-[18px] text-center leading-tight ml-0.5`}>{reservedCount}</span>
               </div>
 
               {/* Right Aligned Stat Cards (flex end) */}
