@@ -65,6 +65,11 @@ public class MainActivity extends BridgeActivity {
                 }
 
                 @JavascriptInterface
+                public String printRawBase64(String address, String base64Raw) {
+                    return bluetoothPrinterHelper.printRawBase64(address, base64Raw);
+                }
+
+                @JavascriptInterface
                 public String testPrint(String address) {
                     return bluetoothPrinterHelper.testPrint(address);
                 }
@@ -82,6 +87,17 @@ public class MainActivity extends BridgeActivity {
                                     Manifest.permission.BLUETOOTH_CONNECT,
                                     Manifest.permission.BLUETOOTH_SCAN
                             }, 1002);
+                        }
+                    });
+                }
+
+                @JavascriptInterface
+                public void requestEnableBluetooth() {
+                    runOnUiThread(() -> {
+                        android.bluetooth.BluetoothAdapter adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+                        if (adapter != null && !adapter.isEnabled()) {
+                            android.content.Intent enableBtIntent = new android.content.Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                            startActivityForResult(enableBtIntent, 1003);
                         }
                     });
                 }

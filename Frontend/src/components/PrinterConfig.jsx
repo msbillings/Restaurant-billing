@@ -1289,6 +1289,72 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       </div>
                     )}
 
+                    {/* LIVE BLUETOOTH STATUS PANEL */}
+                    {formData.bluetoothAddress && (
+                      <div className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-sm space-y-3 mt-3">
+                        <h4 className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Bluetooth size={12} className={isScanningBluetooth ? "animate-pulse" : ""} />
+                          {t("Live Bluetooth Status")}
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          {/* 1. Bluetooth ON/OFF */}
+                          <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                            <span className="text-gray-600 font-medium">{t("Bluetooth Radio")}</span>
+                            {btAvailable === true ? (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 font-bold rounded text-[10px] uppercase">ON</span>
+                            ) : btAvailable === false ? (
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 font-bold rounded text-[10px] uppercase">OFF / UNAVAILABLE</span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-gray-200 text-gray-600 font-bold rounded text-[10px] uppercase">CHECKING...</span>
+                            )}
+                          </div>
+
+                          {/* 2. Paired Status */}
+                          <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                            <span className="text-gray-600 font-medium">{t("Pairing Status")}</span>
+                            {bluetoothDevices.some(d => d.address === formData.bluetoothAddress) ? (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 font-bold rounded text-[10px] uppercase">PAIRED</span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 font-bold rounded text-[10px] uppercase">NOT PAIRED</span>
+                            )}
+                          </div>
+
+                          {/* 3. Connected Status */}
+                          <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                            <span className="text-gray-600 font-medium">{t("Connection")}</span>
+                            {bluetoothDevices.some(d => d.address === formData.bluetoothAddress && d.connected) ? (
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 font-bold rounded text-[10px] uppercase flex items-center gap-1"><CheckCircle size={10}/> CONNECTED</span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-gray-200 text-gray-600 font-bold rounded text-[10px] uppercase">DISCONNECTED</span>
+                            )}
+                          </div>
+
+                          {/* 4. Connection Limit */}
+                          <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+                            <span className="text-gray-600 font-medium">{t("Device Limit")}</span>
+                            {bluetoothDevices.some(d => d.address === formData.bluetoothAddress && d.connected) ? (
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 font-bold rounded text-[10px] uppercase">1/1 (MAX REACHED)</span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-gray-200 text-gray-600 font-bold rounded text-[10px] uppercase">AVAILABLE (0/1)</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 5. Error Reporting */}
+                        {(!btAvailable || !bluetoothDevices.some(d => d.address === formData.bluetoothAddress)) && (
+                          <div className="p-2.5 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2 text-[11px] text-red-700 mt-2">
+                            <AlertTriangle size={14} className="shrink-0 mt-0.5 text-red-500" />
+                            <span className="font-medium">
+                              {!btAvailable 
+                                ? t("Error: Bluetooth adapter is turned off or not found on this system. Please enable it.") 
+                                : t("Error: This device is not currently paired. Please pair it in your system Bluetooth settings first and click Scan.")}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Manual MAC input */}
                     <div className="flex items-center gap-2">
                       <input

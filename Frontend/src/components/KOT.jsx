@@ -308,21 +308,23 @@ const KOT = ({ order, onClose }) => {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
-              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
-              if (!pngBase64) throw new Error("Failed to generate printer raster data");
+              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              if (!escposBase64) throw new Error("Failed to generate printer raster data");
               // Yield a brief moment so UI remains fluid before native bridge
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printRawBase64 ? window.AndroidBluetooth.printRawBase64(macAddress, escposBase64) : window.AndroidBluetooth.printImage(macAddress, await renderElementToPNGBase64(receiptNode, paperWidthDots), paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
-                await new Promise(res => setTimeout(res, 1500));
                 setPrintStatus('success');
                 showToast(t('KOT printed successfully!'), 'success');
                 resetPrintStatus(3000);
                 return;
               } else {
                 const errMsg = res.error || 'Bluetooth print failed';
-                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket')) {
+                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket') || errMsg.toLowerCase().includes('power') || errMsg.toLowerCase().includes('disabled')) {
+                  if (window.AndroidBluetooth && window.AndroidBluetooth.requestEnableBluetooth) {
+                    window.AndroidBluetooth.requestEnableBluetooth();
+                  }
                   setPrintStatus('not_connected');
                   showToast(t('Printer not connected. Please check Bluetooth connection.'), 'error');
                 } else {
@@ -527,13 +529,13 @@ const KOT = ({ order, onClose }) => {
               const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
               if (receiptNode) {
                 const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
-                const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
-                if (pngBase64) {
+                const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                if (escposBase64) {
                   await new Promise(res => setTimeout(res, 20));
-                  const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+                  const resStr = window.AndroidBluetooth.printRawBase64 ? window.AndroidBluetooth.printRawBase64(macAddress, escposBase64) : window.AndroidBluetooth.printImage(macAddress, await renderElementToPNGBase64(receiptNode, paperWidthDots), paperWidthDots);
                   const res = JSON.parse(resStr || '{}');
                   if (res.success) {
-                    await new Promise(res => setTimeout(res, 1500));
+                    // Success without delay
                   }
                 }
               }

@@ -31,7 +31,7 @@ export async function renderElementToESCPOSRaster(element, targetWidthDots = 576
     while (attempt <= 2) {
       try {
         const canvasOptions = {
-          scale: 2,
+          scale: 1, // Lightning fast render, no unnecessary upscaling
           backgroundColor: '#ffffff',
           useCORS: attempt === 1,
           logging: false,
@@ -176,12 +176,10 @@ export async function renderElementToESCPOSRaster(element, targetWidthDots = 576
       pos += c.length;
     }
 
-    // Convert binary to base64 safely in 8KB chunks
+    // Convert binary to base64 safely without hitting call stack limits
     let binary = '';
-    const CHUNK_SIZE = 8192;
-    for (let i = 0; i < combined.length; i += CHUNK_SIZE) {
-      const slice = combined.subarray(i, i + CHUNK_SIZE);
-      binary += String.fromCharCode.apply(null, slice);
+    for (let i = 0; i < combined.length; i++) {
+      binary += String.fromCharCode(combined[i]);
     }
     return btoa(binary);
   } catch (err) {

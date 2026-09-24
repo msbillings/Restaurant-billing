@@ -259,13 +259,13 @@ public class BluetoothPrinterHelper {
 
             OutputStream os = socket.getOutputStream();
             
-            // Send in small chunks (256 bytes) with higher delay to avoid overflowing Bluetooth printer buffer
-            int chunkSize = 256;
+            // Send in chunks (1024 bytes) with tiny delay to avoid overflowing Bluetooth printer buffer
+            int chunkSize = 1024;
             for (int i = 0; i < rasterBytes.length; i += chunkSize) {
                 int len = Math.min(chunkSize, rasterBytes.length - i);
                 os.write(rasterBytes, i, len);
                 os.flush();
-                Thread.sleep(30);
+                Thread.sleep(5);
             }
 
             // Feed and cut
@@ -349,6 +349,11 @@ public class BluetoothPrinterHelper {
             BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
             if (adapter == null || !adapter.isEnabled()) return null;
 
+            // CRITICAL: Cancel discovery because it slows down connection and causes failures
+            if (adapter.isDiscovering()) {
+                adapter.cancelDiscovery();
+            }
+
             BluetoothDevice device = adapter.getRemoteDevice(address);
             if (device == null) return null;
 
@@ -377,5 +382,54 @@ public class BluetoothPrinterHelper {
             Log.e(TAG, "Failed to connect to device: ", e);
         }
         return null;
+    }
+
+    /**
+     * Prints raw ESC/POS commands directly to the printer (Lightning speed)
+     */
+    public String printRawBase64(String address, String base64Raw) {
+        JSONObject response = new JSONObject();
+        try {
+            if (base64Raw == null || base64Raw.trim().isEmpty()) {
+                response.put("success", false);
+                response.put("error", "Raw content is empty");
+                return response.toString();
+            }
+
+            byte[] decodedBytes = Base64.decode(base64Raw, Base64.DEFAULT);
+
+            BluetoothSocket socket = connectToDevice(address);
+            if (socket == null) {
+                response.put("success", false);
+                response.put("error", "Could not connect to Bluetooth printer " + address + " - please ensure it is turned on and paired.");
+                return response.toString();
+            }
+
+            OutputStream os = socket.getOutputStream();
+            
+            // Blast bytes to printer. RFCOMM handles flow control.
+            // Sending in 1024 byte chunks with a 5ms sleep balances lightning speed 
+            // and guarantees we don't overflow the hardware buffer of cheap printers
+            int chunkSize = 1024;
+            for (int i = 0; i < decodedBytes.length; i += chunkSize) {
+                int len = Math.min(chunkSize, decodedBytes.length - i);
+                os.write(decodedBytes, i, len);
+                os.flush();
+                Thread.sleep(5); 
+            }
+
+            Thread.sleep(200);
+            socket.close();
+
+            response.put("success", true);
+            response.put("message", "Print job sent successfully!");
+        } catch (Exception e) {
+            Log.e(TAG, "Print raw error: ", e);
+            try {
+                response.put("success", false);
+                response.put("error", e.getMessage());
+            } catch (Exception ignored) {}
+        }
+        return response.toString();
     }
 }

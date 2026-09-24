@@ -333,21 +333,22 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
-              if (!pngBase64) throw new Error("Failed to generate printer raster data");
+              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              if (!escposBase64) throw new Error("Failed to generate printer raster data");
               await new Promise(res => setTimeout(res, 20));
-              const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printRawBase64 ? window.AndroidBluetooth.printRawBase64(macAddress, escposBase64) : window.AndroidBluetooth.printImage(macAddress, await renderElementToPNGBase64(receiptNode, paperWidthDots), paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
-                // Realistic delay to guarantee the paper has physically printed before showing success
-                await new Promise(res => setTimeout(res, 1500));
                 setPrintStatus('success');
                 setToast({ message: t('Bill printed successfully!'), type: 'success' });
                 resetPrintStatus(3000);
                 return;
               } else {
                 const errMsg = res.error || 'Bluetooth print failed';
-                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket')) {
+                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket') || errMsg.toLowerCase().includes('power') || errMsg.toLowerCase().includes('disabled')) {
+                  if (window.AndroidBluetooth && window.AndroidBluetooth.requestEnableBluetooth) {
+                    window.AndroidBluetooth.requestEnableBluetooth();
+                  }
                   setPrintStatus('not_connected');
                   setToast({ message: t('Printer not connected. Please check Bluetooth connection.'), type: 'error' });
                 } else {
@@ -445,8 +446,6 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           }
 
           if (anySuccess) {
-            // Realistic delay for network printers so success message doesn't appear before paper
-            await new Promise(res => setTimeout(res, 1500));
             setPrintStatus('success');
             setToast({ message: `✅ ${t("Bill printed to")} ${names}!`, type: 'success' });
             resetPrintStatus(3000);

@@ -501,6 +501,7 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
           }
         }
       }
+        
 
       if (-not $matchedPort) {
         Write-Error "PRINTER_OFFLINE: Printer '$targetName' is not reachable. Please make sure the printer is turned ON and paired in Windows Bluetooth Settings, then try again."
@@ -513,11 +514,11 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       $sp.ReadTimeout = 500
       try {
         $sp.Open()
-        $chunkSize = 128
+        $chunkSize = 8192
         for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
           $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
           $sp.Write($rawBytes, $offset, $count)
-          Start-Sleep -Milliseconds 25
+          Start-Sleep -Milliseconds 5
         }
         Start-Sleep -Milliseconds 200
         $sp.Close()
