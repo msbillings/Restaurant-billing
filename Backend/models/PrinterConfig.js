@@ -66,6 +66,10 @@ const printerConfigSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  silentPrinting: {
+    type: Boolean,
+    default: true
+  },
   // KOT specific options
   autoPrintKOT: {
     type: Boolean,

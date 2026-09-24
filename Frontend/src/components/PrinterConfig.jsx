@@ -8,6 +8,7 @@ import {
   AlertTriangle, Layers, Utensils, MapPin, ChevronDown, ChevronUp, RefreshCw, Loader2, Battery
 } from 'lucide-react';
 import BackButton from './common/BackButton';
+import LiveReceiptPreview from './LiveReceiptPreview';
 
 const PrinterConfig = ({ onNavigate, onGoBack }) => {
   const { t } = useLanguage();
@@ -337,6 +338,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       connectionType: 'network',
       paperWidth: '80mm',
       isActive: true,
+      silentPrinting: true,
       autoPrintKOT: true,
       printHeader: '',
       printFooter: ''
@@ -366,6 +368,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       connectionType: config.connectionType || 'network',
       paperWidth: config.paperWidth || '80mm',
       isActive: config.isActive !== false,
+      silentPrinting: config.silentPrinting !== false,
       autoPrintKOT: config.autoPrintKOT !== false,
       printHeader: config.printHeader || '',
       printFooter: config.printFooter || ''
@@ -876,7 +879,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       {/* Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto overscroll-contain touch-pan-y animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] border border-gray-200 my-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[90vh] border border-gray-200 my-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-gray-200 bg-gray-50/80 shrink-0">
               <div>
@@ -893,9 +896,11 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-3.5 sm:p-6 overflow-y-auto overscroll-contain flex-1 space-y-4 sm:space-y-5 touch-pan-y">
-              <form id="printer-form" onSubmit={handleSave} className="space-y-5">
+            {/* Modal Body with 2-Column Layout */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y bg-gray-50 flex flex-col lg:flex-row">
+              {/* Left Column - Form */}
+              <div className="w-full lg:flex-1 p-3.5 sm:p-6 bg-white lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-gray-200 shrink-0">
+                <form id="printer-form" onSubmit={handleSave} className="space-y-5">
                 {/* Station Name & Location */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -1549,20 +1554,56 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
 
                 {/* Active Checkbox */}
-                <div className="flex items-center gap-2.5 pt-1">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    name="isActive"
-                    checked={formData.isActive}
-                    onChange={handleInputChange}
-                    className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
-                  />
-                  <label htmlFor="isActive" className="text-xs sm:text-sm font-bold text-gray-800 cursor-pointer">
-                    {t("Station / Printer is Active & Enabled")}
-                  </label>
+                <div className="flex items-center gap-6 pt-1">
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="isActive"
+                      name="isActive"
+                      checked={formData.isActive}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                    />
+                    <label htmlFor="isActive" className="text-xs sm:text-sm font-bold text-gray-800 cursor-pointer">
+                      {t("Station is Active")}
+                    </label>
+                  </div>
+                  
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="silentPrinting"
+                      name="silentPrinting"
+                      checked={formData.silentPrinting}
+                      onChange={handleInputChange}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <label htmlFor="silentPrinting" className="text-xs sm:text-sm font-bold text-gray-800 cursor-pointer flex items-center gap-1">
+                      {t("Silent Printing (Direct)")}
+                    </label>
+                  </div>
                 </div>
               </form>
+            </div>
+
+            {/* Right Column - Live Preview */}
+            <div className="w-full lg:w-[400px] bg-gray-100 p-4 flex flex-col items-center justify-start lg:overflow-y-auto shrink-0 border-gray-200">
+              <div className="text-center mb-4">
+                <h3 className="text-sm font-bold text-gray-800">{t("Live Receipt Preview")}</h3>
+                <p className="text-[10px] text-gray-500">{t("Preview updates dynamically as you change settings")}</p>
+              </div>
+              <LiveReceiptPreview
+                settings={{
+                  printFormat: formData.paperWidth,
+                  receiptFontFamily: 'arial',
+                  receiptFontSize: 'medium',
+                  restaurantName: 'YOUR RESTAURANT'
+                }}
+                previewTab={formData.type === 'kot' ? 'kot' : 'receipt'}
+                t={t}
+                user={{ username: 'admin' }}
+              />
+            </div>
             </div>
 
             {/* Modal Footer */}

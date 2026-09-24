@@ -38,6 +38,8 @@ const CMD = {
   LINE_SPACING_RELAXED: ESC + '3\x26', // Relaxed 38-dot line spacing (for Large/XL text size)
   BOLD_ON: ESC + '!\x08' + ESC + 'E\x01' + ESC + 'G\x01',            // Master bit 3 + ESC E 1 + ESC G 1 for deep jet-black bold
   BOLD_OFF: ESC + '!\x00' + ESC + 'E\x00' + ESC + 'G\x00',           // Master bit 0 + ESC E 0 + ESC G 0
+  THICK_BOLD_ON: ESC + 'E\x01' + ESC + 'G\x01',                      // Pure bold and double strike without touching ESC !
+  THICK_BOLD_OFF: ESC + 'E\x00' + ESC + 'G\x00',
   CUT_PAPER: GS + 'V\x42\x00',       // Full paper cut
   LINE_FEED: '\n'
 };
@@ -172,7 +174,7 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
 
   // Dynamic Paper Width from Settings or Printer Config (80mm vs 58mm)
   const is58mm = printerConfig.paperWidth === '58mm' || s.printFormat === '58mm';
-  const width = is58mm ? 32 : 44;
+  const width = is58mm ? 30 : 44;
   const lineDivider = '-'.repeat(width);
 
   // Dynamic Font Size from Settings ('small', 'medium', 'large', 'extra-large')
@@ -244,7 +246,7 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     tableLabel = tClean ? `Table No: ${bill.tableNo.includes('Table') ? bill.tableNo : `Table ${tClean}`}` : 'Table No: Dine In';
   }
   if (tableLabel) {
-    content += CMD.ALIGN_CENTER + CMD.TEXT_DOUBLE_HEIGHT_BOLD + tableLabel + CMD.LINE_FEED + CMD.TEXT_NORMAL;
+    content += CMD.ALIGN_CENTER + CMD.THICK_BOLD_ON + tableLabel + CMD.LINE_FEED + CMD.THICK_BOLD_OFF;
   }
   if (bill.customerName) {
     const cust = `Customer: ${bill.customerName}${bill.customerPhone ? ` (${bill.customerPhone})` : ''}`;
@@ -269,15 +271,16 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
 
   // 9. 3-Column Items Table Header (Item, Special Note, Qty.)
   if (is58mm) {
-    content += CMD.BOLD_ON + 'Item              Note       Qty.' + CMD.LINE_FEED + CMD.BOLD_OFF;
+    const header58 = 'Item'.padEnd(15, ' ') + ' ' + 'Note'.padEnd(8, ' ') + ' ' + 'Qty.'.padStart(5, ' ');
+    content += CMD.BOLD_ON + header58 + CMD.LINE_FEED + CMD.BOLD_OFF;
   } else {
     content += CMD.BOLD_ON + 'Item                  Special Note    Qty.' + CMD.LINE_FEED + CMD.BOLD_OFF;
   }
   content += lineDivider + CMD.LINE_FEED;
 
   // 10. Items Rows with BOLD item names, BOLD quantities, and clean whole-word wrapping
-  const maxItem = is58mm ? 16 : 22;
-  const maxNote = is58mm ? 9 : 14;
+  const maxItem = is58mm ? 15 : 22;
+  const maxNote = is58mm ? 8 : 14;
   const qWidth = is58mm ? 5 : 6;
 
   items.forEach((item) => {
@@ -297,11 +300,11 @@ export const generateKOTESCPOSBuffer = (bill, items, kotNumber, printerConfig = 
     const firstLineQty = String(qtyNum).padStart(qWidth, ' ');
 
     // Item line: BOLD item name and BOLD quantity!
-    content += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + firstLineNote + ' ' + CMD.BOLD_ON + firstLineQty + CMD.BOLD_OFF + CMD.LINE_FEED;
+    content += CMD.THICK_BOLD_ON + firstLineItem + ' ' + firstLineNote + ' ' + firstLineQty + CMD.THICK_BOLD_OFF + CMD.LINE_FEED;
 
     // Remaining wrapped item name lines (all bold, no hyphens!)
     for (let l = 1; l < itemLines.length; l++) {
-      content += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
+      content += CMD.THICK_BOLD_ON + `  ${itemLines[l]}` + CMD.THICK_BOLD_OFF + CMD.LINE_FEED;
     }
 
     // Special Note lines if longer than maxNote
@@ -405,13 +408,13 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
     const printPromises = kotPrinters.map(async (printer) => {
       // Dynamic Floor / Location Filtering Logic for KOT
       const printerLocation = (printer.location || '').trim().toLowerCase();
-      const isFloorFilter = printerLocation !== '' && 
-                            printerLocation !== 'all' && 
-                            printerLocation !== 'all floors' && 
-                            printerLocation !== 'both' && 
-                            printerLocation !== 'both / all floors' && 
-                            printerLocation !== 'both / all floors (ground & first)' &&
-                            printerLocation !== 'general';
+      const isFloorFilter = printerLocation !== '' &&
+        printerLocation !== 'all' &&
+        printerLocation !== 'all floors' &&
+        printerLocation !== 'both' &&
+        printerLocation !== 'both / all floors' &&
+        printerLocation !== 'both / all floors (ground & first)' &&
+        printerLocation !== 'general';
 
       if (isFloorFilter) {
         const orderTable = String(bill.tableNo || '').trim().toLowerCase();
@@ -492,37 +495,6 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
           : `${printer.ipAddress}:${printer.port || 9100}`;
       console.log(`[PrinterService] Streaming KOT #${kotNumber} to '${printer.name}' (${targetDestination})`);
 
-      // If running on cloud (Render or Vercel) and printer IP is a private LAN IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.0.0.1):
-      // The cloud server cannot reach the local LAN printer directly via TCP. Relay via Socket.IO to local station.
-      const isPrivateLanIp = isNetwork && /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(printer.ipAddress);
-      const isCloudEnv = !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || (process.env.NODE_ENV === 'production' && !process.env.APP_USER_DATA_PATH));
-      if (isNetwork && isPrivateLanIp && isCloudEnv) {
-        console.log(`[PrinterService] ⚡ Cloud environment (Render/Vercel) cannot reach private LAN printer '${printer.name}' (${printer.ipAddress}). Relaying KOT via Socket.IO to local station.`);
-        emitSocketEvent(req, 'relayPrintKOT', {
-          jobId: `kot_svc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-          bill,
-          items: itemsToPrint,
-          kotNumber,
-          queueNumber,
-          printer: {
-            _id: printer._id,
-            name: printer.name,
-            connectionType: printer.connectionType,
-            ipAddress: printer.ipAddress,
-            port: printer.port || 9100,
-            paperWidth: printer.paperWidth,
-            location: printer.location,
-            bluetoothAddress: printer.bluetoothAddress,
-            deviceName: printer.deviceName,
-            usbPort: printer.usbPort
-          },
-          rasterBufferBase64: (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') ? rasterBufferBase64 : (buffer ? buffer.toString('base64') : null),
-          restaurantDetails,
-          timestamp: Date.now()
-        });
-        return;
-      }
-
       try {
         let res;
         if (isUsb) {
@@ -532,7 +504,7 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
             try {
               const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
               await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
-            } catch (_) {}
+            } catch (_) { }
           }
         } else if (isBluetooth) {
           res = await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);
@@ -765,7 +737,7 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
 
   // Dynamic Paper Width from Settings or Printer Config (80mm vs 58mm)
   const is58mm = printerConfig.paperWidth === '58mm' || s.printFormat === '58mm';
-  const width = is58mm ? 32 : 44;
+  const width = is58mm ? 30 : 44;
   const solidLine = generateESCPOSSolidLine(is58mm, 2);
 
   // Dynamic Font Size from Settings ('small', 'medium', 'large', 'extra-large')
@@ -852,8 +824,8 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
 
   // 3. Invoice Title & Order/Table Details (Up of Boldness)
   let titleSection = '';
-  const invoiceTitle = bill.status === 'Unpaid' 
-    ? 'Unpaid (Khata)' 
+  const invoiceTitle = bill.status === 'Unpaid'
+    ? 'Unpaid (Khata)'
     : (bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice');
   titleSection += CMD.ALIGN_CENTER + CMD.BOLD_ON + invoiceTitle + CMD.LINE_FEED + CMD.BOLD_OFF;
   chunks.push(Buffer.from(titleSection, 'utf-8'));
@@ -887,10 +859,7 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
   if (bill.captainName) {
     orderMeta += `Assign to: ${bill.captainName}` + CMD.LINE_FEED;
   }
-  if (bill.tokenNumber || bill.tokenNo || bill.queueNumber) {
-    const tNum = bill.tokenNumber || bill.tokenNo || bill.queueNumber;
-    orderMeta += CMD.BOLD_ON + `Token No.: ${tNum}` + CMD.BOLD_OFF + CMD.LINE_FEED;
-  }
+
   if (bill.customerName || bill.customerPhone) {
     const custStr = [bill.customerName, bill.customerPhone].filter(Boolean).join(' | ');
     orderMeta += `Customer: ${custStr.substring(0, width - 10)}` + CMD.LINE_FEED;
@@ -898,17 +867,26 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
   chunks.push(Buffer.from(orderMeta, 'utf-8'));
   chunks.push(solidLine);
 
-  // 4. Items Table Header
+  // 4. Items Table Header (Fixed 43 cols on 80mm: Item 18 + Qty 4 + Price 9 + Amount 9 = 40 + 3 spaces = 43)
   let itemHead = '';
   if (is58mm) {
-    itemHead += CMD.BOLD_ON + 'Item             Qty.     Amount' + CMD.LINE_FEED + CMD.BOLD_OFF;
+    // 28 chars: Item(12) + Qty(4) + Amount(10) -> "Item         Qty.     Amount"
+    const h58Item = 'Item'.padEnd(12, ' ');
+    const h58Qty  = 'Qty.'.padStart(4, ' ');
+    const h58Amt  = 'Amount'.padStart(10, ' ');
+    itemHead += CMD.BOLD_ON + h58Item + ' ' + h58Qty + ' ' + h58Amt + CMD.LINE_FEED + CMD.BOLD_OFF;
   } else {
-    itemHead += CMD.BOLD_ON + 'Item                  Qty.    Price    Amount' + CMD.LINE_FEED + CMD.BOLD_OFF;
+    // 43 chars: Item(18) + Qty(4) + Price(9) + Amount(9) -> "Item                  Qty.     Price    Amount"
+    const h80Item = 'Item'.padEnd(18, ' ');
+    const h80Qty  = 'Qty.'.padStart(4, ' ');
+    const h80Price = 'Price'.padStart(9, ' ');
+    const h80Amt  = 'Amount'.padStart(9, ' ');
+    itemHead += CMD.BOLD_ON + h80Item + ' ' + h80Qty + ' ' + h80Price + ' ' + h80Amt + CMD.LINE_FEED + CMD.BOLD_OFF;
   }
   chunks.push(Buffer.from(itemHead, 'utf-8'));
   chunks.push(solidLine);
 
-  // 5. Items List - High Contrast Dynamic Bold
+  // 5. Items List - High Contrast Dynamic Bold with Protected Price/Amount Numbers
   const activeItems = (bill.items || []).filter(i => !i.isCancelled);
   let totalQty = 0;
   let itemsContent = '';
@@ -922,22 +900,24 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
     const name = (item.name || item.itemName || 'Unknown Item').trim();
 
     if (is58mm) {
-      const maxLen = 16;
+      const maxLen = 12;
       const itemLines = wrapTextLines(name, maxLen);
       const firstLineItem = (itemLines[0] || '').padEnd(maxLen, ' ');
       const qStr = String(qty).padStart(4, ' ');
       const aStr = amount.padStart(10, ' ');
+      // 12 + 1 + 4 + 1 + 10 = 28 chars (Price/Amount NEVER wraps!)
       itemsContent += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + qStr + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + aStr + CMD.BOLD_OFF + CMD.LINE_FEED;
       for (let l = 1; l < itemLines.length; l++) {
         itemsContent += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
       }
     } else {
-      const maxLen = 20;
+      // 80mm: Item 18 + 1 + Qty 4 + 1 + Price 9 + 1 + Amount 9 = 43 chars (Price/Amount NEVER wraps!)
+      const maxLen = 18;
       const itemLines = wrapTextLines(name, maxLen);
       const firstLineItem = (itemLines[0] || '').padEnd(maxLen, ' ');
-      const qStr = String(qty).padStart(5, ' ');
-      const pStr = price.padStart(8, ' ');
-      const aStr = amount.padStart(8, ' ');
+      const qStr = String(qty).padStart(4, ' ');
+      const pStr = price.padStart(9, ' ');
+      const aStr = amount.padStart(9, ' ');
       itemsContent += CMD.BOLD_ON + firstLineItem + CMD.BOLD_OFF + ' ' + CMD.BOLD_ON + qStr + CMD.BOLD_OFF + ' ' + pStr + ' ' + CMD.BOLD_ON + aStr + CMD.BOLD_OFF + CMD.LINE_FEED;
       for (let l = 1; l < itemLines.length; l++) {
         itemsContent += CMD.BOLD_ON + `  ${itemLines[l]}` + CMD.BOLD_OFF + CMD.LINE_FEED;
@@ -958,39 +938,29 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
   const taxable = Math.max(0, sub - disc);
 
   let totalsContent = '';
-  if (is58mm) {
-    totalsContent += formatTwoCols(`Total Qty: ${totalQty}`, `Sub Total: ${sub.toFixed(2)}`, width) + CMD.LINE_FEED;
-    if (disc > 0) {
-      const discPct = bill.discountType === 'percentage' && bill.discountValue 
-        ? ` (${bill.discountValue}%)` 
-        : (bill.discountType === 'complimentary' ? ' (100%)' : (bill.discountName ? ` (${bill.discountName})` : ''));
-      totalsContent += CMD.BOLD_ON + formatTwoCols(`Discount${discPct}:`, `-${disc.toFixed(2)}`, width) + CMD.LINE_FEED + CMD.BOLD_OFF;
-    }
-  } else {
-    const leftSide = `Total Qty: ${totalQty}`;
-    const rightSide = `Sub Total          ${sub.toFixed(2)}`;
-    totalsContent += formatTwoCols(leftSide, rightSide, width) + CMD.LINE_FEED;
+  const subStr = `Sub Total: ${sub.toFixed(2)}`;
+  totalsContent += formatTwoCols(`Total Qty: ${totalQty}`, subStr, width) + CMD.LINE_FEED;
 
-    if (disc > 0) {
-      const discPct = bill.discountType === 'percentage' && bill.discountValue 
-        ? ` (${bill.discountValue}%)` 
-        : (bill.discountType === 'complimentary' ? ' (100%)' : (bill.discountName ? ` (${bill.discountName})` : ''));
-      const discRight = `Discount${discPct}     -${disc.toFixed(2)}`;
-      totalsContent += CMD.BOLD_ON + formatTwoCols('', discRight, width) + CMD.LINE_FEED + CMD.BOLD_OFF;
-    }
+  if (disc > 0) {
+    const discPct = bill.discountType === 'percentage' && bill.discountValue
+      ? ` (${bill.discountValue}%)`
+      : (bill.discountType === 'complimentary' ? ' (100%)' : (bill.discountName ? ` (${bill.discountName})` : ''));
+    const discLabel = `Discount${discPct}:`;
+    const discVal = `-${disc.toFixed(2)}`;
+    totalsContent += CMD.BOLD_ON + formatTwoCols(discLabel, discVal, width) + CMD.LINE_FEED + CMD.BOLD_OFF;
   }
 
   // Tax Breakdown (CGST, SGST, IGST)
-  const isCgstEnabled = s.enableCgst !== undefined 
-    ? (s.enableCgst === true || s.enableCgst === 'true') 
+  const isCgstEnabled = s.enableCgst !== undefined
+    ? (s.enableCgst === true || s.enableCgst === 'true')
     : (s.taxSettings?.enableCgst === true || s.taxSettings?.enableCgst === 'true');
 
-  const isSgstEnabled = s.enableSgst !== undefined 
-    ? (s.enableSgst === true || s.enableSgst === 'true') 
+  const isSgstEnabled = s.enableSgst !== undefined
+    ? (s.enableSgst === true || s.enableSgst === 'true')
     : (s.taxSettings?.enableSgst === true || s.taxSettings?.enableSgst === 'true');
 
-  const isGstEnabled = s.enableGst !== undefined 
-    ? (s.enableGst === true || s.enableGst === 'true') 
+  const isGstEnabled = s.enableGst !== undefined
+    ? (s.enableGst === true || s.enableGst === 'true')
     : (s.taxSettings?.enableGst === true || s.taxSettings?.enableGst === 'true');
 
   const cRate = isCgstEnabled ? (s.cgstRate !== undefined ? Number(s.cgstRate) : (s.taxSettings?.cgstRate !== undefined ? Number(s.taxSettings.cgstRate) : 2.5)) : 0;
@@ -1155,7 +1125,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
       };
     }
 
-    const targetPrinters = receiptPrinters.filter(p => 
+    const targetPrinters = receiptPrinters.filter(p =>
       (p.connectionType === 'network' && p.ipAddress) ||
       (p.connectionType === 'usb' && p.usbPort) ||
       (p.connectionType === 'bluetooth' && (p.bluetoothAddress || p.deviceName || p.name))
@@ -1196,13 +1166,13 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
     for (const printer of targetPrinters) {
       // Dynamic Floor / Location Filtering Logic for Bill Receipt
       const printerLocation = (printer.location || '').trim().toLowerCase();
-      const isFloorFilter = printerLocation !== '' && 
-                            printerLocation !== 'all' && 
-                            printerLocation !== 'all floors' && 
-                            printerLocation !== 'both' && 
-                            printerLocation !== 'both / all floors' && 
-                            printerLocation !== 'both / all floors (ground & first)' &&
-                            printerLocation !== 'general';
+      const isFloorFilter = printerLocation !== '' &&
+        printerLocation !== 'all' &&
+        printerLocation !== 'all floors' &&
+        printerLocation !== 'both' &&
+        printerLocation !== 'both / all floors' &&
+        printerLocation !== 'both / all floors (ground & first)' &&
+        printerLocation !== 'general';
 
       if (isFloorFilter) {
         const orderTable = String(bill.tableNo || '').trim().toLowerCase();
@@ -1238,39 +1208,6 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
           ? `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`
           : `${printer.ipAddress}:${printer.port || 9100}`;
 
-      if (isNetwork) {
-        const isPrivateLanIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(printer.ipAddress);
-        const isCloudEnv = !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || (process.env.NODE_ENV === 'production' && !process.env.APP_USER_DATA_PATH));
-        if (isCloudEnv && isPrivateLanIp) {
-          console.log(`[PrinterService] ⚡ Cloud environment (Render/Vercel) cannot reach private LAN printer '${printer.name}' (${printer.ipAddress}). Relaying Bill via Socket.IO to local station.`);
-          emitSocketEvent(req, 'relayPrintBill', {
-            jobId: `bill_svc_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            bill,
-            printer: {
-              _id: printer._id,
-              name: printer.name,
-              connectionType: printer.connectionType,
-              ipAddress: printer.ipAddress,
-              port: printer.port || 9100,
-              paperWidth: printer.paperWidth,
-              location: printer.location,
-              bluetoothAddress: printer.bluetoothAddress,
-              deviceName: printer.deviceName,
-              usbPort: printer.usbPort
-            },
-            rasterBufferBase64: (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') ? rasterBufferBase64 : (buffer ? buffer.toString('base64') : null),
-            restaurantDetails,
-            timestamp: Date.now()
-          });
-          results.push({
-            printer: printer.name,
-            success: true,
-            relayed: true,
-            message: `Bill #${bill.billNumber || ''} sent to ${printer.name} via local Wi-Fi print station`
-          });
-          continue;
-        }
-      }
       try {
         let actualUsbPort = printer.usbPort;
         if (isUsb) {
@@ -1282,7 +1219,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
             try {
               const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
               await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
-            } catch (_) {}
+            } catch (_) { }
           }
         } else if (isBluetooth) {
           await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);

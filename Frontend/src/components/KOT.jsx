@@ -91,7 +91,7 @@ const KOT = ({ order, onClose }) => {
     macResolvedRef.current = true;
 
     const resolveMac = () => {
-      const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+      const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
       const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
       // 1. KOT-specific printer config
@@ -238,28 +238,35 @@ const KOT = ({ order, onClose }) => {
     await new Promise(res => setTimeout(res, 80));
 
     try {
+      const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
+
       if (window.electronAPI) {
-        const receiptNode = document.querySelector('#kot-print-area .receipt-print');
-        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('kot-print-area').outerHTML;
-        const isSilent = settings.silentPrinting !== false;
+        const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+        const printAreaNode = document.getElementById('kot-receipt-slip');
+        const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
+        if (!htmlContent) throw new Error("KOT receipt element not found in DOM");
+        const isSilent = (targetStation?.printer?.silentPrinting ?? settings.silentPrinting) !== false;
         let targetPrinter = settings.kotPrinter || '';
-        const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
         if (targetStation?.printer?.deviceName) targetPrinter = targetStation.printer.deviceName;
-        window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
+        
+        const printResult = await window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
+        if (printResult && printResult.success === false) {
+          throw new Error(printResult.reason || "Electron print failed");
+        }
+
         setPrintStatus('success');
         showToast(t('KOT sent to printer!'), 'success');
         resetPrintStatus(3000);
         return;
 
-      } else if (window.AndroidBluetooth) {
-        const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+      } else if (window.AndroidBluetooth && (targetStation?.printer?.connectionType === 'bluetooth' || (!targetStation?.printer && (settings.kotPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
+        const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
         const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
         // Use pre-resolved MAC first (fastest path — no loops on every print)
         let macAddress = resolvedMacRef.current;
 
         // Station-specific override or first available station group (e.g. "All in One" when viewing ALL)
-        const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
         if (targetStation?.printer) {
           const stationMac = tryMac(targetStation.printer.bluetoothAddress || targetStation.printer.deviceName || '');
           if (stationMac) macAddress = stationMac;
@@ -301,6 +308,7 @@ const KOT = ({ order, onClose }) => {
               const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
+                await new Promise(res => setTimeout(res, 1500));
                 setPrintStatus('success');
                 showToast(t('KOT printed successfully!'), 'success');
                 resetPrintStatus(3000);
@@ -375,6 +383,9 @@ const KOT = ({ order, onClose }) => {
 
           if (targetPrinters.length > 0) {
             let anySuccess = false;
+            
+            const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+
             for (const targetBackendPrinter of targetPrinters) {
               const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
@@ -385,7 +396,8 @@ const KOT = ({ order, onClose }) => {
                   items: itemsToPrint,
                   kotNumber: kotNo,
                   queueNumber: qNo,
-                  printerId: targetBackendPrinter._id
+                  printerId: targetBackendPrinter._id,
+                  restaurantDetails: activeSettings
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
                 if (response.data && (response.data.success || response.data.relayed)) {
                   anySuccess = true;
@@ -396,6 +408,7 @@ const KOT = ({ order, onClose }) => {
             }
 
             if (anySuccess) {
+              await new Promise(res => setTimeout(res, 1500));
               setPrintStatus('success');
               showToast(t('KOT sent to printer(s)!'), 'success');
               resetPrintStatus(3000);
@@ -452,14 +465,14 @@ const KOT = ({ order, onClose }) => {
 
         const chosenPrinter = grp.printer?.deviceName || settings.kotPrinter || '';
         window.electronAPI.silentPrint(htmlContent, chosenPrinter, isSilent);
-      } else if (window.AndroidBluetooth) {
+      } else if (window.AndroidBluetooth && (grp.printer?.connectionType === 'bluetooth' || (!grp.printer && (settings.kotPrinter || settings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
         let chosenPrinter = grp.printer?.bluetoothAddress || grp.printer?.deviceName || settings.kotPrinter || settings.billingPrinter || '';
-        let match = chosenPrinter.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+        let match = chosenPrinter.match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i);
         if (!match) {
           try {
             const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             const raw = s.kotPrinter || s.billingPrinter || '';
-            match = raw.match(/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/);
+            match = raw.match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i);
           } catch (_) { }
         }
         const macAddress = match ? match[0] : null;
@@ -472,7 +485,11 @@ const KOT = ({ order, onClose }) => {
               const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
               if (escposBase64) {
                 await new Promise(res => setTimeout(res, 20));
-                window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
+                const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
+                const res = JSON.parse(resStr || '{}');
+                if (res.success) {
+                  await new Promise(res => setTimeout(res, 1500));
+                }
               }
             }
           } catch (e) {
@@ -488,12 +505,15 @@ const KOT = ({ order, onClose }) => {
           const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
           const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
           const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
+          const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+
           await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
             bill: order,
             items: grp.items,
             kotNumber: kotNo,
             queueNumber: qNo,
-            printerId: grp.printer._id
+            printerId: grp.printer._id,
+            restaurantDetails: activeSettings
           }, {
             headers: { Authorization: `Bearer ${token}` }
           });
@@ -914,12 +934,12 @@ const KOT = ({ order, onClose }) => {
                 const bType = order.billType || order.orderType || (order.tableNo?.startsWith('DEL') ? 'Delivery' : (order.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine In'));
                 let tNo = (order.tableNo || '').trim();
                 if (bType === 'Delivery') {
-                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo || 'DEL'}</div>;
+                  return <div style={{ fontSize: `calc(${fontMetrics.subHeadingSize} + 2px)`, fontWeight: 750 }}>Order #{order.tableNo || 'DEL'}</div>;
                 } else if (bType === 'Takeaway') {
-                  return order.tableNo ? <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>Order #{order.tableNo}</div> : null;
+                  return order.tableNo ? <div style={{ fontSize: `calc(${fontMetrics.subHeadingSize} + 2px)`, fontWeight: 750 }}>Order #{order.tableNo}</div> : null;
                 } else {
                   const cleanT = tNo.replace(/^Table\s*/i, '');
-                  return <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold' }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
+                  return <div style={{ fontSize: `calc(${fontMetrics.subHeadingSize} + 2px)`, fontWeight: 750 }}>{t("Table No: ")}{cleanT ? (tNo.includes('Table') ? tNo : `Table ${cleanT}`) : 'Table'}</div>;
                 }
               })()}
 
@@ -957,15 +977,15 @@ const KOT = ({ order, onClose }) => {
                   return (
                     <div key={idx} className="flex flex-col w-full mb-1.5 pb-1 border-b border-dashed border-gray-200" style={{ width: '100%', marginBottom: '6px', paddingBottom: '4px', borderBottom: '1px dashed #e5e7eb' }}>
                       <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                        <div className={`text-left pr-1 break-words font-bold ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 'bold' }}>
+                        <div className={`text-left pr-1 break-words ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 750, fontSize: `calc(${fontMetrics.itemSize} + 2px)` }}>
                           {item.name || 'Unknown Item'}
-                          {isCancelled && <span className="ml-1 font-black text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 'bold' }}>({t("CANCELLED")})</span>}
-                          {isReduced && <span className="ml-1 font-black text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 'bold' }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
+                          {isCancelled && <span className="ml-1 text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 750 }}>({t("CANCELLED")})</span>}
+                          {isReduced && <span className="ml-1 text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 750 }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
                         </div>
-                        <div className="text-center px-1 break-words" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: fontMetrics.detailSize, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 'bold' : 'normal' }}>
+                        <div className="text-center px-1 break-words" style={{ flex: '1.2 1 0%', textAlign: 'center', wordBreak: 'break-word', paddingLeft: '2px', paddingRight: '2px', fontSize: `calc(${fontMetrics.detailSize} + 1px)`, color: item.specialNote ? '#dc2626' : '#9ca3af', fontWeight: item.specialNote ? 750 : 'normal' }}>
                           {item.specialNote ? item.specialNote : '-'}
                         </div>
-                        <div className={`text-right font-black font-mono shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
+                        <div className={`text-right shrink-0 ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ width: '38px', textAlign: 'right', flexShrink: 0, fontWeight: 750, fontSize: `calc(${fontMetrics.itemSize} + 2px)`, textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000' }}>
                           {isCancelled ? `-${cancelCount}` : (item.quantity || 0)}
                         </div>
                       </div>

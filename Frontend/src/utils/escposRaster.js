@@ -91,9 +91,9 @@ export async function renderElementToESCPOSRaster(element, targetWidthDots = 576
     const activeHeight = lastContentY > 0 ? Math.min(targetHeight, lastContentY + 6) : targetHeight;
 
     // 4. Convert to 1-bit monochrome raster ESC/POS commands
-    // Chunked into 128 rows per GS v 0 command to prevent buffer overrun on microcontrollers
-    const bytesPerLine = Math.floor(targetWidth / 8);
-    const CHUNK_ROWS = 128;
+    // Print in chunks to prevent overflowing the thermal printer's small receive buffer (especially on Bluetooth)
+    const CHUNK_ROWS = 256; // 256 rows is optimal: smooth printing without crashing standard 4KB buffers
+    const bytesPerLine = Math.ceil(targetWidth / 8);
     const xL = bytesPerLine & 0xFF;
     const xH = (bytesPerLine >> 8) & 0xFF;
 

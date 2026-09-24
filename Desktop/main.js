@@ -379,7 +379,8 @@ ipcMain.handle('get-printers', async () => {
   return [];
 });
 
-ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) => {
+ipcMain.handle('silent-print', async (event, { htmlContent, printerName, silent = true }) => {
+  return new Promise((resolve) => {
   console.log('[Print] silent-print received, silent:', silent, 'printer:', printerName || '(default)');
 
   let printWindow = new BrowserWindow({
@@ -408,12 +409,36 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
     console.error('[Print] Could not load CSS for printing:', err);
   }
 
+  // Detect which web font is selected so we can inject a Google Fonts link.
+  // System fonts (Arial, Verdana, Tahoma, Georgia, Courier New, etc.) are available
+  // natively on Windows and need no external link. Only web-only fonts need injection.
+  const WEB_FONT_LINKS = {
+    roboto: '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap">' ,
+    inter: '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap">',
+    'space mono': '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">',
+    'roboto mono': '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap">',
+  };
+  // Extract font-family from the receipt HTML's inline style (set by Invoice.jsx/KOT.jsx)
+  let googleFontsLink = '';
+  const fontFamilyMatch = htmlContent.match(/font-family\s*:\s*([^;"']+)/i);
+  if (fontFamilyMatch) {
+    const detectedFont = fontFamilyMatch[1].toLowerCase();
+    for (const [key, linkTag] of Object.entries(WEB_FONT_LINKS)) {
+      if (detectedFont.includes(key)) {
+        googleFontsLink = linkTag;
+        console.log('[Print] Injecting Google Font for:', key);
+        break;
+      }
+    }
+  }
+
   const fullHtml = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="UTF-8">
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        ${googleFontsLink}
         <style>${cssContent}</style>
         <style>
           * {
@@ -426,7 +451,10 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
             padding: 0 !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            font-family: Arial, Helvetica, sans-serif !important;
+            /* NOTE: font-family is intentionally NOT set here.
+               The receipt component already carries the user-selected font as an
+               inline style (fontFamily: receiptFont) set by Invoice.jsx / KOT.jsx.
+               Overriding it here would silently ignore the Bill & KOT Font Style setting. */
           }
           @page {
             size: 72mm 297mm;
@@ -509,8 +537,10 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
       printWindow.webContents.print(printOptions, (success, failureReason) => {
         if (!success) {
           console.log('[Print] Print failed:', failureReason);
+          resolve({ success: false, reason: failureReason });
         } else {
           console.log('[Print] Print succeeded');
+          resolve({ success: true });
         }
         if (!printWindow.isDestroyed()) printWindow.close();
         // Clean up temp file
@@ -518,10 +548,12 @@ ipcMain.on('silent-print', (event, { htmlContent, printerName, silent = true }) 
       });
     }, 500);
   });
+});
 
   printWindow.webContents.once('did-fail-load', (event, errorCode, errorDescription) => {
     console.error('[Print] Window failed to load:', errorCode, errorDescription);
     if (!printWindow.isDestroyed()) printWindow.close();
+    resolve({ success: false, reason: errorDescription });
   });
 });
 

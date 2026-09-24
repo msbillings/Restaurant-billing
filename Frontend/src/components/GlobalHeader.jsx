@@ -3,6 +3,7 @@ import { Menu, Search, Calculator, Bell, User, Power, Phone } from 'lucide-react
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
 import useOnlineStatus from '../hooks/useOnlineStatus';
+import useServerStatus from '../hooks/useServerStatus';
 import logoImg from '../assets/images/logo.png';
 
 const GlobalHeader = ({
@@ -20,6 +21,7 @@ const GlobalHeader = ({
   const { unreadCount: notifUnread } = useNotifications(userRole);
   const unreadCount = (broadcastUnread || 0) + (notifUnread || 0);
   const { isOnline } = useOnlineStatus();
+  const { isServerConnected } = useServerStatus(3000); // ping every 3s
 
   const handleSearchKeyPress = (e) => {
     if (e.key === 'Enter' && searchBillNo.trim()) {
@@ -52,9 +54,15 @@ const GlobalHeader = ({
             style={{ objectFit: 'contain' }}
           />
         </button>
-        <span className={`relative z-[999] ml-[100px] sm:ml-[120px] md:ml-[140px] px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md border whitespace-nowrap ${isOnline ? 'bg-green-100 text-green-700 border-green-300' : 'bg-orange-100 text-orange-700 border-orange-300'}`}>
-          {isOnline ? '● Online' : '● Offline'}
-        </span>
+        <div className="relative z-[999] ml-[100px] sm:ml-[120px] md:ml-[140px] flex flex-col sm:flex-row gap-1">
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md border whitespace-nowrap text-center ${isOnline ? 'bg-green-100 text-green-700 border-green-300' : 'bg-orange-100 text-orange-700 border-orange-300'}`}>
+            {isOnline ? '● Online' : '● Offline'}
+          </span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shadow-md border whitespace-nowrap text-center transition-colors duration-300 ${isServerConnected ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-red-100 text-red-700 border-red-300'}`}
+                title={isServerConnected ? t("Backend server connected") : t("Waiting for backend server to connect...")}>
+            {isServerConnected ? `● ${t("Server Connected")}` : `● ${t("Server Disconnected")}`}
+          </span>
+        </div>
       </div>
 
       {/* Middle section: New Order & Search (Hidden for Chef) */}

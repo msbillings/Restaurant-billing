@@ -7,6 +7,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Arial',
     category: 'Sans-Serif',
     value: "Arial, 'Arimo', Helvetica, sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -15,6 +16,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Times New Roman',
     category: 'Serif',
     value: "'Times New Roman', 'Tinos', Times, 'Lora', serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontFamily: "'Times New Roman', 'Tinos', Times, 'Lora', serif" }
   },
@@ -24,6 +26,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Roboto',
     category: 'Sans-Serif',
     value: "'Roboto', sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -32,6 +35,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Inter',
     category: 'Sans-Serif',
     value: "'Inter', sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -40,6 +44,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Verdana',
     category: 'Sans-Serif',
     value: "'Verdana', Geneva, sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { letterSpacing: '0.02em' }
   },
@@ -49,6 +54,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Trebuchet MS',
     category: 'Sans-Serif',
     value: "'Trebuchet MS', 'Segoe UI', sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -57,6 +63,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Tahoma',
     category: 'Sans-Serif',
     value: "'Tahoma', Geneva, sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -65,6 +72,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Georgia',
     category: 'Serif',
     value: "'Georgia', 'Lora', serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontFamily: "'Georgia', 'Lora', serif" }
   },
@@ -74,6 +82,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Courier New',
     category: 'Monospace',
     value: "'Courier New', 'Courier Prime', Courier, monospace",
+    escposFont: 'FONT_B',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontFamily: "'Courier New', 'Courier Prime', Courier, monospace" }
   },
@@ -83,6 +92,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Lucida Console',
     category: 'Monospace',
     value: "'Lucida Console', 'Roboto Mono', Monaco, monospace",
+    escposFont: 'FONT_B',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontFamily: "'Lucida Console', 'Roboto Mono', Monaco, monospace" }
   },
@@ -92,6 +102,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Segoe UI',
     category: 'Sans-Serif',
     value: "'Segoe UI', 'Inter', Tahoma, sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
   },
   {
@@ -100,16 +111,8 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Century Gothic',
     category: 'Sans-Serif',
     value: "'Century Gothic', 'Outfit', sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470'
-  },
-  {
-    id: 'impact',
-    label: 'Impact (Heavy Bold Readability)',
-    shortName: 'Impact',
-    category: 'Display',
-    value: "'Impact', 'Oswald', Charcoal, sans-serif",
-    sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
-    previewStyle: { fontFamily: "'Impact', 'Oswald', Charcoal, sans-serif", fontWeight: '700', letterSpacing: '0.04em' }
   },
   {
     id: 'franklin',
@@ -117,6 +120,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Franklin Gothic',
     category: 'Sans-Serif',
     value: "'Franklin Gothic Medium', 'Arial Black', Arial, sans-serif",
+    escposFont: 'FONT_A',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontWeight: '600' }
   },
@@ -126,6 +130,7 @@ export const RECEIPT_FONT_STYLES = [
     shortName: 'Clean Monospace',
     category: 'Monospace',
     value: "'Space Mono', 'Roboto Mono', monospace",
+    escposFont: 'FONT_B',
     sample: '1 x Chicken Biryani ₹250.00 • Total ₹470',
     previewStyle: { fontFamily: "'Space Mono', 'Roboto Mono', monospace" }
   }

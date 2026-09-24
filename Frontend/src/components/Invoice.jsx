@@ -285,14 +285,22 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     try {
       // 2. Desktop Electron App
       if (window.electronAPI) {
-        const receiptNode = document.querySelector('#invoice-print-area .receipt-print');
-        const htmlContent = receiptNode ? receiptNode.outerHTML : document.getElementById('invoice-print-area').outerHTML;
-        const isSilent = activeSettings.silentPrinting !== false;
+        const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
+        const printAreaNode = document.getElementById('invoice-print-area');
+        const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
+        if (!htmlContent) throw new Error("Invoice receipt element not found in DOM");
+        const isSilent = (activeReceiptPrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
+        let printResult = { success: true };
         if (isSilent && activeSettings.billingPrinter) {
-          window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
+          printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
         } else {
-          window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
+          printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
         }
+        
+        if (printResult && printResult.success === false) {
+          throw new Error(printResult.reason || "Electron print failed");
+        }
+        
         setPrintStatus('success');
         setToast({ message: t('Bill sent to printer!'), type: 'success' });
         resetPrintStatus(3000);
@@ -300,8 +308,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
 
       // 3. Android APK (Bluetooth)
-      if (window.AndroidBluetooth) {
-        const MAC_RE = /([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/;
+      if (window.AndroidBluetooth && (activeReceiptPrinter?.connectionType === 'bluetooth' || (!activeReceiptPrinter && (activeSettings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
+        const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
         const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
         let macAddress = tryMac(activeSettings.billingPrinter || '');
@@ -331,6 +339,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const resStr = window.AndroidBluetooth.printImage(macAddress, escposBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
+                // Realistic delay to guarantee the paper has physically printed before showing success
+                await new Promise(res => setTimeout(res, 1500));
                 setPrintStatus('success');
                 setToast({ message: t('Bill printed successfully!'), type: 'success' });
                 resetPrintStatus(3000);
@@ -392,34 +402,44 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
         );
 
-        const receiptPrinter = (list || []).find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+        const receiptPrinters = (list || []).filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill \u0026 KOT') && (
           (!isMobile && c.connectionType === 'usb' && c.usbPort) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
         ));
 
-        if (receiptPrinter) {
-          const destName = receiptPrinter.connectionType === 'usb'
-            ? `USB (${receiptPrinter.usbPort})`
-            : receiptPrinter.connectionType === 'bluetooth'
-              ? `Bluetooth (${receiptPrinter.bluetoothAddress || receiptPrinter.name})`
-              : `${receiptPrinter.ipAddress}`;
-          setToast({ message: `🖨️ ${t("Printing receipt to")} ${receiptPrinter.name} (${destName})...`, type: 'info' });
+        if (receiptPrinters.length > 0) {
+          const names = receiptPrinters.map(p => p.name).join(', ');
+          setToast({ message: `🖨️ ${t("Printing receipt to")} ${names}...`, type: 'info' });
 
           const billPayload = { ...bill, restaurantDetails: activeSettings };
-          const response = await api.post('/printer-configs/print-bill', {
-            bill: billPayload,
-            billId: bill?._id,
-            printerId: receiptPrinter._id
-          });
-          if (response.data && (response.data.success || response.data.relayed)) {
+          let anySuccess = false;
+
+          for (const rp of receiptPrinters) {
+            try {
+              const response = await api.post('/printer-configs/print-bill', {
+                bill: billPayload,
+                billId: bill?._id,
+                printerId: rp._id
+              });
+              if (response.data && (response.data.success || response.data.relayed)) {
+                anySuccess = true;
+              }
+            } catch (err) {
+              console.warn(`Failed to print bill to ${rp.name}:`, err);
+            }
+          }
+
+          if (anySuccess) {
+            // Realistic delay for network printers so success message doesn't appear before paper
+            await new Promise(res => setTimeout(res, 1500));
             setPrintStatus('success');
-            setToast({ message: `✅ ${t("Bill printed to")} ${receiptPrinter.name}!`, type: 'success' });
+            setToast({ message: `✅ ${t("Bill printed to")} ${names}!`, type: 'success' });
             resetPrintStatus(3000);
             return;
           } else {
             setPrintStatus('failed');
-            setToast({ message: response.data?.message || `Failed to print to ${receiptPrinter.name}. Opening system print...`, type: 'warning' });
+            setToast({ message: `Failed to print to ${names}. Opening system print...`, type: 'warning' });
             setTimeout(() => {
               window.print();
               resetPrintStatus(3000);
@@ -1319,7 +1339,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 label = `Dine-In: ${tNo ? `Table ${tNo}` : 'Table'}`;
               }
               return (
-                <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
+                <div style={{ textAlign: 'center', fontWeight: 750, fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
                   {label}
                 </div>
               );
@@ -1328,20 +1348,20 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             {/* Date & Time */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
               <span>{t('Date: ')}{new Date(billDateTime).toLocaleDateString('en-GB')}</span>
-              <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+              <span style={{ fontWeight: 750 }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
             </div>
 
             {/* Cashier & Bill No */}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
               <span>{t('Cashier: ')}{bill.cashierName || 'admin'}</span>
-              <span style={{ fontWeight: 'bold' }}>{t('Bill No: ')}{bill.billNumber || 'PREVIEW'}</span>
+              <span style={{ fontWeight: 750 }}>{t('Bill No: ')}{bill.billNumber || 'PREVIEW'}</span>
             </div>
 
             {bill.captainName && (
               <div style={{ fontSize: fontMetrics.detailSize }}>{t('Assign: ')}{bill.captainName}</div>
             )}
             {bill.tokenNumber && (
-              <div style={{ fontWeight: 'bold', fontSize: fontMetrics.bodySize }}>{t('Token: ')}{bill.tokenNumber}</div>
+              <div style={{ fontWeight: 750, fontSize: fontMetrics.bodySize }}>{t('Token: ')}{bill.tokenNumber}</div>
             )}
 
             {/* Dashed Separator */}
@@ -1355,12 +1375,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                   if (activeQty <= 0) return null;
                   return (
                     <div key={idx} style={{ marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e0e0e0' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: fontMetrics.itemSize, textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
+                      <div style={{ fontWeight: 750, fontSize: fontMetrics.itemSize, textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
                         {item.name || 'Unknown Item'}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.detailSize, marginTop: '1.5px' }}>
                         <span>[{Number(item.price || 0).toFixed(2)}] × {activeQty}</span>
-                        <span style={{ fontWeight: 'bold' }}>{(item.price * activeQty).toFixed(2)}</span>
+                        <span style={{ fontWeight: 750 }}>{(item.price * activeQty).toFixed(2)}</span>
                       </div>
                       {item.hsnCode && (
                         <div style={{ fontSize: '9.5px', color: '#666' }}>HSN: {item.hsnCode}</div>
@@ -1382,12 +1402,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 <span>{t("Total Qty: ")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <span>{t("Sub Total:")}</span>
-                  <span style={{ fontWeight: 'bold' }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
+                  <span style={{ fontWeight: 750 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
                 </div>
               </div>
 
               {bill.discount > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', padding: '1px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 750, padding: '1px 0' }}>
                   <span>{t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}:</span>
                   <span>-{(bill.discount || 0).toFixed(2)}</span>
                 </div>
@@ -1517,7 +1537,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const roundedTotal = Math.round(finalTotal);
 
               return (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 'bold', margin: '3px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 750, margin: '3px 0' }}>
                   <span>{t('Grand Total')}</span>
                   <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                 </div>

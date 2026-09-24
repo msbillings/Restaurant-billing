@@ -939,16 +939,22 @@ export const generateBill = async (req, res) => {
 
     let saveSuccess = false;
     let attempts = 0;
-    while (!saveSuccess && attempts < 5) {
+    while (!saveSuccess && attempts < 15) {
       attempts++;
       try {
         await order.save();
         saveSuccess = true;
       } catch (saveErr) {
         const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
-        if (isDupKey && attempts < 5) {
+        if (isDupKey && attempts < 15) {
           console.warn(`[generateBill] Duplicate billNumber ${order.billNumber} detected (attempt ${attempts}), regenerating...`);
-          billNumber = await generateUniqueBillNumber(Bill);
+          const numMatch = (order.billNumber || '').match(/^MS(\d+)$/i);
+          if (numMatch) {
+             const nextNum = parseInt(numMatch[1], 10) + 1;
+             billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+          } else {
+             billNumber = `MS${Date.now().toString().slice(-6)}`;
+          }
           order.billNumber = billNumber;
           continue;
         }
@@ -979,8 +985,15 @@ export const generateBill = async (req, res) => {
             saveSuccess = true;
           } catch (freshSaveErr) {
             const freshDup = freshSaveErr.code === 11000 || freshSaveErr.message?.includes('E11000') || freshSaveErr.message?.includes('duplicate key');
-            if (freshDup && attempts < 5) {
-              billNumber = await generateUniqueBillNumber(Bill);
+            if (freshDup && attempts < 15) {
+              console.warn(`[generateBill] Duplicate billNumber on retry ${freshOrder.billNumber}, regenerating...`);
+              const numMatch = (freshOrder.billNumber || '').match(/^MS(\d+)$/i);
+              if (numMatch) {
+                 const nextNum = parseInt(numMatch[1], 10) + 1;
+                 billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+              } else {
+                 billNumber = `MS${Date.now().toString().slice(-6)}`;
+              }
               order.billNumber = billNumber;
               continue;
             }
@@ -1140,16 +1153,22 @@ export const settleBill = async (req, res) => {
     // Save the bill with version retry protection & duplicate key retry protection
     let saveSuccess = false;
     let attempts = 0;
-    while (!saveSuccess && attempts < 5) {
+    while (!saveSuccess && attempts < 15) { // Increased max attempts to 15
       attempts++;
       try {
         await order.save();
         saveSuccess = true;
       } catch (saveErr) {
         const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
-        if (isDupKey && attempts < 5) {
+        if (isDupKey && attempts < 15) { // Increased attempts to handle multiple skips
           console.warn(`[settleBill] Duplicate billNumber ${order.billNumber} detected (attempt ${attempts}), regenerating...`);
-          order.billNumber = await generateUniqueBillNumber(Bill);
+          const numMatch = (order.billNumber || '').match(/^MS(\d+)$/i);
+          if (numMatch) {
+             const nextNum = parseInt(numMatch[1], 10) + 1;
+             order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+          } else {
+             order.billNumber = `MS${Date.now().toString().slice(-6)}`; // Fallback to timestamp if pattern fails
+          }
           continue;
         }
 
@@ -1191,8 +1210,15 @@ export const settleBill = async (req, res) => {
               saveSuccess = true;
             } catch (freshSaveErr) {
               const freshDup = freshSaveErr.code === 11000 || freshSaveErr.message?.includes('E11000') || freshSaveErr.message?.includes('duplicate key');
-              if (freshDup && attempts < 5) {
-                order.billNumber = await generateUniqueBillNumber(Bill);
+              if (freshDup && attempts < 15) { // Increased attempts
+                console.warn(`[settleBill] Duplicate billNumber on retry ${freshOrder.billNumber}, regenerating...`);
+                const numMatch = (freshOrder.billNumber || '').match(/^MS(\d+)$/i);
+                if (numMatch) {
+                   const nextNum = parseInt(numMatch[1], 10) + 1;
+                   order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+                } else {
+                   order.billNumber = `MS${Date.now().toString().slice(-6)}`;
+                }
                 continue;
               }
               throw freshSaveErr;
