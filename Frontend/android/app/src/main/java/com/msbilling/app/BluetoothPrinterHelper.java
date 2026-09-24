@@ -357,25 +357,30 @@ public class BluetoothPrinterHelper {
             BluetoothDevice device = adapter.getRemoteDevice(address);
             if (device == null) return null;
 
-            // Try standard RFCOMM SPP socket
             BluetoothSocket socket = null;
-            try {
-                socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
-                socket.connect();
-                return socket;
-            } catch (Exception e1) {
-                Log.w(TAG, "Standard SPP connection failed, attempting fallback reflection socket: " + e1.getMessage());
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++) {
                 try {
-                    // Fallback using reflection for older or non-standard Bluetooth stacks
-                    socket = (BluetoothSocket) device.getClass()
-                            .getMethod("createRfcommSocket", new Class[]{int.class})
-                            .invoke(device, 1);
-                    if (socket != null) {
-                        socket.connect();
-                        return socket;
+                    socket = device.createRfcommSocketToServiceRecord(SPP_UUID);
+                    socket.connect();
+                    return socket;
+                } catch (Exception e1) {
+                    Log.w(TAG, "Standard SPP connection failed, attempting fallback reflection socket: " + e1.getMessage());
+                    try {
+                        // Fallback using reflection for older or non-standard Bluetooth stacks
+                        socket = (BluetoothSocket) device.getClass()
+                                .getMethod("createRfcommSocket", new Class[]{int.class})
+                                .invoke(device, 1);
+                        if (socket != null) {
+                            socket.connect();
+                            return socket;
+                        }
+                    } catch (Exception e2) {
+                        Log.e(TAG, "Attempt " + (i+1) + " failed: ", e2);
+                        if (i < maxRetries - 1) {
+                            Thread.sleep(800); // Wait and retry. The previous socket might still be closing.
+                        }
                     }
-                } catch (Exception e2) {
-                    Log.e(TAG, "Fallback RFCOMM connection failed: ", e2);
                 }
             }
         } catch (Exception e) {
