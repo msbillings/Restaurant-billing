@@ -197,7 +197,7 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
 
       // Check live active ports to verify physical connection and auto-heal if port shifted
       try {
-        const livePorts = await getAvailableUSBAndCOMPorts();
+        const livePorts = []; // Bypassed heavy WMI scan
         const isPortLive = livePorts.some(p => p.port === cleanPort);
         if (!isPortLive && cleanPort.startsWith('USB')) {
           const activeUsb = livePorts.find(p => p.port.startsWith('USB') && p.isThermalLikely) || livePorts.find(p => p.port.startsWith('USB'));
@@ -208,6 +208,23 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
         }
       } catch (checkErr) {
         console.warn('[USBPrinterService] Could not check live USB ports before printing:', checkErr.message);
+      }
+
+      const exePath = path.join(__dirname, '..', 'utils', 'RawPrinter.exe');
+      if (cleanPrinterName && fs.existsSync(exePath)) {
+        try {
+          const fastCmd = `"${exePath}" "${cleanPrinterName}" "${tempBin}"`;
+          const { stdout } = await execPromise(fastCmd, { timeout: 3000 });
+          if (stdout && stdout.includes("SUCCESS")) {
+            return {
+              success: true,
+              actualPort: cleanPort,
+              message: `Printed instantly via native spooler to ${cleanPrinterName}`
+            };
+          }
+        } catch (fastErr) {
+          console.warn('[USBPrinterService] Fast native print failed, falling back to PowerShell:', fastErr.message);
+        }
       }
 
       const printerParam = cleanPrinterName ? ` -PrinterName "${cleanPrinterName}"` : '';
@@ -473,6 +490,17 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
     // -----------------------------------------------------------------
     // FULL SCAN PATH: Find the COM port via PnP, cache it, then print
     // -----------------------------------------------------------------
+    if (btComPortCache.has(cacheKey)) {
+      const cachedPort = btComPortCache.get(cacheKey);
+      try {
+        const { stdout } = await execPromise(`cmd.exe /c copy /b "${tempBin}" ${cachedPort}`, { timeout: 3000 });
+        try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+        return { success: true, message: `Printed instantly to Bluetooth via ${cachedPort}` };
+      } catch (fastErr) {
+        console.warn(`[BluetoothPrinter] Fast native print to ${cachedPort} failed, falling back to full scan:`, fastErr.message);
+        btComPortCache.delete(cacheKey);
+      }
+    }
     const fullScript = `
       $ErrorActionPreference = 'Stop'
       $cleanMac = '${cleanAddress}'
@@ -515,11 +543,11 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       $sp.ReadTimeout = 500
       try {
         $sp.Open()
-        $chunkSize = 256
+        $chunkSize = 2048
         for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
           $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
           $sp.Write($rawBytes, $offset, $count)
-          Start-Sleep -Milliseconds 15
+          Start-Sleep -Milliseconds 2
         }
         Start-Sleep -Milliseconds 200
         $sp.Close()

@@ -254,12 +254,12 @@ export const printKOT = async (req, res) => {
     } catch (e) {}
     const restaurantDetails = { ...dbSettings, ...(targetBill.restaurantDetails || {}) };
 
-    const results = [];
-    for (const printer of printers) {
+    // const results = [];
+    const printPromises = printers.map(async (printer) => {
       const isUsb = printer.connectionType === 'usb' && printer.usbPort;
       const isNetwork = printer.connectionType === 'network' && printer.ipAddress;
       const isBluetooth = printer.connectionType === 'bluetooth' && (printer.bluetoothAddress || printer.deviceName || printer.name);
-      if (!isUsb && !isNetwork && !isBluetooth) continue;
+      if (!isUsb && !isNetwork && !isBluetooth) return null;
 
       let buffer;
       if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
@@ -268,7 +268,6 @@ export const printKOT = async (req, res) => {
         buffer = generateKOTESCPOSBuffer(targetBill, targetItems, targetKotNumber, printer, targetQueue, restaurantDetails);
       }
       const targetDestination = isUsb ? `USB Port: ${printer.usbPort}` : isNetwork ? `${printer.ipAddress}:${printer.port || 9100}` : `Bluetooth: ${printer.bluetoothAddress || printer.deviceName || printer.name}`;
-      
 
       try {
         if (isUsb) {
@@ -284,24 +283,25 @@ export const printKOT = async (req, res) => {
         } else if (isBluetooth) {
           await sendRawToBluetoothPrinter(printer.bluetoothAddress || printer.deviceName || printer.name, buffer);
         }
-        results.push({
+        return {
           printer: printer.name,
           destination: targetDestination,
           success: true,
           message: `KOT #${targetKotNumber} printed successfully to ${printer.name} (${targetDestination})`
-        });
+        };
       } catch (err) {
         console.error(`[PrinterService] KOT print error on '${printer.name}' (${targetDestination}):`, err.message);
-
-
-        results.push({
+        return {
           printer: printer.name,
           destination: targetDestination,
           success: false,
           message: `Failed to print KOT to ${printer.name} (${targetDestination}): ${err.message}`
-        });
+        };
       }
-    }
+    });
+
+    const settled = await Promise.allSettled(printPromises);
+    const results = settled.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
 
     const anySuccess = results.some(r => r.success);
     return res.status(anySuccess ? 200 : 400).json({

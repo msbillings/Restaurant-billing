@@ -65,27 +65,7 @@ Add-Type -TypeDefinition $Source -ErrorAction SilentlyContinue
 
 $cleanPort = ($Port -replace '[:\\/]', '').Trim()
 
-# 1. Check physical connectivity for USB printer ports
-if ($cleanPort -match '^USB\d+$') {
-    $activeUsbDevices = Get-PnpDevice -PresentOnly -Status 'OK' -ErrorAction SilentlyContinue |
-                        Where-Object { $_.InstanceId -match 'USBPRINT' }
-
-    $targetDevice = $activeUsbDevices | Where-Object { $_.InstanceId -match [regex]::Escape($cleanPort) } | Select-Object -First 1
-
-    if (-not $targetDevice -and $activeUsbDevices) {
-        # Target USB port is not physically connected, but another active USBPRINT device IS connected!
-        $firstActive = $activeUsbDevices[0]
-        if ($firstActive.InstanceId -match '(USB\d+)') {
-            $reroutedPort = $matches[1]
-            Write-Host "NOTE: Configured USB port '$cleanPort' is offline; auto-rerouting to active port '$reroutedPort' ($($firstActive.FriendlyName))"
-            $cleanPort = $reroutedPort
-            $Port = $reroutedPort
-        }
-    } elseif (-not $targetDevice -and -not $activeUsbDevices) {
-        Write-Error "FAILED: No physical USB thermal printer is connected or powered on. Please check the USB cable and printer power switch."
-        exit 1
-    }
-}
+# 1. Bypassed slow PnP check to improve print speed. Spooler will naturally fail if port is offline.
 
 # 2. Find or create the Windows Print Spooler queue for this port
 $allPrinters = Get-Printer -ErrorAction SilentlyContinue

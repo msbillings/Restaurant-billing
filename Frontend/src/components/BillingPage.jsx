@@ -2339,12 +2339,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       createdAt: new Date()
     };
 
-    // ⚡ INSTANT 0ms RESPONSE: Show Payment Success Screen IMMEDIATELY on click!
+    // ⚡ INSTANT 0ms RESPONSE: Show Payment Success Screen & Print Preview IMMEDIATELY on click!
     setShowPayment(false);
     setOrderStatus(optimisticBill.status);
     hasPendingLocalChanges.current = false;
     setSuccessPaymentData({ paymentData, billData: optimisticBill });
     setShowSuccessScreen(true);
+    setShowInvoice(true);
+    try {
+      sessionStorage.setItem('ms_invoice_open', 'true');
+      sessionStorage.setItem('ms_completed_bill', JSON.stringify(optimisticBill));
+    } catch (e) { }
 
     // Build full settlement payload for server
     const settlementPayload = {

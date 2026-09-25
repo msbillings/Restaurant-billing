@@ -500,7 +500,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         if (qty <= 0) return null;
         const price = (item.price || 0).toFixed(2);
         const itemTot = ((item.price || 0) * qty).toFixed(2);
-        return `â€¢ ${item.name} x ${qty} @ ₹${price} = ₹${itemTot}`;
+        return `• ${item.name} x ${qty} @ ₹${price} = ₹${itemTot}`;
       })
       .filter(Boolean)
       .join('\n');
@@ -509,7 +509,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     const sub = Number(bill?.subtotal || bill?.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0);
     const subtotal = sub.toFixed(2);
     const disc = Number(bill?.discount || 0);
-    const discount = disc > 0 ? `\nâ€¢ *Discount:* -₹${disc.toFixed(2)}` : '';
+    const discount = disc > 0 ? `\n• *Discount:* -₹${disc.toFixed(2)}` : '';
     const taxable = Math.max(0, sub - disc);
 
     // Dynamic tax calculation identical to printed receipt invoice
@@ -541,19 +541,19 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         const cAmt = taxRupees * (cRate / Math.max(1, totRate));
         const sEff = rate * (sRate / Math.max(1, totRate));
         const sAmt = taxRupees * (sRate / Math.max(1, totRate));
-        taxBreakdown += `\nâ€¢ *CGST (${cEff.toFixed(1)}%):* +₹${cAmt.toFixed(2)}`;
-        taxBreakdown += `\nâ€¢ *SGST (${sEff.toFixed(1)}%):* +₹${sAmt.toFixed(2)}`;
+        taxBreakdown += `\n• *CGST (${cEff.toFixed(1)}%):* +₹${cAmt.toFixed(2)}`;
+        taxBreakdown += `\n• *SGST (${sEff.toFixed(1)}%):* +₹${sAmt.toFixed(2)}`;
       } else if (gRate > 0) {
         const gEff = rate * (gRate / Math.max(1, totRate));
         const gAmt = taxRupees * (gRate / Math.max(1, totRate));
-        taxBreakdown += `\nâ€¢ *GST (${gEff.toFixed(1)}%):* +₹${gAmt.toFixed(2)}`;
+        taxBreakdown += `\n• *GST (${gEff.toFixed(1)}%):* +₹${gAmt.toFixed(2)}`;
       } else {
-        taxBreakdown += `\nâ€¢ *GST/Tax (${rate}%):* +₹${taxRupees.toFixed(2)}`;
+        taxBreakdown += `\n• *GST/Tax (${rate}%):* +₹${taxRupees.toFixed(2)}`;
       }
     }
 
-    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\nâ€¢ *Delivery Charge:* +₹${Number(bill.deliveryCharge).toFixed(2)}` : '';
-    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\nâ€¢ *Container Charge:* +₹${Number(bill.containerCharge).toFixed(2)}` : '';
+    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\n• *Delivery Charge:* +₹${Number(bill.deliveryCharge).toFixed(2)}` : '';
+    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\n• *Container Charge:* +₹${Number(bill.containerCharge).toFixed(2)}` : '';
 
     let finalTotal = Number(bill?.total || 0);
     const addCharges = Number(bill?.deliveryCharge || 0) + Number(bill?.containerCharge || 0);
@@ -562,7 +562,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     }
     const roundedTotal = Math.round(finalTotal);
     const roundOff = roundedTotal - finalTotal;
-    const roundOffText = roundOff !== 0 ? `\nâ€¢ *Round Off:* ${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}` : '';
+    const roundOffText = roundOff !== 0 ? `\n• *Round Off:* ${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}` : '';
     const total = finalTotal.toFixed(2);
 
     let paymentInfo = bill?.paymentMethod || 'Cash';
@@ -581,18 +581,18 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     if (bType === 'Delivery') {
       header = customerName
-        ? `ðŸ›µ Dear *${customerName}*, thank you for ordering delivery with us!\nðŸ§¾ *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `ðŸ›µ *HOME DELIVERY E-BILL* ðŸ›µ\nðŸ  *${restName.toUpperCase()}* | Bill #${billNo}`;
+        ? `🛵 Dear *${customerName}*, thank you for ordering delivery with us!\n🧾 *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛵 *HOME DELIVERY E-BILL* 🛵\nðŸ  *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU FOR YOUR DELIVERY ORDER! ENJOY YOUR MEAL ***';
     } else if (bType === 'Takeaway') {
       header = customerName
-        ? `ðŸ›ï¸ Dear *${customerName}*, thank you for your takeaway order!\nðŸ§¾ *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `ðŸ›ï¸ *TAKEAWAY E-BILL RECEIPT* ðŸ›ï¸\nðŸ“¦ *${restName.toUpperCase()}* | Bill #${billNo}`;
+        ? `ðŸ›ï¸ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `ðŸ›ï¸ *TAKEAWAY E-BILL RECEIPT* ðŸ›ï¸\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU FOR ORDERING TAKEAWAY! VISIT AGAIN ***';
     } else {
       header = customerName
-        ? `ðŸ‘‹ Dear *${customerName}*, thank you for dining with us!\nðŸ§¾ *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `ðŸ§¾ *DIGITAL E-BILL RECEIPT* ðŸ§¾\nðŸ¨ *${restName.toUpperCase()}* | Bill #${billNo}`;
+        ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\nðŸ¨ *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU! VISIT AGAIN ***';
     }
 
@@ -606,18 +606,18 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       (bill?.customerPhone || whatsappPhone ? `*Phone:* ${bill?.customerPhone || whatsappPhone}\n` : '') +
       (bill?.tokenNumber ? `*Token No:* ${bill.tokenNumber}\n` : '') +
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
-      `ðŸ›’ *ITEMS ORDERED (${totalQty} Qty):*\n` +
+      `🛒 *ITEMS ORDERED (${totalQty} Qty):*\n` +
       `${itemsList}\n` +
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
-      `â€¢ *Subtotal:* ₹${subtotal}` +
+      `• *Subtotal:* ₹${subtotal}` +
       discount +
       taxBreakdown +
       deliveryCharge +
       containerCharge +
       roundOffText +
-      `\nâ€¢ *GRAND TOTAL:* *₹${total}*\n` +
-      `â€¢ *Payment Mode:* ${paymentInfo}\n` +
-      (s.whatsappShowQr !== false && s.upiId ? `â€¢ *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
+      `\n• *GRAND TOTAL:* *₹${total}*\n` +
+      `• *Payment Mode:* ${paymentInfo}\n` +
+      (s.whatsappShowQr !== false && s.upiId ? `• *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
       `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
       `_${footerMessage}_`;
   };
