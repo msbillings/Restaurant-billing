@@ -40,6 +40,19 @@ execSync(`${npmCmd} run build`, {
   env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' }
 });
 
+// Build RawPrinter.exe for Windows clients
+if (process.platform === 'win32') {
+  console.log('Compiling RawPrinter.exe for ultra-fast Windows USB Printing...');
+  try {
+    execSync('powershell -NoProfile -ExecutionPolicy Bypass -File buildPrinter.ps1', {
+      cwd: path.join(__dirname, '../Backend/utils'),
+      stdio: 'inherit'
+    });
+  } catch (err) {
+    console.warn('Warning: Failed to compile RawPrinter.exe. Fast USB printing may fallback to PowerShell on client machines.', err.message);
+  }
+}
+
 // Copy Backend (Ignore node_modules, session data, uploads, reports, logs)
 console.log('Copying Backend...');
 copySync(backendSrc, desktopBackend, ['node_modules', '.git', 'auth_info_baileys', 'reports', 'uploads', 'dist', 'logs']);

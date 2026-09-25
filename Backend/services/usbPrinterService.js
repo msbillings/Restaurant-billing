@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import util from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -6,9 +6,27 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 
 const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 const btComPortCache = new Map();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const printerLocks = new Map();
+
+async function withPrinterLock(printerName, task) {
+  const key = printerName || 'default_usb';
+  let currentLock = printerLocks.get(key) || Promise.resolve();
+  let release;
+  const nextLock = new Promise(resolve => { release = resolve; });
+  printerLocks.set(key, currentLock.then(() => nextLock).catch(() => nextLock));
+  
+  try {
+    await currentLock;
+    return await task();
+  } finally {
+    release();
+  }
+}
 
 /**
 /**
@@ -210,44 +228,48 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
         console.warn('[USBPrinterService] Could not check live USB ports before printing:', checkErr.message);
       }
 
-      const exePath = path.join(__dirname, '..', 'utils', 'RawPrinter.exe');
-      if (cleanPrinterName && fs.existsSync(exePath)) {
-        try {
-          const fastCmd = `"${exePath}" "${cleanPrinterName}" "${tempBin}"`;
-          const { stdout } = await execPromise(fastCmd, { timeout: 3000 });
-          if (stdout && stdout.includes("SUCCESS")) {
-            return {
-              success: true,
-              actualPort: cleanPort,
-              message: `Printed instantly via native spooler to ${cleanPrinterName}`
-            };
+      return await withPrinterLock(cleanPrinterName || cleanPort, async () => {
+        const exePath = path.join(__dirname, '..', 'utils', 'RawPrinter.exe');
+        if (cleanPrinterName && fs.existsSync(exePath)) {
+          try {
+            const { stdout } = await execFilePromise(exePath, [cleanPrinterName, tempBin], { timeout: 3000 });
+            if (stdout && stdout.includes("SUCCESS")) {
+              return {
+                success: true,
+                actualPort: cleanPort,
+                message: `Printed instantly via native spooler to ${cleanPrinterName}`
+              };
+            }
+          } catch (fastErr) {
+            console.warn('[USBPrinterService] Fast native print failed, falling back to PowerShell:', fastErr.message);
           }
-        } catch (fastErr) {
-          console.warn('[USBPrinterService] Fast native print failed, falling back to PowerShell:', fastErr.message);
         }
-      }
 
-      const printerParam = cleanPrinterName ? ` -PrinterName "${cleanPrinterName}"` : '';
-      const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -File "${psScriptPath}" -Port "${cleanPort}" -File "${tempBin}"${printerParam}`;
-      const { stdout, stderr } = await execPromise(cmd, { timeout: 12000 });
-      
-      const outText = (stdout || '').trim();
-      if (stderr && stderr.toLowerCase().includes('failed:')) {
-        throw new Error(stderr.trim());
-      }
+        const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", psScriptPath, "-Port", cleanPort, "-File", tempBin];
+        if (cleanPrinterName) {
+          args.push("-PrinterName", cleanPrinterName);
+        }
 
-      // Check if rawPrint.ps1 rerouted to another port
-      let finalPort = cleanPort;
-      const rerouteMatch = outText.match(/auto-rerouting to active port '([^']+)'/i);
-      if (rerouteMatch && rerouteMatch[1]) {
-        finalPort = rerouteMatch[1];
-      }
+        const { stdout, stderr } = await execFilePromise("powershell", args, { timeout: 12000 });
+        
+        const outText = (stdout || '').trim();
+        if (stderr && stderr.toLowerCase().includes('failed:')) {
+          throw new Error(stderr.trim());
+        }
 
-      return {
-        success: true,
-        actualPort: finalPort,
-        message: outText || `Printed raw ESC/POS to ${finalPort}`
-      };
+        // Check if rawPrint.ps1 rerouted to another port
+        let finalPort = cleanPort;
+        const rerouteMatch = outText.match(/auto-rerouting to active port '([^']+)'/i);
+        if (rerouteMatch && rerouteMatch[1]) {
+          finalPort = rerouteMatch[1];
+        }
+
+        return {
+          success: true,
+          actualPort: finalPort,
+          message: outText || `Printed raw ESC/POS to ${finalPort}`
+        };
+      });
     } finally {
       try {
         if (fs.existsSync(tempBin)) {
