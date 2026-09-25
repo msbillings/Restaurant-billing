@@ -279,8 +279,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     setIsPrinting(true);
     setPrintStatus('printing');
 
-    // âš¡ CRITICAL: Allow React to flush DOM and browser to paint the button immediately
-    await new Promise(res => setTimeout(res, 80));
+    // CRITICAL: Allow React to flush DOM and browser to paint the button immediately
+    // Only wait if graphical printing is explicitly enabled
+    if (activeSettings.enableGraphicalPrinting === true) {
+      await new Promise(res => setTimeout(res, 80));
+    }
 
     try {
       // 2. Desktop Electron App
@@ -417,10 +420,10 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           let anySuccess = false;
 
-          for (const rp of receiptPrinters) {
+          await Promise.all(receiptPrinters.map(async (rp) => {
             try {
               let escposBase64 = null;
-              if (activeSettings.enableGraphicalPrinting !== false) {
+              if (activeSettings.enableGraphicalPrinting === true) {
                 try {
                   const receiptNode = document.querySelector('.receipt-print');
                   if (receiptNode) {
@@ -444,7 +447,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             } catch (err) {
               console.warn(`Failed to print bill to ${rp.name}:`, err);
             }
-          }
+          }));
 
           if (anySuccess) {
             setPrintStatus('success');

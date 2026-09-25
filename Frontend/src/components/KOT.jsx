@@ -234,8 +234,11 @@ const KOT = ({ order, onClose }) => {
     setIsPrinting(true);
     setPrintStatus('printing');
 
-    // ⚡ CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
-    await new Promise(res => setTimeout(res, 80));
+    // CRITICAL: Allow React 19 to flush DOM and browser to paint the blue "Printing..." button immediately
+    const activeSettingsGlobal = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+    if (activeSettingsGlobal.enableGraphicalPrinting === true) {
+      await new Promise(res => setTimeout(res, 80));
+    }
 
     try {
       const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
@@ -396,13 +399,13 @@ const KOT = ({ order, onClose }) => {
             
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
 
-            for (const targetBackendPrinter of targetPrinters) {
+            await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
               const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
               try {
                 let escposBase64 = null;
-                if (activeSettings.enableGraphicalPrinting !== false) {
+                if (activeSettings.enableGraphicalPrinting === true) {
                   try {
                     const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
                     if (receiptNode) {
@@ -429,7 +432,7 @@ const KOT = ({ order, onClose }) => {
               } catch (singleErr) {
                 console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
               }
-            }
+            }));
 
             if (anySuccess) {
               await new Promise(res => setTimeout(res, 1500));
@@ -561,12 +564,12 @@ const KOT = ({ order, onClose }) => {
             let anySuccess = false;
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             
-            for (const targetBackendPrinter of targetPrinters) {
+            await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
               try {
                 let escposBase64 = null;
-                if (activeSettings.enableGraphicalPrinting !== false) {
+                if (activeSettings.enableGraphicalPrinting === true) {
                   const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
                   if (receiptNode) {
                     const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
@@ -589,7 +592,7 @@ const KOT = ({ order, onClose }) => {
               } catch (singleErr) {
                 console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
               }
-            }
+            }));
             if (!anySuccess) {
               window.print();
             }
