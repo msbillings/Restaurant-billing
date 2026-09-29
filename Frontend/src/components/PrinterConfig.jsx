@@ -16,6 +16,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [testingId, setTestingId] = useState(null);
 
+  // Connectivity Status Map
+  const [connectionStatuses, setConnectionStatuses] = useState({});
+
   // Categories & Menu Items & Floors from DB
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -219,6 +222,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     port: 9100,
     connectionType: 'network',
     paperWidth: '80mm',
+    numberOfCopies: 1,
     isActive: true,
     autoPrintKOT: true,
     printHeader: '',
@@ -233,11 +237,32 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       });
       const configsList = response.data || [];
       setConfigs(configsList);
+      checkAllConnections(configsList);
     } catch (error) {
       console.error('Error fetching printer configs', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const checkConnectionStatus = async (id) => {
+    setConnectionStatuses(prev => ({ ...prev, [id]: { status: 'checking' } }));
+    try {
+      const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+      const res = await axios.get(`${getApiUrl()}/printer-configs/${id}/status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setConnectionStatuses(prev => ({ 
+        ...prev, 
+        [id]: { status: res.data.connected ? 'connected' : 'disconnected' } 
+      }));
+    } catch (err) {
+      setConnectionStatuses(prev => ({ ...prev, [id]: { status: 'disconnected' } }));
+    }
+  };
+
+  const checkAllConnections = async (configsList) => {
+    configsList.forEach(c => checkConnectionStatus(c._id));
   };
 
   const fetchMenuData = async () => {
@@ -278,6 +303,16 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     fetchMenuData();
     loadBluetoothDevices();
     scanUsbPorts();
+
+    // Auto-detect USB hot-plugging using WebUSB
+    if (navigator.usb) {
+      navigator.usb.addEventListener('connect', scanUsbPorts);
+      navigator.usb.addEventListener('disconnect', scanUsbPorts);
+      return () => {
+        navigator.usb.removeEventListener('connect', scanUsbPorts);
+        navigator.usb.removeEventListener('disconnect', scanUsbPorts);
+      };
+    }
   }, []);
 
   // Map other printers' assignments to identify duplicates
@@ -337,6 +372,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       port: 9100,
       connectionType: 'network',
       paperWidth: '80mm',
+      numberOfCopies: 1,
       isActive: true,
       silentPrinting: true,
       autoPrintKOT: true,
@@ -367,6 +403,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       port: config.port || 9100,
       connectionType: config.connectionType || 'network',
       paperWidth: config.paperWidth || '80mm',
+      numberOfCopies: config.numberOfCopies || 1,
       isActive: config.isActive !== false,
       silentPrinting: config.silentPrinting !== false,
       autoPrintKOT: config.autoPrintKOT !== false,
@@ -610,6 +647,21 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                                     {config.location}
                                   </span>
                                 )}
+                                {connectionStatuses[config._id]?.status === 'checking' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md border border-gray-200 shrink-0">
+                                    <Loader2 size={10} className="animate-spin" /> Checking
+                                  </span>
+                                )}
+                                {connectionStatuses[config._id]?.status === 'connected' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-200 shrink-0">
+                                    <CheckCircle size={10} /> Online
+                                  </span>
+                                )}
+                                {connectionStatuses[config._id]?.status === 'disconnected' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold rounded-md border border-rose-200 shrink-0">
+                                    <AlertTriangle size={10} /> Offline
+                                  </span>
+                                )}
                               </div>
                               {config.assignTo && config.assignTo !== config.name && (
                                 <div className="text-xs text-gray-500 font-medium">
@@ -688,6 +740,12 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                         <td className="px-5 py-3.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-2">
                             <button
+                              onClick={() => checkConnectionStatus(config._id)}
+                              className="p-1.5 rounded-lg text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
+                              title={t("Check Connectivity")}>
+                              <RefreshCw size={16} className={connectionStatuses[config._id]?.status === 'checking' ? 'animate-spin' : ''} />
+                            </button>
+                            <button
                               onClick={() => handleTestPrint(config._id)}
                               disabled={testingId === config._id}
                               className={`p-1.5 rounded-lg transition-all ${testingId === config._id ? 'text-blue-600 bg-blue-50 opacity-70 cursor-not-allowed' : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer'}`}
@@ -752,6 +810,21 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-800 text-[10px] sm:text-[11px] font-bold rounded-md border border-amber-200">
                                 <MapPin size={10} />
                                 {config.location}
+                              </span>
+                            )}
+                            {connectionStatuses[config._id]?.status === 'checking' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md border border-gray-200 shrink-0">
+                                <Loader2 size={10} className="animate-spin" /> Checking
+                              </span>
+                            )}
+                            {connectionStatuses[config._id]?.status === 'connected' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md border border-emerald-200 shrink-0">
+                                <CheckCircle size={10} /> Online
+                              </span>
+                            )}
+                            {connectionStatuses[config._id]?.status === 'disconnected' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-50 text-rose-700 text-[10px] font-bold rounded-md border border-rose-200 shrink-0">
+                                <AlertTriangle size={10} /> Offline
                               </span>
                             )}
                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] sm:text-[11px] font-bold rounded-md border ${
@@ -860,6 +933,13 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                           <span>{t("Edit")}</span>
                         </button>
                         <button
+                          onClick={() => checkConnectionStatus(config._id)}
+                          className="py-2 px-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95 shrink-0"
+                          title="Check Status"
+                        >
+                          <RefreshCw size={14} className={connectionStatuses[config._id]?.status === 'checking' ? 'animate-spin' : ''} />
+                        </button>
+                        <button
                           onClick={() => handleDelete(config._id)}
                           className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-xl flex items-center justify-center transition-colors cursor-pointer active:scale-95"
                           title={t("Delete")}
@@ -956,7 +1036,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                 </div>
 
                 {/* Printer Type & Connection */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
                       {t("Printer Purpose *")}
@@ -997,6 +1077,20 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium bg-white">
                       <option value="80mm">{t("80mm (Standard 3-Inch)")}</option>
                       <option value="58mm">{t("58mm (Small 2-Inch)")}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                      {t("Copies")}
+                    </label>
+                    <select
+                      name="numberOfCopies"
+                      value={formData.numberOfCopies}
+                      onChange={(e) => setFormData(prev => ({ ...prev, numberOfCopies: Number(e.target.value) }))}
+                      className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none font-medium bg-white">
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                        <option key={num} value={num}>{num}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

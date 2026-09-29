@@ -366,7 +366,10 @@ const ensureDBConnection = async (req, res, next) => {
 
 import { tenantMiddleware } from './middleware/tenant.js';
 
-// Apply middleware to all API routes BEFORE routes are registered
+import webhookRoutes from './routes/webhookRoutes.js';
+// Webhook endpoints must bypass tenant middleware as they hit global URLs
+app.use('/api/webhooks', webhookRoutes);
+
 app.use('/api', ensureDBConnection);
 app.use('/api', tenantMiddleware);
 
@@ -404,6 +407,7 @@ import clientRoutes from './routes/clientRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import calculatorRoutes from './routes/calculatorRoutes.js';
+import marketHubRoutes from './routes/marketHubRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -444,6 +448,7 @@ app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/markethub', marketHubRoutes);
 
 // WhatsApp sessions are lazily initialized via WhatsAppManager in whatsappController.js
 

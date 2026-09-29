@@ -5,14 +5,16 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { 
   X, CheckCircle2, RefreshCw, Smartphone, LogOut, Send, 
-  AlertCircle, QrCode, Phone, Copy, Check, Info, ShieldCheck, Laptop
+  AlertCircle, QrCode, Phone, Copy, Check, Info, ShieldCheck, Laptop, Save
 } from 'lucide-react';
 import { 
   getWhatsAppStatus, 
   logoutWhatsApp, 
   sendWhatsAppMessage, 
   requestWhatsAppPairingCode, 
-  refreshWhatsAppQR 
+  refreshWhatsAppQR,
+  getWhatsAppTemplates,
+  saveWhatsAppTemplates
 } from '../api/whatsapp';
 
 const WhatsAppConnectModal = ({ isOpen, onClose }) => {
@@ -36,6 +38,59 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
   const [testPhone, setTestPhone] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
   const [actionMessage, setActionMessage] = useState(null);
+
+  // Templates State
+  const [templates, setTemplates] = useState({
+    loyaltyEarned: "",
+    khataReminder: "",
+    referralMessage: "",
+    eBillReceipt: "",
+    welcomeMessage: "",
+    birthdayWishes: "",
+    weMissYou: "",
+    customMessage: ""
+  });
+  const [activeTemplateKey, setActiveTemplateKey] = useState('loyaltyEarned');
+  const [savingTemplates, setSavingTemplates] = useState(false);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await getWhatsAppTemplates();
+      if (res?.templates) {
+        setTemplates(res.templates);
+        setTemplatesLoaded(true);
+      }
+    } catch (e) {
+      console.warn('Could not fetch templates:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (statusData.status === 'CONNECTED' && !templatesLoaded) {
+      fetchTemplates();
+    }
+  }, [statusData.status, templatesLoaded]);
+
+  const handleSaveTemplates = async () => {
+    setSavingTemplates(true);
+    setActionMessage(null);
+    try {
+      await saveWhatsAppTemplates(templates);
+      setActionMessage({ text: t('Templates saved successfully!'), type: 'success' });
+    } catch (e) {
+      setActionMessage({ text: t('Failed to save templates'), type: 'error' });
+    } finally {
+      setSavingTemplates(false);
+    }
+  };
+
+  const insertVariable = (variable) => {
+    setTemplates(prev => ({
+      ...prev,
+      [activeTemplateKey]: prev[activeTemplateKey] + ' ' + variable + ' '
+    }));
+  };
 
   const fetchStatus = async () => {
     try {
@@ -382,13 +437,78 @@ const WhatsAppConnectModal = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="pt-3 border-t border-gray-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] sm:text-xs font-semibold text-gray-600 uppercase tracking-wider">{t("Dynamic Messages")}</label>
+                  <select 
+                    value={activeTemplateKey} 
+                    onChange={(e) => setActiveTemplateKey(e.target.value)}
+                    className="bg-gray-50 border border-gray-200 text-xs font-bold rounded-lg px-2 py-1 text-emerald-700 outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="loyaltyEarned">{t("Loyalty Points")}</option>
+                    <option value="khataReminder">{t("Khata Reminders")}</option>
+                    <option value="referralMessage">{t("B2B Referrals")}</option>
+                    <option value="eBillReceipt">{t("e-Bill Receipt")}</option>
+                    <option value="welcomeMessage">{t("Welcome Message")}</option>
+                    <option value="birthdayWishes">{t("Birthday / Anniversary")}</option>
+                    <option value="weMissYou">{t("We Miss You")}</option>
+                    <option value="customMessage">{t("Custom Message")}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 space-y-2">
+                    <textarea
+                      value={templates[activeTemplateKey]}
+                      onChange={(e) => setTemplates(prev => ({ ...prev, [activeTemplateKey]: e.target.value }))}
+                      placeholder={t("Type your custom message here...")}
+                      className="w-full h-24 p-3 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 resize-none shadow-inner"
+                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      <button onClick={() => insertVariable('[CustomerName]')} className="px-2 py-1 bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 text-[10px] font-bold rounded cursor-pointer transition-colors border border-gray-200">[CustomerName]</button>
+                      <button onClick={() => insertVariable('[PointsEarned]')} className="px-2 py-1 bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 text-[10px] font-bold rounded cursor-pointer transition-colors border border-gray-200">[PointsEarned]</button>
+                      <button onClick={() => insertVariable('[TotalPoints]')} className="px-2 py-1 bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 text-[10px] font-bold rounded cursor-pointer transition-colors border border-gray-200">[TotalPoints]</button>
+                      <button onClick={() => insertVariable('[KhataBalance]')} className="px-2 py-1 bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 text-[10px] font-bold rounded cursor-pointer transition-colors border border-gray-200">[KhataBalance]</button>
+                      <button onClick={() => insertVariable('[RestaurantName]')} className="px-2 py-1 bg-gray-100 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 text-[10px] font-bold rounded cursor-pointer transition-colors border border-gray-200">[RestaurantName]</button>
+                    </div>
+                  </div>
+
+                  <div className="w-full sm:w-[220px] bg-[#E5DDD5] rounded-[18px] p-2 sm:p-3 relative overflow-hidden border-4 border-gray-800 shadow-xl shrink-0">
+                    <div className="absolute top-0 inset-x-0 h-4 bg-gray-800 rounded-b-xl w-24 mx-auto z-10"></div>
+                    <div className="bg-[#128C7E] -mx-2 sm:-mx-3 -mt-2 sm:-mt-3 p-3 pb-2 flex items-center gap-2 text-white">
+                      <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold">{activeRestaurantName.charAt(0)}</div>
+                      <span className="text-xs font-bold truncate">{activeRestaurantName}</span>
+                    </div>
+                    <div className="mt-2 space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar">
+                      <div className="bg-white p-2.5 rounded-lg rounded-tl-none shadow-sm text-[11px] text-gray-800 relative">
+                        <p className="whitespace-pre-wrap leading-relaxed">{templates[activeTemplateKey]}</p>
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-1 opacity-70">
+                          <span className="text-[10px]">⚡</span>
+                          <span className="text-[9px] font-bold text-gray-600 italic">Powered by MS Billings</span>
+                        </div>
+                        <span className="text-[8px] text-gray-400 absolute bottom-1 right-2">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between pt-3 items-center border-t border-gray-100">
+                <button
+                  onClick={handleSaveTemplates}
+                  disabled={savingTemplates}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer">
+                  {savingTemplates ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                  <span>{savingTemplates ? t("Saving...") : t("Save Templates")}</span>
+                </button>
+
                 <button
                   onClick={handleLogout}
                   disabled={loggingOut}
-                  className="w-full sm:w-auto justify-center px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl border border-rose-200 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95">
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl border border-rose-200 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer active:scale-95">
                   {loggingOut ? <RefreshCw size={14} className="animate-spin" /> : <LogOut size={14} />}
-                  <span>{loggingOut ? t("Disconnecting...") : t("Disconnect / Re-link")}</span>
+                  <span>{loggingOut ? t("Disconnect") : t("Disconnect")}</span>
                 </button>
               </div>
             </div>

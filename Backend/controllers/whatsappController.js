@@ -414,3 +414,62 @@ export const triggerFeedback = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const getTemplates = async (req, res) => {
+  try {
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
+
+    let templatesDoc = await models.Setting.findOne({ key: 'whatsapp_templates' }).lean();
+    
+    const defaultTemplates = {
+      loyaltyEarned: "Thank you for visiting! You earned [PointsEarned] points. Your new balance is [TotalPoints] points.",
+      khataReminder: "Namaskaram [CustomerName], your pending Udhaar balance at [RestaurantName] is ₹[KhataBalance]. Please pay soon!",
+      referralMessage: "Hey! [RestaurantName] uses MS Billings and loves it. Click here to get your first month free!",
+      eBillReceipt: "Hi [CustomerName], thank you for dining at [RestaurantName]. Please find your e-Bill attached.",
+      welcomeMessage: "Welcome to [RestaurantName], [CustomerName]! We are thrilled to have you. Enjoy 10% off your next visit!",
+      birthdayWishes: "Happy Birthday [CustomerName]! Come celebrate at [RestaurantName] today and get a free dessert on us!",
+      weMissYou: "Hi [CustomerName], it's been a while! We miss you at [RestaurantName]. Come back this week for a special surprise!",
+      customMessage: "Hello [CustomerName], this is a special update from [RestaurantName]!"
+    };
+    
+    let savedTemplates = {};
+    if (templatesDoc && templatesDoc.value) {
+      if (typeof templatesDoc.value === 'string') {
+        try { savedTemplates = JSON.parse(templatesDoc.value); } catch(e) {}
+      } else {
+        savedTemplates = templatesDoc.value;
+      }
+    }
+
+    let templates = { ...defaultTemplates, ...savedTemplates };
+
+    res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const saveTemplates = async (req, res) => {
+  try {
+    const { templates } = req.body;
+    if (!templates) return res.status(400).json({ error: 'Templates data is required' });
+
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
+
+    await models.Setting.findOneAndUpdate(
+      { key: 'whatsapp_templates' },
+      { value: templates },
+      { upsert: true }
+    );
+
+    res.json({ success: true, message: 'Templates saved successfully' });
+  } catch (error) {
+    console.error('Error saving templates:', error);
+    res.status(500).json({ error: error.message });
+  }
+};

@@ -14,10 +14,17 @@ const adminSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  plainTextPassword: {
+    type: String
+  },
   role: {
     type: String,
-    enum: ['SuperAdmin', 'Support', 'Sales'],
+    enum: ['SuperAdmin', 'Support', 'Sales', 'Vendor'],
     default: 'SuperAdmin'
+  },
+  // If role is Vendor, store their company name
+  vendorCompanyName: {
+    type: String
   },
   // WebAuthn Passkey Credentials
   passkeys: [{

@@ -9,7 +9,9 @@ import {
   triggerAutoDayBook,
   triggerFeedback,
   logCampaign,
-  getCampaignHistory
+  getCampaignHistory,
+  getTemplates,
+  saveTemplates
 } from '../controllers/whatsappController.js';
 import { optionalAuthenticateToken } from '../middleware/auth.js';
 
@@ -25,6 +27,8 @@ router.post('/trigger-auto-daybook', optionalAuthenticateToken, triggerAutoDayBo
 router.post('/trigger-feedback', optionalAuthenticateToken, triggerFeedback);
 router.post('/campaign/log', optionalAuthenticateToken, logCampaign);
 router.get('/campaign/history', optionalAuthenticateToken, getCampaignHistory);
+router.get('/templates', optionalAuthenticateToken, getTemplates);
+router.post('/templates', optionalAuthenticateToken, saveTemplates);
 
 export default router;
 

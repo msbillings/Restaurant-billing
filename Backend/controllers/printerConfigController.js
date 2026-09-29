@@ -149,10 +149,10 @@ export const testPrinter = async (req, res) => {
       }
     }
 
-    if (config.connectionType === 'usb' && config.usbPort) {
+    if (config.connectionType === 'usb' && (config.usbPort || config.deviceName || config.name)) {
       const buffer = generateESCPOSTestReceipt(config);
       try {
-        const result = await sendRawToUSBPrinter(config.usbPort, buffer, config.deviceName || config.name);
+        const result = await sendRawToUSBPrinter(config.usbPort || config.deviceName || config.name, buffer, config.deviceName || config.name);
         const actualPort = result.actualPort || config.usbPort;
         if (actualPort !== config.usbPort) {
           try {
@@ -256,7 +256,7 @@ export const printKOT = async (req, res) => {
 
     // const results = [];
     const printPromises = printers.map(async (printer) => {
-      const isUsb = printer.connectionType === 'usb' && printer.usbPort;
+      const isUsb = printer.connectionType === 'usb' && (printer.usbPort || printer.deviceName || printer.name);
       const isNetwork = printer.connectionType === 'network' && printer.ipAddress;
       const isBluetooth = printer.connectionType === 'bluetooth' && (printer.bluetoothAddress || printer.deviceName || printer.name);
       if (!isUsb && !isNetwork && !isBluetooth) return null;
@@ -317,3 +317,36 @@ export const printKOT = async (req, res) => {
   }
 };
 
+
+export const checkPrinterStatus = async (req, res) => {
+  try {
+    const PrinterConfig = getTenantModel(req, 'PrinterConfig');
+    const { id } = req.params;
+    const config = await PrinterConfig.findById(id);
+    if (!config) return res.status(404).json({ message: 'Not found' });
+    
+    if (config.connectionType === 'usb') {
+      const ports = await getAvailableUSBAndCOMPorts();
+      const isConnected = ports.some(p => p.port === config.usbPort);
+      return res.status(200).json({ success: true, connected: isConnected });
+    } else if (config.connectionType === 'bluetooth') {
+      const devices = await scanBluetoothDevices();
+      const isConnected = devices.some(d => d.macAddress === config.bluetoothAddress || d.address === config.bluetoothAddress);
+      return res.status(200).json({ success: true, connected: isConnected });
+    } else if (config.connectionType === 'network') {
+      const net = await import('net');
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        let isConnected = false;
+        socket.setTimeout(2000);
+        socket.on('connect', () => { isConnected = true; socket.destroy(); resolve(res.status(200).json({ success: true, connected: true })); });
+        socket.on('timeout', () => { socket.destroy(); resolve(res.status(200).json({ success: true, connected: false })); });
+        socket.on('error', () => { socket.destroy(); resolve(res.status(200).json({ success: true, connected: false })); });
+        socket.connect(config.port || 9100, config.ipAddress);
+      });
+    }
+    return res.status(200).json({ success: true, connected: false });
+  } catch (err) {
+    return res.status(500).json({ success: false, connected: false, error: err.message });
+  }
+};

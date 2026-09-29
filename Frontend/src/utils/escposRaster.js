@@ -35,7 +35,7 @@ export async function renderElementToESCPOSRaster(element, targetWidthDots = 576
           backgroundColor: '#ffffff',
           useCORS: attempt === 1,
           logging: false,
-          imageTimeout: 0,
+          imageTimeout: 5000,
           onclone: (clonedDoc) => {
             const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip') || clonedDoc.body;
             if (receipt) {
@@ -269,7 +269,7 @@ export async function renderElementToPNGBase64(element, targetWidthDots = 576) {
           backgroundColor: '#ffffff',
           useCORS: attempt === 1,
           logging: false,
-          imageTimeout: 0,
+          imageTimeout: 5000,
           onclone: (clonedDoc) => {
             const receipt = clonedDoc.querySelector('.receipt-print') || clonedDoc.querySelector('#kot-receipt-slip') || clonedDoc.body;
             if (receipt) {

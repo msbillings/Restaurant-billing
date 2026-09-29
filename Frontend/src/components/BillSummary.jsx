@@ -32,6 +32,8 @@ const BillSummary = ({
   onSelectTable,
   discount,
   setDiscount,
+  walletRedemption,
+  setWalletRedemption,
   taxRate,
   setTaxRate,
   billType,

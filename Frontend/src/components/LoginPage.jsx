@@ -150,23 +150,21 @@ const LoginPage = ({ onLoginSuccess, onClockInClick }) => {const { t } = useLang
               <button
                 type="button"
                 onClick={async () => {
-                  if (window.confirm('Are you sure you want to reset your license and switch account? You will need to re-enter your license key.')) {
                     try {
                       const API_BASE_URL = getApiUrl();
-                      await fetch(`${API_BASE_URL}/config/reset`, {
+                      fetch(`${API_BASE_URL}/config/reset`, {
                         method: 'POST',
                         headers: {
                           'X-Tenant-DB': localStorage.getItem('resto_db_name') || '',
                           'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`
                         }
-                      });
+                      }).catch(console.error);
                     } catch (err) {}
                     
                     localStorage.clear();
                     sessionStorage.clear();
-                    window.dispatchEvent(new Event('forceLogout'));
-                  }
-                }}
+                    window.location.href = '/login';
+                  }}
                 className="text-gray-400 hover:text-white text-xs sm:text-sm font-medium transition-colors flex items-center gap-2 mt-1 sm:mt-2">
                 <RefreshCw size={12} />{t("Reset License & Switch Account")}
               </button>

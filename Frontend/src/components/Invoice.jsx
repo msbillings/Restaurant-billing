@@ -259,7 +259,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const activeReceiptPrinter = useMemo(() => {
     const list = Array.isArray(printerConfigs) ? printerConfigs : [];
     return list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
-      (c.connectionType === 'usb' && c.usbPort) ||
+      (c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
       (c.connectionType === 'network' && c.ipAddress) ||
       (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
     )) || null;
@@ -283,13 +283,30 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     await new Promise(res => setTimeout(res, 80));
 
     try {
+      let currentActivePrinter = activeReceiptPrinter;
+      let list = Array.isArray(printerConfigs) ? printerConfigs : [];
+      if (list.length === 0) {
+        try {
+          const res = await api.get('/printer-configs');
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            list = res.data;
+            setPrinterConfigs(res.data);
+            currentActivePrinter = list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+              (c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
+              (c.connectionType === 'network' && c.ipAddress) ||
+              (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+            )) || null;
+          }
+        } catch (_) {}
+      }
+
       // 2. Desktop Electron App
-      if (window.electronAPI && !activeReceiptPrinter) {
+      if (window.electronAPI && !currentActivePrinter) {
         const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
         const printAreaNode = document.getElementById('invoice-print-area');
         const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
         if (!htmlContent) throw new Error("Invoice receipt element not found in DOM");
-        const isSilent = (activeReceiptPrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
+        const isSilent = (currentActivePrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
         let printResult = { success: true };
         if (isSilent && activeSettings.billingPrinter) {
           printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
@@ -308,7 +325,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
 
       // 3. Android APK (Bluetooth)
-      if (window.AndroidBluetooth && (activeReceiptPrinter?.connectionType === 'bluetooth' || (!activeReceiptPrinter && (activeSettings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
+      if (window.AndroidBluetooth && (currentActivePrinter?.connectionType === 'bluetooth' || (!currentActivePrinter && (activeSettings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
         const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
         const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
 
@@ -405,7 +422,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         );
 
         const receiptPrinters = (list || []).filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill \u0026 KOT') && (
-          (!isMobile && c.connectionType === 'usb' && c.usbPort) ||
+          (!isMobile && c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
         ));
@@ -473,8 +490,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
 
       // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
-      window.print();
       setPrintStatus('success');
+      window.print();
       resetPrintStatus(3000);
     } catch (unexpectedErr) {
       setPrintStatus('failed');

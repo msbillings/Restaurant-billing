@@ -553,8 +553,34 @@ class WhatsAppService {
     const tierLine = tier ? `\n👑 *Membership Tier:* ${tier}` : '';
 
     let message;
-    if (isFirstVisit && welcomeBonus > 0) {
-      message =
+    
+    // Attempt to fetch custom template
+    let customTemplate = null;
+    let templateKey = isFirstVisit ? 'welcomeMessage' : 'loyaltyEarned';
+    try {
+      const models = await getTenantModels(this.tenantId);
+      if (models?.Setting) {
+        const tplDoc = await models.Setting.findOne({ key: 'whatsapp_templates' }).lean();
+        if (tplDoc && tplDoc.value) {
+          const tpls = typeof tplDoc.value === 'string' ? JSON.parse(tplDoc.value) : tplDoc.value;
+          if (tpls && tpls[templateKey] && tpls[templateKey].trim() !== '') {
+            customTemplate = tpls[templateKey];
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[WhatsApp] Failed to fetch custom templates:', e.message);
+    }
+
+    if (customTemplate) {
+      message = customTemplate
+        .replace(/\[CustomerName\]/gi, customerDisplayName)
+        .replace(/\[PointsEarned\]/gi, pointsEarned || 0)
+        .replace(/\[TotalPoints\]/gi, totalPoints || 0)
+        .replace(/\[RestaurantName\]/gi, restName);
+    } else {
+      if (isFirstVisit && welcomeBonus > 0) {
+        message =
 `👋 Welcome *${customerDisplayName}*!
 🎉 You've joined *${restName}*'s Loyalty Program!
 ${READ_MORE}
@@ -563,8 +589,8 @@ ${READ_MORE}
 ${pointsEarned > 0 ? `⭐ *Points Earned this visit:* ${pointsEarned} pts\n` : ''}${walletRedeemed > 0 ? `💳 *Wallet Used:* ₹${walletRedeemed}\n` : ''}💰 *Wallet Balance:* ₹${walletBalanceFormatted}${tierLine}
 
 Use your wallet balance on your next visit! 😊`;
-    } else {
-      message =
+      } else {
+        message =
 `🌟 Hi *${customerDisplayName}*!
 Thank you for visiting *${restName}*! 🍽️
 ${READ_MORE}
@@ -573,6 +599,7 @@ ${READ_MORE}
 💰 *Wallet Balance:* ₹${walletBalanceFormatted}${tierLine}
 
 Use your wallet balance on your next visit! 😊`;
+      }
     }
 
     if (imageUrl || imageBase64) {

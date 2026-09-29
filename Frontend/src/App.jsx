@@ -23,6 +23,7 @@ const Feedback = React.lazy(() => import('./components/Feedback'));
 const PushOrders = React.lazy(() => import('./components/PushOrders'));
 const PrinterConfig = React.lazy(() => import('./components/PrinterConfig'));
 const OnlineConfig = React.lazy(() => import('./components/OnlineConfig'));
+const ZomatoSwiggyConfig = React.lazy(() => import('./components/ZomatoSwiggyConfig'));
 const OnlineOrders = React.lazy(() => import('./components/OnlineOrders'));
 const ManualSync = React.lazy(() => import('./components/ManualSync'));
 const LanguageSwitcher = React.lazy(() => import('./components/LanguageSwitcher'));
@@ -61,6 +62,7 @@ const UserManualModal = React.lazy(() => import('./components/UserManualModal'))
 const AboutModal = React.lazy(() => import('./components/AboutModal'));
 const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
+const MarketHub = React.lazy(() => import('./components/MarketHub'));
 const LandingPage = React.lazy(() => import('./landing/LandingPage'));
 import GlobalHeader from './components/GlobalHeader';
 import packageJson from '../package.json';
@@ -905,15 +907,18 @@ function App() {
       console.warn('[App] forceLogout event received — resetting user state');
       setUser(null);
       const isNative = isCapacitorApp() || isElectronApp();
-      setView(isNative ? 'floor' : 'landing');
-      window.history.replaceState(null, '', '/');
       // Re-check license status from localStorage in case license was cleared
       // (e.g. via "Reset License" button). If resto_license is gone, show LicenseScreen.
       const savedLicense = localStorage.getItem('resto_license');
       const savedDbName = localStorage.getItem('resto_db_name');
       const isDesktopApp = !!window.electronAPI;
-      if (!savedLicense || !savedDbName && !isDesktopApp) {
+      if (!savedLicense || (!savedDbName && !isDesktopApp)) {
         setHasLicense(false);
+        setView('floor');
+        window.history.replaceState(null, '', '/login');
+      } else {
+        setView(isNative ? 'floor' : 'landing');
+        window.history.replaceState(null, '', '/');
       }
     };
 
@@ -2241,6 +2246,14 @@ function App() {
                       <span>{t("Menu")}</span>
                     </button>
 
+                    <button
+                      onClick={() => handleViewChange('markethub')}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'markethub' ? 'bg-linear-to-r from-indigo-600 to-blue-500 text-white shadow-lg shadow-indigo-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 hover:translate-x-1'}`}>
+
+                      <ShoppingBag size={22} />
+                      <span>{t("Market Hub")} <span className="ml-auto text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">NEW</span></span>
+                    </button>
+
                     {isAdmin &&
                       <button
                         onClick={() => handleViewChange('settings')}
@@ -2417,6 +2430,7 @@ function App() {
                   {view === 'push-orders' && <PushOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'bill-print' && <PrinterConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'online-config' && <OnlineConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                  {view === 'zomato-swiggy' && <ZomatoSwiggyConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'online-orders' && <OnlineOrders onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'sync' && <ManualSync onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'admin' && <AdminDashboard onNavigate={handleViewChange} onGoBack={handleGoBack} />}
@@ -2444,6 +2458,7 @@ function App() {
                   {view === 'custom-status' && <CustomStatus onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                  {view === 'markethub' && <MarketHub onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                 </>
               }
             </Suspense>

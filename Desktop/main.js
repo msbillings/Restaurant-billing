@@ -507,7 +507,7 @@ ipcMain.handle('silent-print', async (event, { htmlContent, printerName, silent 
   printWindow.webContents.once('did-finish-load', () => {
     console.log('[Print] Print window loaded, sending to printer...');
     // Slight delay to ensure CSS is fully painted before sending to printer spooler
-    setTimeout(() => {
+    setTimeout(async () => {
       const printOptions = {
         silent: silent,
         margins: { marginType: 'none' },
@@ -518,30 +518,29 @@ ipcMain.handle('silent-print', async (event, { htmlContent, printerName, silent 
       };
       if (printerName && typeof printerName === 'string' && printerName.trim()) {
         try {
-          const osPrinters = printWindow.webContents.getPrinters();
+          const osPrinters = await printWindow.webContents.getPrintersAsync();
           const exists = osPrinters.some(p => p.name.toLowerCase() === printerName.trim().toLowerCase());
           if (exists) {
             printOptions.deviceName = printerName.trim();
           } else {
-            console.warn(`[Print] Specified printer '${printerName}' not found in OS printers. Falling back to default printer.`);
+            console.warn(`[Print] Specified printer '${printerName}' not found in OS printers. Available printers: ${osPrinters.map(p => p.name).join(', ')}. Falling back to default printer.`);
           }
-        } catch (_) {
-          printOptions.deviceName = printerName.trim();
+        } catch (err) {
+          console.warn(`[Print] Could not enumerate printers: ${err.message}. Falling back to default printer.`);
         }
       }
       console.log('[Print] Print options:', JSON.stringify(printOptions));
-      printWindow.webContents.print(printOptions, (success, failureReason) => {
-        if (!success) {
-          console.log('[Print] Print failed:', failureReason);
-          resolve({ success: false, reason: failureReason });
-        } else {
-          console.log('[Print] Print succeeded');
-          resolve({ success: true });
-        }
+      try {
+        await printWindow.webContents.print(printOptions);
+        console.log('[Print] Print succeeded');
+        resolve({ success: true });
+      } catch (err) {
+        console.log('[Print] Print failed:', err);
+        resolve({ success: false, reason: err.message || err.toString() });
+      } finally {
         if (!printWindow.isDestroyed()) printWindow.close();
-        // Clean up temp file
         try { fs.unlinkSync(tempPath); } catch (e) { }
-      });
+      }
     }, 500);
   });
 });

@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff, Server } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff, Server, ShoppingCart } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
+import MarketHubManager from './MarketHubManager';
+import VendorManager from './VendorManager';
 import { startRegistration } from '@simplewebauthn/browser';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -161,7 +163,7 @@ function App() {
   const CLIENTS_PER_PAGE = 10;
   const [currentTab, setCurrentTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    const validTabs = ['Dashboard', 'Insights', 'Broadcasts'];
+    const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors'];
     const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
     return tabMatch || 'Dashboard';
   });
@@ -173,7 +175,7 @@ function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      const validTabs = ['Dashboard', 'Insights', 'Broadcasts'];
+      const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors'];
       const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
       if (tabMatch && tabMatch !== currentTab) {
         setCurrentTab(tabMatch);
@@ -932,7 +934,14 @@ function App() {
   }, [clients, signupsFilter]);
 
   if (!token) {
-    return <Login onLogin={(t) => setToken(t)} />;
+    return <Login onLogin={(t) => {
+      setToken(t);
+      const user = JSON.parse(localStorage.getItem('superadmin_user'));
+      setAdminUser(user);
+      if (user?.role === 'Vendor') {
+        setCurrentTab('MarketHub');
+      }
+    }} />;
   }
 
   return (
@@ -947,7 +956,7 @@ function App() {
                 <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary/20 rounded-xl flex items-center justify-center border border-primary/30 flex-shrink-0 shadow-[0_0_15px_rgba(255,92,53,0.3)]">
                   <Shield className="text-primary w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
-                <span className="font-black text-lg sm:text-xl tracking-tight whitespace-nowrap">MS<span className="text-primary">BILLING</span> <span className="font-medium text-gray-400 hidden sm:inline">SUPER ADMIN</span></span>
+                <span className="font-black text-lg sm:text-xl tracking-tight whitespace-nowrap">MS<span className="text-primary">BILLING</span> <span className="font-medium text-gray-400 hidden sm:inline">{adminUser?.role === 'Vendor' ? 'VENDOR PORTAL' : 'SUPER ADMIN'}</span></span>
               </div>
               
               <div className="flex sm:hidden items-center gap-2">
@@ -983,33 +992,61 @@ function App() {
       </nav>
 
       {/* Tabs */}
-      <div className="w-full max-w-[1800px] mx-auto px-2 sm:px-6 lg:px-8 mt-4 md:mt-6 overflow-x-auto">
-        <div className="flex gap-2 md:gap-4 border-b border-border min-w-max">
-          <button
-            onClick={() => setCurrentTab('Dashboard')}
-            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Dashboard' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
-          >
-            Client Database
-          </button>
-          <button 
-            onClick={() => setCurrentTab('Insights')}
-            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Insights' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
-          >
-            Global Insights
-          </button>
-          <button 
-            onClick={() => setCurrentTab('Broadcasts')}
-            className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Broadcasts' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
-          >
-            Broadcasts (In-App)
-          </button>
+      {adminUser?.role !== 'Vendor' && (
+        <div className="w-full max-w-[1800px] mx-auto px-2 sm:px-6 lg:px-8 mt-4 md:mt-6 overflow-x-auto">
+          <div className="flex gap-2 md:gap-4 border-b border-border min-w-max">
+            <button
+              onClick={() => setCurrentTab('Dashboard')}
+              className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Dashboard' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+            >
+              Client Database
+            </button>
+            <button 
+              onClick={() => setCurrentTab('Insights')}
+              className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Insights' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+            >
+              Global Insights
+            </button>
+            <button 
+              onClick={() => setCurrentTab('Broadcasts')}
+              className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Broadcasts' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
+            >
+              Broadcasts (In-App)
+            </button>
+            <button 
+              onClick={() => setCurrentTab('Vendors')}
+              className={`px-4 py-2 font-bold transition-colors flex items-center gap-2 ${currentTab === 'Vendors' ? 'border-b-2 border-fuchsia-500 text-fuchsia-400' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Shield size={18} />
+              Vendor Partners
+            </button>
+            <button 
+              onClick={() => setCurrentTab('MarketHub')}
+              className={`px-4 py-2 font-bold transition-colors flex items-center gap-2 ${currentTab === 'MarketHub' ? 'border-b-2 border-fuchsia-500 text-fuchsia-400' : 'text-gray-400 hover:text-white'}`}
+            >
+              <ShoppingCart size={18} />
+              Market Hub
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
       <main className="w-full max-w-[1800px] mx-auto px-2 sm:px-6 lg:px-8 py-4 md:py-8">
         
-        {currentTab === 'Dashboard' && (
+        {adminUser?.role === 'Vendor' && (
+          <MarketHubManager />
+        )}
+
+        {adminUser?.role !== 'Vendor' && currentTab === 'MarketHub' && (
+          <MarketHubManager />
+        )}
+
+        {adminUser?.role !== 'Vendor' && currentTab === 'Vendors' && (
+          <VendorManager />
+        )}
+
+        {adminUser?.role !== 'Vendor' && currentTab === 'Dashboard' && (
           <>
             {/* Stats Row */}
         <div className="grid grid-cols-3 md:grid-cols-4 gap-2 md:gap-6 mb-4 md:mb-8">
@@ -1596,7 +1633,7 @@ function App() {
         </div>
         </>)}
 
-        {currentTab === 'Insights' && (
+        {adminUser?.role !== 'Vendor' && currentTab === 'Insights' && (
           <div className="space-y-8 animate-fade-in">
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-surface p-6 rounded-2xl border border-border shadow-xl">
               <div className="w-full xl:w-auto">
@@ -1668,7 +1705,7 @@ function App() {
           </div>
         )}
 
-        {currentTab === 'Broadcasts' && (
+        {adminUser?.role !== 'Vendor' && currentTab === 'Broadcasts' && (
           <div className="space-y-4 md:space-y-8 animate-fade-in">
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 md:gap-6 bg-surface p-4 md:p-6 rounded-xl md:rounded-2xl border border-border shadow-xl">
               <div className="w-full xl:w-auto">
@@ -2069,6 +2106,7 @@ function App() {
             </div>
           </div>
         )}
+
       </main>
 
       {/* License Edit Modal */}

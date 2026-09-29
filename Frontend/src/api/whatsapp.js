@@ -40,4 +40,14 @@ export const getWhatsAppCampaignHistory = async () => {
   return response.data;
 };
 
+export const getWhatsAppTemplates = async () => {
+  const response = await api.get('/whatsapp/templates');
+  return response.data;
+};
+
+export const saveWhatsAppTemplates = async (templates) => {
+  const response = await api.post('/whatsapp/templates', { templates });
+  return response.data;
+};
+
 

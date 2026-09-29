@@ -240,9 +240,21 @@ const KOT = ({ order, onClose }) => {
     try {
       const targetStation = activeStationGroup || (stationGroups.length > 0 ? stationGroups[0] : null);
 
-      const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+      let list = Array.isArray(printerConfigs) ? printerConfigs : [];
+      if (list.length === 0) {
+        try {
+          const res = await axios.get(`${getApiUrl()}/printer-configs`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` }
+          });
+          if (Array.isArray(res.data) && res.data.length > 0) {
+            list = res.data;
+            setPrinterConfigs(res.data);
+          }
+        } catch (_) {}
+      }
+
       const hasBackendKOTPrinter = list.some(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (
-        (c.connectionType === 'usb' && c.usbPort) ||
+        (c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
         (c.connectionType === 'network' && c.ipAddress) ||
         (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
       ));
@@ -453,11 +465,13 @@ const KOT = ({ order, onClose }) => {
           setPrintStatus('failed');
           showToast(`${t('Print note')}: ${errMsg}. Opening system print...`, 'warning');
           setTimeout(() => {
+            setPrintStatus('success');
             window.print();
             resetPrintStatus(3000);
           }, 600);
           return;
         }
+        setPrintStatus('success');
         window.print();
         resetPrintStatus(3000);
       }
@@ -488,9 +502,21 @@ const KOT = ({ order, onClose }) => {
       await new Promise(res => setTimeout(res, 280)); // wait for UI update
 
       try {
-        const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+        let list = Array.isArray(printerConfigs) ? printerConfigs : [];
+        if (list.length === 0) {
+          try {
+            const res = await axios.get(`${getApiUrl()}/printer-configs`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` }
+            });
+            if (Array.isArray(res.data) && res.data.length > 0) {
+              list = res.data;
+              setPrinterConfigs(res.data);
+            }
+          } catch (_) {}
+        }
+
         const hasBackendKOTPrinter = list.some(c => c.isActive && (c.type === 'kot' || c.type === 'general' || c.type === 'both') && (
-          (c.connectionType === 'usb' && c.usbPort) ||
+          (c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
         ));

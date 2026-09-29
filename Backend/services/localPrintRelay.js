@@ -86,8 +86,8 @@ export const initLocalPrintRelay = () => {
         const port = job.printer.port || 9100;
         await sendRawToNetworkPrinter(job.printer.ipAddress, port, buffer);
         console.log(`[LocalPrintRelay] ✅ Successfully printed KOT #${job.kotNumber} to Wi-Fi printer ${job.printer.ipAddress}:${port}`);
-      } else if (job.printer.connectionType === 'usb' && job.printer.usbPort) {
-        await sendRawToUSBPrinter(job.printer.usbPort, buffer, job.printer.deviceName || job.printer.name);
+      } else if (job.printer.connectionType === 'usb' && (job.printer.usbPort || job.printer.deviceName || job.printer.name)) {
+        await sendRawToUSBPrinter(job.printer.usbPort || job.printer.deviceName || job.printer.name, buffer, job.printer.deviceName || job.printer.name);
         console.log(`[LocalPrintRelay] ✅ Successfully printed KOT #${job.kotNumber} to USB printer on port ${job.printer.usbPort}`);
       } else if (job.printer.connectionType === 'bluetooth') {
         const dest = job.printer.bluetoothAddress || job.printer.deviceName || job.printer.name;
@@ -128,8 +128,8 @@ export const initLocalPrintRelay = () => {
         const port = job.printer.port || 9100;
         await sendRawToNetworkPrinter(job.printer.ipAddress, port, buffer);
         console.log(`[LocalPrintRelay] ✅ Successfully printed Bill to Wi-Fi printer ${job.printer.ipAddress}:${port}`);
-      } else if (job.printer.connectionType === 'usb' && job.printer.usbPort) {
-        await sendRawToUSBPrinter(job.printer.usbPort, buffer, job.printer.deviceName || job.printer.name);
+      } else if (job.printer.connectionType === 'usb' && (job.printer.usbPort || job.printer.deviceName || job.printer.name)) {
+        await sendRawToUSBPrinter(job.printer.usbPort || job.printer.deviceName || job.printer.name, buffer, job.printer.deviceName || job.printer.name);
         console.log(`[LocalPrintRelay] ✅ Successfully printed Bill to USB printer on port ${job.printer.usbPort}`);
       } else if (job.printer.connectionType === 'bluetooth') {
         const dest = job.printer.bluetoothAddress || job.printer.deviceName || job.printer.name;

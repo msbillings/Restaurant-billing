@@ -388,6 +388,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   }, []);
 
   const [discount, setDiscount] = useState({ type: 'percentage', value: '' });
+  const [walletRedemption, setWalletRedemption] = useState(0);
 
   // Delivery / CRM fields
   const [orderSource, setOrderSource] = useState('Direct');
@@ -627,6 +628,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             allowTaint: true,
             backgroundColor: '#ffffff',
             logging: false,
+            imageTimeout: 5000,
             scrollX: 0,
             scrollY: 0,
             windowWidth: 420,
@@ -1700,7 +1702,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const taxVal = taxRate === '' ? 0 : parseFloat(taxRate) || 0;
   const taxAmount = taxableAmount * taxVal / 100;
   const additionalCharges = parseFloat(deliveryCharge || 0) + parseFloat(containerCharge || 0);
-  const total = Math.round(taxableAmount + taxAmount + additionalCharges);
+  const total = Math.max(0, Math.round(taxableAmount + taxAmount + additionalCharges) - walletRedemption);
 
   const syncTimeoutRef = useRef(null);
 
@@ -2326,6 +2328,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       subtotal,
       tax: taxVal,
       discount: discountAmount,
+      walletRedemption,
       total,
       billType,
       orderSource: billType === 'Delivery' ? orderSource : undefined,
@@ -2363,6 +2366,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       discountType: discount.type,
       discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
       discountName: discount.name || discount.offerName || '',
+      walletRedemption,
       billType,
       orderSource: billType === 'Delivery' ? orderSource : undefined,
       customerPhone: optimisticBill.customerPhone,
@@ -3077,6 +3081,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
                 discount={discount}
                 setDiscount={handleDiscountChange}
+                walletRedemption={walletRedemption}
+                setWalletRedemption={setWalletRedemption}
                 taxRate={taxRate}
                 setTaxRate={setTaxRate}
                 billType={billType}
