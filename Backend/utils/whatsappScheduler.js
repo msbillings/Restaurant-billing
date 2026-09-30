@@ -624,7 +624,7 @@ export const startWhatsAppScheduler = () => {
   cron.schedule('* * * * *', async () => {
     // Phase 6: Distributed Cron Lock
     const { default: redisClient } = await import('./redisClient.js');
-    const lockToken = await redisClient.acquireLock('cron:whatsapp:lock', 50); // 50 seconds lock (runs every minute)
+    const lockToken = await redisClient.acquireLock('cron:whatsapp:lock', 120); // 120 seconds lock (runs every minute, prevents overlap)
     if (!lockToken) {
       // Silently skip (runs every minute, logging would be too noisy)
       return;
@@ -664,12 +664,10 @@ export const startWhatsAppScheduler = () => {
       try {
         const clients = await ClientDefault.find({ status: { $ne: 'Inactive' } }).select('databaseName').lean();
         tenantDatabases = clients.map(c => c.databaseName).filter(Boolean);
-      } catch (e) {}
-
-      const primaryDb = mongoose.connection.db?.databaseName;
-      if (primaryDb && primaryDb !== 'admin' && primaryDb !== 'local' && !tenantDatabases.includes(primaryDb)) {
-        tenantDatabases.push(primaryDb);
+      } catch (e) {
+        console.error('[WhatsApp Scheduler] Failed to query Client registry:', e.message);
       }
+
 
       for (const dbName of tenantDatabases) {
         try {

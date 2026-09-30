@@ -12,9 +12,7 @@ import { createClient } from 'redis';
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Ensure Mongoose models are registered
-import BillDefault from '../models/Bill.js';
-import { getTenantModel } from '../utils/tenantHelper.js';
+import { getTenantModels } from '../utils/tenantManager.js';
 
 let ioEmitter = null;
 const REDIS_URI = process.env.REDIS_URI || 'redis://localhost:6379';
@@ -37,13 +35,22 @@ export const startReportWorker = () => {
 
     console.log(`[Report Worker] Processing Job ${job.id} for tenant: ${tenantDb}, type: ${type}`);
 
+    if (!tenantDb) {
+      console.error(`[Report Worker] Job ${job.id} failed: missing tenantDb. Refusing to generate report from master DB.`);
+      throw new Error('Missing tenantDb in job payload');
+    }
+
     if (type !== 'CSV_DAILY' && type !== 'EXCEL_MONTHLY') {
       console.warn(`[Report Worker] Unknown report type: ${type}`);
       return;
     }
 
     try {
-      const Bill = getTenantModel({ tenantDb }, 'Bill', BillDefault);
+      const models = await getTenantModels(tenantDb);
+      const Bill = models.Bill;
+      if (!Bill) {
+        throw new Error(`Failed to resolve Bill model for tenant ${tenantDb}`);
+      }
       
       const bills = await Bill.find({
         $or: [
