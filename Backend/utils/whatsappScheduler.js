@@ -622,6 +622,14 @@ Don't let your rewards go to waste! Visit us this week or order online to redeem
 
 export const startWhatsAppScheduler = () => {
   cron.schedule('* * * * *', async () => {
+    // Phase 6: Distributed Cron Lock
+    const { default: redisClient } = await import('./redisClient.js');
+    const lockToken = await redisClient.acquireLock('cron:whatsapp:lock', 50); // 50 seconds lock (runs every minute)
+    if (!lockToken) {
+      // Silently skip (runs every minute, logging would be too noisy)
+      return;
+    }
+
     try {
       if (mongoose.connection.readyState !== 1) return;
 
@@ -768,6 +776,8 @@ export const startWhatsAppScheduler = () => {
       }
     } catch (err) {
       console.error('[WhatsApp Scheduler] Cron execution error:', err);
+    } finally {
+      await redisClient.releaseLock('cron:whatsapp:lock', lockToken);
     }
   });
   console.log('[WhatsApp Scheduler] Auto-DayBook cron job initialized (2 daily slots: afternoon + night).');

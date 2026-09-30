@@ -44,6 +44,7 @@
     "pdfkit": "^0.20.2",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
+    "redis": "^6.3.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "usb": "^3.1.0",
