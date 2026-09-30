@@ -41,6 +41,7 @@
     "node-rtsp-stream": "^0.0.9",
     "nodemailer": "^9.1.0",
     "nodemon": "^3.1.11",
+    "pdfkit": "^0.20.2",
     "pino": "^10.3.1",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",

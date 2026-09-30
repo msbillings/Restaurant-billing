@@ -1,5 +1,87 @@
 import mongoose from 'mongoose';
 import Client from '../models/Client.js';
+import { getTenantDb } from '../utils/clusterManager.js';
+
+// Simple in-memory cache for DB sizes
+export const dbSizeCache = new Map();
+let isFetchingSizes = false;
+
+// Simple in-memory cache for Live Revenue
+let liveRevenueCache = 0;
+let isFetchingRevenue = false;
+
+const updateLiveRevenue = async () => {
+  if (isFetchingRevenue) return;
+  isFetchingRevenue = true;
+  try {
+    const clients = await Client.find({ status: 'Active' }).lean();
+    let totalTodayRevenue = 0;
+    
+    // Get start of day IST
+    const today = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const istTime = new Date(today.getTime() + istOffset);
+    istTime.setUTCHours(0, 0, 0, 0);
+    const startOfDayUTC = new Date(istTime.getTime() - istOffset);
+
+    for (const client of clients) {
+      if (!client.databaseName) continue;
+      try {
+        const tenantDb = await getTenantDb(client.cluster, client.databaseName);
+        const billsCollection = tenantDb.collection('bills');
+        const todayBills = await billsCollection.find({ 
+          createdAt: { $gte: startOfDayUTC },
+          status: 'Paid'
+        }).toArray();
+        const revenue = todayBills.reduce((acc, bill) => acc + (bill.grandTotal || bill.total || 0), 0);
+        totalTodayRevenue += revenue;
+      } catch (e) {
+        // ignore individual tenant errors to not break loop
+      }
+    }
+    liveRevenueCache = totalTodayRevenue;
+  } catch (err) {
+    console.error('[Analytics] Error updating live revenue:', err.message);
+  } finally {
+    isFetchingRevenue = false;
+  }
+};
+
+// Start background task to fetch live revenue every 1 minute
+setInterval(updateLiveRevenue, 60 * 1000);
+setTimeout(updateLiveRevenue, 10000);
+
+const updateDbSizes = async () => {
+  if (isFetchingSizes) return;
+  isFetchingSizes = true;
+  try {
+    const clients = await Client.find({ status: 'Active' }).lean();
+    for (const client of clients) {
+      if (!client.databaseName) continue;
+      try {
+        const tenantDb = await getTenantDb(client.cluster, client.databaseName);
+        const stats = await tenantDb.db.stats();
+        dbSizeCache.set(client.databaseName, {
+          dataSize: stats.dataSize,
+          storageSize: stats.storageSize,
+          collections: stats.collections || 0,
+          timestamp: Date.now()
+        });
+      } catch (e) {
+        console.error(`[Analytics] Failed to fetch db stats for ${client.databaseName}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Analytics] Error updating db sizes:', err.message);
+  } finally {
+    isFetchingSizes = false;
+  }
+};
+
+// Start background task to fetch DB sizes every 5 minutes
+setInterval(updateDbSizes, 5 * 60 * 1000);
+// Initial fetch
+setTimeout(updateDbSizes, 5000);
 
 export const getGlobalAnalytics = async (req, res) => {
   try {
@@ -148,5 +230,85 @@ export const exportGlobalCustomers = async (req, res) => {
   } catch (error) {
     console.error('Export Customers Error:', error);
     res.status(500).send('Error exporting customers');
+  }
+};
+
+export const getRealtimeAnalytics = async (req, res) => {
+  try {
+    const clients = await Client.find({ status: 'Active' }).lean();
+    
+    // Build realtime active list
+    const realtimeStats = clients.map(client => {
+      const dbName = client.databaseName;
+      const metrics = client.realtimeMetrics || {};
+      const dbSizeInfo = dbSizeCache.get(dbName) || { dataSize: 0, storageSize: 0 };
+      
+      const lastActive = metrics.lastActive ? new Date(metrics.lastActive) : new Date(0);
+      const isCurrentlyActive = (Date.now() - lastActive.getTime()) < (5 * 60 * 1000); // active in last 5 mins
+      
+      const printQueue = metrics.printQueue || { queuedKOTs: 0, queuedBills: 0, failedPrints: 0, printNodesOnline: 0, oldestWaitTime: 0 };
+
+        return {
+          _id: client._id,
+          restaurantName: client.restaurantName,
+          cluster: client.cluster || 'cluster0',
+          rpm: metrics.lastMinuteRequests || 0, // Requests per minute
+          lastMinuteErrors: metrics.lastMinuteErrors || 0,
+          avgLatency: (metrics.lastMinuteRequests > 0) ? (metrics.lastMinuteLatency / metrics.lastMinuteRequests) : 0,
+          totalRequests: metrics.totalRequests || 0,
+          dataTransferDaily: (metrics.totalReqBytes || 0) + (metrics.totalResBytes || 0), // Estimate
+          printQueue: printQueue,
+        dbDataSize: dbSizeInfo.dataSize || 0,
+        dbStorageSize: dbSizeInfo.storageSize || 0,
+        lastActive: lastActive,
+        isCurrentlyActive
+      };
+    });
+
+    // Fetch system metrics for global stats
+    const sysDoc = await mongoose.connection.db.collection('system_metrics').findOne({ _id: 'global' });
+    const activeWebSockets = sysDoc ? sysDoc.activeSockets : 0;
+
+    // Calculate aggregations
+    const totalRPM = realtimeStats.reduce((sum, r) => sum + r.rpm, 0);
+    const totalErrors = realtimeStats.reduce((sum, r) => sum + r.lastMinuteErrors, 0);
+    
+    let totalLatencySum = 0;
+    let latencySources = 0;
+    realtimeStats.forEach(r => {
+      if (r.rpm > 0) {
+        totalLatencySum += r.avgLatency;
+        latencySources++;
+      }
+    });
+    const avgSystemLatency = latencySources > 0 ? (totalLatencySum / latencySources) : 0;
+
+    const totalDataTransfer = realtimeStats.reduce((sum, r) => sum + r.dataTransferDaily, 0);
+    const totalStorageSize = realtimeStats.reduce((sum, r) => sum + r.dbStorageSize, 0);
+    const activeRestaurants = realtimeStats.filter(r => r.isCurrentlyActive).length;
+
+    // Print Queue Aggregations
+    const globalPrintJobs = realtimeStats.reduce((sum, r) => sum + r.printQueue.queuedKOTs + r.printQueue.queuedBills, 0);
+    const globalFailedPrints = realtimeStats.reduce((sum, r) => sum + r.printQueue.failedPrints, 0);
+    const globalActivePrintNodes = realtimeStats.reduce((sum, r) => sum + r.printQueue.printNodesOnline, 0);
+
+    res.status(200).json({
+      totalRPM,
+      totalErrors,
+      avgSystemLatency,
+      activeWebSockets,
+      liveRevenue: liveRevenueCache,
+      totalDataTransfer,
+      totalStorageSize,
+      activeRestaurants,
+      globalPrintJobs,
+      globalFailedPrints,
+      globalActivePrintNodes,
+      restaurants: realtimeStats.sort((a, b) => b.rpm - a.rpm) // Sort by RPM descending
+    });
+
+  } catch (error) {
+    console.error('Realtime Analytics Error:', error);
+    res.status(500).json({ message: 'Error fetching real-time analytics', error: error.message });
   }
 };

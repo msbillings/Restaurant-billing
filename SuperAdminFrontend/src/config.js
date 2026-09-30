@@ -3,7 +3,7 @@ export const getApiBaseUrl = () => {
     const host = window.location.hostname;
     const isLocalhost = host === 'localhost' || host === '127.0.0.1';
     if (isLocalhost) {
-      return import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+      return 'http://localhost:4001/api';
     }
   }
   return import.meta.env.VITE_API_URL || 'https://msbillings-backend-x9qw.onrender.com/api';

@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { getTenantDb } from '../utils/clusterManager.js';
+import { dbSizeCache } from './analyticsController.js';
 
 // Utility to provision/sync the admin user & staff directly into the tenant's MongoDB database
 export const provisionTenantUsers = async (client, plainPassword) => {
@@ -101,14 +102,16 @@ export const getAllClients = async (req, res) => {
   try {
     const clients = await Client.find().lean().sort({ createdAt: -1 });
     
-    // Attach license info to each client
+    // Attach license info and collections to each client
     const clientsWithLicense = await Promise.all(clients.map(async (client) => {
       const license = await License.findOne({ client: client._id });
+      const dbStats = dbSizeCache.get(client.databaseName);
       return { 
         ...client, 
         validUntil: license ? license.validUntil : null,
         plan: license ? license.plan : 'Unknown',
-        licenseCreatedAt: license ? license.createdAt : client.createdAt
+        licenseCreatedAt: license ? license.createdAt : client.createdAt,
+        collections: dbStats ? dbStats.collections : 0
       };
     }));
 

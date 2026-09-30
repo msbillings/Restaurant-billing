@@ -33,6 +33,10 @@ const marketProductSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin' // Points to the Vendor user account
   },
+  allowedVendors: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin'
+  }],
   supplierPrice: {
     type: Number,
     min: 0

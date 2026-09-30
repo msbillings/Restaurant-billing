@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import { getTenantModel, handleTenantError } from '../utils/tenantHelper.js';
 
 export const login = async (req, res) => {
-  const { username, password } = req.body;
+  const { password } = req.body;
+  const username = req.body.username || req.body.email;
   try {
     // PURE MULTI-TENANT: The tenant middleware has already resolved the correct
     // database from the X-Tenant-DB header (set during license activation) or

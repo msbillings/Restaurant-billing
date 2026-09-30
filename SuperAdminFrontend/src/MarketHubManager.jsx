@@ -1,20 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import BulkProductImportModal from './components/BulkProductImportModal';
-import { ShoppingCart, Plus, Edit3, Trash2, Tag, Image as ImageIcon, Box, Package, Server, Smartphone, Monitor, Printer, Loader2, X, TrendingUp, IndianRupee, Activity, AlertTriangle, BarChart2, Upload } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { ShoppingCart, Plus, Edit3, Tag, Image as ImageIcon, Box, Package, Loader2, X, IndianRupee, AlertTriangle, BarChart2, Upload } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from './config';
 
 const MarketHubManager = () => {
-  const [activeTab, setActiveTab] = useState('Dashboard'); // 'Dashboard', 'Products', or 'Orders'
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('adminMarketHubTab') || 'Dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('adminMarketHubTab', activeTab);
+  }, [activeTab]); // 'Dashboard', 'Products', or 'Orders'
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [imageError, setImageError] = useState('');
-  const fileInputRef = useRef(null);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [statusForm, setStatusForm] = useState({
+    status: 'Processing',
+    location: '',
+    note: ''
+  });
   const imageInputRef = useRef(null);
   
   const initialForm = {
@@ -28,15 +41,13 @@ const MarketHubManager = () => {
     features: [''],
     isActive: true,
     vendorName: 'Internal',
-    supplierPrice: ''
+    supplierPrice: '',
+    allowedVendors: []
   };
   const [formData, setFormData] = useState(initialForm);
-
-  useEffect(() => {
-    // Fetch both to populate KPI stats
-    fetchProducts();
-    fetchOrders();
-  }, []);
+  const [productPage, setProductPage] = useState(1);
+  const [orderPage, setOrderPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const fetchProducts = async () => {
     try {
@@ -68,6 +79,28 @@ const MarketHubManager = () => {
     }
   };
 
+  const fetchVendors = async () => {
+    try {
+      const token = localStorage.getItem('superadmin_token');
+      const res = await axios.get(`${API_BASE_URL}/vendors`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setVendors(res.data);
+    } catch (error) {
+      console.warn('Could not fetch vendors (might be a vendor user)', error.message);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch both to populate KPI stats
+    const loadData = async () => {
+      fetchProducts();
+      fetchOrders();
+      fetchVendors();
+    };
+    loadData();
+  }, []);
+
   const handleBulkImportData = async (validItems) => {
     try {
       const token = localStorage.getItem('superadmin_token');
@@ -78,7 +111,7 @@ const MarketHubManager = () => {
       fetchProducts();
     } catch (error) {
       console.error('Error importing CSV/Excel:', error);
-      throw new Error('Failed to import products to database.');
+      throw new Error('Failed to import products to database.', { cause: error });
     }
   };
 
@@ -88,15 +121,28 @@ const MarketHubManager = () => {
     const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
     const pendingOrders = orders.filter(o => o.status === 'Processing' || o.status === 'Pending').length;
     
-    // Generate graph data based on total revenue
-    const chartData = [
-      { name: 'Jan', sales: totalRevenue * 0.1 },
-      { name: 'Feb', sales: totalRevenue * 0.15 },
-      { name: 'Mar', sales: totalRevenue * 0.12 },
-      { name: 'Apr', sales: totalRevenue * 0.2 },
-      { name: 'May', sales: totalRevenue * 0.18 },
-      { name: 'Jun', sales: totalRevenue * 0.25 },
-    ];
+    // Generate actual graph data based on orders (Last 6 months)
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const chartDataMap = {};
+    const today = new Date();
+    
+    // Initialize last 6 months to ensure they show up even if 0
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      chartDataMap[key] = { name: monthNames[d.getMonth()], sales: 0 };
+    }
+
+    orders.forEach(order => {
+      if (!order.createdAt) return;
+      const orderDate = new Date(order.createdAt);
+      const key = `${orderDate.getFullYear()}-${orderDate.getMonth()}`;
+      if (chartDataMap[key]) {
+        chartDataMap[key].sales += (order.totalAmount || 0);
+      }
+    });
+
+    const chartData = Object.values(chartDataMap);
 
     return { totalProducts, lowStock, totalRevenue, pendingOrders, chartData };
   }, [products, orders]);
@@ -114,7 +160,9 @@ const MarketHubManager = () => {
     setFormData({
       ...product,
       price: product.price,
-      stockCount: product.stockCount
+      stockCount: product.stockCount,
+      imageUrl: product.images && product.images.length > 0 ? product.images[0] : '',
+      allowedVendors: product.allowedVendors || []
     });
     setModalOpen(true);
   };
@@ -180,10 +228,12 @@ const MarketHubManager = () => {
       const token = localStorage.getItem('superadmin_token');
       const payload = {
         ...formData,
+        category: formData.category ? formData.category.toUpperCase() : 'HARDWARE',
         price: Number(formData.price),
         supplierPrice: formData.supplierPrice ? Number(formData.supplierPrice) : undefined,
         stockCount: Number(formData.stockCount),
-        features: formData.features.filter(f => f.trim() !== '')
+        features: formData.features.filter(f => f.trim() !== ''),
+        images: formData.imageUrl ? [formData.imageUrl] : []
       };
 
       if (isEdit) {
@@ -203,30 +253,44 @@ const MarketHubManager = () => {
     }
   };
 
-  const handleDispatchOrder = async (orderId) => {
-    const trackingId = prompt("Enter tracking ID (AWB) or courier name:");
-    if (!trackingId) return;
+  const openStatusModal = (order) => {
+    setSelectedOrder(order);
+    setStatusForm({
+      status: order.status || 'Processing',
+      location: '',
+      note: ''
+    });
+    setStatusModalOpen(true);
+  };
 
-    // Optional: could ask for image URL, but tracking ID is sufficient for V1
+  const handleUpdateStatus = async (e) => {
+    e.preventDefault();
     try {
       const token = localStorage.getItem('superadmin_token');
-      await axios.put(`${API_BASE_URL}/markethub/orders/${orderId}/dispatch`, { trackingId }, {
+      await axios.put(`${API_BASE_URL}/markethub/orders/${selectedOrder._id}/status`, statusForm, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert('Order marked as Dispatched!');
+      alert('Order status updated successfully!');
+      setStatusModalOpen(false);
       fetchOrders();
     } catch (error) {
-      console.error('Error dispatching order', error);
-      alert('Failed to dispatch order');
+      console.error('Error updating status', error);
+      alert(`Failed to update status: ${error.response?.data?.message || error.message}`);
     }
   };
 
-  const getCategoryIcon = (category) => {
-    switch (category) {
-      case 'Hardware': return <Printer className="text-blue-400" size={18} />;
-      case 'Software': return <Monitor className="text-purple-400" size={18} />;
-      case 'Service': return <Server className="text-green-400" size={18} />;
-      default: return <Package className="text-gray-400" size={18} />;
+  const handleClearOrders = async () => {
+    if (!window.confirm('Are you sure you want to completely remove all orders for this restaurant?')) return;
+    try {
+      const token = localStorage.getItem('superadmin_token');
+      await axios.delete(`${API_BASE_URL}/markethub/orders`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Orders completely removed from the database for this restaurant.');
+      fetchOrders();
+    } catch (error) {
+      console.error('Error clearing orders', error);
+      alert('Failed to clear orders');
     }
   };
 
@@ -238,35 +302,47 @@ const MarketHubManager = () => {
         onImportSuccess={handleBulkImportData} 
       />
       
-      {/* Header */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8">
-        <div>
-          <h2 className="text-3xl sm:text-4xl font-black text-white flex items-center gap-3 tracking-tight">
-            <ShoppingCart className="text-fuchsia-500 w-8 h-8 sm:w-10 sm:h-10 drop-shadow-[0_0_15px_rgba(217,70,239,0.5)]" />
-            Market Hub Manager
-          </h2>
-          <p className="text-gray-400 mt-2 text-sm max-w-xl leading-relaxed">Manage your hardware inventory, POS terminals, and fulfillment orders all in one centralized B2B hub.</p>
+      {/* Compact Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 bg-surface border border-border p-3 sm:p-4 rounded-2xl shadow-sm">
+        {/* Title */}
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-fuchsia-500/10 rounded-xl border border-fuchsia-500/20">
+            <ShoppingCart className="text-fuchsia-500 w-5 h-5 sm:w-6 sm:h-6" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-none hidden sm:block">Market Hub</h2>
         </div>
         
-        <div className="flex items-center bg-gray-900/50 p-1.5 rounded-2xl border border-border/50 shadow-inner w-full xl:w-auto">
-          <button 
-            onClick={() => setActiveTab('Dashboard')}
-            className={`flex-1 xl:flex-none px-6 py-3 font-bold rounded-xl transition-all duration-300 ${activeTab === 'Dashboard' ? 'bg-fuchsia-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`}
-          >
-            Dashboard
-          </button>
-          <button 
-            onClick={() => setActiveTab('Products')}
-            className={`flex-1 xl:flex-none px-6 py-3 font-bold rounded-xl transition-all duration-300 ${activeTab === 'Products' ? 'bg-fuchsia-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`}
-          >
-            Catalog
-          </button>
-          <button 
-            onClick={() => setActiveTab('Orders')}
-            className={`flex-1 xl:flex-none px-6 py-3 font-bold rounded-xl transition-all duration-300 ${activeTab === 'Orders' ? 'bg-fuchsia-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`}
-          >
-            Orders
-          </button>
+        {/* Tabs and Actions Row */}
+        <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+          {/* Tabs */}
+          <div className="flex bg-gray-900/50 p-1 rounded-xl border border-border/50">
+            {['Dashboard', 'Products', 'Orders'].map(tab => (
+              <button 
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-3 py-1.5 sm:px-5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-all duration-300 ${activeTab === tab ? 'bg-fuchsia-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`}
+              >
+                {tab === 'Products' ? 'Catalog' : tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Action Buttons (Visible only on Catalog tab) */}
+          {activeTab === 'Products' && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => setIsBulkImportOpen(true)} className="bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold py-1.5 px-3 sm:py-2 sm:px-4 text-xs sm:text-sm rounded-lg transition-all flex items-center gap-2 border border-gray-700">
+                <Upload size={16} />
+                <span className="hidden sm:inline">Bulk Import</span>
+              </button>
+              <button
+                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-1.5 px-3 sm:py-2 sm:px-4 text-xs sm:text-sm rounded-lg transition-all shadow-[0_0_15px_rgba(217,70,239,0.3)] flex items-center gap-2"
+                onClick={handleOpenAdd}
+              >
+                <Plus size={16} />
+                <span className="hidden sm:inline">Add Product</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -406,85 +482,93 @@ const MarketHubManager = () => {
       )}
 
       {activeTab === 'Orders' && (
-        /* Orders View */
-        <div className="bg-surface border border-border rounded-2xl overflow-hidden shadow-lg">
+        /* Compact Orders View */
+        <div className="space-y-4 animate-fade-in-up">
           {loading ? (
-            <div className="flex justify-center items-center py-20">
-              <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+            <div className="flex justify-center items-center py-20 bg-surface rounded-2xl border border-border shadow-lg">
+              <Loader2 className="w-10 h-10 text-fuchsia-500 animate-spin" />
             </div>
           ) : orders.length === 0 ? (
-            <div className="text-center p-12">
+            <div className="text-center p-12 bg-surface rounded-2xl border border-border shadow-lg">
               <Package className="w-16 h-16 text-gray-600 mx-auto mb-4 opacity-50" />
               <h3 className="text-xl font-bold text-white mb-2">No Orders Yet</h3>
               <p className="text-gray-400 max-w-sm mx-auto">Orders placed by your restaurant clients will appear here automatically.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-gray-400">
-                <thead className="bg-background text-xs uppercase text-gray-500 font-bold border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4">Order ID & Date</th>
-                    <th className="px-6 py-4">Restaurant</th>
-                    <th className="px-6 py-4">Items</th>
-                    <th className="px-6 py-4">Total Amount</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {orders.map(order => (
-                    <tr key={order._id} className="hover:bg-background/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-mono text-white mb-1">{order._id.substring(0,8).toUpperCase()}</div>
-                        <div className="text-xs">{new Date(order.createdAt).toLocaleString()}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-white">{order.restaurantName}</div>
-                        <div className="text-xs">{order.shippingAddress?.city || 'N/A'}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          {order.items.map((it, idx) => (
-                            <span key={idx} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded inline-block w-max">
-                              {it.quantity}x {it.name}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-black text-emerald-400">₹{order.grandTotal?.toLocaleString()}</div>
-                        <div className="text-[10px] uppercase">Via {order.paymentMethod}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${order.status === 'Processing' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'}`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-2">
-                          <a href={order.invoiceUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 font-bold text-xs flex items-center gap-1 w-max">
-                            View Invoice
-                          </a>
-                          {order.status !== 'Dispatched' && (
-                            <button 
-                              onClick={() => handleDispatchOrder(order._id)}
-                              className="bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-400 text-xs font-bold px-2 py-1 rounded w-max border border-emerald-500/30 transition-colors"
-                            >
-                              Mark Dispatched
-                            </button>
-                          )}
-                          {order.trackingId && (
-                            <div className="text-[10px] text-gray-400 font-mono">
-                              TRK: {order.trackingId}
-                            </div>
-                          )}
-                        </div>
-                      </td>
+            <>
+              <div className="flex justify-between items-center bg-surface border border-border p-4 rounded-t-xl shadow-sm">
+                <h3 className="text-white font-bold">Total Orders: {orders.length}</h3>
+                <div className="flex items-center gap-4">
+                  <button onClick={handleClearOrders} className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-sm rounded font-bold transition-colors shadow-lg">Clear All</button>
+                  <span className="text-sm text-gray-400">
+                    Page {orderPage} of {Math.ceil(orders.length / ITEMS_PER_PAGE)}
+                  </span>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setOrderPage(p => Math.max(1, p - 1))} 
+                      disabled={orderPage === 1}
+                      className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <button 
+                      onClick={() => setOrderPage(p => Math.min(Math.ceil(orders.length / ITEMS_PER_PAGE), p + 1))} 
+                      disabled={orderPage === Math.ceil(orders.length / ITEMS_PER_PAGE)}
+                      className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto bg-surface border-x border-b border-border rounded-b-xl shadow-sm">
+                <table className="w-full text-left text-sm text-gray-300">
+                  <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3">Order ID</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Restaurant</th>
+                      <th className="px-4 py-3">Location</th>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Total</th>
+                      <th className="px-4 py-3 text-center">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border/50">
+                    {orders.slice((orderPage - 1) * ITEMS_PER_PAGE, orderPage * ITEMS_PER_PAGE).map(order => (
+                      <tr key={order._id} className="hover:bg-gray-800/30 transition-colors">
+                        <td className="px-4 py-3 font-mono text-white text-xs">{order._id.substring(0,8).toUpperCase()}</td>
+                        <td className="px-4 py-3 text-xs">{new Date(order.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 font-medium text-white">{order.restaurantName}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400">
+                          {order.trackingHistory && order.trackingHistory.length > 0 && order.trackingHistory[order.trackingHistory.length - 1].location 
+                            ? order.trackingHistory[order.trackingHistory.length - 1].location 
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                          {order.trackingHistory && order.trackingHistory.length > 0 
+                            ? new Date(order.trackingHistory[order.trackingHistory.length - 1].date).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata', timeZoneName: 'short' })
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${order.status === 'Processing' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : order.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'}`}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-emerald-400">₹{order.grandTotal?.toLocaleString()}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2 justify-center">
+                            <button onClick={() => openStatusModal(order)} className="px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded text-xs font-bold hover:bg-indigo-500/20 transition-colors">Update</button>
+                            <a href={order.invoiceUrl} target="_blank" rel="noreferrer" className="px-3 py-1 bg-gray-800 text-gray-300 rounded text-xs font-bold hover:bg-gray-700 transition-colors">Invoice</a>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -492,26 +576,7 @@ const MarketHubManager = () => {
       {activeTab === 'Products' && (
       /* Grid of Products */
       <div className="animate-fade-in-up">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Package className="w-5 h-5 text-gray-400" />
-            Your Inventory
-          </h3>
-          <div className="flex gap-3">
-            <button onClick={() => setIsBulkImportOpen(true)} className="bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold py-2.5 px-6 rounded-xl transition-all flex items-center gap-2 border border-gray-700">
-              <Upload size={18} />
-              <span className="hidden sm:inline">Bulk Import</span>
-            </button>
-            <button
-              className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-[0_0_20px_rgba(217,70,239,0.3)] flex items-center gap-2"
-              onClick={handleOpenAdd}
-            >
-              <Plus size={18} />
-              <span className="hidden sm:inline">Add New Product</span>
-            </button>
-          </div>
-        </div>
-        
+
       {loading ? (
         <div className="flex justify-center items-center py-20">
           <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
@@ -537,69 +602,77 @@ const MarketHubManager = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {products.map(product => (
-            <div key={product._id} className="bg-surface border border-border rounded-2xl overflow-hidden shadow-lg hover:shadow-[0_0_25px_rgba(79,70,229,0.15)] hover:border-indigo-500/30 transition-all group flex flex-col">
-              <div className="h-48 bg-gray-900 relative overflow-hidden">
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-12 h-12 text-gray-700" />
-                  </div>
-                )}
-                <div className="absolute top-3 left-3 flex gap-2">
-                  <span className="bg-black/60 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-white/10 flex items-center gap-1.5 shadow-xl">
-                    {getCategoryIcon(product.category)}
-                    {product.category}
-                  </span>
-                  {!product.isActive && (
-                    <span className="bg-red-500/80 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-red-500/50 shadow-xl">
-                      Draft / Hidden
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="p-5 flex-1 flex flex-col">
-                <h3 className="text-xl font-bold text-white mb-1 line-clamp-1">{product.name}</h3>
-                <p className="text-gray-400 text-sm line-clamp-2 mb-4">{product.description}</p>
-                
-                <div className="mt-auto pt-4 border-t border-border/50 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-0.5">Price</p>
-                    <p className="text-xl font-black text-emerald-400">
-                      {product.currency === 'INR' ? '₹' : '$'}{product.price.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-0.5">Inventory</p>
-                    <p className={`text-sm font-bold ${product.stockCount > 10 ? 'text-blue-400' : product.stockCount > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                      {product.stockCount} in stock
-                    </p>
-                  </div>
-                </div>
-
-                {product.supplierPrice && (
-                  <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between text-xs font-bold">
-                    <span className="text-gray-500">Supplier: {product.vendorName || 'Internal'}</span>
-                    <span className="text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
-                      Margin: ₹{product.price - product.supplierPrice}
-                    </span>
-                  </div>
-                )}
-                
-                <div className="flex gap-2 mt-4 pt-4 border-t border-border/50">
-                  <button onClick={() => handleOpenEdit(product)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-2 border border-gray-700 hover:border-gray-600">
-                    <Edit3 size={16} /> Edit
+          <>
+            <div className="flex justify-between items-center bg-surface border border-border p-4 rounded-t-xl shadow-sm">
+              <h3 className="text-white font-bold">Total Products: {products.length}</h3>
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-gray-400">
+                  Page {productPage} of {Math.ceil(products.length / ITEMS_PER_PAGE) || 1}
+                </span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setProductPage(p => Math.max(1, p - 1))} 
+                    disabled={productPage === 1}
+                    className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Prev
                   </button>
-                  <button onClick={() => handleDelete(product._id)} className="w-10 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm font-bold rounded-lg transition-colors flex items-center justify-center border border-red-500/20 hover:border-red-500/40">
-                    <Trash2 size={16} />
+                  <button 
+                    onClick={() => setProductPage(p => Math.min(Math.ceil(products.length / ITEMS_PER_PAGE) || 1, p + 1))} 
+                    disabled={productPage >= (Math.ceil(products.length / ITEMS_PER_PAGE) || 1)}
+                    className="px-3 py-1 bg-gray-800 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    Next
                   </button>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+            <div className="overflow-x-auto bg-surface border-x border-b border-border rounded-b-xl shadow-sm">
+              <table className="w-full text-left text-sm text-gray-300">
+                <thead className="bg-gray-800/50 text-gray-400 text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-3">Product Name</th>
+                    <th className="px-4 py-3">Category</th>
+                    <th className="px-4 py-3">Price</th>
+                    <th className="px-4 py-3">Stock</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {products.slice((productPage - 1) * ITEMS_PER_PAGE, productPage * ITEMS_PER_PAGE).map(product => (
+                    <tr key={product._id} className="hover:bg-gray-800/30 transition-colors">
+                      <td className="px-4 py-3 font-medium text-white">
+                        <span className="line-clamp-1">{product.name}</span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">{product.category}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-400">
+                        {product.currency === 'INR' ? '₹' : '$'}{product.price?.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`font-bold ${product.stockCount > 10 ? 'text-blue-400' : product.stockCount > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                          {product.stockCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {product.isActive ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">Active</span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-red-500/10 text-red-400 border-red-500/20">Hidden</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 justify-center">
+                          <button onClick={() => handleOpenEdit(product)} className="px-3 py-1 bg-gray-800 text-white rounded text-xs font-bold hover:bg-gray-700 transition-colors border border-gray-700">Edit</button>
+                          <button onClick={() => handleDelete(product._id)} className="px-3 py-1 bg-red-500/10 text-red-400 rounded text-xs font-bold hover:bg-red-500/20 transition-colors border border-red-500/20">Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
       )}
       </div>
       )}
@@ -669,15 +742,23 @@ const MarketHubManager = () => {
                     <span>Product Image</span>
                     {imageError && <span className="text-red-400 text-[10px] animate-pulse">{imageError}</span>}
                   </label>
-                  <div className="relative flex gap-3">
-                    <input type="file" accept="image/*" ref={imageInputRef} hidden onChange={handleImageUpload} />
-                    <button type="button" onClick={() => imageInputRef.current.click()} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 px-4 rounded-xl border border-gray-700 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
-                      <Upload size={16} /> Upload Photo
-                    </button>
-                    <div className="relative flex-1">
-                      <ImageIcon className="absolute left-3 top-3.5 text-gray-500 w-5 h-5" />
-                      <input type="url" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-background border border-border rounded-xl p-3 pl-10 text-white focus:outline-none focus:border-indigo-500 transition-colors" placeholder="Or paste direct URL..." />
+                  <div className="flex flex-col gap-3">
+                    <div className="relative flex gap-3">
+                      <input type="file" accept="image/*" ref={imageInputRef} hidden onChange={handleImageUpload} />
+                      <button type="button" onClick={() => imageInputRef.current.click()} className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 px-4 rounded-xl border border-gray-700 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                        <Upload size={16} /> Upload Photo
+                      </button>
+                      <div className="relative flex-1">
+                        <ImageIcon className="absolute left-3 top-3.5 text-gray-500 w-5 h-5" />
+                        <input type="url" value={formData.imageUrl} onChange={e => setFormData({...formData, imageUrl: e.target.value})} className="w-full bg-background border border-border rounded-xl p-3 pl-10 text-white focus:outline-none focus:border-indigo-500 transition-colors" placeholder="Or paste direct URL..." />
+                      </div>
                     </div>
+                    {formData.imageUrl && (
+                      <div className="p-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl flex justify-center items-center shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all animate-fade-in relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none"></div>
+                        <img src={formData.imageUrl} alt="Preview" className="h-40 max-w-full object-contain drop-shadow-2xl rounded-lg relative z-10" />
+                      </div>
+                    )}
                   </div>
                   <p className="text-[10px] text-gray-500 mt-1.5">JPG, PNG, GIF up to 5MB strict limit.</p>
                 </div>
@@ -700,6 +781,31 @@ const MarketHubManager = () => {
                     )}
                   </div>
                 </div>
+
+                {vendors.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Vendor Permissions (Who can see/sell this)</label>
+                    <div className="grid grid-cols-2 gap-2 bg-background p-3 rounded-xl border border-border">
+                      {vendors.map(vendor => (
+                        <label key={vendor._id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-gray-900"
+                            checked={formData.allowedVendors.includes(vendor._id)}
+                            onChange={(e) => {
+                              const newVendors = e.target.checked 
+                                ? [...formData.allowedVendors, vendor._id] 
+                                : formData.allowedVendors.filter(id => id !== vendor._id);
+                              setFormData({ ...formData, allowedVendors: newVendors });
+                            }}
+                          />
+                          {vendor.vendorCompanyName || vendor.name}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-500 mt-1.5">Select which vendors can access this product.</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5 flex justify-between items-center">
@@ -724,6 +830,66 @@ const MarketHubManager = () => {
               <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl transition-colors border border-gray-700">Cancel</button>
               <button type="submit" form="product-form" className="flex-[2] py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-500">
                 {isEdit ? 'Save Changes' : 'Create Product'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Status Update Modal */}
+      {statusModalOpen && selectedOrder && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-2xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden animate-fade-in">
+            <div className="flex justify-between items-center p-5 border-b border-border bg-background/50">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <Package className="text-indigo-400 w-5 h-5" /> Update Tracking
+              </h3>
+              <button onClick={() => setStatusModalOpen(false)} className="text-gray-400 hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <form id="status-form" onSubmit={handleUpdateStatus} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">New Status</label>
+                  <select 
+                    value={statusForm.status} 
+                    onChange={e => setStatusForm({...statusForm, status: e.target.value})} 
+                    className="w-full bg-background border border-border rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="Processing">Processing</option>
+                    <option value="Shipped">Shipped</option>
+                    <option value="Out for Delivery">Out for Delivery</option>
+                    <option value="Delivered">Delivered</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Location (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={statusForm.location} 
+                    onChange={e => setStatusForm({...statusForm, location: e.target.value})} 
+                    className="w-full bg-background border border-border rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500" 
+                    placeholder="e.g. Mumbai Sorting Facility" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Note / Driver Info (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={statusForm.note} 
+                    onChange={e => setStatusForm({...statusForm, note: e.target.value})} 
+                    className="w-full bg-background border border-border rounded-xl p-3 text-white focus:outline-none focus:border-indigo-500" 
+                    placeholder="e.g. Handed over to delivery agent" 
+                  />
+                </div>
+              </form>
+            </div>
+            
+            <div className="p-5 border-t border-border bg-background/50 flex gap-3">
+              <button type="button" onClick={() => setStatusModalOpen(false)} className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 text-white font-bold rounded-xl border border-gray-700">Cancel</button>
+              <button type="submit" form="status-form" className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] border border-indigo-500">
+                Update Order
               </button>
             </div>
           </div>

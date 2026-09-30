@@ -3,8 +3,10 @@ import axios from 'axios';
 import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff, Server, ShoppingCart } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
+import VendorLogin from './VendorLogin';
 import MarketHubManager from './MarketHubManager';
 import VendorManager from './VendorManager';
+import RealtimeAnalytics from './components/RealtimeAnalytics';
 import { startRegistration } from '@simplewebauthn/browser';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -163,7 +165,7 @@ function App() {
   const CLIENTS_PER_PAGE = 10;
   const [currentTab, setCurrentTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors'];
+    const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime'];
     const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
     return tabMatch || 'Dashboard';
   });
@@ -175,7 +177,7 @@ function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors'];
+      const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime'];
       const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
       if (tabMatch && tabMatch !== currentTab) {
         setCurrentTab(tabMatch);
@@ -184,6 +186,22 @@ function App() {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [currentTab]);
+
+  const [isVendorPath, setIsVendorPath] = useState(() => 
+    window.location.pathname.includes('vendor') || window.location.hash.includes('vendor')
+  );
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setIsVendorPath(window.location.pathname.includes('vendor') || window.location.hash.includes('vendor'));
+    };
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
 
   const [token, setToken] = useState(localStorage.getItem('superadmin_token'));
   const [adminUser, setAdminUser] = useState(JSON.parse(localStorage.getItem('superadmin_user') || 'null'));
@@ -758,6 +776,23 @@ function App() {
     return counts;
   }, [clients]);
 
+  // Calculate collections occupied per cluster
+  const clusterCollections = useMemo(() => {
+    const counts = {};
+    for (let i = 0; i <= 9; i++) {
+      counts[`cluster${i}`] = 0;
+    }
+    clients.forEach(c => {
+      const cl = (c.cluster || 'cluster0').toLowerCase().trim();
+      if (counts[cl] !== undefined) {
+        counts[cl] += (c.collections || 0);
+      } else {
+        counts['cluster0'] += (c.collections || 0);
+      }
+    });
+    return counts;
+  }, [clients]);
+
   const getFirstAvailableCluster = () => {
     for (let i = 0; i <= 9; i++) {
       const id = `cluster${i}`;
@@ -934,6 +969,14 @@ function App() {
   }, [clients, signupsFilter]);
 
   if (!token) {
+    if (isVendorPath) {
+      return <VendorLogin onLogin={(t) => {
+        setToken(t);
+        const user = JSON.parse(localStorage.getItem('superadmin_user'));
+        setAdminUser(user);
+        setCurrentTab('MarketHub');
+      }} />;
+    }
     return <Login onLogin={(t) => {
       setToken(t);
       const user = JSON.parse(localStorage.getItem('superadmin_user'));
@@ -1012,6 +1055,13 @@ function App() {
               className={`px-4 py-2 font-bold transition-colors ${currentTab === 'Broadcasts' ? 'border-b-2 border-primary text-primary' : 'text-gray-400 hover:text-white'}`}
             >
               Broadcasts (In-App)
+            </button>
+            <button 
+              onClick={() => setCurrentTab('Realtime')}
+              className={`px-4 py-2 font-bold transition-colors flex items-center gap-2 ${currentTab === 'Realtime' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Activity size={18} className={currentTab === 'Realtime' ? 'animate-pulse' : ''} />
+              Realtime Analytics
             </button>
             <button 
               onClick={() => setCurrentTab('Vendors')}
@@ -1175,6 +1225,14 @@ function App() {
                       }`}
                       style={{ width: `${Math.max(count > 0 ? 10 : 0, percent)}%` }}
                     />
+                  </div>
+                  
+                  {/* Collections Capacity */}
+                  <div className="mt-3 pt-2 border-t border-slate-800/80 flex flex-col items-center">
+                    <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">Collections</span>
+                    <span className="text-xs font-mono font-bold text-emerald-400">
+                      {clusterCollections[cl.id] || 0} <span className="text-slate-500">/ 500</span>
+                    </span>
                   </div>
                 </div>
               );
@@ -1632,6 +1690,12 @@ function App() {
           </div>
         </div>
         </>)}
+
+        {adminUser?.role !== 'Vendor' && currentTab === 'Realtime' && (
+          <div className="animate-fade-in">
+            <RealtimeAnalytics />
+          </div>
+        )}
 
         {adminUser?.role !== 'Vendor' && currentTab === 'Insights' && (
           <div className="space-y-8 animate-fade-in">
@@ -2792,3 +2856,4 @@ function App() {
 }
 
 export default App;
+
