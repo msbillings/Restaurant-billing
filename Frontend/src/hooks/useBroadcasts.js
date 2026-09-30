@@ -125,6 +125,10 @@ const useBroadcasts = (userRole) => {
         const tenantDb = localStorage.getItem('resto_db_name') || localStorage.getItem('tenant_db') || '';
         const SUPERADMIN_API_URL = getSuperadminApiUrl();
 
+        if (!token) {
+          return [];
+        }
+
         let response;
         try {
           response = await api.get('/broadcasts', {
