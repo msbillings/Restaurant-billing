@@ -36,6 +36,10 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
+// Phase 3: Immediate Configuration Validation (Fail fast if missing secrets)
+import { validateConfig } from './utils/configValidator.js';
+validateConfig();
+
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT EXCEPTION]', err);
 });
@@ -108,6 +112,7 @@ app.use(helmet({
     }
   },
   crossOriginEmbedderPolicy: false, // Required for SharedArrayBuffer / camera features
+  crossOriginResourcePolicy: { policy: "cross-origin" } // Required to allow frontend dev server to read API responses
 }));
 
 // 2. Limit requests from same API (Rate Limiting)
@@ -120,6 +125,9 @@ app.use('/api', limiter);
 
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
+import { createAdapter } from '@socket.io/redis-adapter';
+import redisClient from './utils/redisClient.js';
+
 // Initialize Socket.io with same CORS config as express
 const io = new Server(server, {
   cors: {
@@ -128,32 +136,58 @@ const io = new Server(server, {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   }
 });
+
+// Configure Redis Adapter for horizontal scaling
+// Requires redisClient.pubClient and redisClient.subClient to be initialized
+const setupRedisAdapter = async () => {
+  await redisClient.connect();
+  if (redisClient.pubClient && redisClient.subClient) {
+    io.adapter(createAdapter(redisClient.pubClient, redisClient.subClient));
+    console.log('[Socket] Redis Adapter attached successfully');
+  } else {
+    console.warn('[Socket] Redis Adapter not attached (Redis connection failed)');
+  }
+};
+setupRedisAdapter();
+
 app.locals.io = io;
 
 io.on('connection', (socket) => {
   socket.on('joinTenant', (data) => {
     let tenantDb = null;
     let token = null;
+    let requestedTenant = null;
+
     if (data && typeof data === 'object') {
-      tenantDb = data.tenantDb;
+      requestedTenant = data.tenantDb;
       token = data.token;
     } else {
-      tenantDb = data;
+      requestedTenant = data;
     }
+
+    let isAuthenticated = false;
 
     if (token) {
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_msbillings_2026');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         if (decoded && decoded.db) {
           tenantDb = decoded.db;
+          isAuthenticated = true;
         }
       } catch (err) {
-        // Fall back to tenantDb passed if token expired or invalid
+        // STRICT REQUIREMENT: Do not allow invalid/missing JWT to fall back to tenantDb.
+        // If a token was provided but is invalid, we MUST reject the connection.
       }
+    } else if (requestedTenant) {
+      // Legitimate public functionality exists: The customer QR Menu uses Socket.IO
+      // for realtime order updates and sending "Call Waiter" notifications.
+      // To ensure it cannot access private tenant rooms, we place unauthenticated
+      // sockets in a mathematically distinct public room.
+      tenantDb = `${requestedTenant}_public`;
     }
 
     const isCloud = !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || process.env.NODE_ENV === 'production');
-    if (isCloud && !token && !tenantDb) {
+    if (isCloud && !isAuthenticated && !tenantDb) {
       console.warn('[Socket] Refused unauthenticated socket join on cloud');
       return;
     }
@@ -167,14 +201,22 @@ io.on('connection', (socket) => {
       }
       socket.join(tenantDb);
       socket.tenantDb = tenantDb;
-      console.log(`[Socket] Socket ${socket.id} securely joined tenant room: ${tenantDb}`);
+      socket.isAuthenticated = isAuthenticated;
+      console.log(`[Socket] Socket ${socket.id} securely joined ${isAuthenticated ? 'PRIVATE' : 'PUBLIC'} tenant room: ${tenantDb}`);
     }
   });
 
   // ⚡ INSTANT FAST-PATH: Relay client-generated optimistic notifications to all other connected devices with 0ms delay
   socket.on('clientNotification', (notif) => {
     if (!notif) return;
-    const room = socket.tenantDb || notif.tenantDb;
+    let room = socket.tenantDb || notif.tenantDb;
+
+    // If a public customer (in a _public room) sends a notification (e.g. "Call Waiter"),
+    // route it to the private staff room so the staff can receive it.
+    if (room && room.endsWith('_public')) {
+      room = room.replace('_public', '');
+    }
+
     if (room && room !== 'undefined' && room !== 'null') {
       socket.to(room).emit('new_notification', notif);
       console.log(`[Socket] ⚡ Relayed instant notification (${notif.title}) to tenant room: ${room}`);
@@ -280,6 +322,22 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Required infrastructure health endpoints
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+app.get('/ready', (req, res) => {
+  // Check dependency readiness (MongoDB)
+  const isMongoReady = mongoose.connection.readyState === 1;
+  // TODO: Check Redis readiness here once Redis is fully integrated for HA
+
+  if (isMongoReady) {
+    res.status(200).json({ status: 'ready', dependencies: { mongodb: 'up' } });
+  } else {
+    res.status(503).json({ status: 'not ready', dependencies: { mongodb: 'down' } });
+  }
+});
 
 
 // Database Connection
@@ -347,7 +405,7 @@ const connectDB = async () => {
 const ensureDBConnection = async (req, res, next) => {
   try {
     if (isSettingUpDB) {
-      // If the database is currently being configured, skip the connection check 
+      // If the database is currently being configured, skip the connection check
       // for other routes so we don't cause a concurrent connection race condition
       return next();
     }
@@ -366,10 +424,7 @@ const ensureDBConnection = async (req, res, next) => {
 
 import { tenantMiddleware } from './middleware/tenant.js';
 
-import webhookRoutes from './routes/webhookRoutes.js';
-// Webhook endpoints must bypass tenant middleware as they hit global URLs
-app.use('/api/webhooks', webhookRoutes);
-
+// Apply middleware to all API routes BEFORE routes are registered
 app.use('/api', ensureDBConnection);
 app.use('/api', tenantMiddleware);
 
@@ -407,7 +462,6 @@ import clientRoutes from './routes/clientRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import calculatorRoutes from './routes/calculatorRoutes.js';
-import marketHubRoutes from './routes/marketHubRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -448,7 +502,6 @@ app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/contact', contactRoutes);
-app.use('/api/markethub', marketHubRoutes);
 
 // WhatsApp sessions are lazily initialized via WhatsAppManager in whatsappController.js
 
