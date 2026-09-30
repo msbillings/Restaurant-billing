@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 export const tenantMiddleware = async (req, res, next) => {
   try {
-    let tenantDbName = req.headers['x-tenant-db'] || req.query?.tenant || req.body?.tenant;
+    let tenantDbName = null;
 
     // CRITICAL SECURITY ENFORCEMENT: If an Authorization token is present, 
     // decode it to extract the secure db name. This overrides the client-side header 
@@ -19,6 +19,10 @@ export const tenantMiddleware = async (req, res, next) => {
       } catch (err) {
         // Ignore decoding errors here (handled by auth middleware)
       }
+      // If a token is provided but lacks a db claim or is invalid, do NOT fall back to headers.
+    } else {
+      // Unauthenticated requests (e.g. login, public QR menu) use headers/query to route
+      tenantDbName = req.headers['x-tenant-db'] || req.query?.tenant || req.body?.tenant;
     }
 
     if (tenantDbName && tenantDbName !== 'undefined' && tenantDbName !== 'null') {
@@ -32,6 +36,7 @@ export const tenantMiddleware = async (req, res, next) => {
   } catch (error) {
     console.error('[TenantMiddleware] Error loading tenant models:', error);
     req.models = null;
+    req.tenantDb = null;
   }
   next();
 };

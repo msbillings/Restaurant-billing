@@ -39,11 +39,12 @@ const authenticateToken = async (req, res, next) => {
       } catch (err) {
         console.error('[Auth] Failed to connect to tenant DB from JWT:', err.message);
       }
+    } else {
+      return res.status(401).json({ message: 'Legacy or invalid token format. Please login again.' });
     }
 
     if (!TenantUser) {
-      // Fallback: If token has no db field (old token), use req.models from header or default User
-      TenantUser = req.models?.User || User;
+      return res.status(401).json({ message: 'Tenant User context could not be resolved' });
     }
 
     const user = await TenantUser.findById(decoded.id);
