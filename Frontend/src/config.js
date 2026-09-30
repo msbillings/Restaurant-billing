@@ -93,7 +93,7 @@ export const getApiUrl = () => {
         return cleanApiUrl(`http://${host}:5002`);
     }
 
-    return 'http://localhost:5002/api';
+    return 'http://localhost:4001/api';
 };
 
 export const getSuperadminApiUrl = () => {

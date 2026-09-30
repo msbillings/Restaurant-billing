@@ -13,6 +13,7 @@ import { emitSocketEvent } from '../utils/socket.js';
 import { printKOTToPrinters } from '../services/printerService.js';
 import { getTableMatchCondition, getDynamicTaxRate, getTenantShopName } from '../utils/billHelpers.js';
 import { syncOrderKotsWithItems } from './kotController.js';
+import CreditAccountDefault from '../models/CreditAccount.js';
 
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
@@ -1122,6 +1123,10 @@ export const settleBill = async (req, res) => {
     if (total !== undefined && Number(total) > 0) order.total = Number(total);
     if (subtotal !== undefined && Number(subtotal) > 0) order.subtotal = Number(subtotal);
 
+    if (paymentMode === 'Unpaid' && !customerPhone && !order.customerPhone) {
+      return res.status(400).json({ message: 'Customer Phone Number is mandatory for Unpaid (Khata) bills.' });
+    }
+
     // Safeguard against zero total/subtotal
     if (!order.subtotal || order.subtotal <= 0) {
       order.subtotal = (order.items || []).reduce((acc, i) =>
@@ -1240,6 +1245,40 @@ export const settleBill = async (req, res) => {
         }
       }
     }
+
+    // ---- KHATA (CREDIT) LOGIC ----
+    if (paymentMode === 'Unpaid' && saveSuccess) {
+      try {
+        const CreditAccount = getTenantModel(req, 'CreditAccount', CreditAccountDefault);
+        const finalPhone = order.customerPhone || customerPhone;
+        const finalName = order.customerName || customerName || 'Unknown Customer';
+        
+        let account = await CreditAccount.findOne({ phoneNumber: finalPhone });
+        
+        if (!account) {
+          account = new CreditAccount({
+            customerName: finalName,
+            phoneNumber: finalPhone,
+            balance: 0,
+            transactions: []
+          });
+        }
+        
+        account.transactions.push({
+          type: 'credit',
+          amount: order.total || 0,
+          billId: order._id,
+          note: `Unpaid Bill #${order.billNumber || ''}`
+        });
+        
+        account.balance += (order.total || 0);
+        await account.save();
+        console.log(`[Khata] Added ${order.total} to ${finalPhone}'s account.`);
+      } catch (err) {
+        console.error('[Khata] Error updating Credit Account:', err);
+      }
+    }
+    // ------------------------------
 
     // Clear cache when bill is settled (most important for dashboard)
     cache.clear('dailyStats');

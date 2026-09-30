@@ -219,9 +219,16 @@ export const getAnalytics = async (req, res) => {
         const cash = Number(b.splitPayments.cash) || 0;
         const upi = Number(b.splitPayments.upi) || 0;
         const card = Number(b.splitPayments.card) || 0;
-        if (cash > 0) { paymentTotals.Cash += cash; paymentCounts.Cash += 1; }
-        if (upi > 0) { paymentTotals.UPI += upi; paymentCounts.UPI += 1; }
-        if (card > 0) { paymentTotals.Card += card; paymentCounts.Card += 1; }
+        
+        if (cash === 0 && upi === 0 && card === 0) {
+          // Fallback for old records with missing split data
+          paymentTotals.Cash += b.total || 0;
+          paymentCounts.Cash += 1;
+        } else {
+          if (cash > 0) { paymentTotals.Cash += cash; paymentCounts.Cash += 1; }
+          if (upi > 0) { paymentTotals.UPI += upi; paymentCounts.UPI += 1; }
+          if (card > 0) { paymentTotals.Card += card; paymentCounts.Card += 1; }
+        }
       } else if (b.paymentMode) {
         paymentTotals[b.paymentMode] = (paymentTotals[b.paymentMode] || 0) + (b.total || 0);
         paymentCounts[b.paymentMode] = (paymentCounts[b.paymentMode] || 0) + 1;
@@ -491,19 +498,26 @@ export const getDayBook = async (req, res) => {
         const splitCash = Number(bill.splitPayments.cash) || 0;
         const splitUpi = Number(bill.splitPayments.upi) || 0;
         const splitCard = Number(bill.splitPayments.card) || 0;
-        cashFlow.cashIn += splitCash;
-        billCashIn = splitCash;
-        billOnlineIn = splitUpi + splitCard;
-        if (splitUpi > 0) {
-          cashFlow.onlineIn.total += splitUpi;
-          const appName = bill.upiApp || 'UPI Other';
-          if (!cashFlow.onlineIn.upiApps[appName]) cashFlow.onlineIn.upiApps[appName] = 0;
-          cashFlow.onlineIn.upiApps[appName] += splitUpi;
-        }
-        if (splitCard > 0) {
-          cashFlow.onlineIn.total += splitCard;
-          if (!cashFlow.onlineIn.upiApps['Card']) cashFlow.onlineIn.upiApps['Card'] = 0;
-          cashFlow.onlineIn.upiApps['Card'] += splitCard;
+        
+        if (splitCash === 0 && splitUpi === 0 && splitCard === 0) {
+          // Fallback for old records with missing split data
+          cashFlow.cashIn += bill.total || 0;
+          billCashIn = bill.total || 0;
+        } else {
+          cashFlow.cashIn += splitCash;
+          billCashIn = splitCash;
+          billOnlineIn = splitUpi + splitCard;
+          if (splitUpi > 0) {
+            cashFlow.onlineIn.total += splitUpi;
+            const appName = bill.upiApp || 'UPI Other';
+            if (!cashFlow.onlineIn.upiApps[appName]) cashFlow.onlineIn.upiApps[appName] = 0;
+            cashFlow.onlineIn.upiApps[appName] += splitUpi;
+          }
+          if (splitCard > 0) {
+            cashFlow.onlineIn.total += splitCard;
+            if (!cashFlow.onlineIn.upiApps['Card']) cashFlow.onlineIn.upiApps['Card'] = 0;
+            cashFlow.onlineIn.upiApps['Card'] += splitCard;
+          }
         }
       } else {
         cashFlow.cashIn += bill.total || 0;

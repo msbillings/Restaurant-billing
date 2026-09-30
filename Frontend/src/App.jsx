@@ -48,6 +48,7 @@ const KOTHistory = React.lazy(() => import('./components/KOTHistory'));
 const EditedBills = React.lazy(() => import('./components/EditedBills'));
 const LicenseScreen = React.lazy(() => import('./components/LicenseScreen'));
 const DayBook = React.lazy(() => import('./components/DayBook'));
+const KhataDashboard = React.lazy(() => import('./components/KhataDashboard'));
 const InventoryManagement = React.lazy(() => import('./components/InventoryManagement'));
 const KDS = React.lazy(() => import('./components/KDS'));
 const CRM = React.lazy(() => import('./components/CRM'));
@@ -1363,7 +1364,7 @@ function App() {
         */}
 
       {/* NEW RESPONSIVE TOP HEADER */}
-      <header className={`min-h-[56px] sm:min-h-[58px] lg:min-h-[62px] xl:min-h-[66px] py-1 sm:py-1.5 flex items-center justify-between px-2 sm:px-3 lg:px-4 border-b shadow-xs shrink-0 gap-1 sm:gap-2 lg:gap-3 w-full z-40 relative overflow-visible ${view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
+      <header className={`min-h-[44px] sm:min-h-[48px] lg:min-h-[52px] xl:min-h-[56px] py-0.5 sm:py-1 flex items-center justify-between px-2 sm:px-3 lg:px-4 border-b shadow-xs shrink-0 gap-1 sm:gap-2 lg:gap-3 w-full z-40 relative overflow-visible ${view === 'kds' ? 'bg-slate-950 border-slate-800/80 text-slate-100' : 'bg-surface border-border/40 text-text-main'
         }`}>
         {/* Left: Hamburger & Logo */}
         <div className="flex items-center min-w-0 shrink-0 gap-1">
@@ -1380,7 +1381,7 @@ function App() {
             <img
               src={logoImg}
               alt="msbillings"
-              className="h-9.5 sm:h-10.5 md:h-11 lg:h-12 xl:h-14 2xl:h-15 w-auto object-contain block transform scale-145 sm:scale-150 md:scale-155 lg:scale-175 xl:scale-190 origin-left"
+              className="h-7 sm:h-8 md:h-9 lg:h-10 xl:h-10 w-auto object-contain block transform scale-145 sm:scale-150 md:scale-155 lg:scale-175 xl:scale-190 origin-left"
               style={{ objectFit: 'contain' }}
             />
           </button>
@@ -2181,6 +2182,14 @@ function App() {
                         <span>{t('DayBook')}</span>
                       </button>
                     }
+
+                    <button
+                      onClick={() => handleViewChange('khata')}
+                      className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all font-medium text-[1.05rem] ${view === 'khata' ? 'bg-linear-to-r from-red-600 to-orange-500 text-white shadow-lg shadow-red-500/30 font-bold translate-x-1' : 'text-gray-500 hover:bg-orange-50 hover:text-orange-600 hover:translate-x-1'}`}>
+
+                      <BookOpen size={22} />
+                      <span>{t('Khata Book')}</span>
+                    </button>
                   </div>
                 }
               </div>
@@ -2420,6 +2429,7 @@ function App() {
                   {view === 'kothistory' && <KOTHistory onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'analytics' && <Analytics onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'daybook' && <DayBook onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                  {view === 'khata' && <KhataDashboard />}
                   {view === 'operations' && <Operations onNavigate={handleViewChange} onGoBack={handleGoBack} userRole={user?.role?.toLowerCase()} />}
                   {view === 'tax' && <TaxConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'discount' && <DiscountConfig onNavigate={handleViewChange} onGoBack={handleGoBack} />}

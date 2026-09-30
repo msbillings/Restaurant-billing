@@ -41,7 +41,7 @@ const marketOrderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Pending', 'Processing', 'Dispatched', 'Delivered', 'Cancelled'],
+    enum: ['Pending', 'Processing', 'Shipped', 'Dispatched', 'Out for Delivery', 'Delivered', 'Cancelled'],
     default: 'Pending'
   },
   trackingId: {
@@ -60,6 +60,12 @@ const marketOrderSchema = new mongoose.Schema({
   invoiceUrl: {
     type: String
   },
+  trackingHistory: [{
+    status: String,
+    location: String,
+    date: Date,
+    note: String
+  }],
   shippingAddress: {
     street: String,
     city: String,

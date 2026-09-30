@@ -110,6 +110,12 @@ const processSyncQueue = async () => {
 const refreshCaches = async () => {
   if (!_isOnline) return;
 
+  const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
+  if (!token) {
+    console.log('[SyncEngine] Skipping cache refresh - not logged in.');
+    return;
+  }
+
   try {
     // Cache menu items
     const menuRes = await api.get('/menu');

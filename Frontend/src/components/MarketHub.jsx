@@ -8,13 +8,66 @@ const MarketHub = ({ onNavigate }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('ALL');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('clientMarketHubTab') || 'ALL';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('clientMarketHubTab', activeTab);
+  }, [activeTab]);
+  
+  const getFullInvoiceUrl = (url) => {
+    if (!url) return '#';
+    if (!url.startsWith('/')) return url;
+    const apiUrl = getApiUrl();
+    if (apiUrl.endsWith('/api') && url.startsWith('/api/')) {
+      return `${apiUrl}${url.substring(4)}`;
+    }
+    return `${apiUrl}${url}`;
+  };
   
   // Phase 2 Cart & Checkout States
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    const savedCart = localStorage.getItem('clientMarketHubCart');
+    return savedCart ? JSON.parse(savedCart) : [];
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [flyingItems, setFlyingItems] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem('clientMarketHubCart', JSON.stringify(cart));
+  }, [cart]);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+
+  const [orderPage, setOrderPage] = useState(1);
+  const [productPage, setProductPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
+
+  useEffect(() => {
+    if (activeTab === 'ORDERS') {
+      fetchOrders();
+    }
+  }, [activeTab]);
+
+  const fetchOrders = async () => {
+    setLoadingOrders(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const apiUrl = getApiUrl();
+      const response = await axios.get(`${apiUrl}/markethub/orders`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOrders(response.data);
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -29,34 +82,7 @@ const MarketHub = ({ onNavigate }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (response.data.length === 0) {
-        setProducts([
-          {
-            _id: '1',
-            name: 'Epson TM-T82X POS Printer',
-            category: 'HARDWARE',
-            price: 11500,
-            originalPrice: 14000,
-            stockCount: 50,
-            description: 'Industry standard thermal receipt printer. USB + Serial interface, fast printing speed of 200mm/s.',
-            images: ['https://m.media-amazon.com/images/I/51r-88aZheL._SX679_.jpg'],
-            features: ['200mm/s Print Speed', 'Auto Cutter', 'USB + Ethernet']
-          },
-          {
-            _id: '2',
-            name: 'Thermal Paper Rolls (Box of 50)',
-            category: 'SUPPLIES',
-            price: 2500,
-            originalPrice: 3000,
-            stockCount: 500,
-            description: 'Premium quality 3-inch (80mm) thermal paper rolls. High brightness and long-lasting print.',
-            images: ['https://m.media-amazon.com/images/I/71Yv3P0p-QL._SX679_.jpg'],
-            features: ['80mm Width', 'BPA Free', 'Dark Print']
-          }
-        ]);
-      } else {
-        setProducts(response.data);
-      }
+      setProducts(response.data);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching products', err);
@@ -67,10 +93,47 @@ const MarketHub = ({ onNavigate }) => {
 
   const handleAddToCart = (e, product) => {
     e.stopPropagation();
+    
+    // Animation Logic
+    const btnRect = e.target.getBoundingClientRect();
+    const cartBtn = document.querySelector('.mh-cart-btn');
+    let tx = 0, ty = 0;
+    
+    if (cartBtn) {
+      const cartRect = cartBtn.getBoundingClientRect();
+      tx = cartRect.left + cartRect.width / 2 - (btnRect.left + btnRect.width / 2);
+      ty = cartRect.top + cartRect.height / 2 - (btnRect.top + btnRect.height / 2);
+    } else {
+      tx = window.innerWidth - 50 - btnRect.left;
+      ty = 50 - btnRect.top;
+    }
+
+    const newFlyingItem = {
+      id: Date.now() + Math.random(),
+      x: btnRect.left + btnRect.width / 2 - 12,
+      y: btnRect.top + btnRect.height / 2 - 12,
+      tx: `${tx}px`,
+      ty: `${ty}px`,
+    };
+
+    setFlyingItems(prev => [...prev, newFlyingItem]);
+    
+    setTimeout(() => {
+      setFlyingItems(prev => prev.filter(item => item.id !== newFlyingItem.id));
+    }, 800);
+
     setCart(prev => {
       const existing = prev.find(item => item.product._id === product._id);
       if (existing) {
+        if (existing.quantity + 1 > product.stockCount) {
+          alert(`Cannot add more. Only ${product.stockCount} items in stock.`);
+          return prev;
+        }
         return prev.map(item => item.product._id === product._id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      if (product.stockCount < 1) {
+        alert('Item is out of stock.');
+        return prev;
       }
       return [...prev, { product, quantity: 1 }];
     });
@@ -84,6 +147,10 @@ const MarketHub = ({ onNavigate }) => {
     setCart(prev => prev.map(item => {
       if (item.product._id === productId) {
         const newQ = item.quantity + delta;
+        if (newQ > item.product.stockCount) {
+          alert(`Maximum stock reached. Only ${item.product.stockCount} items available.`);
+          return item;
+        }
         return newQ > 0 ? { ...item, quantity: newQ } : item;
       }
       return item;
@@ -157,94 +224,192 @@ const MarketHub = ({ onNavigate }) => {
       {/* Premium Header */}
       <div className="mh-header">
         <div className="mh-header-content">
-          <div>
+          <div className="mh-title-group">
             <h1 className="mh-title">B2B Market Hub</h1>
+            <span className="mh-subtitle-divider hidden md:inline">•</span>
             <p className="mh-subtitle">Equip your restaurant with enterprise-grade hardware, supplies, and integrations.</p>
           </div>
-          <button className="mh-cart-btn" onClick={() => setIsCartOpen(true)}>
-            <ShoppingCart size={20} />
-            <span>Cart</span>
-            {cartCount > 0 && <span className="mh-cart-badge">{cartCount}</span>}
-          </button>
-        </div>
-        
-        {/* Apple-style Segmented Control */}
-        <div className="mh-tabs">
-          {['ALL', 'HARDWARE', 'SOFTWARE', 'SUPPLIES'].map(tab => (
-            <button 
-              key={tab}
-              className={`mh-tab ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab.charAt(0) + tab.slice(1).toLowerCase()}
+          
+          <div className="mh-actions-group">
+            {/* Apple-style Segmented Control */}
+            <div className="mh-tabs">
+              {['ALL', 'HARDWARE', 'SOFTWARE', 'SUPPLIES', 'ORDERS'].map(tab => (
+                <button 
+                  key={tab}
+                  className={`mh-tab ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab.charAt(0) + tab.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
+            
+            <button className="mh-cart-btn" onClick={() => setIsCartOpen(true)}>
+              <ShoppingCart size={20} />
+              <span>Cart</span>
+              {cartCount > 0 && <span className="mh-cart-badge">{cartCount}</span>}
             </button>
-          ))}
+          </div>
         </div>
       </div>
 
       {error && <div className="mh-error-banner">{error}</div>}
 
-      {/* Product Grid */}
-      <div className="mh-grid">
-        {filteredProducts.map((product) => (
-          <div key={product._id} className="mh-card group">
-            {product.originalPrice && (
-              <div className="mh-discount-badge">
-                Save ₹{product.originalPrice - product.price}
-              </div>
-            )}
-            
-            <div className="mh-image-container">
-              <img 
-                src={product.images?.[0] || product.imageUrl || 'https://via.placeholder.com/300?text=No+Image'} 
-                alt={product.name} 
-                className="mh-image"
-                onError={(e) => { e.target.src = 'https://via.placeholder.com/300?text=Image+Not+Found' }}
-              />
-            </div>
-            
-            <div className="mh-info">
-              <div className="mh-category">
-                <Tag size={14} />
-                <span>{product.category}</span>
-              </div>
-              <h3 className="mh-name">{product.name}</h3>
-              <p className="mh-desc">{product.description}</p>
-              
-              <div className="mh-features">
-                {product.features?.map((f, i) => (
-                  <span key={i} className="mh-feature-pill">
-                    <Check size={12} className="text-emerald-500" /> {f}
+      {/* Order Tracking View */}
+      {activeTab === 'ORDERS' && (
+        <div className="w-full mt-4">
+          <h2 className="text-2xl font-black mb-6 text-gray-900 px-2">Your Orders & Tracking</h2>
+          {loadingOrders ? (
+             <div className="text-center py-12"><div className="animate-spin inline-block w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div><p className="mt-4 text-gray-500 font-medium">Loading your orders...</p></div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center bg-white border border-gray-200 p-4 rounded-t-xl shadow-sm mb-0">
+                <h3 className="text-gray-900 font-bold">Total Orders: {orders.length}</h3>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-500">
+                    Page {orderPage} of {Math.ceil(orders.length / ITEMS_PER_PAGE) || 1}
                   </span>
-                ))}
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setOrderPage(p => Math.max(1, p - 1))} 
+                      disabled={orderPage === 1}
+                      className="px-3 py-1 bg-gray-100 text-gray-700 font-medium rounded hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >
+                      Prev
+                    </button>
+                    <button 
+                      onClick={() => setOrderPage(p => Math.min(Math.ceil(orders.length / ITEMS_PER_PAGE) || 1, p + 1))} 
+                      disabled={orderPage >= (Math.ceil(orders.length / ITEMS_PER_PAGE) || 1)}
+                      className="px-3 py-1 bg-gray-100 text-gray-700 font-medium rounded hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+              <div className="overflow-x-auto bg-white border-x border-b border-gray-200 rounded-b-xl shadow-sm">
+                <table className="w-full text-left text-sm text-gray-700">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Order ID</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Location</th>
+                      <th className="px-4 py-3">Time</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Total</th>
+                      <th className="px-4 py-3 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {orders.slice((orderPage - 1) * ITEMS_PER_PAGE, orderPage * ITEMS_PER_PAGE).map(order => (
+                      <tr key={order._id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedOrder(order)}>
+                        <td className="px-4 py-3 font-mono font-bold text-gray-900 text-xs">{order._id.substring(0,8).toUpperCase()}</td>
+                        <td className="px-4 py-3 text-xs">{new Date(order.createdAt).toLocaleDateString('en-IN')}</td>
+                        <td className="px-4 py-3 text-xs font-medium text-gray-600">
+                          {order.trackingHistory && order.trackingHistory.length > 0 && order.trackingHistory[order.trackingHistory.length - 1].location 
+                            ? order.trackingHistory[order.trackingHistory.length - 1].location 
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-medium text-gray-600 whitespace-nowrap">
+                          {order.trackingHistory && order.trackingHistory.length > 0 
+                            ? new Date(order.trackingHistory[order.trackingHistory.length - 1].date).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata', timeZoneName: 'short' })
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${order.status === 'Processing' ? 'bg-amber-100 text-amber-700 border-amber-200' : order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                            {order.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-black text-indigo-700">₹{order.grandTotal.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-center">
+                          <a href={getFullInvoiceUrl(order.invoiceUrl)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1.5 text-[10px] bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white px-2.5 py-1.5 rounded font-bold transition-colors">
+                            <Receipt size={12} /> Invoice
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-            <div className="mh-footer">
-              <div className="mh-pricing">
-                <span className="mh-price">₹{product.price.toLocaleString('en-IN')}</span>
-                {product.originalPrice && (
-                  <span className="mh-original-price">₹{product.originalPrice.toLocaleString('en-IN')}</span>
-                )}
-                {product.category !== 'SOFTWARE' && <span className="mh-tax-info">+ GST</span>}
-                {product.category === 'SOFTWARE' && <span className="mh-tax-info">/ month</span>}
+      {/* Product Grid */}
+      {activeTab !== 'ORDERS' && (
+        <div className="w-full mt-4">
+          <div className="flex justify-between items-center bg-white border border-gray-200 p-4 rounded-t-xl shadow-sm mb-0">
+            <h3 className="text-gray-900 font-bold">Total Products: {filteredProducts.length}</h3>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-500">
+                Page {productPage} of {Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1}
+              </span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setProductPage(p => Math.max(1, p - 1))} 
+                  disabled={productPage === 1}
+                  className="px-3 py-1 bg-gray-100 text-gray-700 font-medium rounded hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  Prev
+                </button>
+                <button 
+                  onClick={() => setProductPage(p => Math.min(Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1, p + 1))} 
+                  disabled={productPage >= (Math.ceil(filteredProducts.length / ITEMS_PER_PAGE) || 1)}
+                  className="px-3 py-1 bg-gray-100 text-gray-700 font-medium rounded hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                >
+                  Next
+                </button>
               </div>
-              
-              <button 
-                className={`mh-add-btn ${product.stockCount <= 0 ? 'disabled' : ''}`}
-                onClick={(e) => handleAddToCart(e, product)}
-                disabled={product.stockCount <= 0}
-              >
-                {product.stockCount <= 0 ? 'Out of Stock' : (
-                  <>
-                    <Plus size={18} /> Add
-                  </>
-                )}
-              </button>
             </div>
           </div>
-        ))}
-      </div>
+          <div className="overflow-x-auto bg-white border-x border-b border-gray-200 rounded-b-xl shadow-sm">
+            <table className="w-full text-left text-sm text-gray-700">
+              <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                <tr>
+                  <th className="px-4 py-3">Product Name</th>
+                  <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3">Price</th>
+                  <th className="px-4 py-3">Stock</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredProducts.slice((productPage - 1) * ITEMS_PER_PAGE, productPage * ITEMS_PER_PAGE).map(product => (
+                  <tr key={product._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <span className="line-clamp-1">{product.name}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs">{product.category}</td>
+                    <td className="px-4 py-3 font-black text-indigo-700">
+                      ₹{product.price?.toLocaleString()}
+                      {product.originalPrice && <span className="ml-1 text-[10px] text-gray-400 line-through">₹{product.originalPrice.toLocaleString()}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`font-bold ${product.stockCount > 10 ? 'text-emerald-500' : product.stockCount > 0 ? 'text-amber-500' : 'text-red-500'}`}>
+                        {product.stockCount > 0 ? `${product.stockCount} in stock` : 'Out of Stock'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button 
+                        className={`px-3 py-1.5 rounded font-bold text-xs transition-colors border flex items-center justify-center gap-1 mx-auto ${product.stockCount <= 0 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-600 hover:text-white'}`}
+                        onClick={(e) => handleAddToCart(e, product)}
+                        disabled={product.stockCount <= 0}
+                      >
+                        {product.stockCount <= 0 ? 'Out of Stock' : (
+                          <>
+                            <Plus size={14} /> Add to Cart
+                          </>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Cart Slide-over Overlay */}
       {isCartOpen && (
@@ -276,7 +441,7 @@ const MarketHub = ({ onNavigate }) => {
                     <p className="font-bold text-gray-900 text-lg">₹{orderSuccess.grandTotal.toLocaleString()}</p>
                   </div>
                   
-                  <a href={orderSuccess.invoiceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition-all shadow-[0_5px_15px_rgba(5,150,105,0.3)]">
+                  <a href={getFullInvoiceUrl(orderSuccess.invoiceUrl)} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition-all shadow-[0_5px_15px_rgba(5,150,105,0.3)]">
                     <Receipt size={18} /> Download GST Invoice
                   </a>
                   
@@ -302,7 +467,11 @@ const MarketHub = ({ onNavigate }) => {
                         <div className="flex items-center bg-gray-100 rounded-lg border">
                           <button onClick={() => updateQuantity(item.product._id, -1)} className="px-2.5 py-1 text-gray-600 hover:text-black font-bold border-r">-</button>
                           <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.product._id, 1)} className="px-2.5 py-1 text-gray-600 hover:text-black font-bold border-l">+</button>
+                          <button 
+                            onClick={() => updateQuantity(item.product._id, 1)} 
+                            className={`px-2.5 py-1 font-bold border-l ${item.quantity >= item.product.stockCount ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-black'}`}
+                            disabled={item.quantity >= item.product.stockCount}
+                          >+</button>
                         </div>
                         <button onClick={() => removeFromCart(item.product._id)} className="text-xs text-red-500 font-medium hover:underline">Remove</button>
                       </div>
@@ -346,6 +515,122 @@ const MarketHub = ({ onNavigate }) => {
           </div>
         </div>
       )}
+      {/* Tracking Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fade-in p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden relative">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div>
+                <h3 className="text-xl font-black text-gray-900">Order Details</h3>
+                <p className="text-sm text-gray-500 font-mono mt-1">ID: {selectedOrder._id}</p>
+              </div>
+              <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-gray-900 bg-white shadow-sm border border-gray-200 p-2 rounded-xl transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 overflow-y-auto flex-1 bg-white">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+                {/* Status Card */}
+                <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Current Status</p>
+                  <p className="text-2xl font-black text-indigo-700">{selectedOrder.status}</p>
+                  <p className="text-sm text-indigo-500/80 font-medium mt-1">Placed on {new Date(selectedOrder.createdAt).toLocaleDateString()}</p>
+                </div>
+                {/* Total Card */}
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex flex-col justify-center">
+                  <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">Amount Paid</p>
+                  <p className="text-2xl font-black text-emerald-700">₹{selectedOrder.grandTotal?.toLocaleString()}</p>
+                  <a href={getFullInvoiceUrl(selectedOrder.invoiceUrl)} target="_blank" rel="noreferrer" className="text-emerald-600 font-bold text-sm mt-2 flex items-center gap-1 hover:underline">
+                    <Receipt size={14} /> View Invoice
+                  </a>
+                </div>
+              </div>
+
+              {/* Tracking Timeline */}
+              <h4 className="font-bold text-gray-900 mb-4 uppercase tracking-wider text-sm flex items-center gap-2">
+                <Info size={16} className="text-indigo-500"/> Tracking History
+              </h4>
+              <div className="bg-gray-50 border border-gray-100 rounded-xl p-5 mb-8">
+                {selectedOrder.trackingHistory && selectedOrder.trackingHistory.length > 0 ? (
+                  <div className="space-y-6">
+                    {[...selectedOrder.trackingHistory].reverse().map((track, i) => (
+                      <div key={i} className="flex gap-4 relative">
+                        {i !== selectedOrder.trackingHistory.length - 1 && (
+                          <div className="absolute top-8 left-3.5 w-0.5 h-full bg-gray-200"></div>
+                        )}
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 z-10 ${i === 0 ? 'bg-indigo-600 text-white shadow-md ring-4 ring-indigo-50' : 'bg-white border-2 border-gray-200 text-gray-400'}`}>
+                          <Check size={14} />
+                        </div>
+                        <div className="pt-0.5">
+                          <p className={`font-bold text-sm ${i === 0 ? 'text-gray-900' : 'text-gray-600'}`}>{track.status}</p>
+                          <p className="text-xs text-gray-500 font-medium mt-1 flex items-center gap-2">
+                            <span>{new Date(track.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                            {track.location && <span className="bg-gray-200 px-2 py-0.5 rounded text-[10px] text-gray-700">{track.location}</span>}
+                          </p>
+                          {track.note && (
+                            <p className="text-sm text-gray-600 mt-2 bg-white p-2.5 rounded-lg border border-gray-100">{track.note}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-gray-500 font-medium">No tracking history available yet.</p>
+                    <p className="text-sm text-gray-400 mt-1">Updates will appear here once the vendor processes the order.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Order Items */}
+              <h4 className="font-bold text-gray-900 mb-4 uppercase tracking-wider text-sm flex items-center gap-2">
+                <Package size={16} className="text-indigo-500"/> Order Items
+              </h4>
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 font-bold border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3">Item</th>
+                      <th className="px-4 py-3 text-center">Qty</th>
+                      <th className="px-4 py-3 text-right">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {selectedOrder.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                        <td className="px-4 py-3 text-center font-bold text-indigo-600">{item.quantity}</td>
+                        <td className="px-4 py-3 text-right font-bold text-gray-700">₹{(item.price * item.quantity).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Flying Items */}
+      {flyingItems.map(item => (
+        <div 
+          key={item.id} 
+          className="flying-item" 
+          style={{ 
+            left: item.x, 
+            top: item.y, 
+            '--tx': item.tx, 
+            '--ty': item.ty 
+          }}
+        >
+          +1
+        </div>
+      ))}
     </div>
   );
 };

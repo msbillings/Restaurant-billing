@@ -79,6 +79,40 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Metrics collection middleware
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  // Capture response size by hooking into res.end and res.send
+  const originalSend = res.send;
+  const originalEnd = res.end;
+  let resBytes = 0;
+
+  res.send = function (body) {
+    if (body) {
+      resBytes += Buffer.byteLength(typeof body === 'string' ? body : JSON.stringify(body));
+    }
+    return originalSend.apply(this, arguments);
+  };
+
+  res.end = function (chunk) {
+    if (chunk) {
+      resBytes += Buffer.byteLength(chunk);
+    }
+    
+    // Request is fully handled, record metrics
+    if (req.tenantDb) {
+      const reqBytes = req.socket?.bytesRead || parseInt(req.headers['content-length'] || 0, 10);
+      const latency = Date.now() - startTime;
+      const isError = res.statusCode >= 400;
+      recordMetrics(req.tenantDb, reqBytes, resBytes, latency, isError);
+    }
+    
+    return originalEnd.apply(this, arguments);
+  };
+
+  next();
+});
+
 // Security Middleware Imports
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -469,6 +503,9 @@ import { startSecureReportCleanupJob } from './utils/secureReportCleanup.js';
 import { startWhatsAppScheduler } from './utils/whatsappScheduler.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
 import { buildTenantClusterMap } from './utils/tenantManager.js';
+import { recordMetrics, startMetricsIngester } from './utils/metricsCollector.js';
+
+
 
 app.use('/api/menu', menuRoutes);
 app.use('/api/bills', billRoutes);
@@ -598,6 +635,9 @@ if (!isServerless) {
 
   // Start WhatsApp Scheduler
   startWhatsAppScheduler();
+
+  // Start Realtime Metrics Ingester
+  startMetricsIngester(app.locals.io);
 }
 
 // Initialize connection for serverless (non-blocking)

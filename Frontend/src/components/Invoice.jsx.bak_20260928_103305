@@ -1,0 +1,2019 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { useLanguage } from '../context/LanguageContext';
+import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
+import Toast from './Toast';
+import { sendWhatsAppBill } from '../api/whatsapp';
+import html2canvas from 'html2canvas-pro';
+import api from '../api/axios';
+import { formatTime12 } from '../utils/timeFormat';
+import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
+import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBottom } from '../utils/escposRaster';
+
+const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
+  const { t } = useLanguage();
+  const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
+  const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
+  let enabledCurrencies = [];
+  let baseRate = 1.0;
+  try {
+    const s = JSON.parse(localStorage.getItem('secondaryCurrencies')) || [];
+    enabledCurrencies = s.filter((c) => c.enabled && c.code !== primaryCurrency);
+    if (primaryCurrency !== 'INR') {
+      const found = s.find((r) => r.code === primaryCurrency);
+      if (found) baseRate = found.rate;
+    }
+  } catch (e) { }
+
+  const [settings, setSettings] = useState(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('restaurantSettings') : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.logo === '[logo_stored]') parsed.logo = '';
+        return {
+          restaurantName: 'msbillings',
+          restaurantType: 'Restaurant',
+          address: '123 Foodie Street, Gourmet City',
+          phone: '+91 98765 43210',
+          email: 'feedback@msbillings.com',
+          gstin: '29ABCDE1234F1Z5',
+          upiId: 'maheshsiva864@oksbi',
+          footerMessage: '*** Thank You! Visit Again ***',
+          logo: '',
+          ...parsed
+        };
+      }
+    } catch (e) { }
+    return {
+      restaurantName: 'msbillings',
+      restaurantType: 'Restaurant',
+      address: '123 Foodie Street, Gourmet City',
+      phone: '+91 98765 43210',
+      email: 'feedback@msbillings.com',
+      gstin: '29ABCDE1234F1Z5',
+      upiId: 'maheshsiva864@oksbi',
+      footerMessage: '*** Thank You! Visit Again ***',
+      logo: ''
+    };
+  });
+
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsappPhone, setWhatsappPhone] = useState(() => bill?.customerPhone || '');
+  const [whatsappCustomerName, setWhatsappCustomerName] = useState(() => bill?.customerName || '');
+  const [toast, setToast] = useState(null);
+  const [sendingAutomated, setSendingAutomated] = useState(false);
+  const [showCustomerEditModal, setShowCustomerEditModal] = useState(false);
+  const [msgExpanded, setMsgExpanded] = useState(false);
+  const [customerSuggestions, setCustomerSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  // â”€â”€â”€ Duplicate-tap guard: locked while Bluetooth print is in progress â”€â”€â”€â”€
+  const [isPrinting, setIsPrinting] = useState(false);
+  // â”€â”€â”€ Dynamic print status: null | 'printing' | 'success' | 'failed' | 'not_connected'
+  const [printStatus, setPrintStatus] = useState(null);
+
+  // Helper: reset print status after delay
+  const resetPrintStatus = (delay = 3500) => {
+    setTimeout(() => {
+      setPrintStatus(null);
+      setIsPrinting(false);
+    }, delay);
+  };
+  // â”€â”€â”€ WhatsApp capture flag â€” tells QR render whether to use whatsappShowQr setting
+  const isCapturingForWhatsApp = useRef(false);
+
+
+  // â”€â”€â”€ Duplicate WhatsApp Send Prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const billIdentifier = bill?.billNumber || bill?._id;
+  // IMPORTANT: Only consider a bill "already sent" if THIS session sent it
+  // (via sessionStorage or whatsappBillSentIds). Do NOT use bill?.whatsappSent
+  // from the DB â€” it may be stale/wrong and would block legitimate resends.
+  const [isAlreadySent, setIsAlreadySent] = useState(() => {
+    if (!billIdentifier) return false;
+    try {
+      if (sessionStorage.getItem(`ms_wa_sent_${billIdentifier}`) === 'true') return true;
+      if (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') return true;
+      if (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true') return true;
+      if (whatsappBillSentIds && (whatsappBillSentIds.has(billIdentifier) || (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) || (bill?._id && whatsappBillSentIds.has(bill._id)))) return true;
+      // NOTE: bill?.whatsappSent (DB flag) intentionally NOT used here â€” stale DB state
+      // should NOT block the user from sending. Only in-session confirms count.
+    } catch (e) { }
+    return false;
+  });
+
+  useEffect(() => {
+    if (!billIdentifier) return;
+    try {
+      const sentInSession = (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') ||
+        (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true');
+      const sentInSet = whatsappBillSentIds && (
+        (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) ||
+        (bill?._id && whatsappBillSentIds.has(bill._id))
+      );
+      // Only update from session-based confirms, not DB flag
+      if (sentInSession || sentInSet) {
+        setIsAlreadySent(true);
+      }
+    } catch (e) { }
+
+    const handleWaSent = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setIsAlreadySent(true);
+        setSendingAutomated(false);
+      }
+    };
+    const handleWaSending = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setSendingAutomated(true);
+      }
+    };
+    const handleWaFailed = (e) => {
+      if (e.detail?.billNumber === bill?.billNumber) {
+        setSendingAutomated(false);
+      }
+    };
+
+    window.addEventListener('whatsappSent', handleWaSent);
+    window.addEventListener('whatsappSending', handleWaSending);
+    window.addEventListener('whatsappSendFailed', handleWaFailed);
+
+    return () => {
+      window.removeEventListener('whatsappSent', handleWaSent);
+      window.removeEventListener('whatsappSending', handleWaSending);
+      window.removeEventListener('whatsappSendFailed', handleWaFailed);
+    };
+  }, [bill?.billNumber, bill?._id, whatsappBillSentIds]);
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (whatsappPhone && whatsappPhone.length >= 2) {
+        try {
+          const res = await api.get(`/customers/search?q=${whatsappPhone}`);
+          setCustomerSuggestions(res.data);
+          setShowSuggestions(true);
+        } catch (err) {
+          console.error('Error fetching customer suggestions:', err);
+        }
+      } else {
+        setCustomerSuggestions([]);
+        setShowSuggestions(false);
+      }
+    };
+
+    const timeoutId = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(timeoutId);
+  }, [whatsappPhone]);
+
+  useEffect(() => {
+    const updateLocalSettings = () => {
+      try {
+        const savedSettings = localStorage.getItem('restaurantSettings');
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          if (parsed.logo === '[logo_stored]') parsed.logo = '';
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        }
+      } catch (e) { }
+    };
+
+    updateLocalSettings();
+    api.get('/config/info').then(res => {
+      const incoming = res.data?.restaurantSettings || res.data;
+      if (incoming && typeof incoming === 'object') {
+        setSettings(prev => ({ ...prev, ...incoming }));
+        try {
+          const local = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+          localStorage.setItem('restaurantSettings', JSON.stringify({ ...local, ...incoming }));
+        } catch (_) {}
+      }
+    }).catch(() => {});
+
+    window.addEventListener('settingsUpdated', updateLocalSettings);
+    return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
+  }, []);
+
+  // Get stored logo from local settings if available
+  const storedLogo = (settings?.logo && settings.logo !== '[logo_stored]')
+    ? settings.logo
+    : (() => {
+      try {
+        const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+        return (s.logo && s.logo !== '[logo_stored]') ? s.logo : '';
+      } catch (e) {
+        return '';
+      }
+    })();
+
+  const billRest = bill?.restaurantDetails || {};
+  // If the bill has its own real image logo (data URI / URL), use it.
+  // Otherwise, if bill has '[logo_stored]' or no logo (e.g. at settlement time), fall back to stored logo!
+  const effectiveLogo = (billRest.logo && billRest.logo !== '[logo_stored]')
+    ? billRest.logo
+    : (bill?.logo && bill.logo !== '[logo_stored]' ? bill.logo : storedLogo);
+
+  // STRICT AUDIT SECURITY: Prioritize frozen bill restaurantDetails snapshot
+  const activeSettings = {
+    ...settings,
+    ...billRest,
+    logo: effectiveLogo
+  };
+
+  // For bills viewed from history (isHistoryView=true), check if the bill explicitly has showLogo saved.
+  // If so, use it exactly as it was when the bill was generated/settled.
+  // Otherwise fallback to the active settings toggle.
+  const shouldShowLogo = bill?.showLogo !== undefined
+    ? bill.showLogo
+    : (activeSettings.showLogo !== false);
+  const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
+    enableCgst: activeSettings.enableCgst !== false,
+    enableSgst: activeSettings.enableSgst !== false,
+    enableGst: activeSettings.enableGst === true,
+    cgstRate: activeSettings.cgstRate !== undefined ? Number(activeSettings.cgstRate) : 2.5,
+    sgstRate: activeSettings.sgstRate !== undefined ? Number(activeSettings.sgstRate) : 2.5,
+    gstRate: activeSettings.gstRate !== undefined ? Number(activeSettings.gstRate) : 5
+  };
+  const activeFontFamilyVal = settings.receiptFontFamily || activeSettings.receiptFontFamily;
+  const matchedFontObj = findReceiptFont(activeFontFamilyVal);
+  const receiptFont = matchedFontObj.value;
+  const activeFontSize = settings.receiptFontSize || activeSettings.receiptFontSize || 'medium';
+  const isSettingsPage = window.location.pathname.includes('/settings');
+  const displayFormat = isSettingsPage ? activeSettings.printFormat : '80mm';
+  const fontMetrics = getReceiptFontMetrics(activeFontSize, displayFormat);
+  const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
+  const [printerConfigs, setPrinterConfigs] = useState([]);
+
+  useEffect(() => {
+    const fetchPrinters = async () => {
+      try {
+        const res = await api.get('/printer-configs');
+        if (Array.isArray(res.data)) {
+          setPrinterConfigs(res.data);
+        }
+      } catch (_) {}
+    };
+    fetchPrinters();
+  }, []);
+
+  const activeReceiptPrinter = useMemo(() => {
+    const list = Array.isArray(printerConfigs) ? printerConfigs : [];
+    return list.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && (
+      (c.connectionType === 'usb' && c.usbPort) ||
+      (c.connectionType === 'network' && c.ipAddress) ||
+      (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+    )) || null;
+  }, [printerConfigs]);
+
+  const handlePrint = async (forceBrowserPrint = false) => {
+    // 1. Explicit request to use standard browser print (e.g. Save to PDF)
+    if (forceBrowserPrint === true) {
+      window.print();
+      return;
+    }
+
+    // Guard: block duplicate prints while a print is in progress
+    if (isPrinting) return;
+
+    // â”€â”€ IMMEDIATE UI FEEDBACK â”€â”€ set state BEFORE any async work
+    setIsPrinting(true);
+    setPrintStatus('printing');
+
+    // âš¡ CRITICAL: Allow React to flush DOM and browser to paint the button immediately
+    await new Promise(res => setTimeout(res, 80));
+
+    try {
+      // 2. Desktop Electron App
+      if (window.electronAPI && !activeReceiptPrinter) {
+        const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.querySelector('.receipt-print');
+        const printAreaNode = document.getElementById('invoice-print-area');
+        const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
+        if (!htmlContent) throw new Error("Invoice receipt element not found in DOM");
+        const isSilent = (activeReceiptPrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
+        let printResult = { success: true };
+        if (isSilent && activeSettings.billingPrinter) {
+          printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
+        } else {
+          printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
+        }
+        
+        if (printResult && printResult.success === false) {
+          throw new Error(printResult.reason || "Electron print failed");
+        }
+        
+        setPrintStatus('success');
+        setToast({ message: t('Bill sent to printer!'), type: 'success' });
+        resetPrintStatus(3000);
+        return;
+      }
+
+      // 3. Android APK (Bluetooth)
+      if (window.AndroidBluetooth && (activeReceiptPrinter?.connectionType === 'bluetooth' || (!activeReceiptPrinter && (activeSettings.billingPrinter || '').match(/([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i)))) {
+        const MAC_RE = /([0-9A-Fa-f]{2}[:-]?){5}[0-9A-Fa-f]{2}/i;
+        const tryMac = (raw) => { const m = (raw || '').match(MAC_RE); return m ? m[0] : null; };
+
+        let macAddress = tryMac(activeSettings.billingPrinter || '');
+
+        // Check live printer configs from database
+        if (!macAddress && Array.isArray(printerConfigs)) {
+          const receiptStation = printerConfigs.find(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both') && tryMac(c.bluetoothAddress || c.deviceName || ''));
+          if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
+        }
+
+        if (!macAddress) {
+          setPrintStatus('not_connected');
+          setToast({ message: t('Printer not connected. Please pair a Bluetooth printer in Printer & Kitchen Routing settings.'), type: 'error' });
+          resetPrintStatus(4000);
+          return;
+        }
+
+        if (window.AndroidBluetooth.printImage) {
+          try {
+            const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
+            if (receiptNode) {
+              const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
+              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              if (!escposBase64) throw new Error("Failed to generate printer raster data");
+              await new Promise(res => setTimeout(res, 20));
+              const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
+                const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+              const res = JSON.parse(resStr || '{}');
+              if (res.success) {
+                setPrintStatus('success');
+                setToast({ message: t('Bill printed successfully!'), type: 'success' });
+                resetPrintStatus(3000);
+                return;
+              } else {
+                const errMsg = res.error || 'Bluetooth print failed';
+                if (errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('socket') || errMsg.toLowerCase().includes('power') || errMsg.toLowerCase().includes('disabled')) {
+                  if (window.AndroidBluetooth && window.AndroidBluetooth.requestEnableBluetooth) {
+                    window.AndroidBluetooth.requestEnableBluetooth();
+                  }
+                  setPrintStatus('not_connected');
+                  setToast({ message: t('Printer not connected. Please check Bluetooth connection.'), type: 'error' });
+                } else {
+                  setPrintStatus('failed');
+                  setToast({ message: `${t('Bill print failed')}: ${errMsg}`, type: 'error' });
+                }
+                resetPrintStatus(4000);
+                return;
+              }
+            }
+          } catch (err) {
+            setPrintStatus('failed');
+            setToast({ message: `${t('Bill print error')}: ${err.message || 'Unknown error'}`, type: 'error' });
+            resetPrintStatus(4000);
+            return;
+          }
+        }
+
+        if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+          window.AndroidPrint.print();
+        } else {
+          window.print();
+        }
+        setPrintStatus('success');
+        resetPrintStatus(3000);
+        return;
+      }
+
+      // 4. Android System Print
+      if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
+        window.AndroidPrint.print();
+        setPrintStatus('success');
+        resetPrintStatus(3000);
+        return;
+      }
+
+      // 5. Direct Thermal Receipt Printer (USB RAW, Bluetooth, or TCP ESC/POS via Backend)
+      try {
+        let list = printerConfigs;
+        if (!list || list.length === 0) {
+          try {
+            const res = await api.get('/printer-configs');
+            if (Array.isArray(res.data)) {
+              list = res.data;
+              setPrinterConfigs(res.data);
+            }
+          } catch (_) {}
+        }
+
+        const isMobile = typeof window !== 'undefined' && (
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+          (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
+        );
+
+        const receiptPrinters = (list || []).filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill \u0026 KOT') && (
+          (!isMobile && c.connectionType === 'usb' && c.usbPort) ||
+          (c.connectionType === 'network' && c.ipAddress) ||
+          (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
+        ));
+
+        if (receiptPrinters.length > 0) {
+          const names = receiptPrinters.map(p => p.name).join(', ');
+          setToast({ message: `ðŸ–¨ï¸ ${t("Printing receipt to")} ${names}...`, type: 'info' });
+
+          const billPayload = { ...bill, restaurantDetails: activeSettings };
+          let anySuccess = false;
+
+          for (const rp of receiptPrinters) {
+            try {
+              let escposBase64 = null;
+              if (activeSettings.enableGraphicalPrinting !== false) {
+                try {
+                  const receiptNode = document.querySelector('.receipt-print');
+                  if (receiptNode) {
+                    const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || rp?.paperWidth === '58mm') ? 384 : 576;
+                    escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                  }
+                } catch (err) {
+                  console.warn('Failed to rasterize Bill:', err);
+                }
+              }
+
+              const response = await api.post('/printer-configs/print-bill', {
+                bill: billPayload,
+                billId: bill?._id,
+                printerId: rp._id,
+                rasterBufferBase64: escposBase64 || null
+              });
+              if (response.data && (response.data.success || response.data.relayed)) {
+                anySuccess = true;
+              }
+            } catch (err) {
+              console.warn(`Failed to print bill to ${rp.name}:`, err);
+            }
+          }
+
+          if (anySuccess) {
+            setPrintStatus('success');
+            setToast({ message: `âœ… ${t("Bill printed to")} ${names}!`, type: 'success' });
+            resetPrintStatus(3000);
+            return;
+          } else {
+            setPrintStatus('failed');
+            setToast({ message: `Failed to print to ${names}. Opening system print...`, type: 'warning' });
+            setTimeout(() => {
+              window.print();
+              resetPrintStatus(3000);
+            }, 600);
+            return;
+          }
+        }
+      } catch (netErr) {
+        const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
+        setPrintStatus('failed');
+        setToast({ message: `âš ï¸ ${errMsg}. Opening system print...`, type: 'warning' });
+        setTimeout(() => {
+          window.print();
+          resetPrintStatus(3000);
+        }, 600);
+        return;
+      }
+
+      // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
+      window.print();
+      setPrintStatus('success');
+      resetPrintStatus(3000);
+    } catch (unexpectedErr) {
+      setPrintStatus('failed');
+      setToast({ message: `${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, type: 'error' });
+      resetPrintStatus(4000);
+    }
+  };
+
+  const generateEBillWhatsAppText = (overrideName = null) => {
+    const s = activeSettings;
+    const restName = (s.restaurantName || 'MS Billings Restaurant').trim();
+    const billNo = bill?.billNumber || 'PREVIEW';
+    const dateStr = new Date(billDateTime).toLocaleDateString('en-GB');
+    const timeStr = formatTime12(billDateTime);
+    const bType = bill?.billType || (bill?.tableNo?.startsWith('DEL') ? 'Delivery' : (bill?.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+    const tableInfo = bType === 'Dine-In' ? `Table: ${bill?.tableNo || 'N/A'}` : `${bType} ${bill?.tableNo ? `(${bill?.tableNo})` : ''}`;
+    const customerName = overrideName || whatsappCustomerName || bill?.customerName || '';
+
+    const itemsList = (bill?.items || [])
+      .filter(item => !item.isCancelled)
+      .map(item => {
+        const qty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+        if (qty <= 0) return null;
+        const price = (item.price || 0).toFixed(2);
+        const itemTot = ((item.price || 0) * qty).toFixed(2);
+        return `• ${item.name} x ${qty} @ ₹${price} = ₹${itemTot}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    const totalQty = (bill?.items || []).filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0);
+    const sub = Number(bill?.subtotal || bill?.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0);
+    const subtotal = sub.toFixed(2);
+    const disc = Number(bill?.discount || 0);
+    const discount = disc > 0 ? `\n• *Discount:* -₹${disc.toFixed(2)}` : '';
+    const taxable = Math.max(0, sub - disc);
+
+    // Dynamic tax calculation identical to printed receipt invoice
+    const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+    const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+    const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+    const totRate = cRate + sRate + gRate;
+
+    let rate = totRate;
+    let taxRupees = 0;
+
+    if (bill?.tax !== undefined && bill?.tax !== null) {
+      if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+        rate = Number(bill.tax);
+        taxRupees = (taxable * rate) / 100;
+      } else {
+        taxRupees = Number(bill.tax);
+        rate = bill.taxRate || Math.round((taxRupees / Math.max(1, taxable)) * 100) || totRate;
+      }
+    } else if (totRate > 0) {
+      rate = totRate;
+      taxRupees = (taxable * rate) / 100;
+    }
+
+    let taxBreakdown = '';
+    if (taxRupees > 0 && rate > 0) {
+      if (cRate > 0 && sRate > 0) {
+        const cEff = rate * (cRate / Math.max(1, totRate));
+        const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+        const sEff = rate * (sRate / Math.max(1, totRate));
+        const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+        taxBreakdown += `\n• *CGST (${cEff.toFixed(1)}%):* +₹${cAmt.toFixed(2)}`;
+        taxBreakdown += `\n• *SGST (${sEff.toFixed(1)}%):* +₹${sAmt.toFixed(2)}`;
+      } else if (gRate > 0) {
+        const gEff = rate * (gRate / Math.max(1, totRate));
+        const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+        taxBreakdown += `\n• *GST (${gEff.toFixed(1)}%):* +₹${gAmt.toFixed(2)}`;
+      } else {
+        taxBreakdown += `\n• *GST/Tax (${rate}%):* +₹${taxRupees.toFixed(2)}`;
+      }
+    }
+
+    const deliveryCharge = Number(bill?.deliveryCharge || 0) > 0 ? `\n• *Delivery Charge:* +₹${Number(bill.deliveryCharge).toFixed(2)}` : '';
+    const containerCharge = Number(bill?.containerCharge || 0) > 0 ? `\n• *Container Charge:* +₹${Number(bill.containerCharge).toFixed(2)}` : '';
+
+    let finalTotal = Number(bill?.total || 0);
+    const addCharges = Number(bill?.deliveryCharge || 0) + Number(bill?.containerCharge || 0);
+    if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+      finalTotal = taxable + taxRupees + addCharges;
+    }
+    const roundedTotal = Math.round(finalTotal);
+    const roundOff = roundedTotal - finalTotal;
+    const roundOffText = roundOff !== 0 ? `\n• *Round Off:* ${roundOff > 0 ? '+' : ''}₹${roundOff.toFixed(2)}` : '';
+    const total = finalTotal.toFixed(2);
+
+    let paymentInfo = bill?.paymentMethod || 'Cash';
+    if (bill?.paymentBreakdown && (bill.paymentBreakdown.cash > 0 || bill.paymentBreakdown.upi > 0 || bill.paymentBreakdown.card > 0)) {
+      const parts = [];
+      if (bill.paymentBreakdown.cash > 0) parts.push(`Cash: ₹${bill.paymentBreakdown.cash}`);
+      if (bill.paymentBreakdown.upi > 0) parts.push(`UPI: ₹${bill.paymentBreakdown.upi}`);
+      if (bill.paymentBreakdown.card > 0) parts.push(`Card: ₹${bill.paymentBreakdown.card}`);
+      paymentInfo = parts.join(' | ');
+    }
+
+    const READ_MORE = String.fromCharCode(8206).repeat(4001);
+
+    let header = '';
+    let footerMessage = s.footerMessage;
+
+    if (bType === 'Delivery') {
+      header = customerName
+        ? `🛵 Dear *${customerName}*, thank you for ordering delivery with us!\n🧾 *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🛵 *HOME DELIVERY E-BILL* 🛵\nðŸ  *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR YOUR DELIVERY ORDER! ENJOY YOUR MEAL ***';
+    } else if (bType === 'Takeaway') {
+      header = customerName
+        ? `ðŸ›ï¸ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `ðŸ›ï¸ *TAKEAWAY E-BILL RECEIPT* ðŸ›ï¸\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU FOR ORDERING TAKEAWAY! VISIT AGAIN ***';
+    } else {
+      header = customerName
+        ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+        : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\nðŸ¨ *${restName.toUpperCase()}* | Bill #${billNo}`;
+      if (!footerMessage) footerMessage = '*** THANK YOU! VISIT AGAIN ***';
+    }
+
+    return `${header}\n${READ_MORE}\n` +
+      (s.address ? `ðŸ“ ${s.address.split('\n')[0]}\n` : '') +
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `*Bill No:* #${billNo}\n` +
+      `*Date & Time:* ${dateStr}, ${timeStr}\n` +
+      `*Order Type:* ${tableInfo}\n` +
+      (customerName ? `*Customer:* ${customerName}\n` : '') +
+      (bill?.customerPhone || whatsappPhone ? `*Phone:* ${bill?.customerPhone || whatsappPhone}\n` : '') +
+      (bill?.tokenNumber ? `*Token No:* ${bill.tokenNumber}\n` : '') +
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `🛒 *ITEMS ORDERED (${totalQty} Qty):*\n` +
+      `${itemsList}\n` +
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `• *Subtotal:* ₹${subtotal}` +
+      discount +
+      taxBreakdown +
+      deliveryCharge +
+      containerCharge +
+      roundOffText +
+      `\n• *GRAND TOTAL:* *₹${total}*\n` +
+      `• *Payment Mode:* ${paymentInfo}\n` +
+      (s.whatsappShowQr !== false && s.upiId ? `• *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
+      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `_${footerMessage}_`;
+  };
+
+  const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null, forceResend = false) => {
+    // Note: isAlreadySent guard removed â€” user can click Resend (â†º) button which
+    // resets isAlreadySent to false before calling this function.
+
+    const numToSend = (targetPhone !== null ? targetPhone : (whatsappPhone || bill?.customerPhone || '')).trim();
+    let cleanPhone = numToSend.replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) {
+      cleanPhone = '91' + cleanPhone.slice(1);
+    } else if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setShowWhatsAppModal(true);
+      setToast({ message: t("Please enter customer WhatsApp number to send bill"), type: 'warning' });
+      setSendingAutomated(false);
+      return;
+    }
+
+    const msg = generateEBillWhatsAppText(overrideName);
+
+    setSendingAutomated(true);
+
+    // Give React and the browser ample time (300ms) to paint the loading spinner 
+    // and start the CSS animation before html2canvas blocks the main thread
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // High-resolution receipt image capture
+    let imageBase64 = null;
+    // Signal QR render to use whatsappShowQr setting instead of enableQrPayment
+    isCapturingForWhatsApp.current = true;
+    try {
+      const receiptElement = document.querySelector('#invoice-print-area .receipt-print');
+      console.log('[eBill] Receipt element found:', !!receiptElement, receiptElement);
+      if (receiptElement) {
+        const canvas = await Promise.race([
+          html2canvas(receiptElement, {
+            scale: 1.5,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            imageTimeout: 5000,
+            scrollX: 0,
+            scrollY: 0,
+            windowWidth: 420,
+            windowHeight: Math.max(1200, (receiptElement.scrollHeight || 800) + 400),
+            onclone: (clonedDoc) => {
+              // 1. Reset root elements so nothing clips or hides overflow
+              if (clonedDoc.documentElement) {
+                clonedDoc.documentElement.style.overflow = 'visible';
+                clonedDoc.documentElement.style.height = 'auto';
+              }
+              if (clonedDoc.body) {
+                clonedDoc.body.style.overflow = 'visible';
+                clonedDoc.body.style.height = 'auto';
+                clonedDoc.body.style.backgroundColor = '#ffffff';
+                clonedDoc.body.style.margin = '0';
+                clonedDoc.body.style.padding = '0';
+              }
+
+              // 2. Un-fix and un-scroll the modal container in clone
+              const printArea = clonedDoc.querySelector('#invoice-print-area');
+              if (printArea) {
+                printArea.style.position = 'static';
+                printArea.style.overflow = 'visible';
+                printArea.style.height = 'auto';
+                printArea.style.maxHeight = 'none';
+                printArea.style.padding = '0';
+                printArea.style.margin = '0';
+                printArea.style.background = '#ffffff';
+                printArea.style.backgroundColor = '#ffffff';
+                printArea.style.backdropFilter = 'none';
+                printArea.style.filter = 'none';
+              }
+
+              // 3. Hide interactive controls / buttons in the clone
+              const controls = printArea?.querySelectorAll('button, .sticky');
+              controls?.forEach((c) => {
+                c.style.display = 'none';
+              });
+
+              // 3.5 Show/Hide QR code explicitly for WhatsApp based on whatsappShowQr setting
+              const showInWhatsapp = activeSettings.whatsappShowQr !== false;
+              const qrWrappers = clonedDoc.querySelectorAll('.receipt-qr-wrapper');
+              qrWrappers.forEach(w => {
+                const isFlex = w.style.flexDirection === 'column';
+                w.style.setProperty('display', showInWhatsapp ? (isFlex ? 'flex' : 'block') : 'none', 'important');
+              });
+
+              // 4. Style the receipt container
+              const el = clonedDoc.querySelector('.receipt-print');
+              if (el) {
+                el.style.boxShadow = 'none';
+                el.style.filter = 'none';
+                el.style.backdropFilter = 'none';
+                el.style.margin = '0 auto';
+                el.style.backgroundColor = '#ffffff';
+                el.style.border = 'none';
+                el.style.borderRadius = '0px';
+                el.style.width = '360px';
+                el.style.maxWidth = '360px';
+                el.style.minWidth = '360px';
+                el.style.height = 'auto';
+                el.style.maxHeight = 'none';
+                el.style.overflow = 'visible';
+                el.style.padding = '12px 14px 28px 14px';
+
+                // Safety spacer at bottom to guarantee footer text never touches canvas bottom edge
+                const spacer = clonedDoc.createElement('div');
+                spacer.style.height = '20px';
+                spacer.style.width = '100%';
+                spacer.style.backgroundColor = '#ffffff';
+                spacer.style.clear = 'both';
+                el.appendChild(spacer);
+              }
+            }
+          }),
+          new Promise((resolve) => setTimeout(() => resolve(null), 10000))
+        ]);
+
+        if (canvas) {
+          console.log(`[eBill] Canvas captured: ${canvas.width}x${canvas.height}px`);
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+          const approxKB = Math.round(imageBase64.length * 0.75 / 1024);
+          console.log(`[eBill] Image base64 size: ~${approxKB} KB`);
+        } else {
+          console.warn('[eBill] html2canvas returned null/timed-out canvas');
+        }
+      } else {
+        console.warn('[eBill] .receipt-print element NOT found in DOM');
+      }
+    } catch (captureErr) {
+      console.error('[eBill] Receipt image capture error:', captureErr);
+    } finally {
+      isCapturingForWhatsApp.current = false;
+    }
+
+    if (!imageBase64) {
+      console.warn('[eBill] âŒ Receipt image capture failed â€” ABORTING send to guarantee bill photo requirement.');
+      setToast({ message: t('Receipt photo capture failed. WhatsApp e-Bill requires bill receipt image.'), type: 'error' });
+      setSendingAutomated(false);
+      return;
+    }
+
+    try {
+      console.log(`[eBill] Calling sendWhatsAppBill API for phone=${cleanPhone}, hasImage=${!!imageBase64}...`);
+      const res = await Promise.race([
+        sendWhatsAppBill(
+          cleanPhone,
+          msg,
+          imageBase64,
+          null,
+          `Bill_${bill?.billNumber || 'Receipt'}.jpg`,
+          null,
+          null,
+          bill?._id || null,
+          bill?.billNumber || null,
+          forceResend  // bypass duplicate-check on backend if user explicitly resends
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 45000))
+      ]);
+
+      if (res && res.success) {
+        console.log(`[eBill] âœ… Bill sent successfully to +${cleanPhone}`);
+        setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! âœ“")}`, type: 'success' });
+        setIsAlreadySent(true);
+        if (bill?.billNumber) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) { }
+        }
+        if (bill?._id) {
+          try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) { }
+        }
+        if (onWhatsAppSent) onWhatsAppSent(bill?.billNumber || bill?._id);
+        setShowWhatsAppModal(false);
+      } else {
+        throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
+      }
+    } catch (err) {
+      if (err?.response?.status === 409 || err?.response?.data?.alreadySent) {
+        // 409 means DB says it was sent before â€” but user says customer didn't receive it.
+        // DO NOT silently mark as sent. Show a warning and let user resend.
+        setToast({
+          message: t("System shows bill was sent before, but customer may not have received it. Click WhatsApp e-Bill again to resend."),
+          type: 'warning'
+        });
+        setShowWhatsAppModal(false);
+        setSendingAutomated(false);
+        return;
+      }
+      console.error('[eBill] âŒ WhatsApp send FAILED:', err?.message);
+      const errorMsg = err?.response?.data?.error || err?.message || t('Failed to send WhatsApp e-Bill');
+      setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
+    } finally {
+      setSendingAutomated(false);
+    }
+  };
+
+  // Keep phone and customer name in sync with incoming bill prop
+  useEffect(() => {
+    if (bill?.customerPhone && bill.customerPhone !== whatsappPhone) {
+      setWhatsappPhone(bill.customerPhone);
+    }
+    if (bill?.customerName && bill.customerName !== whatsappCustomerName) {
+      setWhatsappCustomerName(bill.customerName);
+    }
+  }, [bill?.customerPhone, bill?.customerName]);
+
+  // â”€â”€â”€ Auto-send WhatsApp e-Bill with original receipt image on mount if autoSendWhatsApp is enabled â”€â”€â”€
+  const autoSendTriggeredRef = React.useRef(false);
+  useEffect(() => {
+    if (!autoSendWhatsApp || isAlreadySent || autoSendTriggeredRef.current) return;
+
+    const targetPhone = (whatsappPhone || bill?.customerPhone || '').trim();
+    const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+    const custName = (whatsappCustomerName || bill?.customerName || '').trim();
+
+    if (cleanPhone.length >= 10) {
+      autoSendTriggeredRef.current = true;
+      console.log(`[Invoice] âš¡ Auto-sending WhatsApp bill for ${cleanPhone}...`);
+      // Two rAF passes let React flush the invoice DOM paint first,
+      // then we wait a short idle gap before html2canvas captures.
+      // This keeps the invoice preview visually instant (no main-thread block on open).
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            handleSendWhatsAppBill(targetPhone, custName || undefined);
+          }, 300);
+        });
+      });
+    } else {
+      // Auto-send is on, but phone is missing. Prompt the user!
+      autoSendTriggeredRef.current = true;
+      setShowWhatsAppModal(true);
+    }
+  }, [autoSendWhatsApp, isAlreadySent, whatsappPhone, bill?.customerPhone, bill?.billNumber]);
+
+
+  const getFormatClasses = () => {
+    switch (displayFormat) {
+      case 'A4': return 'w-full max-w-sm print:max-w-full';
+      case '58mm': return 'w-[210px] print:w-full print:max-w-full print:m-0';
+      case '80mm':
+      default: return 'w-[280px] print:w-full print:max-w-full print:m-0';
+    }
+  };
+
+  return (
+    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/30 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
+      <style>
+        {`
+          @media print {
+            @page {
+              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
+              margin: 0 !important;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #ffffff !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .invoice-container {
+              background: #ffffff !important;
+              padding: 0 !important;
+            }
+            .receipt-print {
+              margin: 0 auto !important;
+              box-shadow: none !important;
+              border: none !important;
+            }
+          }
+        `}
+      </style>
+
+      {/* Controls - Hidden on Print */}
+      <div className="sticky top-4 flex flex-wrap items-center justify-center gap-2.5 print:hidden w-full max-w-2xl mx-auto z-30 px-4 py-2.5 bg-transparent mb-4">
+        {onSave &&
+          <button
+            onClick={onSave}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-gray-900 rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+            <Save size={16} />
+            <span>{t("Finish")}</span>
+          </button>
+        }
+        {isAlreadySent ? (
+          <div className="flex items-center bg-emerald-700/90 rounded-xl shadow-md overflow-hidden border border-emerald-600/60">
+            <div
+              className="flex items-center gap-1.5 px-3.5 py-2 text-white font-bold text-xs sm:text-sm select-none"
+              title={t("e-Bill sent via WhatsApp this session")}
+            >
+              <span className="text-white text-sm font-black leading-none">âœ“</span>
+              <span>{t("WhatsApp Sent")}</span>
+            </div>
+            <button
+              onClick={() => {
+                // Allow resend â€” customer may not have received it
+                setIsAlreadySent(false);
+                if (bill?.billNumber) {
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill.billNumber}`); } catch (e) { }
+                }
+                if (bill?._id) {
+                  try { sessionStorage.removeItem(`ms_wa_sent_${bill._id}`); } catch (e) { }
+                }
+                setToast({ message: t("Ready to resend. Click WhatsApp e-Bill to send again."), type: 'info' });
+              }}
+              className="px-2 py-2 text-emerald-200 hover:text-white hover:bg-emerald-600 border-l border-emerald-600/60 transition-colors cursor-pointer"
+              title={t("Resend â€” customer didn't receive it?")}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center bg-[#25D366] rounded-xl shadow-md overflow-hidden">
+            <button
+              onClick={() => {
+                if (!whatsappPhone && !bill?.customerPhone) {
+                  setShowWhatsAppModal(true);
+                  setToast({ message: t("Please enter customer WhatsApp number to send bill"), type: 'warning' });
+                } else {
+                  handleSendWhatsAppBill();
+                }
+              }}
+              disabled={sendingAutomated}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-gray-900 font-bold text-xs sm:text-sm active:scale-95 cursor-pointer hover:bg-[#20bd5a] transition-all disabled:opacity-75 disabled:cursor-wait"
+              title={t("Send e-Bill directly on WhatsApp (1-Click)")}>
+              {sendingAutomated ? (
+                <>
+                  <Loader2 size={15} className="animate-spin shrink-0" />
+                  <span className="animate-pulse">{t('Sending...')}</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                  </svg>
+                  <span>{t("WhatsApp e-Bill")}</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => { setShowWhatsAppModal(true); setMsgExpanded(false); }}
+              className="px-2 py-2 text-gray-900/80 hover:text-gray-900 hover:bg-[#20bd5a] border-l border-white/25 transition-colors cursor-pointer"
+              title={t("Edit mobile number")}>
+              <Smartphone size={15} />
+            </button>
+          </div>
+        )}
+        <div className="flex items-center bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+          <button
+            onClick={() => handlePrint(false)}
+            disabled={isPrinting}
+            className={`flex items-center gap-1.5 px-3.5 py-2 font-bold text-xs sm:text-sm transition-colors duration-100 active:scale-95 cursor-pointer min-w-[110px] justify-center ${printStatus === 'success'
+                ? 'bg-emerald-50 text-emerald-700'
+                : printStatus === 'failed'
+                  ? 'bg-red-50 text-red-700'
+                  : printStatus === 'not_connected'
+                    ? 'bg-orange-50 text-orange-700'
+                    : printStatus === 'printing'
+                      ? 'bg-blue-50 text-blue-700 cursor-not-allowed'
+                      : 'text-gray-900 hover:bg-gray-100'
+              }`}
+            title={activeReceiptPrinter ? `${t("Print directly to")} ${activeReceiptPrinter.name} (${activeReceiptPrinter.connectionType === 'usb' ? activeReceiptPrinter.usbPort : activeReceiptPrinter.connectionType === 'bluetooth' ? (activeReceiptPrinter.bluetoothAddress || 'Bluetooth') : activeReceiptPrinter.ipAddress})` : t("Print Bill")}>
+            {printStatus === 'printing' && (
+              <svg className="animate-spin shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+            )}
+            {printStatus === 'success' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-emerald-600 shrink-0"><path d="M20 6L9 17l-5-5" /></svg>}
+            {printStatus === 'failed' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-red-600 shrink-0"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>}
+            {printStatus === 'not_connected' && <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-orange-600 shrink-0"><line x1="1" y1="1" x2="23" y2="23" /><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" /><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" /><path d="M10.71 5.05A16 16 0 0 1 22.56 9" /><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" /><path d="M8.53 16.11a6 6 0 0 1 6.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></svg>}
+            {!printStatus && <Printer size={16} className={activeReceiptPrinter ? "text-emerald-600 shrink-0" : "text-gray-900 shrink-0"} />}
+            <span>
+              {printStatus === 'printing' ? t('Printing...')
+                : printStatus === 'success' ? t('Printed! âœ“')
+                  : printStatus === 'failed' ? t('Print Failed')
+                    : printStatus === 'not_connected' ? t('Not Connected')
+                      : activeReceiptPrinter ? `${t("Print")} (${activeReceiptPrinter.name})` : t("Print Bill")}
+            </span>
+          </button>
+          {activeReceiptPrinter && (
+            <button
+              onClick={() => handlePrint(true)}
+              className="px-2.5 py-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 border-l border-gray-200 transition-colors cursor-pointer text-[11px] font-bold"
+              title={t("Open browser print dialog (PDF / Office Printer)")}>
+              PDF
+            </button>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-gray-900 rounded-xl transition-all shadow-md font-bold text-xs sm:text-sm active:scale-95 cursor-pointer">
+          <ArrowLeft size={16} />
+          <span>{t("Close")}</span>
+        </button>
+      </div>
+
+      {/* WhatsApp Quick Modal rendered via Portal */}
+      {showWhatsAppModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-200 rounded-3xl p-6 w-full max-w-md shadow-2xl text-gray-900 animate-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] overflow-hidden relative">
+            {/* Ambient background glow */}
+            <div className="absolute top-0 right-0 w-40 h-40 bg-[#25D366]/5 rounded-full blur-2xl pointer-events-none"></div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4 shrink-0 relative z-10">
+              <div className="flex items-center gap-2.5 text-[#25D366] font-bold text-base">
+                <div className="w-8 h-8 rounded-xl bg-[#25D366]/20 border border-[#25D366]/30 flex items-center justify-center text-[#25D366]">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                  </svg>
+                </div>
+                <span>{t("Send WhatsApp e-Bill")}</span>
+              </div>
+              <button onClick={() => setShowWhatsAppModal(false)} className="text-gray-500 hover:text-gray-900 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 mb-4 overflow-y-auto pr-1 flex-1 relative z-10">
+
+              {/* Customer Name Row */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">{t('Customer Name')} <span className="text-gray-500 font-normal">(for personalised greeting)</span></label>
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+                  <UserRound size={14} className="text-gray-500 shrink-0" />
+                  <input
+                    type="text"
+                    value={whatsappCustomerName}
+                    onChange={(e) => setWhatsappCustomerName(e.target.value)}
+                    placeholder="e.g. Rahul Sharma"
+                    className="bg-transparent text-gray-900 flex-1 text-gray-900 text-sm focus:outline-none"
+                  />
+                  {/* Open Customer CRM mini-modal */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerEditModal(true)}
+                    title="Open Customer Details"
+                    className="shrink-0 p-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 hover:text-orange-300 transition-colors cursor-pointer">
+                    <UserRound size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Phone Number Row */}
+              <div className="relative">
+                <label className="text-xs font-semibold text-gray-600 block mb-1">
+                  {t("Recipient / Customer Mobile Number")}
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+                  <span className="text-sm font-bold text-gray-500">+91</span>
+                  <input
+                    type="tel"
+                    value={whatsappPhone}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setWhatsappPhone(val);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="Enter 10-digit number"
+                    className="bg-transparent text-gray-900 flex-1 text-gray-900 font-mono font-bold text-sm focus:outline-none"
+                    autoFocus
+                  />
+                  <Phone size={14} className="text-gray-500 shrink-0" />
+                </div>
+                {/* Suggestions Dropdown */}
+                {showSuggestions && customerSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-100 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                    {customerSuggestions.map((cust, idx) => (
+                      <div
+                        key={idx}
+                        className="px-3 py-2.5 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setWhatsappPhone(cust.phone);
+                          setWhatsappCustomerName(cust.name && cust.name !== 'Guest' ? cust.name : '');
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
+                          <span className="text-xs text-gray-500">{cust.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Preset Buttons */}
+              {bill?.customerPhone && (
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setWhatsappPhone(bill.customerPhone); setWhatsappCustomerName(bill.customerName || whatsappCustomerName); }}
+                    className="text-[11px] font-semibold bg-gray-50 hover:bg-gray-100 text-cyan-700 border border-cyan-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer">
+                    {bill.customerPhone} {bill.customerName ? `(${bill.customerName})` : '(Customer)'}
+                  </button>
+                </div>
+              )}
+
+              {/* Bill Details Snapshot */}
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-xs space-y-1 text-gray-600">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t("Bill No:")}</span>
+                  <span className="font-bold text-gray-900">#{bill?.billNumber || 'PREVIEW'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{t("Total Amount:")}</span>
+                  <span className="font-bold text-emerald-600 font-mono">₹{Number(bill?.total || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* WhatsApp Message Preview with Read More/Less */}
+              {(() => {
+                const rawMsg = generateEBillWhatsAppText();
+                const previewMsg = rawMsg.replace(/\u200E/g, '');
+                const previewLimit = 220;
+                const isLong = previewMsg.length > previewLimit;
+                return (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 shadow-sm">
+                    <div className="text-[11px] text-gray-600 font-semibold mb-1.5 flex items-center gap-1">
+                      <svg className="w-3 h-3 fill-emerald-600" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg>
+                      <span>{t("Message Preview")}</span>
+                    </div>
+                    <pre className="text-[11px] text-gray-800 whitespace-pre-wrap leading-relaxed font-sans max-h-48 overflow-y-auto">
+                      {msgExpanded || !isLong ? previewMsg : previewMsg.slice(0, previewLimit) + '...'}
+                    </pre>
+                    {isLong && (
+                      <button
+                        type="button"
+                        onClick={() => setMsgExpanded(v => !v)}
+                        className="mt-1.5 flex items-center gap-1 text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold transition-colors cursor-pointer">
+                        {msgExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        <span>{msgExpanded ? t("Read less") : t("Read more")}</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2 border-t border-gray-100 shrink-0 relative z-10">
+              <button
+                type="button"
+                onClick={() => setShowWhatsAppModal(false)}
+                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs sm:text-sm transition-colors cursor-pointer">
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={sendingAutomated || isAlreadySent}
+                onClick={() => handleSendWhatsAppBill(whatsappPhone, whatsappCustomerName)}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${isAlreadySent
+                    ? 'bg-gray-400 text-white shadow-none'
+                    : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-[#25D366]/20'
+                  }`}>
+                {sendingAutomated ? (
+                  <><Loader2 size={16} className="animate-spin" /><span className="animate-pulse">{t("Sending...")}</span></>
+                ) : isAlreadySent ? (
+                  <><span className="font-bold">âœ“</span><span>{t("Already Sent")}</span></>
+                ) : (
+                  <><svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg><span>{t("Send e-Bill")}</span></>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Inline Customer Details Mini-Modal rendered via Portal */}
+      {showCustomerEditModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
+          <div className="bg-white border border-orange-500/30 rounded-2xl p-5 w-full max-w-sm shadow-2xl text-gray-900 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-orange-500 rounded-lg">
+                  <UserRound size={16} className="text-gray-900" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm text-gray-900">{t('Customer Details')}</div>
+                  <div className="text-[11px] text-gray-500">{t('Name & phone for this e-bill')}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowCustomerEditModal(false)} className="text-gray-500 hover:text-gray-900 p-1 cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="relative">
+                <label className="text-xs font-semibold text-gray-500 block mb-1">{t('Phone Number')}</label>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
+                  <Phone size={14} className="text-gray-500 shrink-0" />
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    value={whatsappPhone}
+                    onChange={(e) => {
+                      setWhatsappPhone(e.target.value.replace(/[^0-9]/g, ''));
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    placeholder="10-digit mobile number"
+                    className="bg-transparent text-gray-900 flex-1 text-gray-900 font-mono font-bold text-sm focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+                {/* Suggestions Dropdown */}
+                {showSuggestions && customerSuggestions.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-gray-50 border border-gray-100 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
+                    {customerSuggestions.map((cust, idx) => (
+                      <div
+                        key={idx}
+                        className="px-3 py-2.5 hover:bg-slate-700 cursor-pointer border-b border-white/5 last:border-0 flex justify-between items-center"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setWhatsappPhone(cust.phone);
+                          setWhatsappCustomerName(cust.name && cust.name !== 'Guest' ? cust.name : '');
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm text-gray-900 font-mono">{cust.phone}</span>
+                          <span className="text-xs text-gray-500">{cust.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">{t('Customer Name')}</label>
+                <div className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
+                  <UserRound size={14} className="text-gray-500 shrink-0" />
+                  <input
+                    type="text"
+                    value={whatsappCustomerName}
+                    onChange={(e) => setWhatsappCustomerName(e.target.value)}
+                    placeholder="e.g. Rahul Sharma"
+                    className="bg-transparent text-gray-900 flex-1 text-gray-900 text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCustomerEditModal(false)}
+                className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-gray-900 rounded-xl font-bold text-sm transition-all shadow-md shadow-orange-500/20 cursor-pointer active:scale-95">
+                âœ“ {t('Apply')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      <div
+        id="invoice-print-area"
+        className={`receipt-print bg-white text-black mx-auto shadow-2xl print:shadow-none mt-2 mb-2 pb-1 print:m-0 print:border-0 ${getFormatClasses()}`}
+        style={{
+          fontFamily: receiptFont,
+          color: '#000',
+          fontWeight: 'normal',
+          fontSize: fontMetrics.bodySize,
+          lineHeight: fontMetrics.lineHeight,
+          width: displayFormat === 'A4' ? '100%' : (displayFormat === '58mm' ? '210px' : '280px'),
+          maxWidth: displayFormat === 'A4' ? '360px' : (displayFormat === '58mm' ? '210px' : '280px'),
+          overflow: 'visible',
+          boxSizing: 'border-box'
+        }}>
+
+        {displayFormat === '58mm' ? (
+          /* 58mm Compact Clean Receipt Layout (Zomato Style) */
+          <div style={{ padding: '6px 4px 14px 4px', boxSizing: 'border-box', width: '100%', fontFamily: receiptFont, fontSize: fontMetrics.bodySize, lineHeight: fontMetrics.lineHeight, color: '#000' }}>
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '3px' }}>
+              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '3px' }}>
+                  <img
+                    src={activeSettings.logo}
+                    alt="Logo"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    style={{ maxHeight: '38px', maxWidth: '110px', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+              <div style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
+                {activeSettings.restaurantName || 'MSBILLINGS'}
+              </div>
+              <div style={{ fontSize: fontMetrics.detailSize, marginTop: '2px', lineHeight: '1.25' }}>
+                {(activeSettings.address || '').split('\n').map((line, i) => (
+                  <div key={i}>{line}</div>
+                ))}
+                {activeSettings.gstin && <div>{t("GSTIN: ")}{activeSettings.gstin}</div>}
+                {activeSettings.phone && <div>{t("PH: ")}{activeSettings.phone}</div>}
+                {activeSettings.fssai && <div>{t("FSSAI: ")}{activeSettings.fssai}</div>}
+              </div>
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Bill Type / Invoice Title */}
+            <div style={{ fontSize: fontMetrics.subHeadingSize, fontWeight: 'bold', textAlign: 'center', margin: '2px 0' }}>
+              {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Order Type & Table */}
+            {(() => {
+              const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+              let label = '';
+              if (bType === 'Delivery') {
+                const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
+                label = `DELIVERY: ${channel.toUpperCase()}${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else if (bType === 'Takeaway') {
+                label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else {
+                let tNo = (bill.tableNo || '').trim();
+                if (tNo.toLowerCase().startsWith('table')) {
+                  tNo = tNo.substring(5).trim();
+                }
+                label = `Dine-In: ${tNo ? `Table ${tNo}` : 'Table'}`;
+              }
+              return (
+                <div style={{ textAlign: 'center', fontWeight: 750, fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
+                  {label}
+                </div>
+              );
+            })()}
+
+            {/* Date & Time */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
+              <span>{t('Date: ')}{new Date(billDateTime).toLocaleDateString('en-GB')}</span>
+              <span style={{ fontWeight: 750 }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            </div>
+
+            {/* Cashier & Bill No */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, marginBottom: '2px' }}>
+              <span>{t('Cashier: ')}{bill.cashierName || 'admin'}</span>
+              <span style={{ fontWeight: 750 }}>{t('Bill No: ')}{bill.billNumber || 'PREVIEW'}</span>
+            </div>
+
+            {bill.captainName && (
+              <div style={{ fontSize: fontMetrics.detailSize }}>{t('Assign: ')}{bill.captainName}</div>
+            )}
+            {bill.tokenNumber && (
+              <div style={{ fontWeight: 750, fontSize: fontMetrics.bodySize }}>{t('Token: ')}{bill.tokenNumber}</div>
+            )}
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Items List (Compact Zomato 2-line layout) */}
+            <div style={{ marginBottom: '3px' }}>
+              {bill.items && bill.items.length > 0 ? (
+                bill.items.filter(item => !item.isCancelled).map((item, idx) => {
+                  const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                  if (activeQty <= 0) return null;
+                  return (
+                    <div key={idx} style={{ marginBottom: '4px', paddingBottom: '3px', borderBottom: '1px dashed #e0e0e0' }}>
+                      <div style={{ fontWeight: 750, fontSize: fontMetrics.itemSize, textAlign: 'left', wordBreak: 'break-word', lineHeight: '1.2' }}>
+                        {item.name || 'Unknown Item'}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.detailSize, marginTop: '1.5px' }}>
+                        <span>[{Number(item.price || 0).toFixed(2)}] Ã— {activeQty}</span>
+                        <span style={{ fontWeight: 750 }}>{(item.price * activeQty).toFixed(2)}</span>
+                      </div>
+                      {item.hsnCode && (
+                        <div style={{ fontSize: '9.5px', color: '#666' }}>HSN: {item.hsnCode}</div>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: 'center', padding: '4px 0', fontSize: fontMetrics.detailSize }}>{t("No items")}</div>
+              )}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Totals & Breakdown */}
+            <div style={{ fontSize: fontMetrics.detailSize, lineHeight: fontMetrics.lineHeight }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1px 0' }}>
+                <span>{t("Total Qty: ")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <span>{t("Sub Total:")}</span>
+                  <span style={{ fontWeight: 750 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+
+              {bill.discount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 750, padding: '1px 0' }}>
+                  <span>{t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}:</span>
+                  <span>-{(bill.discount || 0).toFixed(2)}</span>
+                </div>
+              )}
+
+              {(() => {
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+
+                let rate = totRate;
+                let taxRupees = 0;
+
+                if (bill.tax !== undefined && bill.tax !== null) {
+                  if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+                    rate = Number(bill.tax);
+                    taxRupees = taxable * rate / 100;
+                  } else {
+                    taxRupees = Number(bill.tax);
+                    rate = bill.taxRate || Math.round(taxRupees / Math.max(1, taxable) * 100) || totRate;
+                  }
+                } else if (totRate > 0) {
+                  rate = totRate;
+                  taxRupees = taxable * rate / 100;
+                }
+
+                if (taxRupees === 0 || rate === 0) return null;
+
+                const cEff = rate * (cRate / Math.max(1, totRate));
+                const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+                const sEff = rate * (sRate / Math.max(1, totRate));
+                const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+                const gEff = rate * (gRate / Math.max(1, totRate));
+                const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+
+                return (
+                  <>
+                    {cRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                        <span>{t("CGST@")}{cEff.toFixed(1)}%:</span>
+                        <span>{cAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {sRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                        <span>{t("SGST@")}{sEff.toFixed(1)}%:</span>
+                        <span>{sAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {gRate > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                        <span>{t("GST@")}{gEff.toFixed(1)}%:</span>
+                        <span>{gAmt.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {Number(bill.deliveryCharge || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                  <span>{t("Delivery Charge:")}</span>
+                  <span>{Number(bill.deliveryCharge).toFixed(2)}</span>
+                </div>
+              )}
+              {Number(bill.containerCharge || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                  <span>{t("Container Charge:")}</span>
+                  <span>{Number(bill.containerCharge).toFixed(2)}</span>
+                </div>
+              )}
+
+              {(() => {
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+                let finalTotal = Number(bill.total);
+
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+                const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                  ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                  : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+                const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+                if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                  finalTotal = taxable + taxRupees + addCharges;
+                }
+                const roundedTotal = Math.round(finalTotal);
+                const roundOff = roundedTotal - finalTotal;
+                if (roundOff === 0) return null;
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                    <span>{t("Round off:")}</span>
+                    <span>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Grand Total */}
+            {(() => {
+              let finalTotal = Number(bill.total);
+              const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+              const disc = Number(bill.discount || 0);
+              const taxable = Math.max(0, sub - disc);
+              const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+              const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+              const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+              const totRate = cRate + sRate + gRate;
+              const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+              const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+              if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                finalTotal = taxable + taxRupees + addCharges;
+              }
+              const roundedTotal = Math.round(finalTotal);
+
+              return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 750, margin: '3px 0' }}>
+                  <span>{t('Grand Total')}</span>
+                  <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
+                </div>
+              );
+            })()}
+
+            {/* Dashed Separator */}
+            <div style={{ borderTop: '1px dashed #444', margin: '7px 0', width: '100%', height: '1px', clear: 'both' }}></div>
+
+            {/* Payment Mode */}
+            {(() => {
+              const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
+              if (hasSplit) {
+                return (
+                  <div style={{ fontSize: fontMetrics.detailSize, textAlign: 'center', margin: '2px 0' }}>
+                    <div style={{ fontWeight: 'bold' }}>{t("PAID VIA MIXED")}</div>
+                    {Number(bill.splitPayments?.cash || 0) > 0 && <div>Cash: {currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</div>}
+                    {Number(bill.splitPayments?.upi || 0) > 0 && <div>UPI: {currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</div>}
+                    {Number(bill.splitPayments?.card || 0) > 0 && <div>Card: {currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</div>}
+                  </div>
+                );
+              } else if (bill.status === 'Unpaid') {
+                return <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.bodySize, margin: '2px 0' }}>{t("UNPAID (KHATA BILL)")}</div>;
+              } else {
+                const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
+                const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
+                return (
+                  <div style={{ textAlign: 'center', fontSize: fontMetrics.bodySize, fontWeight: 'bold', margin: '2px 0' }}>
+                    {t("Paid via")} {bill.paymentMode || 'Cash'}{appSuffix}
+                  </div>
+                );
+              }
+            })()}
+
+            {/* QR Code (if enabled) â€” for WhatsApp capture, respects separate whatsappShowQr toggle completely independently */}
+            {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
+              const pa = (activeSettings.upiId || '').trim();
+              if (!pa) return null;
+              const isMixed = bill.paymentMode === 'Mixed';
+              const upiSplit = Number(bill.splitPayments?.upi || 0);
+              const am = (isMixed && upiSplit > 0) ? upiSplit.toFixed(2) : Number(bill.total || 0).toFixed(2);
+              if (Number(am) <= 0) return null;
+              const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
+              const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
+
+              const showNormally = activeSettings.enableQrPayment !== false;
+
+              return (
+                <div className="receipt-qr-wrapper" style={{ display: showNormally ? 'block' : 'none', textAlign: 'center', margin: '5px 0' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 'bold' }}>{t("SCAN TO PAY VIA UPI")}</div>
+                  <div style={{ margin: '3px auto', display: 'inline-block' }}>
+                    <QRCodeCanvas value={qrUri} size={130} level="L" includeMargin={false} />
+                  </div>
+                  <div style={{ fontSize: '9px' }}>{pa}</div>
+                </div>
+              );
+            })()}
+
+            {/* Footer Message */}
+            <div style={{ textAlign: 'center', fontSize: '10px', fontWeight: 'bold', marginTop: '5px', lineHeight: '1.3' }}>
+              {activeSettings.footerMessage || t("Thank You | Please visit Again")}
+            </div>
+          </div>
+        ) : (
+          /* Existing 80mm and A4 layout with dynamic typography */
+          <div className="p-3 print:p-2" style={{
+            paddingLeft: '8px',
+            paddingRight: '8px',
+            paddingTop: '8px',
+            paddingBottom: '16px',
+            boxSizing: 'border-box',
+            fontFamily: receiptFont,
+            ...(matchedFontObj?.previewStyle || {}),
+            fontSize: fontMetrics.bodySize,
+            lineHeight: fontMetrics.lineHeight,
+            color: '#000000'
+          }}>
+
+            {/* Header */}
+            <div align="center" className="text-center mb-2" style={{ textAlign: 'center', margin: '0 auto 8px auto', width: '100%', display: 'block' }}>
+              {Boolean(activeSettings.logo && activeSettings.logo !== '[logo_stored]' && shouldShowLogo) &&
+                <div align="center" className="flex justify-center mb-1" style={{ display: 'flex', justifyContent: 'center', width: '100%', margin: '0 auto 4px auto', textAlign: 'center' }}>
+                  <img
+                    src={activeSettings.logo}
+                    alt="Restaurant Logo"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    style={{ maxHeight: '48px', maxWidth: '120px', width: 'auto', height: 'auto', objectFit: 'contain', margin: '0 auto', display: 'block' }}
+                    className="max-h-12 max-w-[120px] object-contain print:max-h-12 print:max-w-[120px]"
+                  />
+                </div>
+              }
+              <div align="center" style={{ fontSize: fontMetrics.headingSize, lineHeight: '1.15', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
+                {(activeSettings.restaurantName || 'MSBILLINGS').toUpperCase()}
+              </div>
+              <div align="center" style={{ fontSize: fontMetrics.detailSize, lineHeight: '1.25', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
+                {(activeSettings.address || '').split('\n').map((line, i) =>
+                  <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
+                )}
+                {activeSettings.gstin && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("GSTIN :")}{activeSettings.gstin}</div>}
+                {activeSettings.phone && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("PH :")}{activeSettings.phone}</div>}
+                {activeSettings.fssai && <div align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{t("FSSAI :")}{activeSettings.fssai}</div>}
+              </div>
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            <div style={{ fontSize: fontMetrics.subHeadingSize, textAlign: 'center', margin: '4px 0', fontWeight: 'bold' }}>
+              {bill.status === 'Unpaid' ? 'Unpaid (Khata)' : bill.discountType === 'complimentary' ? 'Complimentary Bill' : 'Tax Invoice'}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Bill Info Grid - Table on own row, then Date+Time side-by-side, then Cashier+BillNo */}
+            {/* Row 1: Order Type / Table Name - full width, centered */}
+            {(() => {
+              const bType = bill.billType || (bill.tableNo?.startsWith('DEL') ? 'Delivery' : (bill.tableNo?.startsWith('TAK') ? 'Takeaway' : 'Dine-In'));
+              let label = '';
+              if (bType === 'Delivery') {
+                const channel = (bill.orderSource || '').trim() || 'DIRECT DELIVERY';
+                label = `DELIVERY: ${channel.toUpperCase()}${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else if (bType === 'Takeaway') {
+                label = `TAKEAWAY${bill.tableNo ? ` (${bill.tableNo})` : ''}`;
+              } else {
+                label = `Dine-In: ${bill.tableNo || 'Table'}`;
+              }
+              return (
+                <div style={{ width: '100%', textAlign: 'center', fontWeight: 'bold', fontSize: fontMetrics.subHeadingSize, marginBottom: '2px' }}>
+                  {label}
+                </div>
+              );
+            })()}
+
+            {/* Row 2: Date (left) | Time 12h (right) */}
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, fontWeight: 'normal', marginBottom: '2px' }}>
+              <span>{t('Date:')}{new Date(billDateTime).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+              <span style={{ fontWeight: 'bold' }}>{new Date(billDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</span>
+            </div>
+
+            {/* Row 3: Cashier (left) | Bill No (right) */}
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', fontSize: fontMetrics.detailSize, fontWeight: 'normal', marginBottom: '2px' }}>
+              <span>{t('Cashier:')}{bill.cashierName || 'admin'}</span>
+              <span style={{ fontWeight: 'bold' }}>{t('Bill No.:')}{bill.billNumber || 'PREVIEW'}</span>
+            </div>
+            {bill.captainName && (
+              <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>{t('Assign to:')}{bill.captainName}</div>
+            )}
+            {bill.tokenNumber && (
+              <div style={{ fontWeight: 'bold', fontSize: fontMetrics.detailSize }}>{t('Token No.:')}{bill.tokenNumber}</div>
+            )}
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Items Header */}
+            <div className="flex pb-0.5" style={{ display: 'flex', width: '100%', alignItems: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>
+              <div className="flex-1" style={{ flex: '1 1 0%', textAlign: 'left' }}>{t('Item')}</div>
+              <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0 }}>{t("Qty.")}</div>
+              <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0 }}>{t("Price")}</div>
+              <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{t('Amount')}</div>
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '3px 0 5px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Items List */}
+            <div className="mb-1 pb-1" style={{ borderBottom: '1.5px solid #000000', paddingBottom: '4px', marginBottom: '4px' }}>
+              {bill.items && bill.items.length > 0 ?
+                bill.items.filter(item => !item.isCancelled).map((item, idx) => {
+                  const activeQty = (item.quantity || 0) - (item.cancelledQuantity || 0);
+                  if (activeQty <= 0) return null;
+                  return (
+                    <div key={idx} className="flex items-start mb-1 leading-tight" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', fontSize: fontMetrics.itemSize, fontWeight: 'normal' }}>
+                      <div className="flex-1 pr-1 break-words" style={{ flex: '1 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', fontSize: fontMetrics.itemSize }}>
+                        {item.name || 'Unknown Item'}
+                        {item.hsnCode ? <span style={{ fontSize: fontMetrics.detailSize }}>{t("(HSN:")}{item.hsnCode})</span> : ''}
+                      </div>
+                      <div className="w-8 text-center" style={{ width: '32px', textAlign: 'center', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{activeQty}</div>
+                      <div className="w-14 text-right" style={{ width: '56px', textAlign: 'right', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{(item.price || 0).toFixed(2)}</div>
+                      <div className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontSize: fontMetrics.itemSize }}>{(item.price * activeQty).toFixed(2)}</div>
+                    </div>
+                  );
+                }) :
+
+                <div className="text-center py-1" style={{ textAlign: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>{t("No items")}</div>
+              }
+            </div>
+
+            {/* Tax / Discount / Items summary */}
+            <div className="flex flex-col gap-0.5 mt-1" style={{ display: 'flex', flexDirection: 'column', fontSize: fontMetrics.detailSize, fontWeight: 'normal' }}>
+              <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="text-left w-24" style={{ width: '96px', textAlign: 'left', flexShrink: 0 }}>{t("Total Qty:")}{bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.quantity || 1) - (curr.cancelledQuantity || 0)), 0) || 0}</span>
+                <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                  <span className="text-left" style={{ textAlign: 'left' }}>{t("Sub Total")}</span>
+                  <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0 }}>{(bill.subtotal || bill.items?.filter(i => !i.isCancelled).reduce((acc, curr) => acc + ((curr.price || 0) * ((curr.quantity || 1) - (curr.cancelledQuantity || 0))), 0) || 0).toFixed(2)}</span>
+                </div>
+              </div>
+              {bill.discount > 0 &&
+                <div className="flex justify-between w-full" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold', fontSize: fontMetrics.bodySize }}>
+                  <span className="w-24" style={{ width: '96px', flexShrink: 0 }}></span>
+                  <div className="flex-1 flex justify-between pl-2" style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingLeft: '8px' }}>
+                    <span className="text-left" style={{ textAlign: 'left', fontWeight: 'bold' }}>
+                      {t('Discount')} {bill.discountType === 'percentage' && bill.discountValue ? `(${bill.discountValue}%)` : (bill.discountType === 'complimentary' ? '(100%)' : '')}
+                    </span>
+                    <span className="w-16 text-right" style={{ width: '64px', textAlign: 'right', flexShrink: 0, fontWeight: 'bold' }}>-{(bill.discount || 0).toFixed(2)}</span>
+                  </div>
+                </div>
+              }
+
+              {(() => {
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+
+                let rate = totRate;
+                let taxRupees = 0;
+
+                if (bill.tax !== undefined && bill.tax !== null) {
+                  if (Number(bill.tax) <= 100 && Math.abs(Number(bill.total) - taxable - taxable * Number(bill.tax) / 100) <= Math.abs(Number(bill.total) - taxable - Number(bill.tax))) {
+                    rate = Number(bill.tax);
+                    taxRupees = taxable * rate / 100;
+                  } else {
+                    taxRupees = Number(bill.tax);
+                    rate = bill.taxRate || Math.round(taxRupees / Math.max(1, taxable) * 100) || totRate;
+                  }
+                } else if (totRate > 0) {
+                  rate = totRate;
+                  taxRupees = taxable * rate / 100;
+                }
+
+                if (taxRupees === 0 || rate === 0) return null;
+
+                const cEff = rate * (cRate / Math.max(1, totRate));
+                const cAmt = taxRupees * (cRate / Math.max(1, totRate));
+                const sEff = rate * (sRate / Math.max(1, totRate));
+                const sAmt = taxRupees * (sRate / Math.max(1, totRate));
+                const gEff = rate * (gRate / Math.max(1, totRate));
+                const gAmt = taxRupees * (gRate / Math.max(1, totRate));
+
+                return (
+                  <>
+                    {cRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("CGST@")}{cEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{cAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                    {sRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("SGST@")}{sEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{sAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                    {gRate > 0 &&
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("GST@")}{gEff.toFixed(1)}%</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{gAmt.toFixed(2)}</span>
+                      </div>
+                    }
+                  </>);
+
+              })()}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '5px 0 4px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Total & Round off */}
+            <div className="flex flex-col pb-1" style={{ display: 'flex', flexDirection: 'column', fontSize: '14px' }}>
+              {(() => {
+                const sub = Number(bill.subtotal || bill.items?.reduce((acc, curr) => acc + ((curr.price || 0) * (curr.quantity || 1)), 0) || 0);
+                const disc = Number(bill.discount || 0);
+                const taxable = Math.max(0, sub - disc);
+                let finalTotal = Number(bill.total);
+
+                const cRate = activeTaxSettings.enableCgst !== false ? (activeTaxSettings.cgstRate !== undefined ? Number(activeTaxSettings.cgstRate) : 2.5) : 0;
+                const sRate = activeTaxSettings.enableSgst !== false ? (activeTaxSettings.sgstRate !== undefined ? Number(activeTaxSettings.sgstRate) : 2.5) : 0;
+                const gRate = activeTaxSettings.enableGst === true ? (activeTaxSettings.gstRate !== undefined ? Number(activeTaxSettings.gstRate) : 5) : 0;
+                const totRate = cRate + sRate + gRate;
+
+                const taxRupees = bill.tax !== undefined && bill.tax !== null && Number(bill.tax) > 0
+                  ? (Number(bill.tax) <= 100 ? (taxable * Number(bill.tax)) / 100 : Number(bill.tax))
+                  : (totRate > 0 ? (taxable * totRate) / 100 : 0);
+
+                const addCharges = Number(bill.deliveryCharge || 0) + Number(bill.containerCharge || 0);
+
+                // Safeguard: If bill.total is missing, 0, NaN or <= 0 while sub > 0, compute dynamically
+                if (!finalTotal || isNaN(finalTotal) || (finalTotal <= 0 && sub > 0)) {
+                  finalTotal = taxable + taxRupees + addCharges;
+                }
+
+                const roundedTotal = Math.round(finalTotal);
+                const roundOff = roundedTotal - finalTotal;
+
+                return (
+                  <>
+                    {Number(bill.deliveryCharge || 0) > 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Delivery Charge")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.deliveryCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.containerCharge || 0) > 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontWeight: 'bold' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Container Charge")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{Number(bill.containerCharge).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {roundOff !== 0 && (
+                      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ textAlign: 'left', flex: 1 }}>{t("Round off")}</span>
+                        <span style={{ textAlign: 'right', flexShrink: 0, minWidth: '48px' }}>{roundOff > 0 ? '+' : ''}{roundOff.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center w-full mt-1.5" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 'bold', paddingTop: '3px', paddingBottom: '3px', boxSizing: 'border-box' }}>
+                      <span style={{ textAlign: 'left' }}>{t('Grand Total')}</span>
+                      <span style={{ textAlign: 'right' }}>{currencySymbol}{roundedTotal.toFixed(2)}</span>
+                    </div>
+                  </>);
+
+              })()}
+            </div>
+
+            <div style={{ height: '1.5px', backgroundColor: '#000000', margin: '4px 0 6px 0', width: '100%', minHeight: '1.5px', flexShrink: 0 }}></div>
+
+            {/* Secondary Currencies */}
+            {enabledCurrencies.length > 0 &&
+              <div className="text-center mt-2 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }}>
+                <div className="mb-1">{t("Amount in Foreign Currencies:")}</div>
+                {enabledCurrencies.map((c) => {
+                  const foreignAmt = Math.round(bill.total) * (c.rate / baseRate);
+                  return (
+                    <div key={c.code} className="flex justify-between px-6" style={{ display: 'flex', width: '100%', justifyContent: 'space-between', paddingLeft: '24px', paddingRight: '24px', fontWeight: 'normal' }}>
+                      <span>{c.code}</span>
+                      <span>{foreignAmt.toFixed(2)}</span>
+                    </div>);
+
+                })}
+                <div style={{ borderTop: '1.5px dashed #000000', margin: '4px 0', marginTop: '6px', height: '1px', width: '100%' }}></div>
+              </div>
+            }
+
+            {/* Payment Mode & Entered Breakdown */}
+            {(() => {
+              const hasSplit = bill.paymentMode === 'Mixed' || (bill.splitPayments && (Number(bill.splitPayments.cash || 0) > 0 || Number(bill.splitPayments.upi || 0) > 0 || Number(bill.splitPayments.card || 0) > 0));
+              if (hasSplit) {
+                return (
+                  <div className="my-1.5 pb-1" style={{ fontSize: '13px' }}>
+                    <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '3px' }}>
+                      {t("PAID VIA MIXED PAYMENT")}
+                    </div>
+                    <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
+                    {Number(bill.splitPayments?.cash || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("Cash Paid:")}</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.cash).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.splitPayments?.upi || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("UPI Paid")} {bill.upiApp || bill.paymentMethod ? `(${bill.upiApp || bill.paymentMethod})` : ''}:</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.upi).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {Number(bill.splitPayments?.card || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '1px 0' }}>
+                        <span>{t("Card Paid:")}</span>
+                        <span style={{ fontWeight: 'bold' }}>{currencySymbol}{Number(bill.splitPayments.card).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1.5px dashed #000000', margin: '3px 0', height: '1px', width: '100%' }}></div>
+                  </div>
+                );
+              } else if (bill.status === 'Unpaid') {
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'bold', marginTop: '5px', marginBottom: '4px', borderTop: '1.5px dashed #000', borderBottom: '1.5px dashed #000', padding: '4px 0' }}>
+                    {t("UNPAID (KHATA BILL)")}
+                  </div>
+                );
+              } else if (bill.paymentMode === 'Cash') {
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: 'bold' }}>{t("Paid via Cash")}</div>
+                    {bill.amountPaid && Number(bill.amountPaid) > Number(bill.total) && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '2px', padding: '0 4px' }}>
+                        <span>{t("Tendered:")} {currencySymbol}{Number(bill.amountPaid).toFixed(2)}</span>
+                        <span>{t("Change:")} {currencySymbol}{(Number(bill.amountPaid) - Number(bill.total)).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              } else if (bill.paymentMode) {
+                // Only show UPI app name for UPI/QR payments, not for Card
+                const isUpiMode = bill.paymentMode === 'UPI' || bill.paymentMode === 'QR' || bill.paymentMode === 'Online';
+                const appSuffix = isUpiMode && (bill.upiApp || bill.paymentMethod) ? ` [${bill.upiApp || bill.paymentMethod}]` : '';
+                return (
+                  <div className="text-center mt-1 pb-1" style={{ textAlign: 'center', fontSize: '14px', fontWeight: 'normal', marginTop: '5px', marginBottom: '4px' }}>
+                    {t("Paid via")} <strong style={{ fontWeight: 'bold' }}>{bill.paymentMode}</strong>{appSuffix}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) â€” respects whatsappShowQr toggle completely independently during WhatsApp capture */}
+            {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
+              const pa = (activeSettings.upiId || '').trim();
+              if (!pa) return null;
+
+              const isMixed = bill.paymentMode === 'Mixed';
+              const upiSplit = Number(bill.splitPayments?.upi || 0);
+
+              const am = (isMixed && upiSplit > 0)
+                ? upiSplit.toFixed(2)
+                : Number(bill.total || 0).toFixed(2);
+
+              if (Number(am) <= 0) return null;
+
+              const pn = (activeSettings.restaurantName || 'MSBILLINGS').trim();
+              const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
+              const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
+
+              const showNormally = activeSettings.enableQrPayment !== false;
+
+              return (
+                <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>
+                  <div className="uppercase mb-0.5" style={{ fontSize: '13px', fontWeight: 'bold', textAlign: 'center' }}>
+                    {isMixed && upiSplit > 0 ? `${t("SCAN TO PAY UPI PORTION")} (${currencySymbol}${am})` : t("SCAN TO PAY VIA UPI")}
+                  </div>
+                  <div className="p-1 bg-white inline-block rounded-md shadow-xs my-1" style={{ display: 'inline-block', margin: '4px auto', textAlign: 'center' }}>
+                    <QRCodeCanvas
+                      value={qrUri}
+                      size={140}
+                      level="L"
+                      includeMargin={false}
+                    />
+                  </div>
+
+                  <div className="mt-0.5" style={{ fontSize: '13px', fontWeight: 'normal', textAlign: 'center' }}>
+                    {t("UPI ID:")} {pa}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="mt-1 text-center" style={{ textAlign: 'center', fontSize: fontMetrics.detailSize, fontWeight: 'bold', marginTop: '4px', marginBottom: '2px', paddingBottom: '2px', width: '100%', display: 'block' }}>
+              <p style={{ margin: 0, padding: '1px 0 2px 0', lineHeight: '1.3', display: 'block' }}>{activeSettings.footerMessage || t("Thank You | Please visit Again")}</p>
+            </div>
+
+          </div>
+        )}
+      </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+export default Invoice;
