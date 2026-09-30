@@ -786,16 +786,66 @@ const useNotifications = (userRole = 'Admin') => {
       });
     };
 
+    const handleReportReady = (data) => {
+      if (!data || !data.downloadUrl) return;
+
+      console.log(`[useNotifications] Report Ready Event Received! Downloading: ${data.filename}`);
+
+      // Fetch the file securely using authenticated API client
+      api.get(data.downloadUrl, { responseType: 'blob' })
+        .then(response => {
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', data.filename || 'Report');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+
+          // Show a success notification
+          setNotifications((prev) => {
+            const notification = {
+              id: data.jobId || Date.now().toString(),
+              title: 'Report Download Ready',
+              message: data.message || 'Your background report is ready and has been downloaded.',
+              type: 'report_ready',
+              timestamp: new Date().toISOString()
+            };
+            return [notification, ...prev];
+          });
+          setUnreadCount(prev => prev + 1);
+          playNotificationSound();
+        })
+        .catch(err => {
+          console.error('[useNotifications] Secure report download failed:', err);
+          setNotifications((prev) => {
+            const notification = {
+              id: Date.now().toString(),
+              title: 'Report Download Failed',
+              message: 'Failed to securely download your report.',
+              type: 'error',
+              timestamp: new Date().toISOString()
+            };
+            return [notification, ...prev];
+          });
+          setUnreadCount(prev => prev + 1);
+          playNotificationSound();
+        });
+    };
+
     const unsubNotif = realtimeService.subscribe('new_notification', handleNewNotification);
     const unsubDismiss = realtimeService.subscribe('dismiss_notification', handleDismissNotification);
     const unsubWithdrawn = realtimeService.subscribe('itemCancellationWithdrawn', handleItemCancellationWithdrawn);
     const unsubResolved = realtimeService.subscribe('cancellationResolved', handleCancellationResolved);
+    const unsubReportReady = realtimeService.subscribe('report_ready', handleReportReady);
 
     return () => {
       unsubNotif();
       unsubDismiss();
       unsubWithdrawn();
       unsubResolved();
+      unsubReportReady();
     };
   }, [userRole]);
 

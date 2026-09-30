@@ -465,6 +465,7 @@ import calculatorRoutes from './routes/calculatorRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
+import { startSecureReportCleanupJob } from './utils/secureReportCleanup.js';
 import { startWhatsAppScheduler } from './utils/whatsappScheduler.js';
 import { globalErrorHandler } from './middleware/errorHandler.js';
 import { buildTenantClusterMap } from './utils/tenantManager.js';
@@ -593,6 +594,7 @@ if (!isServerless) {
 
   // Start EOD Report job (Daily at 11:59 PM)
   startReportCron();
+  startSecureReportCleanupJob();
 
   // Start WhatsApp Scheduler
   startWhatsAppScheduler();

@@ -5,7 +5,9 @@ import { generateDayBookWorkbook } from '../utils/excelGenerator.js';
 import ExcelJS from 'exceljs';
 import { resolveTenantInfo } from './whatsappController.js';
 import { getISTDayRange, getISTMonthRange, IST_TIMEZONE } from '../utils/timezoneHelper.js';
-
+import fs from 'fs';
+import path from 'path';
+import Report from '../models/Report.js';
 // Get comprehensive analytics
 export const getAnalytics = async (req, res) => {
   try {
@@ -293,11 +295,12 @@ export const getAnalytics = async (req, res) => {
   }
 };
 
-// Download daily report in CSV format
+// Download daily report in CSV format (Delegated to Background Worker in Phase 7)
 export const downloadDailyReportCSV = async (req, res) => {
   try {
-    const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { month, year, days } = req.query;
+    const tenantDb = req.tenantDb || req.user?.db || 'default';
+    const userId = req.user?.id;
 
     let startDate, endDate, periodName;
 
@@ -322,39 +325,36 @@ export const downloadDailyReportCSV = async (req, res) => {
       periodName = `${now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`;
     }
 
-    const bills = await Bill.find({
-      $or: [
-        { createdAt: { $gte: startDate, $lte: endDate } },
-        { clearedAt: { $gte: startDate, $lte: endDate } }
-      ],
-      status: 'Paid'
-    }).sort({ createdAt: -1 });
-
-    // CSV Header
-    let csv = 'Date,Time,Bill ID,Table,Items,Subtotal,Discount,Tax,Total,Payment Mode\n';
-
-    // CSV Data
-    bills.forEach(bill => {
-      const date = new Date(bill.createdAt).toLocaleDateString('en-IN');
-      const time = new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const items = bill.items.map(item => `${item.name}(${item.quantity})`).join('; ');
-      csv += `${date},${time},${bill._id},${bill.tableNo},"${items}",${bill.subtotal},${bill.discount},${bill.tax},${bill.total},${bill.paymentMode}\n`;
+    // Phase 7: Extract to Background Queue
+    const { ReportQueue } = await import('../workers/queueManager.js');
+    const job = await ReportQueue.add('generateReport', {
+      tenantDb,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      periodName,
+      type: 'CSV_DAILY',
+      userId
     });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="daily-report-${periodName.replace(/\s+/g, '-').toLowerCase()}.csv"`);
-    res.send(csv);
+    console.log(`[Report API] Added CSV_DAILY job ${job.id} to ReportQueue for tenant ${tenantDb}`);
+
+    res.status(202).json({ 
+      success: true, 
+      message: 'Report generation started in the background. You will be notified when it is ready.',
+      jobId: job.id
+    });
   } catch (error) {
-    console.error('Error generating CSV report:', error);
+    console.error('Error queuing CSV report:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// Download monthly/custom report in Excel format
+// Download monthly/custom report in Excel format (Delegated to Background Worker in Phase 7)
 export const downloadMonthlyReportExcel = async (req, res) => {
   try {
-    const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { month, year, days, date, customStart, customEnd, restaurantName } = req.query;
+    const tenantDb = req.tenantDb || req.user?.db || 'default';
+    const userId = req.user?.id;
 
     let startDate, endDate, periodName;
 
@@ -390,226 +390,27 @@ export const downloadMonthlyReportExcel = async (req, res) => {
       periodName = `${now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}`;
     }
 
-    const bills = await Bill.find({
-      $or: [
-        { createdAt: { $gte: startDate, $lte: endDate } },
-        { clearedAt: { $gte: startDate, $lte: endDate } }
-      ],
-      status: 'Paid'
-    })
-    .select('billNumber tableNo items subtotal discount tax total paymentMode billType orderSource createdAt')
-    .sort({ createdAt: -1 })
-    .lean();
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Sales Report');
-
-    // Row 1: Title
-    worksheet.mergeCells('A1:L1');
-    const titleRow = worksheet.getRow(1);
-    titleRow.height = 36;
-    const titleCell = titleRow.getCell(1);
-    const displayRestName = restaurantName ? restaurantName.toUpperCase() : 'RESTAURANT';
-    titleCell.value = `${displayRestName} - Sales Report (${periodName})`;
-    titleCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FF1E293B' } };
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-    // Row 2: Spacer
-    worksheet.getRow(2).height = 10;
-
-    // Row 3: Headers
-    const headerRow = worksheet.getRow(3);
-    headerRow.height = 28;
-    headerRow.values = ['Date', 'Time', 'Bill ID', 'Bill Type', 'Table / Order', 'Item Count', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment Mode', 'Platform'];
-    headerRow.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E293B' } };
-    headerRow.eachCell(cell => {
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFE2E8F0' }
-      };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
-        left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-        right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
-      };
+    // Phase 7: Extract to Background Queue
+    const { ReportQueue } = await import('../workers/queueManager.js');
+    const job = await ReportQueue.add('generateReport', {
+      tenantDb,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      periodName,
+      type: 'EXCEL_MONTHLY',
+      userId,
+      restaurantName
     });
 
-    // Calculate payment method totals
-    const paymentTotals = {
-      Card: 0,
-      UPI: 0,
-      Cash: 0
-    };
+    console.log(`[Report API] Added EXCEL_MONTHLY job ${job.id} to ReportQueue for tenant ${tenantDb}`);
 
-    // Add data rows
-    bills.forEach((bill, index) => {
-      const row = worksheet.getRow(index + 4);
-      row.height = 22;
-      
-      // Determine platform for delivery orders
-      let platform = '';
-      if (bill.billType === 'Delivery' && bill.orderSource) {
-        platform = bill.orderSource;
-      }
-      
-      // Calculate item count
-      const itemCount = bill.items ? bill.items.reduce((sum, item) => sum + (item.quantity || 0), 0) : 0;
-      
-      // Calculate payment totals
-      if (bill.paymentMode && paymentTotals.hasOwnProperty(bill.paymentMode)) {
-        paymentTotals[bill.paymentMode] += bill.total || 0;
-      }
-      
-      row.values = [
-        new Date(bill.createdAt).toLocaleDateString('en-IN'),
-        new Date(bill.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        bill.billNumber || '',
-        bill.billType || 'Dine-In',
-        bill.tableNo || '',
-        itemCount,
-        bill.subtotal || 0,
-        bill.discount || 0,
-        bill.tax || 0,
-        bill.total || 0,
-        bill.paymentMode || '',
-        platform
-      ];
-
-      row.eachCell((cell, colNumber) => {
-        cell.alignment = { 
-          vertical: 'middle', 
-          horizontal: colNumber <= 6 || colNumber >= 11 ? 'center' : 'right' 
-        };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFF1F5F9' } },
-          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          left: { style: 'thin', color: { argb: 'FFF1F5F9' } },
-          right: { style: 'thin', color: { argb: 'FFF1F5F9' } }
-        };
-      });
+    res.status(202).json({ 
+      success: true, 
+      message: 'Excel Report generation started in the background. You will be notified when it is ready.',
+      jobId: job.id
     });
-
-    // Configure generous column widths for perfect mobile & desktop view
-    worksheet.columns = [
-      { key: 'date', width: 14 },
-      { key: 'time', width: 12 },
-      { key: 'billId', width: 18 },
-      { key: 'billType', width: 14 },
-      { key: 'table', width: 18 },
-      { key: 'itemCount', width: 12 },
-      { key: 'subtotal', width: 15 },
-      { key: 'discount', width: 14 },
-      { key: 'tax', width: 14 },
-      { key: 'total', width: 16 },
-      { key: 'paymentMode', width: 16 },
-      { key: 'platform', width: 16 }
-    ];
-
-    // Format financial columns as currency
-    const financialColumns = [6, 7, 8, 9]; // Subtotal, Discount, Tax, Total
-    bills.forEach((bill, index) => {
-      financialColumns.forEach(colIndex => {
-        const cell = worksheet.getCell(index + 4, colIndex + 1);
-        cell.numFmt = '#,##0.00';
-      });
-    });
-
-    // Add summary at the bottom
-    const totalRow = bills.length + 4;
-    const summaryRow = worksheet.getRow(totalRow);
-    summaryRow.height = 26;
-    summaryRow.values = [
-      'TOTAL',
-      '',
-      '',
-      '',
-      '',
-      bills.reduce((sum, bill) => sum + (bill.items ? bill.items.reduce((s, item) => s + (item.quantity || 0), 0) : 0), 0),
-      bills.reduce((sum, bill) => sum + (bill.subtotal || 0), 0),
-      bills.reduce((sum, bill) => sum + (bill.discount || 0), 0),
-      bills.reduce((sum, bill) => sum + (bill.tax || 0), 0),
-      bills.reduce((sum, bill) => sum + (bill.total || 0), 0),
-      '',
-      ''
-    ];
-    summaryRow.font = { name: 'Calibri', size: 11, bold: true };
-    summaryRow.eachCell(cell => {
-      cell.alignment = { vertical: 'middle' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCBD5E1' } };
-    });
-    financialColumns.forEach(colIndex => {
-      const cell = worksheet.getCell(totalRow, colIndex + 1);
-      cell.numFmt = '#,##0.00';
-    });
-
-    // Add payment method totals
-    const cardRow = worksheet.getRow(totalRow + 1);
-    cardRow.height = 22;
-    cardRow.values = [
-      'CARD TOTAL',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      paymentTotals.Card,
-      'Card',
-      ''
-    ];
-    cardRow.font = { bold: true };
-    worksheet.getCell(totalRow + 1, 10).numFmt = '#,##0.00';
-
-    const upiRow = worksheet.getRow(totalRow + 2);
-    upiRow.height = 22;
-    upiRow.values = [
-      'UPI TOTAL',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      paymentTotals.UPI,
-      'UPI',
-      ''
-    ];
-    upiRow.font = { bold: true };
-    worksheet.getCell(totalRow + 2, 10).numFmt = '#,##0.00';
-
-    const cashRow = worksheet.getRow(totalRow + 3);
-    cashRow.height = 22;
-    cashRow.values = [
-      'CASH TOTAL',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      paymentTotals.Cash,
-      'Cash',
-      ''
-    ];
-    cashRow.font = { bold: true };
-    worksheet.getCell(totalRow + 3, 10).numFmt = '#,##0.00';
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="monthly-report-${periodName.replace(/\s+/g, '-').toLowerCase()}.xlsx"`);
-
-    await workbook.xlsx.write(res);
-    res.end();
   } catch (error) {
-    console.error('Error generating Excel report:', error);
+    console.error('Error queuing Excel report:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -1065,5 +866,59 @@ export const sendAnalyticsWhatsApp = async (req, res) => {
   } catch (error) {
     console.error('Error sending Analytics via WhatsApp:', error);
     res.status(500).json({ error: error.message });
+  }
+};
+
+// Download secure generated report via ID
+export const downloadSecureReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const tenantDb = req.tenantDb;
+
+    if (!reportId || !tenantDb) {
+      return res.status(400).json({ message: 'Missing reportId or tenant context' });
+    }
+
+    const report = await Report.findOne({ reportId, tenantDb });
+
+    if (!report) {
+      // If it doesn't exist or belongs to another tenant, we return 404 safely
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    // Protection against path traversal and arbitrary files
+    if (report.status === 'expired') {
+      return res.status(410).json({ message: 'Report has expired and been deleted' });
+    }
+
+    const normalizedPath = path.normalize(report.filePath);
+    const secureDir = path.join(process.cwd(), 'secure_reports');
+    if (!normalizedPath.startsWith(secureDir)) {
+      console.warn(`[Security Alert] Traversal attempt blocked: ${normalizedPath} by tenant ${tenantDb}`);
+      return res.status(403).json({ message: 'Invalid report path' });
+    }
+
+    if (!fs.existsSync(normalizedPath)) {
+      // Auto-update to expired if missing on disk
+      await Report.updateOne({ reportId }, { $set: { status: 'expired' } });
+      return res.status(410).json({ message: 'Report file is no longer available on the server' });
+    }
+
+    // Security Headers & Download Stream
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`);
+    res.download(normalizedPath, report.filename, (err) => {
+      if (err) {
+        if (res.headersSent) {
+          console.error('[Download] Headers sent, unable to send error response.', err);
+        } else {
+          res.status(500).json({ message: 'Failed to download report file' });
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error downloading secure report:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };

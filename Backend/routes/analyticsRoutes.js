@@ -7,7 +7,8 @@ import {
   downloadDailyReportCSV, 
   downloadMonthlyReportExcel,
   sendDayBookWhatsApp,
-  sendAnalyticsWhatsApp
+  sendAnalyticsWhatsApp,
+  downloadSecureReport
 } from '../controllers/analyticsController.js';
 import { getSalesForecast } from '../controllers/forecastController.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
@@ -31,5 +32,6 @@ router.post('/whatsapp', authenticateToken, sendAnalyticsWhatsApp);
 // Download reports - Available to Cashier & Admin
 router.get('/download/daily/csv', authenticateToken, downloadDailyReportCSV);
 router.get('/download/monthly/excel', authenticateToken, downloadMonthlyReportExcel);
+router.get('/download/:reportId', authenticateToken, downloadSecureReport);
 
 export default router;
