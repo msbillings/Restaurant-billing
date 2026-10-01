@@ -20,6 +20,9 @@ redisManager.client = {
        store.set(key, current);
        return [current, parseInt(args[5], 10)];
     }
+    if (args[0] === 'SCRIPT' && args[1] === 'EXISTS') {
+      return [1];
+    }
     return null;
   }
 };
@@ -103,6 +106,9 @@ describe('Rate Limiter Middleware', () => {
            store.set(key, current);
            return [current, parseInt(args[5], 10)];
         }
+        if (args[0] === 'SCRIPT' && args[1] === 'EXISTS') {
+          return [1];
+        }
         return null;
       }
     };
@@ -175,9 +181,11 @@ describe('Rate Limiter Middleware', () => {
 
   // 8. user A cannot consume user B quota
   it('should isolate by user ID within the same tenant', async () => {
+    const promises = [];
     for (let i = 0; i < 300; i++) {
-      await request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token'); // tenantA, user_123
+      promises.push(request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token')); // tenantA, user_123
     }
+    await Promise.all(promises);
     const resBlocked = await request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token');
     expect(resBlocked.status).toBe(429);
 
@@ -187,9 +195,11 @@ describe('Rate Limiter Middleware', () => {
 
   // 9. authenticated tenant identity ignores spoofed tenant header
   it('authenticated identity ignores spoofed headers', async () => {
+    const promises = [];
     for (let i = 0; i < 300; i++) {
-      await request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token').set('X-Tenant-DB', 'tenantB');
+      promises.push(request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token').set('X-Tenant-DB', 'tenantB'));
     }
+    await Promise.all(promises);
     // Should be blocked because token resolves to tenantA
     const resBlocked = await request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token').set('X-Tenant-DB', 'tenantB');
     expect(resBlocked.status).toBe(429);
@@ -304,9 +314,11 @@ describe('Rate Limiter Middleware', () => {
 
   // 21. pushOrder GET has tenantApiLimiter
   it('should enforce tenantApiLimiter on pushOrder GET', async () => {
+    const promises = [];
     for (let i = 0; i < 300; i++) {
-      await request(app).get('/api/push-orders').set('Authorization', 'Bearer valid_token');
+      promises.push(request(app).get('/api/push-orders').set('Authorization', 'Bearer valid_token'));
     }
+    await Promise.all(promises);
     const resOver = await request(app).get('/api/push-orders').set('Authorization', 'Bearer valid_token');
     expect(resOver.status).toBe(429);
   });
@@ -320,10 +332,11 @@ describe('Rate Limiter Middleware', () => {
 
   // 23. A valid trusted webhook identity resolves to the correct tenant and limits correctly
   it('should allow valid trusted webhook and limit based on trusted identity, ignoring spoof attempts', async () => {
-    // We send X-Tenant-DB: attacker_tenant, but the route sets webhookVerifiedTenant = 'trusted_tenant'
+    const promises = [];
     for (let i = 0; i < 500; i++) {
-      await request(app).post('/api/webhook_valid').set('X-Tenant-DB', 'attacker_tenant').set('X-Forwarded-For', '1.1.1.1');
+      promises.push(request(app).post('/api/webhook_valid').set('X-Tenant-DB', 'attacker_tenant').set('X-Forwarded-For', '1.1.1.1'));
     }
+    await Promise.all(promises);
     const resOver = await request(app).post('/api/webhook_valid').set('X-Tenant-DB', 'attacker_tenant').set('X-Forwarded-For', '1.1.1.1');
     expect(resOver.status).toBe(429);
 

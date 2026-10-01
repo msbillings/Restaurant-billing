@@ -2366,6 +2366,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       discountType: discount.type,
       discountValue: discount.value === '' ? 0 : parseFloat(discount.value) || 0,
       discountName: discount.name || discount.offerName || '',
+      walletRedemption,
       billType,
       orderSource: billType === 'Delivery' ? orderSource : undefined,
       customerPhone: optimisticBill.customerPhone,

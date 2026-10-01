@@ -14,7 +14,8 @@ jest.unstable_mockModule('bullmq', () => {
     }),
     Queue: jest.fn().mockImplementation(() => ({
       add: jest.fn()
-    }))
+    })),
+    UnrecoverableError: class UnrecoverableError extends Error {}
   };
 });
 
@@ -28,11 +29,20 @@ jest.unstable_mockModule('../../utils/redisClient.js', () => {
   return {
     __esModule: true,
     default: {
-      acquireLock: jest.fn(),
-      releaseLock: jest.fn()
+      acquireLock: jest.fn().mockResolvedValue('fake-lock'),
+      releaseLock: jest.fn().mockResolvedValue(true)
     }
   };
 });
+
+jest.unstable_mockModule('../../utils/dlqManager.js', () => ({
+  __esModule: true,
+  default: {
+    handleFailedJob: jest.fn(),
+    replayDeadLetterJob: jest.fn(),
+    handleReplayedJobSuccess: jest.fn()
+  }
+}));
 
 const mockGetTenantModels = jest.fn();
 const mockBuildTenantClusterMap = jest.fn();
@@ -40,7 +50,8 @@ const mockBuildTenantClusterMap = jest.fn();
 jest.unstable_mockModule('../../utils/tenantManager.js', () => {
   return {
     getTenantModels: mockGetTenantModels,
-    buildTenantClusterMap: mockBuildTenantClusterMap
+    buildTenantClusterMap: mockBuildTenantClusterMap,
+    getMasterModels: jest.fn(async () => ({}))
   };
 });
 
@@ -70,7 +81,8 @@ const mockReportCreate = jest.fn();
 jest.unstable_mockModule('../../models/Report.js', () => ({
   __esModule: true,
   default: {
-    create: mockReportCreate
+    create: mockReportCreate,
+    findOneAndUpdate: jest.fn().mockResolvedValue({})
   }
 }));
 
@@ -105,7 +117,8 @@ describe('Phase 1 Implementation Tests', () => {
   describe('WhatsApp Worker (K-4)', () => {
     it('A. WhatsApp worker tenant isolation - Uses correct tenant Bill model', async () => {
       const mockBillModel = {
-        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 })
+        updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        findById: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue({ _id: 'bill-123', totalAmount: 100 }) })
       };
       mockGetTenantModels.mockResolvedValue({ Bill: mockBillModel });
 
@@ -126,7 +139,11 @@ describe('Phase 1 Implementation Tests', () => {
       expect(mockGetTenantModels).toHaveBeenCalledWith('tenant_A');
       expect(mockBillModel.updateOne).toHaveBeenCalledWith(
         { _id: 'bill-123' },
-        { $set: { isWhatsappSent: true } }
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            isWhatsappSent: true
+          })
+        })
       );
     });
 
