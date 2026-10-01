@@ -69,7 +69,7 @@ export const startReportWorker = () => {
       let filepath = '';
       let downloadUrl = '';
       let displayFilename = '';
-      const reportId = crypto.randomUUID();
+      const reportId = job.id.toString();
 
       if (type === 'CSV_DAILY') {
         // Generate CSV Content
@@ -208,14 +208,19 @@ export const startReportWorker = () => {
 
       console.log(`[Report Worker] Job ${job.id} completed. Saved to ${downloadUrl}`);
 
-      // Store report metadata in primary DB
-      await Report.create({
-        reportId,
-        tenantDb,
-        filePath: filepath,
-        filename: displayFilename,
-        status: 'ready'
-      });
+      // Store report metadata in primary DB idempotently
+      await Report.findOneAndUpdate(
+        { reportId },
+        {
+          $set: {
+            tenantDb,
+            filePath: filepath,
+            filename: displayFilename,
+            status: 'ready'
+          }
+        },
+        { upsert: true, new: true }
+      );
 
       // Emit notification to the user/tenant who requested it
       if (ioEmitter) {

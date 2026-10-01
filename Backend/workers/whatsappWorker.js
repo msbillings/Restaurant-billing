@@ -3,10 +3,10 @@ import { connection } from './queueManager.js';
 import whatsappManager from '../services/whatsappService.js';
 import mongoose from 'mongoose';
 
-import { getTenantModels } from '../utils/tenantManager.js';
+import * as tenantManager from '../utils/tenantManager.js';
+import redisClient from '../utils/redisClient.js';
 
-export const startWhatsAppWorker = () => {
-  const worker = new Worker('WhatsAppQueue', async (job) => {
+export const processWhatsAppJob = async (job) => {
     const {
       tenantDb,
       phone,
@@ -32,14 +32,30 @@ export const startWhatsAppWorker = () => {
     let updateResult = null;
     let BillModel = null;
     if (billId) {
-       const models = await getTenantModels(tenantDb);
+       const models = await tenantManager.getTenantModels(tenantDb);
        BillModel = models.Bill;
        if (!BillModel) {
          throw new Error(`[WhatsApp Worker] Failed to resolve Bill model for tenant ${tenantDb}`);
        }
     }
 
+    let lockToken = null;
+    const idempotencyKey = billId ? `whatsapp:bill:${tenantDb}:${billId}` : `whatsapp:job:${tenantDb}:${job.id}`;
+
     try {
+      if (BillModel && billId && !forceResend) {
+        const bill = await BillModel.findById(billId).lean();
+        if (bill && bill.whatsappSent) {
+          console.log(`[WhatsApp Worker] Job ${job.id} skipped: Bill ${billId} already sent.`);
+          return;
+        }
+      }
+
+      lockToken = await redisClient.acquireLock(idempotencyKey, 60);
+      if (!lockToken) {
+        throw new Error(`Concurrent processing lock active for key ${idempotencyKey}`);
+      }
+
       const whatsappService = whatsappManager.getInstance(tenantDb || 'default');
       await whatsappService.ensureConnection();
 
@@ -61,15 +77,22 @@ export const startWhatsAppWorker = () => {
       if (BillModel && billId) {
         updateResult = await BillModel.updateOne(
           { _id: billId },
-          { $set: { isWhatsappSent: true } }
+          { $set: { whatsappSent: true, whatsappSentAt: new Date(), isWhatsappSent: true } }
         );
       }
       console.log(`[WhatsApp Worker] Job ${job.id} completed successfully.`);
     } catch (error) {
       console.error(`[WhatsApp Worker] Job ${job.id} error:`, error.message);
       throw error;
+    } finally {
+      if (lockToken) {
+        await redisClient.releaseLock(idempotencyKey, lockToken);
+      }
     }
-  }, {
+};
+
+export const startWhatsAppWorker = () => {
+  const worker = new Worker('WhatsAppQueue', processWhatsAppJob, {
     connection,
     concurrency: 5 // Process up to 5 WhatsApp messages simultaneously
   });
