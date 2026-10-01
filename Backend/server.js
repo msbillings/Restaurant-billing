@@ -156,8 +156,8 @@ app.use('/api', limiter);
 
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
-// import { createAdapter } from '@socket.io/redis-adapter';
-// import redisClient from './utils/redisClient.js';
+import { createAdapter } from '@socket.io/redis-adapter';
+import redisClient from './utils/redisClient.js';
 
 // Initialize Socket.io with same CORS config as express
 const io = new Server(server, {
@@ -170,16 +170,17 @@ const io = new Server(server, {
 
 // Configure Redis Adapter for horizontal scaling
 // Requires redisClient.pubClient and redisClient.subClient to be initialized
-// const setupRedisAdapter = async () => {
-//   await redisClient.connect();
-//   if (redisClient.pubClient && redisClient.subClient) {
-//     io.adapter(createAdapter(redisClient.pubClient, redisClient.subClient));
-//     console.log('[Socket] Redis Adapter attached successfully');
-//   } else {
-//     console.warn('[Socket] Redis Adapter not attached (Redis connection failed)');
-//   }
-// };
-// setupRedisAdapter();
+const setupRedisAdapter = async () => {
+  await redisClient.connect();
+  if (redisClient.pubClient && redisClient.subClient) {
+    io.adapter(createAdapter(redisClient.pubClient, redisClient.subClient));
+    console.log('[Socket] Redis Adapter attached successfully');
+  } else {
+    console.warn('[Socket] Redis Adapter not attached (Redis connection failed)');
+  }
+};
+setupRedisAdapter();
+
 
 app.locals.io = io;
 
