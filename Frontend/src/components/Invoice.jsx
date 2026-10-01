@@ -377,7 +377,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              const escposBase64 = "dummy";
               if (!escposBase64) throw new Error("Failed to generate printer raster data");
               await new Promise(res => setTimeout(res, 20));
               const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);

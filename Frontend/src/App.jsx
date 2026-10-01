@@ -173,6 +173,16 @@ function App() {
   const [showPin, setShowPin] = useState(false);
   const [isVerifyingPin, setIsVerifyingPin] = useState(false);
 
+  // Live system clock (uses OS locale & timezone automatically)
+  const [liveTime, setLiveTime] = useState(() => new Date());
+  useEffect(() => {
+    const clockTimer = setInterval(() => setLiveTime(new Date()), 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+  const navTimeStr = liveTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const navDateStr = liveTime.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const navDayStr  = liveTime.toLocaleDateString(undefined, { weekday: 'long' });
+
   // Keyboard shortcut for Calculator (Alt + C or Ctrl + Alt + C)
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1389,7 +1399,7 @@ function App() {
           </button>
           <button
             onClick={() => handleViewChange('floor')}
-            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-0.5 px-0.5 min-w-[105px] sm:min-w-[135px] md:min-w-[160px] lg:min-w-[210px] xl:min-w-[250px] 2xl:min-w-[270px] hover:opacity-90 transition-opacity overflow-visible"
+            className="flex items-center cursor-pointer relative shrink-0 focus:outline-none py-0.5 px-0.5 min-w-[60px] sm:min-w-[90px] md:min-w-[100px] lg:min-w-[120px] xl:min-w-[140px] hover:opacity-90 transition-opacity overflow-visible"
             title={t("Go to Table View / Floor Management")}>
             <img
               src={logoImg}
@@ -1398,6 +1408,14 @@ function App() {
               style={{ objectFit: 'contain' }}
             />
           </button>
+
+          {/* Live Date/Time/Day — right of logo */}
+          <div className="flex flex-col items-center justify-center ml-1 sm:ml-4 px-1 sm:px-1.5 py-0.5 bg-gray-50 border border-gray-200 rounded-lg leading-none shrink-0">
+            <span className="text-blue-700 font-extrabold text-[10px] sm:text-[11px] tracking-tight whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>{navTimeStr}</span>
+            <span className="text-gray-500 font-semibold text-[7px] sm:text-[8px] uppercase tracking-tight whitespace-nowrap leading-tight">{navDayStr}</span>
+            <span className="text-gray-400 font-medium text-[7px] sm:text-[8px] whitespace-nowrap leading-none">{navDateStr}</span>
+          </div>
+
           <span className={`relative z-[99] ml-1 sm:ml-2 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-sm border whitespace-nowrap ${onlineStatus?.isOnline ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
             {onlineStatus?.isOnline ? '● Online' : '● Offline'}
           </span>
@@ -1456,7 +1474,9 @@ function App() {
         </div>
 
         {/* Right Section Header Controls */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+
+
           <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg">
             <PhoneCall size={16} className="text-red-500" />
             <div className="flex flex-col leading-none">
@@ -1784,13 +1804,13 @@ function App() {
             <User size={18} />
           </button>
 
-          {/* Mobile Quick Action Dropdown Trigger (Ensures NO features/buttons are missing on mobile) */}
+          {/* Mobile Quick Action Dropdown Trigger */}
           <button
             onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
-            className={`sm:hidden p-1.5 rounded-lg transition-colors touch-target flex items-center justify-center border shrink-0 ${view === 'kds' ? 'text-slate-300 border-slate-800 hover:bg-slate-800' : 'text-gray-700 hover:bg-surface-hover border-border/60'
+            className={`sm:hidden w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 shadow-sm border -mr-0.5 ${view === 'kds' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
               }`}
             title="More Actions">
-            <MoreVertical size={18} />
+            <MoreVertical size={16} strokeWidth={2.5} />
           </button>
         </div>
 

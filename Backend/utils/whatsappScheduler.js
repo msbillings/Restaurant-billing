@@ -217,7 +217,8 @@ export const triggerAutoDayBookForTenant = async (dbName) => {
         fileName: `DayBook-${result.dateStr.replace(/\//g, '-')}.xlsx`
       });
     } else {
-      await waManager.sendMessage(targetPhone, result.msg);
+      console.warn('[WhatsApp Scheduler] No Excel file generated for DayBook. Aborting send.');
+      return { success: false, error: 'No Excel file generated. Aborting send.' };
     }
 
     return { success: true, message: `Auto DayBook report delivered to +${targetPhone}` };

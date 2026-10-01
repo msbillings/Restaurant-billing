@@ -5,6 +5,68 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
 import { uploadImage } from '../utils/cloudinary.js';
 
+const processingBills = new Set();
+
+
+async function processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt = 1) {
+  // Before trying, ensure it wasn't already sent by another process or previous successful retry that timed out locally
+  if (attempt > 1 && BillModel && (billId || billNumber)) {
+     try {
+       const query = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+       const existing = await BillModel.findOne(query).select('whatsappSent').lean();
+       if (existing && existing.whatsappSent) {
+          console.log('[Queue] 🛑 Bill ' + (billNumber||billId) + ' already marked as sent in DB. Stopping retries to prevent duplicate WhatsApp messages.');
+          return { success: true };
+       }
+     } catch(e) {}
+  }
+  try {
+    await whatsappService.sendBillMedia(phone, payload);
+    // Success! Update DB.
+    if (BillModel && (billId || billNumber)) {
+      const updateQuery = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      await BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e=>console.error(e));
+    }
+    console.log('[Queue] ✅ Successfully sent bill to ' + phone + ' on attempt ' + attempt);
+    return { success: true };
+  } catch (error) {
+    // If the error implies the message might have actually reached WhatsApp server but Baileys timed out locally waiting for an ack, we should be extremely careful about retrying!
+    // But we check DB at the top of the next retry anyway.
+    if (attempt < 5) {
+      console.warn('[Queue] Send failed for ' + phone + ' (Attempt ' + attempt + '/5): ' + error.message + '. Retrying in 8 seconds...');
+      setTimeout(() => {
+        processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt + 1);
+      }, 8000);
+      return { success: false, queued: true, error: error.message };
+    } else {
+      console.error('[Queue] ❌ Send permanently failed for ' + phone + ' after 5 attempts!');
+      // Try Cloud Gateway as last resort on 5th failure
+      const isCloud = process.env.RENDER || process.env.VERCEL;
+      if (!isCloud) {
+        console.warn('[Queue] Fallback to 24/7 Cloud Gateway...');
+        try {
+          const cloudUrl = 'https://msbillings-backend-x9qw.onrender.com/api/whatsapp/send-bill';
+          const fetchParams = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-tenant-db': tenantId },
+            body: JSON.stringify({ phone, imageBase64: payload.imageBase64, pdfBase64: payload.pdfBase64, documentBase64: payload.documentBase64, mimetype: payload.mimetype, billText: payload.caption, fileName: payload.fileName, billId, billNumber, forceResend: true })
+          };
+          fetch(cloudUrl, fetchParams).then(r => r.json()).then(cloudData => {
+             if (cloudData && cloudData.success) {
+                console.log('[Queue] ✅ Cloud Gateway fallback succeeded!');
+                if (BillModel && (billId || billNumber)) {
+                  const updateQuery = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+                  BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e=>{});
+                }
+             }
+          }).catch(e => console.error('[Queue] Cloud gateway fallback error:', e.message));
+        } catch(e) {}
+      }
+      return { success: false, queued: false };
+    }
+  }
+}
+
 export const resolveTenantInfo = async (req) => {
   let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.headers?.['X-Tenant-DB'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
   
@@ -173,7 +235,14 @@ export const sendBill = async (req, res) => {
     const { tenantId, whatsappService } = await resolveTenantInfo(req);
 
     // --- Prevent duplicate WhatsApp sends for the same bill ---
-    // Skip duplicate check if user explicitly requested a resend (e.g. customer didn't receive it)
+    const lockKey = `${tenantId}_${billId || billNumber}`;
+    if (!forceResend) {
+      if (processingBills.has(lockKey)) {
+        return res.status(409).json({ error: 'This bill is currently being sent.', alreadySent: true });
+      }
+      processingBills.add(lockKey);
+    }
+    
     let models = null;
     try {
       models = req.models || (await getTenantModels(tenantId));
@@ -199,6 +268,8 @@ export const sendBill = async (req, res) => {
       }
     }
 
+    const cleanupLock = () => { if (!forceResend) processingBills.delete(lockKey); };
+
     // --- DIAGNOSTIC: Log socket state BEFORE ensureConnection ---
     const wsStateBefore = whatsappService.sock?.ws?.socket?.readyState ?? whatsappService.sock?.ws?.readyState ?? 'none';
     console.log(`[WhatsApp sendBill] Socket readyState BEFORE ensureConnection: ${wsStateBefore} | service.status: ${whatsappService.status}`);
@@ -221,76 +292,36 @@ export const sendBill = async (req, res) => {
     }
 
     let imageUrl = null;
-    // Removed Cloudinary upload to eliminate 3-5 second latency.
-    // The WhatsApp service will directly use the base64 buffer for instant (< 1s) delivery.
-    try {
-      console.log(`[WhatsApp sendBill] Sending MEDIA (Receipt Photo) to ${phone}... (hasCloudUrl=${!!imageUrl})`);
-      await whatsappService.sendBillMedia(phone, {
-        imageBase64,
-        imageUrl,
-        pdfBase64,
-        documentBase64,
-        mimetype,
-        caption: billText,
-        fileName
-      });
-      console.log(`[WhatsApp sendBill] ✅ Receipt photo & media sent successfully to ${phone}`);
-    } catch (sendErr) {
-      // If local socket send failed (e.g. Baileys conflict with 24/7 Render cloud gateway),
-      // seamlessly forward the bill send request to the Render Cloud Gateway!
-      const isCloud = process.env.RENDER || process.env.VERCEL;
-      if (!isCloud) {
-        console.warn(`[WhatsApp sendBill] Local send failed (${sendErr.message}). Fallback to 24/7 Cloud Gateway...`);
-        try {
-          const cloudUrl = 'https://msbillings-backend-x9qw.onrender.com/api/whatsapp/send-bill';
-          const cloudRes = await fetch(cloudUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-tenant-db': tenantId,
-              ...(req.headers['authorization'] ? { 'authorization': req.headers['authorization'] } : {})
-            },
-            body: JSON.stringify(req.body)
+      // Dispatch to dynamic retry queue
+      console.log(`[WhatsApp sendBill] Queueing MEDIA (Receipt Photo) to ${phone}... (hasCloudUrl=${!!imageUrl})`);
+      
+      const payload = {
+          imageBase64,
+          imageUrl,
+          pdfBase64,
+          documentBase64,
+          mimetype,
+          caption: billText,
+          fileName
+      };
+      
+      // Do not block the request. Send the first attempt and handle retries asynchronously.
+      const initialAttempt = await processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, 1);
+      
+      cleanupLock();
+      if (initialAttempt && initialAttempt.success) {
+          return res.json({ success: true, message: 'e-Bill sent successfully via WhatsApp!' });
+      } else {
+          cleanupLock();
+          // It failed on the first attempt, but it's now dynamically in the queue!
+          // We return an error so the frontend knows it hasn't successfully sent YET, 
+          // but we do NOT stop the background retries.
+          return res.json({ 
+              success: true,
+              queued: true,
+              message: 'WhatsApp e-Bill queued for background delivery (will retry 5 times).'
           });
-          const cloudData = await cloudRes.json();
-          if (cloudRes.ok && cloudData?.success) {
-            console.log('[WhatsApp sendBill] ✅ Cloud Gateway fallback succeeded!');
-            // Mark bill as sent in DB
-            if (BillModel && (billId || billNumber)) {
-              try {
-                const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
-                  ? { _id: billId }
-                  : { billNumber: billNumber || billId };
-                await BillModel.updateOne(updateQuery, {
-                  $set: { whatsappSent: true, whatsappSentAt: new Date() }
-                });
-              } catch (e) {}
-            }
-            return res.json({ success: true, message: 'e-Bill sent successfully via Cloud Gateway!' });
-          }
-        } catch (cloudErr) {
-          console.warn('[WhatsApp sendBill] Cloud gateway fallback error:', cloudErr.message);
-        }
       }
-      throw sendErr;
-    }
-
-    // --- Mark bill as sent in DB ---
-    if (BillModel && (billId || billNumber)) {
-      try {
-        const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
-          ? { _id: billId }
-          : { billNumber: billNumber || billId };
-        const updateRes = await BillModel.updateOne(updateQuery, {
-          $set: { whatsappSent: true, whatsappSentAt: new Date() }
-        });
-        console.log(`[WhatsApp sendBill] ✅ Marked bill ${billNumber || billId} as whatsappSent in DB (matched: ${updateRes?.matchedCount}, modified: ${updateRes?.modifiedCount})`);
-      } catch (dbErr) {
-        console.warn('[WhatsApp sendBill] Could not update Bill whatsappSent flag:', dbErr?.message);
-      }
-    }
-
-    res.json({ success: true, message: 'e-Bill sent successfully via WhatsApp!' });
   } catch (error) {
     console.error('[WhatsApp sendBill] ❌ FINAL ERROR:', error?.message);
     console.error('[WhatsApp sendBill] Stack Trace:', error?.stack);

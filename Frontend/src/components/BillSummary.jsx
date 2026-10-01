@@ -97,6 +97,7 @@ const BillSummary = ({
   const [showCharges, setShowCharges] = useState(false);
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [settlementAmount, setSettlementAmount] = useState('');
+  const [isPrintConfigOpen, setIsPrintConfigOpen] = useState(false);
 
   const [showPaxModal, setShowPaxModal] = useState(false);
   const [paxInput, setPaxInput] = useState('1');
@@ -1680,14 +1681,24 @@ const BillSummary = ({
 
       {/* Direct Print Configuration Dropdown - Small Settings Gear */}
       <div className="px-2 py-1 bg-white border-t border-gray-100 flex justify-end">
-        <div className="relative group">
+        <div className="relative">
           <button 
             type="button" 
+            onClick={() => setIsPrintConfigOpen(!isPrintConfigOpen)}
             className="text-[10px] text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-50 px-2 py-1 rounded border border-gray-200 cursor-pointer"
           >
             ⚙️ {t("Print Config")} <ChevronDown size={10} />
           </button>
-          <div className="absolute bottom-full right-0 mb-1 w-48 bg-white shadow-xl border border-gray-200 rounded-lg p-2 hidden group-hover:block z-50 animate-in slide-in-from-bottom-2 duration-200">
+          
+          {/* Overlay to close dropdown when clicking outside on mobile */}
+          {isPrintConfigOpen && (
+            <div 
+              className="fixed inset-0 z-40"
+              onClick={() => setIsPrintConfigOpen(false)}
+            ></div>
+          )}
+
+          <div className={`absolute bottom-full right-0 mb-1 w-48 bg-white shadow-xl border border-gray-200 rounded-lg p-2 z-50 animate-in slide-in-from-bottom-2 duration-200 ${isPrintConfigOpen ? 'block' : 'hidden md:hidden md:group-hover:block'}`}>
             <div className="text-[10px] font-bold text-gray-700 mb-2 border-b border-gray-100 pb-1">{t("Direct Print Settings")}</div>
             <label className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer mb-2 hover:bg-gray-50 p-1 rounded">
               <input 

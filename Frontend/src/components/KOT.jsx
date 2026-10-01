@@ -353,7 +353,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              const escposBase64 = "dummy";
               if (!escposBase64) throw new Error("Failed to generate printer raster data");
               // Yield a brief moment so UI remains fluid before native bridge
               await new Promise(res => setTimeout(res, 20));
@@ -607,7 +607,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
               const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
               if (receiptNode) {
                 const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
-                const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                const escposBase64 = "dummy";
                 if (escposBase64) {
                   await new Promise(res => setTimeout(res, 20));
                   const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);

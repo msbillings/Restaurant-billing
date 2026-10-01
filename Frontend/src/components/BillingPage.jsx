@@ -621,6 +621,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
     const billText = buildWhatsAppBillText(bill, s);
+    showToast("Sending automated WhatsApp bill...", 'info');
+    window.dispatchEvent(new CustomEvent('whatsappSending', { detail: { billNumber: billNo } }));
 
     // Mount offscreen bill for canvas capture
     setOffscreenBill(bill);
@@ -641,7 +643,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
         const canvas = await Promise.race([
           html2canvas(el, {
-            scale: 1.5,
+            scale: 1.3,
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
@@ -667,7 +669,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           new Promise(r => setTimeout(() => r(null), 5000))
         ]);
         if (canvas) {
-          imageBase64 = canvas.toDataURL('image/jpeg', 0.88);
+          imageBase64 = canvas.toDataURL('image/jpeg', 0.70);
           console.log(`[Instant WhatsApp Auto-Send] Captured receipt image (~${Math.round(imageBase64.length * 0.75 / 1024)} KB)`);
         }
       }
@@ -678,6 +680,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // CRITICAL MANDATE: Never send WhatsApp e-bill without receipt photo image!
     if (!imageBase64) {
       console.warn('[Instant WhatsApp Auto-Send] ❌ Receipt image capture returned null — ABORTING send to guarantee photo image requirement.');
+      window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
       return;
     }
 
@@ -696,16 +699,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     ).then(res => {
       if (res && res.success) {
         markBillAlreadySent(billNo);
-        console.log(`[Instant WhatsApp Auto-Send] ✅ Receipt Image & Message delivered to +${cleanPhone} successfully!`);
-        setToast({ message: `e-Bill & Receipt Image sent to +${cleanPhone} via WhatsApp! ✓`, type: 'success' });
-      } else {
+          window.dispatchEvent(new CustomEvent('whatsappSent', { detail: { billNumber: billNo } }));
+          if (res.queued) {
+            console.log(`[Instant WhatsApp Auto-Send] ⏳ Queued for background delivery to +${cleanPhone}`);
+            setToast({ message: `WhatsApp e-Bill queued for background delivery (will retry up to 5 times) ⏳`, type: 'info' });
+          } else {
+            console.log(`[Instant WhatsApp Auto-Send] ✅ Receipt Image & Message delivered to +${cleanPhone} successfully!`);
+            setToast({ message: `e-Bill & Receipt Image sent to +${cleanPhone} via WhatsApp! ✓`, type: 'success' });
+          }
+        } else {
         console.warn(`[Instant WhatsApp Auto-Send] ⚠️ API returned error:`, res?.error);
         setToast({ message: `WhatsApp send failed: ${res?.error || 'Bot not connected'}`, type: 'error' });
+        window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
       }
     }).catch(err => {
       const errMsg = err?.response?.data?.error || err?.message || 'WhatsApp send failed';
       console.warn('[Instant WhatsApp Auto-Send] ❌ Dispatch error:', errMsg);
       setToast({ message: `WhatsApp e-Bill failed: ${errMsg}`, type: 'error' });
+      window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
     });
   };
   // ─────────────────────────────────────────────────────────────────────────────
@@ -2204,6 +2215,14 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       };
 
       const targetId = (orderId && !orderId.startsWith('offline_')) ? orderId : 'new';
+
+      let optimisticBillData = null;
+      if (directPrintConfigs.save) {
+        optimisticBillData = { ...billData, _id: targetId, items: cart, restaurantDetails: s, billNumber: billNumber || 'MS0001', status: 'Billed', billedAt: new Date(), createdAt: new Date() };
+        setCompletedBill(optimisticBillData);
+        isViewingInvoiceRef.current = true;
+        setShowInvoice(true);
+      }
       // ⚡ Direct dynamic execution - pure server response time
       const billedOrder = await generateBill(targetId, billData);
       if (billedOrder) {
@@ -2407,6 +2426,13 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     };
 
     try {
+      if (directPrintConfigs.settle) {
+        const optimisticSettleBill = { ...optimisticBill, status: 'Paid', paymentMode: paymentData.mode, amountPaid: paymentData.amountPaid, billNumber: billNumber || 'MS0001', tableNo: tableToUse, subtotal, tax: taxVal, discount: discountAmount, total, billType, customerName, customerPhone, deliveryCharge, containerCharge, restaurantDetails: { ...s }, settledAt: new Date(), createdAt: new Date() };
+        setCompletedBill(optimisticSettleBill);
+        isViewingInvoiceRef.current = true;
+        setShowInvoice(true);
+      }
+
       // ⚡ Direct dynamic execution - pure server response time in background
       const settledOrder = await settleBill(orderId || 'new', settlementPayload);
       const confirmedBillNumber = settledOrder?.billNumber || optimisticBillNumber;
@@ -2555,9 +2581,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       }
 
       removeClearedTableRecord(tableNo);
-      const response = await apiGenerateKOT(currentId, cart, tableNo);
+      // OPTIMISTIC KOT PRINT
+        if (directPrintConfigs.kot) {
+          const unprintedItems = cart.filter(i => (i.quantity - (i.printedQuantity || 0)) > 0);
+          setActiveKOTData({ items: unprintedItems, tableNo: tableNo, billType, orderSource });
+          setShowKOT(true);
+        }
 
-      // In ONE single shot: update cart with confirmed KOT items, show preview, show toast
+        const response = await apiGenerateKOT(currentId, cart, tableNo);
+
+        // In ONE single shot: update cart with confirmed KOT items, show preview, show toast
       if (response.bill && response.bill.items) {
         setCart(response.bill.items.map(i => ({
           ...i,
@@ -3408,7 +3441,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             backgroundColor: '#ffffff',
             color: '#000000',
             padding: '16px 14px 24px 14px',
-            fontFamily: 'monospace, sans-serif',
+            fontFamily: 'sans-serif',
             fontSize: '12px',
             lineHeight: '1.4',
             boxSizing: 'border-box',
