@@ -221,8 +221,23 @@ export const performBackup = async () => {
 };
 
 export const startBackupCron = () => {
-  cron.schedule('0 3 * * *', () => {
-    console.log('[Backup] Running scheduled daily multi-tenant backup...');
-    performBackup();
+  cron.schedule('0 3 * * *', async () => {
+    const { default: redisClient } = await import('./redisClient.js');
+    // Lock TTL: 1800s (30 minutes) to safely exceed maximum expected backup duration
+    const lockToken = await redisClient.acquireLock('cron:backup:lock', 1800);
+
+    // Fail safely if lock isn't acquired OR if Redis is down and returned a local fallback token
+    // (We must not execute distributed crons on local fake locks if horizontal scaling is present)
+    if (!lockToken || lockToken === 'local-fallback-token') {
+      console.log('[Backup] Skipping backup (lock acquired by another worker node or Redis unavailable)');
+      return;
+    }
+
+    try {
+      console.log('[Backup] Running scheduled daily multi-tenant backup...');
+      await performBackup();
+    } finally {
+      await redisClient.releaseLock('cron:backup:lock', lockToken);
+    }
   });
 };

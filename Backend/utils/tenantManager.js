@@ -32,7 +32,38 @@ import { NotificationDefault } from '../models/Notification.js';
 import WhatsAppAuthDefault from '../models/WhatsAppAuth.js';
 import CampaignDefault from '../models/Campaign.js';
 
-const tenantModelsCache = new Map();
+class BoundedCache {
+  constructor(maxSize = 100) {
+    this.maxSize = maxSize;
+    this.cache = new Map();
+  }
+  has(key) { return this.cache.has(key); }
+  get(key) {
+    if (!this.cache.has(key)) return undefined;
+    const val = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, val); // refresh LRU
+    return val;
+  }
+  set(key, value) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+      // We explicitly DO NOT close the underlying connection (conn.close())
+      // because connections are shared at the cluster level. This cache
+      // only holds model definitions. Evicting the tenant's models from RAM
+      // is completely safe and causes no cross-tenant impact or connection leaks.
+    }
+    this.cache.set(key, value);
+    return this;
+  }
+  delete(key) { return this.cache.delete(key); }
+  clear() { this.cache.clear(); }
+}
+
+const tenantModelsCache = new BoundedCache(100);
 
 // Map of clusterName -> mongoose.Connection (e.g. 'cluster1' -> Connection, 'cluster2' -> Connection)
 const clusterConnections = new Map();
@@ -398,3 +429,4 @@ export const getTenantModels = async (databaseName) => {
   return models;
 };
 
+export { tenantModelsCache };
