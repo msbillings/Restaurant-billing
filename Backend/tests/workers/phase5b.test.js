@@ -33,7 +33,8 @@ let mockBillModel = {
 
 jest.unstable_mockModule('../../utils/tenantManager.js', () => {
   return {
-    getTenantModels: jest.fn().mockResolvedValue({ Bill: mockBillModel })
+    getTenantModels: jest.fn().mockResolvedValue({ Bill: mockBillModel }),
+    getMasterModels: jest.fn().mockResolvedValue({ DeadLetterJob: { updateOne: jest.fn(), findOneAndUpdate: jest.fn() } })
   };
 });
 

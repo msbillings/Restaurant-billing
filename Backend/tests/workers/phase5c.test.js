@@ -52,7 +52,8 @@ const mockBillModel = {
   updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 })
 };
 jest.unstable_mockModule('../../utils/tenantManager.js', () => ({
-  getTenantModels: jest.fn().mockResolvedValue({ Bill: mockBillModel })
+  getTenantModels: jest.fn().mockResolvedValue({ Bill: mockBillModel }),
+  getMasterModels: jest.fn().mockResolvedValue({ DeadLetterJob: { updateOne: jest.fn(), findOneAndUpdate: jest.fn() } })
 }));
 
 // Mock redisClient

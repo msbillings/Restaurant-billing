@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { getTenantModels } from '../utils/tenantManager.js';
+import * as dlqManager from '../utils/dlqManager.js';
 
 let ioEmitter = null;
 const REDIS_URI = process.env.REDIS_URI || 'redis://localhost:6379';
@@ -249,8 +250,17 @@ export const startReportWorker = () => {
     concurrency: 2 // Reports are CPU intensive, keep concurrency low
   });
 
-  worker.on('failed', (job, err) => {
+  worker.on('failed', async (job, err) => {
     console.error(`[Report Worker] Job ${job?.id} failed with error: ${err.message}`);
+    if (job) {
+      await dlqManager.handleFailedJob('ReportQueue', job, err);
+    }
+  });
+
+  worker.on('completed', async (job) => {
+    if (job && job.data && job.data._replayedFrom) {
+      await dlqManager.handleReplayedJobSuccess(job);
+    }
   });
 
   console.log('[Report Worker] Started and listening to ReportQueue');

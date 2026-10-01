@@ -31,6 +31,7 @@ import LoyaltyConfigDefault from '../models/LoyaltyConfig.js';
 import { NotificationDefault } from '../models/Notification.js';
 import WhatsAppAuthDefault from '../models/WhatsAppAuth.js';
 import CampaignDefault from '../models/Campaign.js';
+import DeadLetterJobDefault from '../models/DeadLetterJob.js';
 
 class BoundedCache {
   constructor(maxSize = 100) {
@@ -321,6 +322,7 @@ export const getMasterModels = async () => {
     Notification: NotificationDefault,
     WhatsAppAuth: WhatsAppAuthDefault,
     Campaign: CampaignDefault,
+    DeadLetterJob: DeadLetterJobDefault,
     connection: mongoose.connection
   };
 };

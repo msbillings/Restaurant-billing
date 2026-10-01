@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 
 import * as tenantManager from '../utils/tenantManager.js';
 import redisClient from '../utils/redisClient.js';
+import * as dlqManager from '../utils/dlqManager.js';
 
 export const processWhatsAppJob = async (job) => {
     const {
@@ -97,8 +98,17 @@ export const startWhatsAppWorker = () => {
     concurrency: 5 // Process up to 5 WhatsApp messages simultaneously
   });
 
-  worker.on('failed', (job, err) => {
+  worker.on('failed', async (job, err) => {
     console.error(`[WhatsApp Worker] Job ${job?.id} failed with error: ${err.message}`);
+    if (job) {
+      await dlqManager.handleFailedJob('WhatsAppQueue', job, err);
+    }
+  });
+
+  worker.on('completed', async (job) => {
+    if (job && job.data && job.data._replayedFrom) {
+      await dlqManager.handleReplayedJobSuccess(job);
+    }
   });
 
   console.log('[WhatsApp Worker] Started and listening to WhatsAppQueue');
