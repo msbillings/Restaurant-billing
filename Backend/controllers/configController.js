@@ -2,8 +2,10 @@ import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import ClientDefault from '../models/Client.js';
 import UserDefault from '../models/User.js';
+import ReferralLog from '../models/ReferralLog.js';
 import SettingDefault from '../models/Setting.js';
 import FloorDefault from '../models/Floor.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
@@ -137,9 +139,9 @@ export const getRestaurantInfo = async (req, res) => {
       restaurantSettings = {};
     }
 
-    // Intelligent fallback to SuperAdmin Client registration if restaurantName is not set yet in tenant DB
+    let referralCode = '';
     const tenantDbName = req.tenantDb || req.headers?.['x-tenant-db'] || '';
-    if (!restaurantSettings.restaurantName && tenantDbName) {
+    if (tenantDbName) {
       try {
         const clientDoc = await ClientDefault.findOne({
           $or: [
@@ -149,6 +151,11 @@ export const getRestaurantInfo = async (req, res) => {
         }).lean();
 
         if (clientDoc) {
+          referralCode = clientDoc.referralCode;
+          if (!referralCode) {
+            referralCode = 'REF-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+            await ClientDefault.updateOne({ _id: clientDoc._id }, { $set: { referralCode } });
+          }
           if (!restaurantSettings.restaurantName && clientDoc.restaurantName) {
             restaurantSettings.restaurantName = clientDoc.restaurantName;
           }
@@ -210,7 +217,8 @@ export const getRestaurantInfo = async (req, res) => {
       restaurantSettings,
       spaces,
       ...restaurantSettings,
-      logo: restaurantSettings.logo
+      logo: restaurantSettings.logo,
+      referralCode
     });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching config', error: error.message });
@@ -497,5 +505,49 @@ export const verifyPin = async (req, res) => {
   } catch (error) {
     console.error('Error verifying PIN:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const getReferralHistory = async (req, res) => {
+  try {
+    const tenantDbName = req.tenantDb || req.headers?.['x-tenant-db'] || '';
+    if (!tenantDbName) {
+      return res.status(400).json({ success: false, message: 'Tenant DB required' });
+    }
+
+    const clientDoc = await ClientDefault.findOne({ databaseName: tenantDbName }).lean();
+    if (!clientDoc) {
+      return res.status(404).json({ success: false, message: 'Client not found' });
+    }
+
+    const logs = await ReferralLog.find({ referrerId: clientDoc._id })
+      .populate('referredId', 'restaurantName phone createdAt databaseName')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    let totalEarnedDays = 0;
+    const history = logs.map(log => {
+      if (log.status === 'APPLIED') {
+        totalEarnedDays += (log.referrerRewardDays || 0);
+      }
+      return {
+        id: log._id,
+        restaurantName: log.referredId?.restaurantName || 'Unknown Restaurant',
+        phone: log.referredId?.phone || 'N/A',
+        status: log.status, // 'PENDING', 'APPLIED', 'FAILED'
+        daysEarned: log.referrerRewardDays,
+        joinedAt: log.createdAt
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      totalEarnedDays,
+      totalReferrals: logs.length,
+      history
+    });
+  } catch (error) {
+    console.error('Error fetching referral history:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch referral history' });
   }
 };

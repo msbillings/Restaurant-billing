@@ -13,6 +13,7 @@ import {
   getTemplates,
   saveTemplates
 } from '../controllers/whatsappController.js';
+import { sendReferralInvite } from '../controllers/referralWhatsAppController.js';
 import { optionalAuthenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -29,6 +30,7 @@ router.post('/campaign/log', optionalAuthenticateToken, logCampaign);
 router.get('/campaign/history', optionalAuthenticateToken, getCampaignHistory);
 router.get('/templates', optionalAuthenticateToken, getTemplates);
 router.post('/templates', optionalAuthenticateToken, saveTemplates);
+router.post('/send-referral', optionalAuthenticateToken, sendReferralInvite);
 
 export default router;
 

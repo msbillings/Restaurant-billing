@@ -742,7 +742,7 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
   // Dynamic Paper Width from Settings or Printer Config (80mm vs 58mm)
   const is58mm = printerConfig.paperWidth === '58mm' || s.printFormat === '58mm';
   const width = is58mm ? 30 : 44;
-  const solidLine = generateESCPOSSolidLine(is58mm, 2);
+  const solidLine = Buffer.from('-'.repeat(width) + CMD.LINE_FEED, 'utf-8');
 
   // Dynamic Font Size from Settings ('small', 'medium', 'large', 'extra-large')
   const fontSize = (s.receiptFontSize || printerConfig.fontSize || 'medium').toLowerCase();
@@ -785,12 +785,12 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
 
   // 1. Dynamic Restaurant Logo (if enabled and present)
   const logoUrl = s.logo || s.restaurantLogo;
-  const shouldShowLogo = (s.showLogo !== false && s.showLogo !== 'false' && s.printLogo !== false && s.printLogo !== 'false') && !!logoUrl && printerConfig.connectionType !== 'bluetooth';
+  const shouldShowLogo = (s.showLogo !== false && s.showLogo !== 'false' && s.printLogo !== false && s.printLogo !== 'false') && !!logoUrl && !is58mm;
   if (shouldShowLogo) {
     try {
       const logoBuf = await generateESCPOSLogoRaster(logoUrl, is58mm);
       if (logoBuf && logoBuf.length > 0) {
-        chunks.push(logoBuf);
+        chunks.push(logoBuf); 
       }
     } catch (e) {
       console.warn('[PrinterService] Failed to include logo raster:', e.message);
@@ -876,15 +876,15 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
   if (is58mm) {
     // 28 chars: Item(12) + Qty(4) + Amount(10) -> "Item         Qty.     Amount"
     const h58Item = 'Item'.padEnd(12, ' ');
-    const h58Qty  = 'Qty.'.padStart(4, ' ');
-    const h58Amt  = 'Amount'.padStart(10, ' ');
+    const h58Qty = 'Qty.'.padStart(4, ' ');
+    const h58Amt = 'Amount'.padStart(10, ' ');
     itemHead += CMD.BOLD_ON + h58Item + ' ' + h58Qty + ' ' + h58Amt + CMD.LINE_FEED + CMD.BOLD_OFF;
   } else {
     // 43 chars: Item(18) + Qty(4) + Price(9) + Amount(9) -> "Item                  Qty.     Price    Amount"
     const h80Item = 'Item'.padEnd(18, ' ');
-    const h80Qty  = 'Qty.'.padStart(4, ' ');
+    const h80Qty = 'Qty.'.padStart(4, ' ');
     const h80Price = 'Price'.padStart(9, ' ');
-    const h80Amt  = 'Amount'.padStart(9, ' ');
+    const h80Amt = 'Amount'.padStart(9, ' ');
     itemHead += CMD.BOLD_ON + h80Item + ' ' + h80Qty + ' ' + h80Price + ' ' + h80Amt + CMD.LINE_FEED + CMD.BOLD_OFF;
   }
   chunks.push(Buffer.from(itemHead, 'utf-8'));
@@ -1055,9 +1055,8 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
 
   // 9. UPI Scan to Pay QR Code (Universal 1-bit Monochrome ESC/POS Raster)
   const pa = (s.upiId || '').trim();
-  const isBluetooth = printerConfig.connectionType === 'bluetooth';
-  
-  if (s.enableQrPayment !== false && pa && roundedTotal > 0 && !isBluetooth) {
+
+  if (s.enableQrPayment !== false && pa && roundedTotal > 0 && !is58mm) {
     const isMixed = bill.paymentMode === 'Mixed';
     const upiSplit = Number(bill.splitPayments?.upi || 0);
     const am = (isMixed && upiSplit > 0) ? upiSplit.toFixed(2) : roundedTotal.toFixed(2);
@@ -1070,7 +1069,7 @@ export const generateESCPOSBillReceipt = async (bill, printerConfig = {}, restau
     let preQr = '';
     preQr += CMD.ALIGN_CENTER + CMD.BOLD_ON + 'SCAN TO PAY VIA UPI' + CMD.LINE_FEED + CMD.BOLD_OFF;
 
-    const qrRasterBuffer = Buffer.alloc(0);
+    const qrRasterBuffer = generateESCPOSQRCodeRaster(qrUri, is58mm);
 
     let postQr = '';
     postQr += CMD.ALIGN_CENTER + `UPI ID: ${pa}` + CMD.LINE_FEED;

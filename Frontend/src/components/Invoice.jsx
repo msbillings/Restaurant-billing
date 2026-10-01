@@ -186,9 +186,9 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         try {
           const local = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
           localStorage.setItem('restaurantSettings', JSON.stringify({ ...local, ...incoming }));
-        } catch (_) {}
+        } catch (_) { }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     window.addEventListener('settingsUpdated', updateLocalSettings);
     return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
@@ -251,7 +251,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         if (Array.isArray(res.data)) {
           setPrinterConfigs(res.data);
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     fetchPrinters();
   }, []);
@@ -297,7 +297,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
             )) || null;
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       // 2. Desktop Electron App
@@ -313,11 +313,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         } else {
           printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter || '', false);
         }
-        
+
         if (printResult && printResult.success === false) {
           throw new Error(printResult.reason || "Electron print failed");
         }
-        
+
         setPrintStatus('success');
         setToast({ message: t('Bill sent to printer!'), type: 'success' });
         resetPrintStatus(3000);
@@ -354,7 +354,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               if (!escposBase64) throw new Error("Failed to generate printer raster data");
               await new Promise(res => setTimeout(res, 20));
               const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
-                const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
+              const resStr = window.AndroidBluetooth.printImage(macAddress, pngBase64, paperWidthDots);
               const res = JSON.parse(resStr || '{}');
               if (res.success) {
                 setPrintStatus('success');
@@ -413,7 +413,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               list = res.data;
               setPrinterConfigs(res.data);
             }
-          } catch (_) {}
+          } catch (_) { }
         }
 
         const isMobile = typeof window !== 'undefined' && (
@@ -436,24 +436,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
           await Promise.all(receiptPrinters.map(async (rp) => {
             try {
-              let escposBase64 = null;
-              if (activeSettings.enableGraphicalPrinting === true) {
-                try {
-                  const receiptNode = document.querySelector('.receipt-print');
-                  if (receiptNode) {
-                    const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || rp?.paperWidth === '58mm') ? 384 : 576;
-                    escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
-                  }
-                } catch (err) {
-                  console.warn('Failed to rasterize Bill:', err);
-                }
-              }
-
               const response = await api.post('/printer-configs/print-bill', {
                 bill: billPayload,
                 billId: bill?._id,
                 printerId: rp._id,
-                rasterBufferBase64: escposBase64 || null
+                rasterBufferBase64: null
               });
               if (response.data && (response.data.success || response.data.relayed)) {
                 anySuccess = true;
@@ -995,14 +982,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             onClick={() => handlePrint(false)}
             disabled={isPrinting}
             className={`flex items-center gap-1.5 px-3.5 py-2 font-bold text-xs sm:text-sm transition-colors duration-100 active:scale-95 cursor-pointer min-w-[110px] justify-center ${printStatus === 'success'
-                ? 'bg-emerald-50 text-emerald-700'
-                : printStatus === 'failed'
-                  ? 'bg-red-50 text-red-700'
-                  : printStatus === 'not_connected'
-                    ? 'bg-orange-50 text-orange-700'
-                    : printStatus === 'printing'
-                      ? 'bg-blue-50 text-blue-700 cursor-not-allowed'
-                      : 'text-gray-900 hover:bg-gray-100'
+              ? 'bg-emerald-50 text-emerald-700'
+              : printStatus === 'failed'
+                ? 'bg-red-50 text-red-700'
+                : printStatus === 'not_connected'
+                  ? 'bg-orange-50 text-orange-700'
+                  : printStatus === 'printing'
+                    ? 'bg-blue-50 text-blue-700 cursor-not-allowed'
+                    : 'text-gray-900 hover:bg-gray-100'
               }`}
             title={activeReceiptPrinter ? `${t("Print directly to")} ${activeReceiptPrinter.name} (${activeReceiptPrinter.connectionType === 'usb' ? activeReceiptPrinter.usbPort : activeReceiptPrinter.connectionType === 'bluetooth' ? (activeReceiptPrinter.bluetoothAddress || 'Bluetooth') : activeReceiptPrinter.ipAddress})` : t("Print Bill")}>
             {printStatus === 'printing' && (
@@ -1196,8 +1183,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 disabled={sendingAutomated || isAlreadySent}
                 onClick={() => handleSendWhatsAppBill(whatsappPhone, whatsappCustomerName)}
                 className={`flex-1 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed ${isAlreadySent
-                    ? 'bg-gray-400 text-white shadow-none'
-                    : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-[#25D366]/20'
+                  ? 'bg-gray-400 text-white shadow-none'
+                  : 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-[#25D366]/20'
                   }`}>
                 {sendingAutomated ? (
                   <><Loader2 size={16} className="animate-spin" /><span className="animate-pulse">{t("Sending...")}</span></>

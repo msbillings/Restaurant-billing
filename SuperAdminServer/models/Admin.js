@@ -33,7 +33,9 @@ const adminSchema = new mongoose.Schema({
     counter: Number,
     transports: [String]
   }],
-  currentChallenge: String
+  currentChallenge: String,
+  referrerRewardDays: { type: Number, default: 7 },
+  refereeRewardDays: { type: Number, default: 7 }
 }, { timestamps: true });
 
 export default mongoose.model('Admin', adminSchema);

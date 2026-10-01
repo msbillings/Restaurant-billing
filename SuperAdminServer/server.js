@@ -196,6 +196,7 @@ import authRoutes from './routes/authRoutes.js';
 import broadcastRoutes from './routes/broadcastRoutes.js';
 import marketHubRoutes from './routes/marketHubRoutes.js';
 import vendorRoutes from './routes/vendorRoutes.js';
+import referralRoutes from './routes/referralRoutes.js';
 import { protect } from './middleware/authMiddleware.js';
 
 app.use('/api/auth', authRoutes);
@@ -206,5 +207,6 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/markethub', protect, marketHubRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/referrals', referralRoutes);
 
 export default app;

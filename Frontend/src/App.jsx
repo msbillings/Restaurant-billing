@@ -7,6 +7,7 @@ import { useLanguage } from './context/LanguageContext';
 const BillingPage = React.lazy(() => import('./components/BillingPage'));
 const BillHistory = React.lazy(() => import('./components/BillHistory'));
 const LoginPage = React.lazy(() => import('./components/LoginPage'));
+const RegisterPage = React.lazy(() => import('./components/RegisterPage'));
 const MenuManagement = React.lazy(() => import('./components/MenuManagement'));
 const ActiveOrders = React.lazy(() => import('./components/ActiveOrders'));
 const Analytics = React.lazy(() => import('./components/Analytics'));
@@ -64,6 +65,7 @@ const AboutModal = React.lazy(() => import('./components/AboutModal'));
 const UpdateModal = React.lazy(() => import('./components/UpdateModal'));
 const CalculatorModal = React.lazy(() => import('./components/CalculatorModal'));
 const MarketHub = React.lazy(() => import('./components/MarketHub'));
+const ReferAndEarn = React.lazy(() => import('./components/ReferAndEarn'));
 const LandingPage = React.lazy(() => import('./landing/LandingPage'));
 import GlobalHeader from './components/GlobalHeader';
 import packageJson from '../package.json';
@@ -557,6 +559,8 @@ function App() {
   // Sync license expiry and restaurant settings from Backend Database so ALL devices (Desktop & Mobile) match 100%!
   const lastSyncConfigTimeRef = useRef(0);
   const syncConfigFromBackend = async (force = false) => {
+    if (!localStorage.getItem('accessToken')) return;
+
     const now = Date.now();
     // Cache for 10 minutes unless forced
     if (!force && now - lastSyncConfigTimeRef.current < 10 * 60 * 1000 && localStorage.getItem('restaurantSettings')) {
@@ -1159,7 +1163,16 @@ function App() {
     );
   }
 
-  // 2. POS App Terminal flow (Native APK/EXE or Web users entering /login or /app)
+  // 2. Registration Page flow
+  if (window.location.pathname === '/register') {
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-950 text-white"><div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div></div>}>
+        <RegisterPage />
+      </Suspense>
+    );
+  }
+
+  // 3. POS App Terminal flow (Native APK/EXE or Web users entering /login or /app)
   if (!hasLicense) {
     return (
       <>
@@ -2469,6 +2482,7 @@ function App() {
                   {view === 'loyalty' && <LoyaltyProgram onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'forecasting' && <SalesForecasting onNavigate={handleViewChange} onGoBack={handleGoBack} />}
                   {view === 'markethub' && <MarketHub onNavigate={handleViewChange} onGoBack={handleGoBack} />}
+                  {view === 'refer-and-earn' && <ReferAndEarn onGoBack={handleGoBack} />}
                 </>
               }
             </Suspense>

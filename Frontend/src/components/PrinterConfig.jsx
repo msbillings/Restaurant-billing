@@ -1757,7 +1757,9 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                   printFormat: formData.paperWidth,
                   receiptFontFamily: 'arial',
                   receiptFontSize: 'medium',
-                  restaurantName: 'YOUR RESTAURANT'
+                  restaurantName: 'YOUR RESTAURANT',
+                  logo: 'https://via.placeholder.com/150',
+                  upiId: 'test@upi'
                 }}
                 previewTab={formData.type === 'kot' ? 'kot' : 'receipt'}
                 t={t}

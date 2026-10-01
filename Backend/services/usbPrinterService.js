@@ -12,10 +12,10 @@ const execPromise = (cmd, opts) => {
     const timer = setTimeout(() => {
       if (isDone) return;
       isDone = true;
-      try { if (child) child.kill('SIGKILL'); } catch (e) {}
+      try { if (child) child.kill('SIGKILL'); } catch (e) { }
       reject(new Error('Process execution timed out strictly'));
     }, opts?.timeout || 15000);
-    
+
     child = exec(cmd, opts, (error, stdout, stderr) => {
       if (isDone) return;
       isDone = true;
@@ -33,10 +33,10 @@ const execFilePromise = (exe, args, opts) => {
     const timer = setTimeout(() => {
       if (isDone) return;
       isDone = true;
-      try { if (child) child.kill('SIGKILL'); } catch (e) {}
+      try { if (child) child.kill('SIGKILL'); } catch (e) { }
       reject(new Error('Process execution timed out strictly'));
     }, opts?.timeout || 15000);
-    
+
     child = execFile(exe, args, opts, (error, stdout, stderr) => {
       if (isDone) return;
       isDone = true;
@@ -59,7 +59,7 @@ async function withPrinterLock(printerName, task) {
   let release;
   const nextLock = new Promise(resolve => { release = resolve; });
   printerLocks.set(key, currentLock.then(() => nextLock).catch(() => nextLock));
-  
+
   try {
     await currentLock;
     return await task();
@@ -205,7 +205,7 @@ export async function getAvailableUSBAndCOMPorts() {
           });
         });
       }
-    } catch (e) {}
+    } catch (e) { }
     return ports;
   }
 
@@ -292,14 +292,14 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
             `;
             const encoded = Buffer.from(psCommand, 'utf16le').toString('base64');
             const { stdout } = await execFilePromise("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-EncodedCommand", encoded], { timeout: 25000 });
-            
+
             if (stdout) {
-               const lines = stdout.trim().split(/\r?\n/);
-               const foundName = lines[lines.length - 1].trim();
-               if (foundName) {
-                 targetSpoolerName = foundName;
-                 usbPrinterCache.set(cleanPort, foundName);
-               }
+              const lines = stdout.trim().split(/\r?\n/);
+              const foundName = lines[lines.length - 1].trim();
+              if (foundName) {
+                targetSpoolerName = foundName;
+                usbPrinterCache.set(cleanPort, foundName);
+              }
             }
           }
         } catch (e) {
@@ -330,7 +330,7 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
         if (fs.existsSync(tempBin)) {
           fs.unlinkSync(tempBin);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   } else if (process.platform === 'linux' && portName.startsWith('/dev/')) {
     // Linux direct write
@@ -406,7 +406,7 @@ export async function checkNetworkConnectivity() {
         if (name === 'lo') continue;
         const carrierPath = `/sys/class/net/${name}/carrier`;
         let carrier = '0';
-        try { carrier = fs.readFileSync(carrierPath, 'utf8').trim(); } catch (_) {}
+        try { carrier = fs.readFileSync(carrierPath, 'utf8').trim(); } catch (_) { }
         if (carrier === '1') {
           for (const addr of addrs) {
             if (addr.family === 'IPv4' && !addr.internal) {
@@ -578,11 +578,11 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
           $sp.ReadTimeout = 500
           try {
             $sp.Open()
-            $chunkSize = 256
+            $chunkSize = 128
             for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
               $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
               $sp.Write($rawBytes, $offset, $count)
-              Start-Sleep -Milliseconds 50
+              Start-Sleep -Milliseconds 40
             }
             Start-Sleep -Milliseconds 200
             $sp.Close()
@@ -592,8 +592,8 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
           }
         `;
         const encodedFast = Buffer.from(fastScript, 'utf16le').toString('base64');
-        await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedFast}`, { timeout: 20000 });
-        try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+        await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedFast}`, { timeout: 45000 });
+        try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) { }
         return { success: true, message: `Printed instantly to Bluetooth via ${cachedPort}` };
       } catch (fastErr) {
         console.warn(`[BluetoothPrinter] Fast native print to ${cachedPort} failed, falling back to full scan:`, fastErr.message);
@@ -605,34 +605,27 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       $cleanMac = '${cleanAddress}'
       $targetName = '${addressOrName.replace(/'/g, "''")}'
 
-      # Find assigned COM port for this Bluetooth device
-      $allPorts = Get-PnpDevice -Class 'Ports' -Status 'OK' -ErrorAction SilentlyContinue |
-        Select-Object FriendlyName, InstanceId
-
+      # Find assigned COM port for this Bluetooth device using Registry
       $matchedPort = ''
-      foreach ($p in $allPorts) {
-        if ($cleanMac -and $p.InstanceId -and $p.InstanceId.ToUpper() -match $cleanMac) {
-          if ($p.FriendlyName -match 'COM\\d+') {
-            $matchedPort = $matches[0]
-            break
-          }
-        }
-      }
-
-      if (-not $matchedPort) {
-        foreach ($p in $allPorts) {
-          if ($p.FriendlyName -match [regex]::Escape($targetName)) {
-            if ($p.FriendlyName -match 'COM\\d+') {
-              $matchedPort = $matches[0]
-              break
+      $bthEnumPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\BTHENUM'
+      if (Test-Path $bthEnumPath) {
+        $bthKeys = Get-ChildItem -Path $bthEnumPath -Recurse -Depth 1 -ErrorAction SilentlyContinue
+        foreach ($key in $bthKeys) {
+          if ($cleanMac -and $key.PSChildName.ToUpper() -match $cleanMac) {
+            $devParams = Join-Path -Path $key.PSPath -ChildPath 'Device Parameters'
+            if (Test-Path $devParams) {
+              $portName = (Get-ItemProperty -Path $devParams -Name 'PortName' -ErrorAction SilentlyContinue).PortName
+              if ($portName -match 'COM\\d+') {
+                $matchedPort = $portName
+                break
+              }
             }
           }
         }
       }
-        
 
       if (-not $matchedPort) {
-        Write-Error "PRINTER_OFFLINE: Printer '$targetName' is not reachable. Please make sure the printer is turned ON and paired in Windows Bluetooth Settings, then try again."
+        Write-Output "PRINTER_OFFLINE: Printer $targetName ($cleanMac) has no assigned COM port. Make sure it's paired via Classic Bluetooth (not LE)."
         exit 1
       }
 
@@ -642,18 +635,18 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       $sp.ReadTimeout = 500
       try {
         $sp.Open()
-        $chunkSize = 256
+        $chunkSize = 128
         for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
           $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
           $sp.Write($rawBytes, $offset, $count)
-          Start-Sleep -Milliseconds 30
+          Start-Sleep -Milliseconds 40
         }
         Start-Sleep -Milliseconds 200
         $sp.Close()
         Write-Output "SUCCESS:$matchedPort"
       } catch {
         if ($sp.IsOpen) { $sp.Close() }
-        Write-Error "Failed to send data to Bluetooth port $matchedPort : $($_.Exception.Message)"
+        Write-Output "ERROR: Failed to send data to Bluetooth port $matchedPort : $($_.Exception.Message)"
         exit 1
       }
     `;
@@ -664,7 +657,7 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
         `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encoded}`,
         { timeout: 60000 }
       );
-      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) { }
 
       const out = (stdout || '').trim();
       const portMatch = out.match(/SUCCESS:(.+)/i);
@@ -675,13 +668,13 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       }
       return { success: true, message: out || `Printed to Bluetooth port for ${addressOrName}` };
     } catch (err) {
-      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) {}
+      try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) { }
       const rawMsg = (err.stderr || err.stdout || err.message || '');
 
       const offlineMatch = rawMsg.match(/PRINTER_OFFLINE:\s*(.+)/i);
       if (offlineMatch) throw new Error(offlineMatch[1].trim());
 
-      const writeErrMatch = rawMsg.match(/Write-Error[^:]*:\s*(.+)/i);
+      const writeErrMatch = rawMsg.match(/ERROR:\s*(.+)/i);
       if (writeErrMatch) throw new Error(writeErrMatch[1].trim());
 
       const cleaned = rawMsg

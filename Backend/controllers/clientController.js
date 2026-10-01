@@ -1,6 +1,8 @@
 import Client from '../models/Client.js';
 import License from '../models/License.js';
 import Broadcast from '../models/Broadcast.js';
+import ReferralLog from '../models/ReferralLog.js';
+import Setting from '../models/Setting.js';
 import crypto from 'crypto';
 
 // Get all clients (For Super Admin dashboard)
@@ -80,7 +82,7 @@ export const updateLicense = async (req, res) => {
 // Create a new client and generate a license
 export const createClient = async (req, res) => {
   try {
-    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts, cluster } = req.body;
+    const { restaurantName, ownerName, email, password, plan, customDays, staffAccounts, cluster, referralCode } = req.body;
 
     // Enforce 10 restaurants per cluster limit
     const targetCluster = (cluster || 'cluster0').toLowerCase().trim();
@@ -96,8 +98,31 @@ export const createClient = async (req, res) => {
       return res.status(400).json({ message: 'Email already registered' });
     }
 
+    let referrer = null;
+    let refereeRewardDays = 0;
+    let referrerRewardDays = 0;
+
+    if (referralCode) {
+      referrer = await Client.findOne({ referralCode });
+      if (!referrer) {
+        return res.status(400).json({ message: 'Invalid Referral Code' });
+      }
+
+      // Fetch dynamic reward settings (or use defaults)
+      const settings = await Setting.find({ key: { $in: ['referrerRewardDays', 'refereeRewardDays'] } });
+      const referrerSetting = settings.find(s => s.key === 'referrerRewardDays');
+      const refereeSetting = settings.find(s => s.key === 'refereeRewardDays');
+      
+      referrerRewardDays = referrerSetting ? parseInt(referrerSetting.value, 10) : 30;
+      refereeRewardDays = refereeSetting ? parseInt(refereeSetting.value, 10) : 14;
+    }
+
     const generateKeySegment = () => crypto.randomBytes(2).toString('hex').toUpperCase();
     const licenseKey = `MSBILL-${generateKeySegment()}-${generateKeySegment()}-${generateKeySegment()}`;
+
+    // Generate unique referral code for the new client
+    const prefix = restaurantName ? restaurantName.replace(/[^A-Za-z]/g, '').substring(0, 4).toUpperCase() : 'REST';
+    const newClientRefCode = `REF-${prefix}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
 
     const newClient = new Client({
       restaurantName,
@@ -105,6 +130,8 @@ export const createClient = async (req, res) => {
       email,
       plainTextPassword: password,
       licenseKey,
+      referralCode: newClientRefCode,
+      referredBy: referrer ? referrer._id : null,
       staffAccounts: staffAccounts || [],
       cluster: cluster || 'cluster1'
     });
@@ -118,6 +145,11 @@ export const createClient = async (req, res) => {
     else if (plan === 'Custom' && customDays) {
       validUntil.setDate(validUntil.getDate() + parseInt(customDays, 10));
     }
+    
+    // Add referee referral reward days
+    if (referrer && refereeRewardDays > 0 && plan !== 'Lifetime') {
+      validUntil.setDate(validUntil.getDate() + refereeRewardDays);
+    }
 
     const newLicense = new License({
       key: licenseKey,
@@ -127,6 +159,23 @@ export const createClient = async (req, res) => {
     });
 
     await newLicense.save();
+
+    // Reward the Referrer
+    if (referrer && referrerRewardDays > 0) {
+      const referrerLicense = await License.findOne({ client: referrer._id });
+      if (referrerLicense && referrerLicense.plan !== 'Lifetime') {
+        const baseDate = Math.max(Date.now(), new Date(referrerLicense.validUntil).getTime());
+        referrerLicense.validUntil = new Date(baseDate + (referrerRewardDays * 24 * 60 * 60 * 1000));
+        await referrerLicense.save();
+      }
+
+      await ReferralLog.create({
+        referrerId: referrer._id,
+        refereeId: savedClient._id,
+        referrerRewardDays,
+        refereeRewardDays
+      });
+    }
 
     res.status(201).json({
       message: 'Client and License generated successfully',

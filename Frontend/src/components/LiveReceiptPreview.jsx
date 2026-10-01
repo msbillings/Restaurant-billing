@@ -173,7 +173,7 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               backgroundColor: '#ffffff'
             }}>
             {/* Logo */}
-            {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false) && (
+            {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false && fmt !== '58mm') && (
               <div className="flex justify-center mb-1">
                 <img
                   src={settings.logo}
@@ -307,7 +307,7 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               {t("Paid via Cash")}
             </div>
 
-            {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
+            {settings.enableQrPayment !== false && (settings.upiId || '').trim() && fmt !== '58mm' && (
               <div style={{ textAlign: 'center', margin: '5px 0' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', marginBottom: '2px' }}>
                   {t("SCAN TO PAY VIA UPI")}

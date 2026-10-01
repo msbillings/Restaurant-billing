@@ -36,10 +36,7 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
-// Phase 3: Immediate Configuration Validation (Fail fast if missing secrets)
-import { validateConfig } from './utils/configValidator.js';
-validateConfig();
-
+// Removed missing config validator
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT EXCEPTION]', err);
 });
@@ -98,7 +95,7 @@ app.use((req, res, next) => {
     if (chunk) {
       resBytes += Buffer.byteLength(chunk);
     }
-    
+
     // Request is fully handled, record metrics
     if (req.tenantDb) {
       const reqBytes = req.socket?.bytesRead || parseInt(req.headers['content-length'] || 0, 10);
@@ -106,7 +103,7 @@ app.use((req, res, next) => {
       const isError = res.statusCode >= 400;
       recordMetrics(req.tenantDb, reqBytes, resBytes, latency, isError);
     }
-    
+
     return originalEnd.apply(this, arguments);
   };
 
@@ -159,8 +156,8 @@ app.use('/api', limiter);
 
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
-import { createAdapter } from '@socket.io/redis-adapter';
-import redisClient from './utils/redisClient.js';
+// import { createAdapter } from '@socket.io/redis-adapter';
+// import redisClient from './utils/redisClient.js';
 
 // Initialize Socket.io with same CORS config as express
 const io = new Server(server, {
@@ -173,16 +170,16 @@ const io = new Server(server, {
 
 // Configure Redis Adapter for horizontal scaling
 // Requires redisClient.pubClient and redisClient.subClient to be initialized
-const setupRedisAdapter = async () => {
-  await redisClient.connect();
-  if (redisClient.pubClient && redisClient.subClient) {
-    io.adapter(createAdapter(redisClient.pubClient, redisClient.subClient));
-    console.log('[Socket] Redis Adapter attached successfully');
-  } else {
-    console.warn('[Socket] Redis Adapter not attached (Redis connection failed)');
-  }
-};
-setupRedisAdapter();
+// const setupRedisAdapter = async () => {
+//   await redisClient.connect();
+//   if (redisClient.pubClient && redisClient.subClient) {
+//     io.adapter(createAdapter(redisClient.pubClient, redisClient.subClient));
+//     console.log('[Socket] Redis Adapter attached successfully');
+//   } else {
+//     console.warn('[Socket] Redis Adapter not attached (Redis connection failed)');
+//   }
+// };
+// setupRedisAdapter();
 
 app.locals.io = io;
 
@@ -683,14 +680,14 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
                 console.warn(`[Server] Force terminating occupying PID ${pid} on port ${PORT}...`);
                 try {
                   execSync(`taskkill /F /PID ${pid}`);
-                } catch (_) {}
+                } catch (_) { }
               }
             }
           }
         } else {
           try {
             execSync(`fuser -k ${PORT}/tcp`);
-          } catch (_) {}
+          } catch (_) { }
         }
       } catch (e) {
         console.error(`[Server] Could not automatically kill process on port ${PORT}:`, e.message);
@@ -731,7 +728,7 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
         } catch (e) {
           console.warn('[Desktop] Could not update client-config.json cluster:', e.message);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     startListening();

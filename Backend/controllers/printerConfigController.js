@@ -35,11 +35,11 @@ export const updatePrinterConfig = async (req, res) => {
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const updatedConfig = await PrinterConfig.findByIdAndUpdate(id, req.body, { new: true });
-    
+
     if (!updatedConfig) {
       return res.status(404).json({ message: 'Printer config not found' });
     }
-    
+
     res.status(200).json(updatedConfig);
   } catch (error) {
     res.status(500).json({ message: 'Error updating printer config', error: error.message });
@@ -52,11 +52,11 @@ export const deletePrinterConfig = async (req, res) => {
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const deletedConfig = await PrinterConfig.findByIdAndDelete(id);
-    
+
     if (!deletedConfig) {
       return res.status(404).json({ message: 'Printer config not found' });
     }
-    
+
     res.status(200).json({ message: 'Printer config deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting printer config', error: error.message });
@@ -124,11 +124,11 @@ export const testPrinter = async (req, res) => {
     const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
     const { id } = req.params;
     const config = await PrinterConfig.findById(id);
-    
+
     if (!config) {
       return res.status(404).json({ message: 'Printer config not found' });
     }
-    
+
     if (config.connectionType === 'network' && config.ipAddress) {
       // Dynamically verify network connectivity right now
       try {
@@ -158,7 +158,7 @@ export const testPrinter = async (req, res) => {
           try {
             const PrinterConfig = getTenantModel(req, 'PrinterConfig', PrinterConfigDefault);
             await PrinterConfig.findByIdAndUpdate(config._id, { usbPort: actualPort });
-          } catch (_) {}
+          } catch (_) { }
         }
         return res.status(200).json({ message: `Test receipt printed to ${config.name} on USB port ${actualPort}` });
       } catch (err) {
@@ -183,7 +183,7 @@ export const testPrinter = async (req, res) => {
     }
 
     return res.status(400).json({ message: `Unknown or unconfigured printer connection type: ${config.connectionType}` });
-    
+
   } catch (error) {
     res.status(500).json({ message: 'Error testing printer', error: error.message });
   }
@@ -251,7 +251,7 @@ export const printKOT = async (req, res) => {
       if (settingsDoc?.value) {
         dbSettings = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
       }
-    } catch (e) {}
+    } catch (e) { }
     const restaurantDetails = { ...dbSettings, ...(targetBill.restaurantDetails || {}) };
 
     // const results = [];
@@ -275,7 +275,7 @@ export const printKOT = async (req, res) => {
           if (res.actualPort && res.actualPort !== printer.usbPort) {
             try {
               await PrinterConfig.findByIdAndUpdate(printer._id, { usbPort: res.actualPort });
-            } catch (_) {}
+            } catch (_) { }
             printer.usbPort = res.actualPort;
           }
         } else if (isNetwork) {
@@ -324,14 +324,19 @@ export const checkPrinterStatus = async (req, res) => {
     const { id } = req.params;
     const config = await PrinterConfig.findById(id);
     if (!config) return res.status(404).json({ message: 'Not found' });
-    
+
     if (config.connectionType === 'usb') {
       const ports = await getAvailableUSBAndCOMPorts();
       const isConnected = ports.some(p => p.port === config.usbPort);
       return res.status(200).json({ success: true, connected: isConnected });
     } else if (config.connectionType === 'bluetooth') {
-      const devices = await scanBluetoothDevices();
-      const isConnected = devices.some(d => d.macAddress === config.bluetoothAddress || d.address === config.bluetoothAddress);
+      const scanResult = await scanBluetoothDevices();
+      const btDevices = scanResult.devices || [];
+      const cleanTarget = (config.bluetoothAddress || '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+      const isConnected = btDevices.some(d => {
+        const dAddr = (d.macAddress || d.address || '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+        return dAddr === cleanTarget && cleanTarget.length > 0;
+      });
       return res.status(200).json({ success: true, connected: isConnected });
     } else if (config.connectionType === 'network') {
       const net = await import('net');

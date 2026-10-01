@@ -50,6 +50,16 @@ const clientSchema = new mongoose.Schema({
     enum: ['Active', 'Suspended', 'Expired'],
     default: 'Active'
   },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client',
+    default: null
+  },
   features: {
     type: Object,
     default: {
