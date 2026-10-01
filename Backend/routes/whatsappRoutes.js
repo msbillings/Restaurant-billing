@@ -13,22 +13,22 @@ import {
   getTemplates,
   saveTemplates
 } from '../controllers/whatsappController.js';
-import { optionalAuthenticateToken } from '../middleware/auth.js';
+import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/status', optionalAuthenticateToken, getStatus);
-router.post('/logout', optionalAuthenticateToken, logout);
-router.post('/send-message', optionalAuthenticateToken, sendMessage);
-router.post('/send-bill', optionalAuthenticateToken, sendBill);
-router.post('/pairing-code', optionalAuthenticateToken, requestPairingCode);
-router.post('/refresh', optionalAuthenticateToken, refreshQR);
-router.post('/trigger-auto-daybook', optionalAuthenticateToken, triggerAutoDayBook);
-router.post('/trigger-feedback', optionalAuthenticateToken, triggerFeedback);
-router.post('/campaign/log', optionalAuthenticateToken, logCampaign);
-router.get('/campaign/history', optionalAuthenticateToken, getCampaignHistory);
-router.get('/templates', optionalAuthenticateToken, getTemplates);
-router.post('/templates', optionalAuthenticateToken, saveTemplates);
+router.get('/status', authenticateToken, getStatus);
+router.post('/logout', authenticateToken, logout);
+router.post('/send-message', authenticateToken, sendMessage);
+router.post('/send-bill', authenticateToken, sendBill);
+router.post('/pairing-code', authenticateToken, requestPairingCode);
+router.post('/refresh', authenticateToken, refreshQR);
+router.post('/trigger-auto-daybook', authenticateToken, triggerAutoDayBook);
+router.post('/trigger-feedback', authenticateToken, triggerFeedback);
+router.post('/campaign/log', authenticateToken, logCampaign);
+router.get('/campaign/history', authenticateToken, getCampaignHistory);
+router.get('/templates', authenticateToken, getTemplates);
+router.post('/templates', authenticateToken, saveTemplates);
 
 export default router;
 

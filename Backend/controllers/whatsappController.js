@@ -7,7 +7,7 @@ import { uploadImage } from '../utils/cloudinary.js';
 
 export const resolveTenantInfo = async (req) => {
   let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.headers?.['X-Tenant-DB'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
-  
+
   if (!tenantId || tenantId === 'undefined' || tenantId === 'null') {
     tenantId = 'default';
   }
@@ -17,7 +17,7 @@ export const resolveTenantInfo = async (req) => {
   if (isCloud() && tenantId === 'default') {
     throw new Error('Database isolation error: Master database access denied via public routing.');
   }
-  
+
   // High-speed fast path: If WhatsAppService already initialized in memory for this exact tenantId, return immediately (0ms)
   if (tenantId !== 'default' && whatsappManager.hasInstance(tenantId)) {
     const existing = whatsappManager.getInstance(tenantId);
@@ -67,7 +67,7 @@ export const getStatus = async (req, res) => {
             if (hasAuthCreds && status.status !== 'SCAN_QR') {
               const dispName = dbVal.restaurantName || restaurantName || 'MS Billings POS';
               const devName = dbVal.deviceName || `${dispName} Gateway`;
-              
+
               // Auto-trigger background connection supervisor if socket dropped
               if (whatsappService.status === 'DISCONNECTED') {
                 whatsappService.ensureConnection().catch(() => {});
@@ -143,7 +143,7 @@ export const sendMessage = async (req, res) => {
 
     const { tenantId, whatsappService } = await resolveTenantInfo(req);
     console.log(`[WhatsApp API Diagnostics - ${tenantId}] Processing sendMessage request for +${phone}...`);
-    
+
     await whatsappService.ensureConnection();
 
     try {
@@ -348,6 +348,65 @@ export const triggerFeedback = async (req, res) => {
     res.json({ success: true, message: 'Feedback processing triggered in background' });
   } catch (error) {
     console.error('Error triggering feedback:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getTemplates = async (req, res) => {
+  try {
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
+
+    let templatesDoc = await models.Setting.findOne({ key: 'whatsapp_templates' }).lean();
+
+    const defaultTemplates = {
+      loyaltyEarned: "Thank you for visiting! You earned [PointsEarned] points. Your new balance is [TotalPoints] points.",
+      khataReminder: "Namaskaram [CustomerName], your pending Udhaar balance at [RestaurantName] is ₹[KhataBalance]. Please pay soon!",
+      referralMessage: "Hey! [RestaurantName] uses MS Billings and loves it. Click here to get your first month free!",
+      eBillReceipt: "Hi [CustomerName], thank you for dining at [RestaurantName]. Please find your e-Bill attached.",
+      welcomeMessage: "Welcome to [RestaurantName], [CustomerName]! We are thrilled to have you. Enjoy 10% off your next visit!",
+      birthdayWishes: "Happy Birthday [CustomerName]! Come celebrate at [RestaurantName] today and get a free dessert on us!",
+      weMissYou: "Hi [CustomerName], it's been a while! We miss you at [RestaurantName]. Come back this week for a special surprise!",
+      customMessage: "Hello [CustomerName], this is a special update from [RestaurantName]!"
+    };
+
+    let savedTemplates = {};
+    if (templatesDoc && templatesDoc.value) {
+      if (typeof templatesDoc.value === 'string') {
+        try { savedTemplates = JSON.parse(templatesDoc.value); } catch(e) {}
+      } else {
+        savedTemplates = templatesDoc.value;
+      }
+    }
+
+    let templates = { ...defaultTemplates, ...savedTemplates };
+
+    res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const saveTemplates = async (req, res) => {
+  try {
+    const { templates } = req.body;
+    if (!templates) return res.status(400).json({ error: 'Templates data is required' });
+
+    const { tenantId } = await resolveTenantInfo(req);
+    const models = req.models || (await getTenantModels(tenantId));
+    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
+
+    await models.Setting.findOneAndUpdate(
+      { key: 'whatsapp_templates' },
+      { value: templates },
+      { upsert: true }
+    );
+
+    res.json({ success: true, message: 'Templates saved successfully' });
+  } catch (error) {
+    console.error('Error saving templates:', error);
     res.status(500).json({ error: error.message });
   }
 };

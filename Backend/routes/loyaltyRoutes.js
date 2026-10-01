@@ -37,7 +37,7 @@ router.route('/adjust')
   .post(protect, admin, adjustCustomerPoints);
 
 router.route('/test-whatsapp')
-  .post(optionalAuthenticateToken, testLoyaltyWhatsApp);
+  .post(protect, admin, testLoyaltyWhatsApp);
 
 router.route('/campaign/audience')
   .get(protect, admin, getCampaignAudience);
