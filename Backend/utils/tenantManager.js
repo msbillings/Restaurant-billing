@@ -251,11 +251,56 @@ const resolveClusterConnection = async (databaseName) => {
   throw new Error(errorMsg);
 };
 
+export const getMasterModels = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection.readyState === 2) {
+      await new Promise((resolve) => {
+        if (mongoose.connection.readyState === 1) return resolve();
+        mongoose.connection.once('open', resolve);
+        setTimeout(resolve, 5000);
+      });
+    }
+  }
+
+  return {
+    Menu: MenuDefault,
+    Bill: BillDefault,
+    Setting: SettingDefault,
+    User: UserDefault,
+    Category: CategoryDefault,
+    Expense: ExpenseDefault,
+    InventoryItem: InventoryItemDefault,
+    Recipe: RecipeDefault,
+    StockLog: StockLogDefault,
+    Floor: FloorDefault,
+    Staff: StaffDefault,
+    Customer: CustomerDefault,
+    ServiceRequest: ServiceRequestDefault,
+    Camera: CameraDefault,
+    Tax: TaxDefault,
+    Discount: DiscountDefault,
+    CashLog: CashLogDefault,
+    CreditAccount: CreditAccountDefault,
+    Reservation: ReservationDefault,
+    Feedback: FeedbackDefault,
+    PushOrder: PushOrderDefault,
+    PrinterConfig: PrinterConfigDefault,
+    OnlineConfig: OnlineConfigDefault,
+    LoyaltyConfig: LoyaltyConfigDefault,
+    Notification: NotificationDefault,
+    WhatsAppAuth: WhatsAppAuthDefault,
+    Campaign: CampaignDefault,
+    connection: mongoose.connection
+  };
+};
+
 export const getTenantModels = async (databaseName) => {
-  // If databaseName is empty or 'default', route to the primary connected database (e.g. mscurechain)
+  // CRITICAL SECURITY FIX: Fail closed on missing/invalid tenant DB.
+  // Never silently fall back to the primary master database.
   if (!databaseName || databaseName === 'undefined' || databaseName === 'null' || databaseName === 'default') {
-    const primaryDb = mongoose.connection.db?.databaseName || 'mscurechain';
-    databaseName = primaryDb;
+    const error = new Error(`Database isolation error: Invalid tenant database name '${databaseName}'. Refusing fallback to master database.`);
+    error.code = 'TENANT_NOT_RESOLVED';
+    throw error;
   }
 
   // Ensure default connection is established

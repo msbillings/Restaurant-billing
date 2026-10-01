@@ -35,9 +35,9 @@ export const startReportWorker = () => {
 
     console.log(`[Report Worker] Processing Job ${job.id} for tenant: ${tenantDb}, type: ${type}`);
 
-    if (!tenantDb) {
-      console.error(`[Report Worker] Job ${job.id} failed: missing tenantDb. Refusing to generate report from master DB.`);
-      throw new Error('Missing tenantDb in job payload');
+    if (!tenantDb || tenantDb === 'default' || tenantDb === 'undefined' || tenantDb === 'null') {
+      console.error(`[Report Worker] Job ${job.id} failed: missing or invalid tenantDb. Refusing to generate report from master DB.`);
+      throw new Error('Missing or invalid tenantDb in job payload');
     }
 
     if (type !== 'CSV_DAILY' && type !== 'EXCEL_MONTHLY') {

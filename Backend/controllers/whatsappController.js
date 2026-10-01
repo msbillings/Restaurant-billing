@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import whatsappManager from '../services/whatsappService.js';
-import { getTenantModels } from '../utils/tenantManager.js';
-import { getTenantModel } from '../utils/tenantHelper.js';
+import { getTenantModels, getMasterModels } from '../utils/tenantManager.js';
+import { getTenantModel, isCloud } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
 import { uploadImage } from '../utils/cloudinary.js';
 
@@ -10,6 +10,12 @@ export const resolveTenantInfo = async (req) => {
   
   if (!tenantId || tenantId === 'undefined' || tenantId === 'null') {
     tenantId = 'default';
+  }
+
+  // CRITICAL SECURITY FIX: Never allow 'default' tenant access in Cloud environments
+  // from external inputs. Only local Desktop (isCloud === false) uses default.
+  if (isCloud() && tenantId === 'default') {
+    throw new Error('Database isolation error: Master database access denied via public routing.');
   }
   
   // High-speed fast path: If WhatsAppService already initialized in memory for this exact tenantId, return immediately (0ms)
@@ -22,7 +28,7 @@ export const resolveTenantInfo = async (req) => {
 
   let restaurantName = req.headers?.['x-restaurant-name'] || req.headers?.['X-Restaurant-Name'] || null;
   try {
-    const models = req.models || (await getTenantModels(tenantId));
+    const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
     if (models?.Setting) {
       const settingsDoc = await models.Setting.findOne({ key: 'restaurantSettings' }).lean();
       let settings = settingsDoc?.value;
@@ -52,7 +58,7 @@ export const getStatus = async (req, res) => {
     // 2. Cross-Device Sync: Check MongoDB persisted whatsapp_status ONLY for valid tenantId
     try {
       if (tenantId && tenantId !== 'default') {
-        const models = req.models || (await getTenantModels(tenantId));
+        const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
         if (models?.Setting) {
           const dbStatusDoc = await models.Setting.findOne({ key: 'whatsapp_status' }).lean();
           if (dbStatusDoc?.value?.status === 'CONNECTED' && dbStatusDoc?.value?.connectedNumber) {
@@ -111,7 +117,7 @@ export const logout = async (req, res) => {
 
     // Clear database status as well
     try {
-      const models = req.models || (await getTenantModels(tenantId));
+      const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
       if (models?.Setting) {
         await models.Setting.findOneAndUpdate(
           { key: 'whatsapp_status' },
@@ -176,7 +182,7 @@ export const sendBill = async (req, res) => {
     // Skip duplicate check if user explicitly requested a resend (e.g. customer didn't receive it)
     let models = null;
     try {
-      models = req.models || (await getTenantModels(tenantId));
+      models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
     } catch (e) {}
 
     const BillModel = (models && models.Bill) || getTenantModel(req, 'Bill', BillDefault);
@@ -199,102 +205,33 @@ export const sendBill = async (req, res) => {
       }
     }
 
-    // --- DIAGNOSTIC: Log socket state BEFORE ensureConnection ---
-    const wsStateBefore = whatsappService.sock?.ws?.socket?.readyState ?? whatsappService.sock?.ws?.readyState ?? 'none';
-    console.log(`[WhatsApp sendBill] Socket readyState BEFORE ensureConnection: ${wsStateBefore} | service.status: ${whatsappService.status}`);
-
-    await whatsappService.ensureConnection();
-
-    // --- DIAGNOSTIC: Log socket state AFTER ensureConnection ---
-    const wsStateAfter = whatsappService.sock?.ws?.socket?.readyState ?? whatsappService.sock?.ws?.readyState ?? 'none';
-    const svcStatus    = whatsappService.getStatus();
-    console.log(`[WhatsApp sendBill] Socket readyState AFTER  ensureConnection: ${wsStateAfter} | service.status: ${whatsappService.status} | connected: ${svcStatus.status}`);
-
-    if (svcStatus.status !== 'CONNECTED' || !whatsappService.connectedNumber) {
-      console.error(`[WhatsApp sendBill] ❌ Bot not connected (status=${svcStatus.status}) — aborting send. tenantId=${tenantId}`);
-      return res.status(400).json({ success: false, error: 'WhatsApp bot is not connected. Please scan QR or pair your phone in Settings.' });
-    }
-
     if (!imageBase64 && !pdfBase64 && !documentBase64) {
       console.error(`[WhatsApp sendBill] ❌ No receipt photo image provided — aborting. Bill image is mandatory. tenantId=${tenantId}`);
       return res.status(400).json({ error: 'Receipt photo image is mandatory for sending WhatsApp e-Bill.' });
     }
 
-    let imageUrl = null;
-    // Removed Cloudinary upload to eliminate 3-5 second latency.
-    // The WhatsApp service will directly use the base64 buffer for instant (< 1s) delivery.
-    try {
-      console.log(`[WhatsApp sendBill] Sending MEDIA (Receipt Photo) to ${phone}... (hasCloudUrl=${!!imageUrl})`);
-      await whatsappService.sendBillMedia(phone, {
-        imageBase64,
-        imageUrl,
-        pdfBase64,
-        documentBase64,
-        mimetype,
-        caption: billText,
-        fileName
-      });
-      console.log(`[WhatsApp sendBill] ✅ Receipt photo & media sent successfully to ${phone}`);
-    } catch (sendErr) {
-      // If local socket send failed (e.g. Baileys conflict with 24/7 Render cloud gateway),
-      // seamlessly forward the bill send request to the Render Cloud Gateway!
-      const isCloud = process.env.RENDER || process.env.VERCEL;
-      if (!isCloud) {
-        console.warn(`[WhatsApp sendBill] Local send failed (${sendErr.message}). Fallback to 24/7 Cloud Gateway...`);
-        try {
-          const cloudUrl = 'https://msbillings-backend-x9qw.onrender.com/api/whatsapp/send-bill';
-          const cloudRes = await fetch(cloudUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-tenant-db': tenantId,
-              ...(req.headers['authorization'] ? { 'authorization': req.headers['authorization'] } : {})
-            },
-            body: JSON.stringify(req.body)
-          });
-          const cloudData = await cloudRes.json();
-          if (cloudRes.ok && cloudData?.success) {
-            console.log('[WhatsApp sendBill] ✅ Cloud Gateway fallback succeeded!');
-            // Mark bill as sent in DB
-            if (BillModel && (billId || billNumber)) {
-              try {
-                const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
-                  ? { _id: billId }
-                  : { billNumber: billNumber || billId };
-                await BillModel.updateOne(updateQuery, {
-                  $set: { whatsappSent: true, whatsappSentAt: new Date() }
-                });
-              } catch (e) {}
-            }
-            return res.json({ success: true, message: 'e-Bill sent successfully via Cloud Gateway!' });
-          }
-        } catch (cloudErr) {
-          console.warn('[WhatsApp sendBill] Cloud gateway fallback error:', cloudErr.message);
-        }
-      }
-      throw sendErr;
-    }
+    // Phase 7: Extract to Background Queue
+    const { WhatsAppQueue } = await import('../workers/queueManager.js');
+    await WhatsAppQueue.add('sendBill', {
+      tenantDb: tenantId,
+      phone,
+      billText,
+      imageBase64,
+      pdfBase64,
+      documentBase64,
+      mimetype,
+      fileName,
+      billId,
+      billNumber,
+      forceResend
+    });
 
-    // --- Mark bill as sent in DB ---
-    if (BillModel && (billId || billNumber)) {
-      try {
-        const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId)
-          ? { _id: billId }
-          : { billNumber: billNumber || billId };
-        const updateRes = await BillModel.updateOne(updateQuery, {
-          $set: { whatsappSent: true, whatsappSentAt: new Date() }
-        });
-        console.log(`[WhatsApp sendBill] ✅ Marked bill ${billNumber || billId} as whatsappSent in DB (matched: ${updateRes?.matchedCount}, modified: ${updateRes?.modifiedCount})`);
-      } catch (dbErr) {
-        console.warn('[WhatsApp sendBill] Could not update Bill whatsappSent flag:', dbErr?.message);
-      }
-    }
-
-    res.json({ success: true, message: 'e-Bill sent successfully via WhatsApp!' });
+    console.log(`[WhatsApp sendBill] ✅ Added job to WhatsAppQueue for phone ${phone}`);
+    res.json({ success: true, message: 'e-Bill is being generated and sent via WhatsApp in the background!' });
   } catch (error) {
     console.error('[WhatsApp sendBill] ❌ FINAL ERROR:', error?.message);
     console.error('[WhatsApp sendBill] Stack Trace:', error?.stack);
-    res.status(500).json({ error: error.message || 'Failed to send WhatsApp bill.' });
+    res.status(500).json({ error: error.message || 'Failed to enqueue WhatsApp bill.' });
   }
 };
 
@@ -343,7 +280,7 @@ export const triggerAutoDayBook = async (req, res) => {
 export const logCampaign = async (req, res) => {
   try {
     const { tenantId } = await resolveTenantInfo(req);
-    const models = req.models || (await getTenantModels(tenantId));
+    const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
     const CampaignModel = models?.Campaign;
     if (!CampaignModel) {
       return res.status(500).json({ error: 'Campaign model not available' });
@@ -388,7 +325,7 @@ export const logCampaign = async (req, res) => {
 export const getCampaignHistory = async (req, res) => {
   try {
     const { tenantId } = await resolveTenantInfo(req);
-    const models = req.models || (await getTenantModels(tenantId));
+    const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
     const CampaignModel = models?.Campaign;
     if (!CampaignModel) {
       return res.status(500).json({ error: 'Campaign model not available' });
@@ -411,65 +348,6 @@ export const triggerFeedback = async (req, res) => {
     res.json({ success: true, message: 'Feedback processing triggered in background' });
   } catch (error) {
     console.error('Error triggering feedback:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const getTemplates = async (req, res) => {
-  try {
-    const { tenantId } = await resolveTenantInfo(req);
-    const models = req.models || (await getTenantModels(tenantId));
-    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
-
-    let templatesDoc = await models.Setting.findOne({ key: 'whatsapp_templates' }).lean();
-    
-    const defaultTemplates = {
-      loyaltyEarned: "Thank you for visiting! You earned [PointsEarned] points. Your new balance is [TotalPoints] points.",
-      khataReminder: "Namaskaram [CustomerName], your pending Udhaar balance at [RestaurantName] is ₹[KhataBalance]. Please pay soon!",
-      referralMessage: "Hey! [RestaurantName] uses MS Billings and loves it. Click here to get your first month free!",
-      eBillReceipt: "Hi [CustomerName], thank you for dining at [RestaurantName]. Please find your e-Bill attached.",
-      welcomeMessage: "Welcome to [RestaurantName], [CustomerName]! We are thrilled to have you. Enjoy 10% off your next visit!",
-      birthdayWishes: "Happy Birthday [CustomerName]! Come celebrate at [RestaurantName] today and get a free dessert on us!",
-      weMissYou: "Hi [CustomerName], it's been a while! We miss you at [RestaurantName]. Come back this week for a special surprise!",
-      customMessage: "Hello [CustomerName], this is a special update from [RestaurantName]!"
-    };
-    
-    let savedTemplates = {};
-    if (templatesDoc && templatesDoc.value) {
-      if (typeof templatesDoc.value === 'string') {
-        try { savedTemplates = JSON.parse(templatesDoc.value); } catch(e) {}
-      } else {
-        savedTemplates = templatesDoc.value;
-      }
-    }
-
-    let templates = { ...defaultTemplates, ...savedTemplates };
-
-    res.json({ success: true, templates });
-  } catch (error) {
-    console.error('Error fetching templates:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const saveTemplates = async (req, res) => {
-  try {
-    const { templates } = req.body;
-    if (!templates) return res.status(400).json({ error: 'Templates data is required' });
-
-    const { tenantId } = await resolveTenantInfo(req);
-    const models = req.models || (await getTenantModels(tenantId));
-    if (!models?.Setting) return res.status(500).json({ error: 'Settings model not available' });
-
-    await models.Setting.findOneAndUpdate(
-      { key: 'whatsapp_templates' },
-      { value: templates },
-      { upsert: true }
-    );
-
-    res.json({ success: true, message: 'Templates saved successfully' });
-  } catch (error) {
-    console.error('Error saving templates:', error);
     res.status(500).json({ error: error.message });
   }
 };

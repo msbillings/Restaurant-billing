@@ -20,22 +20,22 @@ import { emitNotification, emitDismissNotification, getTenantDbFromReq } from '.
 export const getTableMatchCondition = (tblStr) => {
   if (!tblStr) return tblStr;
   const trimmed = tblStr.trim();
-  
+
   // If floor prefix exists (e.g. "Ground Floor - Cabin 1", "First Floor - Table 2", "Ground Floor - H-1")
   if (trimmed.includes(' - ')) {
     const parts = trimmed.split(' - ');
     const floorPart = parts[0].trim();
     const tablePart = parts.slice(1).join(' - ').trim();
-    
+
     const escapedFloor = floorPart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const escapedTable = tablePart.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
+
     const patterns = [];
     // 1. Exact match with floor: "Ground Floor - H-1"
     patterns.push(`^${escapedFloor}\\s*-\\s*${escapedTable}$`);
     // 2. Bare match without floor: "H-1"
     patterns.push(`^${escapedTable}$`);
-    
+
     // 3. If standard space type (e.g. "Table 1", "Cabin 2", "Sofa 3", "Room 4", "Bar 5")
     const standardMatch = tablePart.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
     if (standardMatch) {
@@ -54,7 +54,7 @@ export const getTableMatchCondition = (tblStr) => {
         patterns.push(`^${letter}-?0*${num}$`);
       }
     }
-    
+
     return new RegExp(`(?:${patterns.join('|')})`, 'i');
   }
 
@@ -63,7 +63,7 @@ export const getTableMatchCondition = (tblStr) => {
   const patterns = [];
   patterns.push(`^${escapedTrimmed}$`);
   patterns.push(`^.*?\\s*-\\s*${escapedTrimmed}$`);
-  
+
   const standardMatch = trimmed.match(/^(Table|Cabin|Sofa|Room|Bar)\s*0*(\d+)$/i);
   if (standardMatch) {
     const type = standardMatch[1];
@@ -80,7 +80,7 @@ export const getTableMatchCondition = (tblStr) => {
       patterns.push(`^.*?\\s*-\\s*${letter}-?0*${num}$`);
     }
   }
-  
+
   return new RegExp(`(?:${patterns.join('|')})`, 'i');
 };
 
@@ -119,7 +119,7 @@ export const getCachedDynamicSettings = async (req) => {
     if (settingsDoc?.value) {
       s = typeof settingsDoc.value === 'string' ? JSON.parse(settingsDoc.value) : settingsDoc.value;
     }
-    
+
     if (s.enableCgst) {
       cgstRate = Number(s.cgstRate || 0);
     }
@@ -160,17 +160,17 @@ export const findActiveBillForTable = async (Bill, tableNo) => {
   }
 
   // 1. Fast indexed exact match first (0ms latency)
-  let bill = await Bill.findOne({ 
-    tableNo: { $in: directMatches }, 
-    status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
+  let bill = await Bill.findOne({
+    tableNo: { $in: directMatches },
+    status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] }
   }).sort({ createdAt: -1 });
 
   // 2. Fallback to regex pattern if not found by exact string
   if (!bill) {
     const tableRegex = getTableMatchCondition(tableNo);
-    bill = await Bill.findOne({ 
-      tableNo: tableRegex, 
-      status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] } 
+    bill = await Bill.findOne({
+      tableNo: tableRegex,
+      status: { $in: ['Open', 'open', 'Billed', 'Pending', 'Occupied'] }
     }).sort({ createdAt: -1 });
   }
 
@@ -194,7 +194,7 @@ export const formatPublicBillPayload = (bill, taxSettings) => {
     if (allKots && Array.isArray(allKots) && allKots.length > 0) {
       for (let i = allKots.length - 1; i >= 0; i--) {
         const k = allKots[i];
-        const matchingKi = (k.items || []).find(ki => 
+        const matchingKi = (k.items || []).find(ki =>
           (ki._id && item._id && ki._id.toString() === item._id.toString()) ||
           (ki.name && item.name && ki.name.trim().toLowerCase() === item.name.trim().toLowerCase())
         );
@@ -388,7 +388,7 @@ router.post('/order', async (req, res) => {
       date: { $gte: todayStart },
       status: { $in: ['pending', 'confirmed', 'seated'] }
     }).lean().maxTimeMS(1500).catch(() => []);
-    
+
     const now = new Date();
     let isReserved = false;
     for (const reservation of activeReservations) {
@@ -440,7 +440,7 @@ router.post('/order', async (req, res) => {
           // Allow a 40m GPS accuracy buffer on the backend for indoor phones
           const effectiveDistance = Math.max(0, distance - Math.min(accuracy, 30));
           if (distance > allowedRadius + 50 && effectiveDistance > allowedRadius) {
-            return res.status(403).json({ 
+            return res.status(403).json({
               message: `You appear to be ${distance}m away from the restaurant. Orders must be placed inside the restaurant premises (within ${allowedRadius}m).`,
               distance,
               allowedRadius
@@ -487,7 +487,7 @@ router.post('/order', async (req, res) => {
     if (bill) {
       // Append items to existing order safely
       sanitizedItems.forEach(newItem => {
-        const existingItem = bill.items.find(i => 
+        const existingItem = bill.items.find(i =>
           (i._id && newItem._id && i._id.toString() === newItem._id.toString()) ||
           (i.name && newItem.name && i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim())
         );
@@ -504,7 +504,7 @@ router.post('/order', async (req, res) => {
       });
 
       bill.subtotal = bill.items.reduce((acc, i) => acc + (i.isCancelled ? 0 : (i.price * (i.quantity - (i.cancelledQuantity || 0)))), 0);
-      
+
       const taxAmount = Number(((bill.subtotal * taxRate) / 100).toFixed(2));
       bill.tax = taxRate;
       bill.taxBreakdown = {
@@ -552,10 +552,10 @@ router.post('/order', async (req, res) => {
       const itemNames = sanitizedItems.map(i => `${i.quantity}x ${i.name}`).join(', ');
       const cleanTable = tableNo.replace(/^Table\s*/i, '');
       emitNotification(
-        req, 
-        `Table ${cleanTable} Order`, 
-        `${itemNames}`, 
-        'success', 
+        req,
+        `Table ${cleanTable} Order`,
+        `${itemNames}`,
+        'success',
         ['Admin', 'Manager', 'Captain', 'Chef'],
         { orderId: bill._id, type: 'digital_order', tableNo: bill.tableNo, total: bill.total }
       );
@@ -614,13 +614,13 @@ router.post('/order', async (req, res) => {
 router.post('/request-service', async (req, res) => {
   try {
     const { tableNumber, requestType } = req.body;
-    
+
     if (!tableNumber || !requestType) {
       return res.status(400).json({ message: 'tableNumber and requestType are required' });
     }
-    
+
     const displayTable = tableNumber.startsWith('Table') ? tableNumber : `Table ${tableNumber}`;
-    
+
     // ⚡ INSTANT WEBSOCKET BROADCAST (0ms latency to POS UI)
     emitNotification(
       req,
@@ -636,7 +636,7 @@ router.post('/request-service', async (req, res) => {
       requestType,
       status: 'Pending'
     });
-    
+
     await newRequest.save();
 
     res.status(201).json({ message: 'Request sent successfully', request: newRequest });
@@ -656,7 +656,7 @@ router.get('/order-status', async (req, res) => {
 
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const bill = await findActiveBillForTable(Bill, tableNo);
-    
+
     if (!bill) {
       return res.status(404).json({ message: 'No active order found' });
     }
@@ -681,7 +681,7 @@ router.post('/request-item-cancel', async (req, res) => {
 
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const bill = await Bill.findById(orderId);
-    
+
     if (!bill) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -721,9 +721,9 @@ router.post('/request-item-cancel', async (req, res) => {
     );
 
     if (io && tenantDb) {
-      io.to(tenantDb).emit('itemCancellationRequested', { 
-        orderId: bill._id, 
-        itemId: item._id, 
+      io.to(tenantDb).emit('itemCancellationRequested', {
+        orderId: bill._id,
+        itemId: item._id,
         tableNo: bill.tableNo,
         itemName: item.name,
         cancelQty: item.cancellationRequestedQty
@@ -743,9 +743,14 @@ router.get('/r/:encodedDbName', async (req, res) => {
   try {
     const encodedDbName = req.params.encodedDbName;
     const tenantDb = Buffer.from(encodedDbName, 'base64url').toString('utf-8');
+
+    if (tenantDb === 'default' || tenantDb === 'undefined' || tenantDb === 'null') {
+      return res.status(404).send('Invalid restaurant identifier');
+    }
+
     const models = await getTenantModels(tenantDb);
     const Setting = models.Setting;
-    
+
     let reviewLink = '';
     const settingsDoc = await Setting.findOne({ key: 'restaurantSettings' }).lean();
     if (settingsDoc && settingsDoc.value) {
@@ -755,14 +760,14 @@ router.get('/r/:encodedDbName', async (req, res) => {
       }
       reviewLink = settings.google_review_link || settings.googleReviewLink;
     }
-    
+
     if (!reviewLink) {
       const reviewDoc = await Setting.findOne({ key: 'googleReviewLink' }).lean();
       if (reviewDoc && reviewDoc.value) {
         reviewLink = reviewDoc.value;
       }
     }
-    
+
     if (reviewLink && reviewLink.trim()) {
       return res.redirect(302, reviewLink.trim());
     } else {
@@ -784,7 +789,7 @@ router.post('/withdraw-item-cancel', async (req, res) => {
 
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const bill = await Bill.findById(orderId);
-    
+
     if (!bill) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -832,9 +837,9 @@ router.post('/withdraw-item-cancel', async (req, res) => {
     );
 
     if (io && tenantDb) {
-      io.to(tenantDb).emit('itemCancellationWithdrawn', { 
-        orderId: bill._id, 
-        itemId: item._id, 
+      io.to(tenantDb).emit('itemCancellationWithdrawn', {
+        orderId: bill._id,
+        itemId: item._id,
         tableNo: bill.tableNo,
         itemName: item.name
       });

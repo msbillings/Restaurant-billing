@@ -141,7 +141,7 @@ describe('Phase 1 Implementation Tests', () => {
         }
       };
 
-      await expect(processor(mockJob)).rejects.toThrow('Missing tenantDb in job payload');
+      await expect(processor(mockJob)).rejects.toThrow('Missing or invalid tenantDb in job payload');
       expect(mockGetTenantModels).not.toHaveBeenCalled();
     });
 
@@ -207,7 +207,7 @@ describe('Phase 1 Implementation Tests', () => {
         }
       };
 
-      await expect(processor(mockJob)).rejects.toThrow('Missing tenantDb in job payload');
+      await expect(processor(mockJob)).rejects.toThrow('Missing or invalid tenantDb in job payload');
       expect(mockGetTenantModels).not.toHaveBeenCalled();
     });
   });

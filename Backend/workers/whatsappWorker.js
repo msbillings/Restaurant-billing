@@ -25,8 +25,8 @@ export const startWhatsAppWorker = () => {
 
     // Since this is a worker, we might not have a full `req` object for getTenantModel.
     // We can simulate the `req` object for the tenant helper if needed, or query directly.
-    if (!tenantDb) {
-      throw new Error('[WhatsApp Worker] Missing tenantDb in job payload. Refusing to process against global master database.');
+    if (!tenantDb || tenantDb === 'default' || tenantDb === 'undefined' || tenantDb === 'null') {
+      throw new Error('[WhatsApp Worker] Missing or invalid tenantDb in job payload. Refusing to process against global master database.');
     }
 
     let updateResult = null;

@@ -1,7 +1,7 @@
 import ReservationDefault from '../models/Reservation.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { resolveTenantInfo } from './whatsappController.js';
-import { getTenantModels } from '../utils/tenantManager.js';
+import { getTenantModels, getMasterModels } from '../utils/tenantManager.js';
 
 const formatTime12Hour = (time24) => {
   if (!time24) return '';
@@ -41,7 +41,7 @@ export const sendReservationWhatsAppAlert = async (req, reservation, type = 'con
     let restaurantPhone = '';
 
     try {
-      const models = req.models || (await getTenantModels(tenantId));
+      const models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
       if (models?.Setting) {
         const settingsDoc = await models.Setting.findOne({ key: 'restaurantSettings' }).lean();
         let s = settingsDoc?.value;

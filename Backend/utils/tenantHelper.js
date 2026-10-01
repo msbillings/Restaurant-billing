@@ -9,7 +9,7 @@
  * local backend connects to a single tenant DB via client-config.json).
  */
 
-const isCloud = () => {
+export const isCloud = () => {
   return !!(process.env.RENDER || process.env.VERCEL || process.env.VERCEL_ENV || process.env.NODE_ENV === 'production');
 };
 
@@ -28,8 +28,11 @@ export const getTenantModel = (req, modelName, DefaultModel) => {
     return req.models[modelName];
   }
 
-  // Graceful fallback to DefaultModel bound to primary database connection
-  return DefaultModel;
+  // CRITICAL SECURITY FIX: Never silently fall back to DefaultModel (master DB).
+  // All master access must be explicit via getMasterModels().
+  const error = new Error('Database isolation error: Tenant models not resolved on request.');
+  error.code = 'TENANT_NOT_RESOLVED';
+  throw error;
 };
 
 /**

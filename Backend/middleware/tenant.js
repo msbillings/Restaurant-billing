@@ -25,7 +25,7 @@ export const tenantMiddleware = async (req, res, next) => {
       tenantDbName = req.headers['x-tenant-db'] || req.query?.tenant || req.body?.tenant;
     }
 
-    if (tenantDbName && tenantDbName !== 'undefined' && tenantDbName !== 'null') {
+    if (tenantDbName && tenantDbName !== 'undefined' && tenantDbName !== 'null' && tenantDbName !== 'default') {
       const models = await getTenantModels(tenantDbName);
       req.models = models;
       req.tenantDb = tenantDbName;

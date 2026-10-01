@@ -22,8 +22,8 @@ export const setupDatabase = async (req, res) => {
     const { databaseName, username, password, staffAccounts } = req.body;
 
     // We only strictly need databaseName now, but we check if either username/password OR staffAccounts is provided
-    if (!databaseName || (!username && !staffAccounts)) {
-      return res.status(400).json({ message: 'Missing required configuration fields.' });
+    if (!databaseName || databaseName === 'default' || (!username && !staffAccounts)) {
+      return res.status(400).json({ message: 'Missing or invalid required configuration fields.' });
     }
 
     // If running in cloud environment (Render, Vercel, or production), do NOT disconnect global database!
