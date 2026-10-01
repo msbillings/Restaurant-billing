@@ -1,0 +1,53 @@
+name: CI Verification
+
+on:
+  pull_request:
+    branches: [ "main", "phase-*" ]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            Backend/package-lock.json
+            Frontend/package-lock.json
+
+      - name: Install Backend Dependencies
+        working-directory: ./Backend
+        run: npm ci
+
+      - name: Run Backend Tests
+        working-directory: ./Backend
+        env:
+          MONGO_URI: "mongodb://localhost:27017/dummy_master"
+          MONGO_URI_CLUSTER1: "mongodb://localhost:27017/dummy_cluster1"
+          BACKUP_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          JWT_SECRET: "ci-dummy-jwt-secret"
+        run: |
+          NODE_OPTIONS="--experimental-vm-modules" npx jest \
+            tests/utils/phase5a.test.js \
+            tests/workers/phase5b.test.js \
+            tests/workers/phase5c.test.js \
+            tests/workers/phase5d.test.js \
+            tests/workers/phase5e.test.js \
+            tests/utils/tenantManager.test.js \
+            tests/utils/backupManager.test.js
+
+      - name: Install Frontend Dependencies
+        working-directory: ./Frontend
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: ./Frontend
+        run: npm run build
+
+      - name: Verify Git Tracking and Whitespace
+        run: git diff --check
