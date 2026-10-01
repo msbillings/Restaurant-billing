@@ -1,6 +1,6 @@
 {
   "name": "restaurant-billing",
-  "version": "6.0.100",
+  "version": "6.0.102",
   "private": true,
   "scripts": {
     "build": "if [ -d Frontend ]; then cd Frontend; fi && npm install && npm run build",

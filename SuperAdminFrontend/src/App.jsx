@@ -42,6 +42,19 @@ axios.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.warn('Session expired or unauthorized. Logging out...');
+      localStorage.removeItem('superadmin_token');
+      localStorage.removeItem('superadmin_user');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
+
 const getClusterBadge = (cluster) => {
   const norm = (cluster || 'cluster0').toLowerCase();
   switch (norm) {
