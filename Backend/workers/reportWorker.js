@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Worker, UnrecoverableError } from 'bullmq';
 import { connection } from './queueManager.js';
 import mongoose from 'mongoose';
 import fs from 'fs';
@@ -37,7 +37,7 @@ export const startReportWorker = () => {
 
     if (!tenantDb || tenantDb === 'default' || tenantDb === 'undefined' || tenantDb === 'null') {
       console.error(`[Report Worker] Job ${job.id} failed: missing or invalid tenantDb. Refusing to generate report from master DB.`);
-      throw new Error('Missing or invalid tenantDb in job payload');
+      throw new UnrecoverableError('Missing or invalid tenantDb in job payload');
     }
 
     if (type !== 'CSV_DAILY' && type !== 'EXCEL_MONTHLY') {
@@ -49,7 +49,7 @@ export const startReportWorker = () => {
       const models = await getTenantModels(tenantDb);
       const Bill = models.Bill;
       if (!Bill) {
-        throw new Error(`Failed to resolve Bill model for tenant ${tenantDb}`);
+        throw new UnrecoverableError(`Failed to resolve Bill model for tenant ${tenantDb}`);
       }
       
       const bills = await Bill.find({

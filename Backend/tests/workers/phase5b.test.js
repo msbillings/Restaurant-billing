@@ -15,6 +15,12 @@ jest.unstable_mockModule('bullmq', () => ({
     constructor() {
       this.add = jest.fn();
     }
+  },
+  UnrecoverableError: class UnrecoverableError extends Error {
+    constructor(message) {
+      super(message);
+      this.name = 'UnrecoverableError';
+    }
   }
 }));
 

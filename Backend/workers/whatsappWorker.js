@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Worker, UnrecoverableError } from 'bullmq';
 import { connection } from './queueManager.js';
 import whatsappManager from '../services/whatsappService.js';
 import mongoose from 'mongoose';
@@ -26,7 +26,7 @@ export const processWhatsAppJob = async (job) => {
     // Since this is a worker, we might not have a full `req` object for getTenantModel.
     // We can simulate the `req` object for the tenant helper if needed, or query directly.
     if (!tenantDb || tenantDb === 'default' || tenantDb === 'undefined' || tenantDb === 'null') {
-      throw new Error('[WhatsApp Worker] Missing or invalid tenantDb in job payload. Refusing to process against global master database.');
+      throw new UnrecoverableError('[WhatsApp Worker] Missing or invalid tenantDb in job payload. Refusing to process against global master database.');
     }
 
     let updateResult = null;
@@ -35,7 +35,7 @@ export const processWhatsAppJob = async (job) => {
        const models = await tenantManager.getTenantModels(tenantDb);
        BillModel = models.Bill;
        if (!BillModel) {
-         throw new Error(`[WhatsApp Worker] Failed to resolve Bill model for tenant ${tenantDb}`);
+         throw new UnrecoverableError(`[WhatsApp Worker] Failed to resolve Bill model for tenant ${tenantDb}`);
        }
     }
 
@@ -61,7 +61,7 @@ export const processWhatsAppJob = async (job) => {
 
       const svcStatus = whatsappService.getStatus();
       if (svcStatus.status !== 'CONNECTED' || !whatsappService.connectedNumber) {
-        throw new Error('WhatsApp bot is not connected for tenant ' + tenantDb);
+        throw new UnrecoverableError('WhatsApp bot is not connected for tenant ' + tenantDb);
       }
 
       await whatsappService.sendBillMedia(phone, {
