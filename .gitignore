@@ -59,3 +59,9 @@ __pycache__/
 bw_*.jpg
 *.bin
 diff.txt
+
+# Vercel Cache
+.vercel_backup/
+
+# Generated Business Data
+Backend/reports/EOD_Report_*.json
