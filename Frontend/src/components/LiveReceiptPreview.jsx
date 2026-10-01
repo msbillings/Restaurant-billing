@@ -190,6 +190,11 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               <div style={{ fontSize: previewMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
                 {settings.restaurantName || 'ANAND\'S RESTAURANT'}
               </div>
+              {settings.restaurantType && (
+                <div style={{ fontSize: previewMetrics.detailSize, fontWeight: 600, marginTop: '2px', lineHeight: '1.2' }}>
+                  {settings.restaurantType}
+                </div>
+              )}
               <div style={{ fontSize: previewMetrics.detailSize, marginTop: '2px', lineHeight: '1.25', color: '#000000' }}>
                 {(settings.address || '123, Flavor Avenue, Banjara Hills, Hyderabad, Telangana 500034').split('\n').map((line, i) => (
                   <div key={i}>{line}</div>

@@ -68,9 +68,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const [msgExpanded, setMsgExpanded] = useState(false);
   const [customerSuggestions, setCustomerSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  // â”€â”€â”€ Duplicate-tap guard: locked while Bluetooth print is in progress â”€â”€â”€â”€
   const [isPrinting, setIsPrinting] = useState(false);
-  // â”€â”€â”€ Dynamic print status: null | 'printing' | 'success' | 'failed' | 'not_connected'
   const [printStatus, setPrintStatus] = useState(null);
 
   // Helper: reset print status after delay
@@ -80,15 +78,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       setIsPrinting(false);
     }, delay);
   };
-  // â”€â”€â”€ WhatsApp capture flag â€” tells QR render whether to use whatsappShowQr setting
   const isCapturingForWhatsApp = useRef(false);
 
 
-  // â”€â”€â”€ Duplicate WhatsApp Send Prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const billIdentifier = bill?.billNumber || bill?._id;
   // IMPORTANT: Only consider a bill "already sent" if THIS session sent it
   // (via sessionStorage or whatsappBillSentIds). Do NOT use bill?.whatsappSent
-  // from the DB â€” it may be stale/wrong and would block legitimate resends.
+  // from the DB - it may be stale/wrong and would block legitimate resends.
   const [isAlreadySent, setIsAlreadySent] = useState(() => {
     if (!billIdentifier) return false;
     try {
@@ -96,7 +92,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       if (bill?.billNumber && sessionStorage.getItem(`ms_wa_sent_${bill.billNumber}`) === 'true') return true;
       if (bill?._id && sessionStorage.getItem(`ms_wa_sent_${bill._id}`) === 'true') return true;
       if (whatsappBillSentIds && (whatsappBillSentIds.has(billIdentifier) || (bill?.billNumber && whatsappBillSentIds.has(bill.billNumber)) || (bill?._id && whatsappBillSentIds.has(bill._id)))) return true;
-      // NOTE: bill?.whatsappSent (DB flag) intentionally NOT used here â€” stale DB state
+      // NOTE: bill?.whatsappSent (DB flag) intentionally NOT used here - stale DB state
       // should NOT block the user from sending. Only in-session confirms count.
     } catch (e) { }
     return false;
@@ -144,7 +140,6 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       window.removeEventListener('whatsappSendFailed', handleWaFailed);
     };
   }, [bill?.billNumber, bill?._id, whatsappBillSentIds]);
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   useEffect(() => {
     const fetchSuggestions = async () => {
@@ -275,7 +270,6 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     // Guard: block duplicate prints while a print is in progress
     if (isPrinting) return;
 
-    // â”€â”€ IMMEDIATE UI FEEDBACK â”€â”€ set state BEFORE any async work
     setIsPrinting(true);
     setPrintStatus('printing');
 
@@ -337,7 +331,6 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           if (receiptStation) macAddress = tryMac(receiptStation.bluetoothAddress || receiptStation.deviceName || receiptStation.name || '');
         }
 
-        // â”€â”€ CONNECTION CHECK: Show error immediately if no printer found
         if (!macAddress) {
           setPrintStatus('not_connected');
           setToast({ message: t('Printer not connected. Please pair a Bluetooth printer in Printer & Kitchen Routing settings.'), type: 'error' });
@@ -371,7 +364,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                   setToast({ message: t('Printer not connected. Please check Bluetooth connection.'), type: 'error' });
                 } else {
                   setPrintStatus('failed');
-                  setToast({ message: `${t('Bill print failed')}: ${errMsg}`, type: 'error' });
+                                    setToast({ message: `${t('Bill print failed')}: ${errMsg}`, type: 'error' });
                 }
                 resetPrintStatus(4000);
                 return;
@@ -384,24 +377,14 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             return;
           }
         }
+      }
 
         if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
           window.AndroidPrint.print();
-        } else {
-          window.print();
+          setPrintStatus('success');
+          resetPrintStatus(3000);
+          return;
         }
-        setPrintStatus('success');
-        resetPrintStatus(3000);
-        return;
-      }
-
-      // 4. Android System Print
-      if (window.AndroidPrint && typeof window.AndroidPrint.print === 'function') {
-        window.AndroidPrint.print();
-        setPrintStatus('success');
-        resetPrintStatus(3000);
-        return;
-      }
 
       // 5. Direct Thermal Receipt Printer (USB RAW, Bluetooth, or TCP ESC/POS via Backend)
       try {
@@ -421,7 +404,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           (window.innerWidth <= 768 && ('ontouchstart' in window || navigator.maxTouchPoints > 0))
         );
 
-        const receiptPrinters = (list || []).filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill \u0026 KOT') && (
+        const receiptPrinters = (list || []).filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill & KOT') && (
           (!isMobile && c.connectionType === 'usb' && (c.usbPort || c.deviceName || c.name)) ||
           (c.connectionType === 'network' && c.ipAddress) ||
           (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
@@ -429,7 +412,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
         if (receiptPrinters.length > 0) {
           const names = receiptPrinters.map(p => p.name).join(', ');
-          setToast({ message: `ðŸ–¨ï¸ ${t("Printing receipt to")} ${names}...`, type: 'info' });
+          setToast({ message: `🖨️ ${t("Printing receipt to")} ${names}...`, type: 'info' });
 
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           let anySuccess = false;
@@ -452,14 +435,18 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
           if (anySuccess) {
             setPrintStatus('success');
-            setToast({ message: `âœ… ${t("Bill printed to")} ${names}!`, type: 'success' });
+            setToast({ message: `✅ ${t("Bill printed to")} ${names}!`, type: 'success' });
             resetPrintStatus(3000);
             return;
           } else {
             setPrintStatus('failed');
             setToast({ message: `Failed to print to ${names}. Opening system print...`, type: 'warning' });
             setTimeout(() => {
-              window.print();
+              if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.print();
+              } else {
+                console.log('Skipping native print popup on localhost testing.');
+              }
               resetPrintStatus(3000);
             }, 600);
             return;
@@ -468,18 +455,26 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       } catch (netErr) {
         const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
         setPrintStatus('failed');
-        setToast({ message: `âš ï¸ ${errMsg}. Opening system print...`, type: 'warning' });
+        setToast({ message: `⚠️ ${errMsg}. Opening system print...`, type: 'warning' });
         setTimeout(() => {
-          window.print();
+          if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            window.print();
+          }
           resetPrintStatus(3000);
         }, 600);
         return;
       }
 
       // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
-      setPrintStatus('success');
-      window.print();
-      resetPrintStatus(3000);
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        setPrintStatus('success');
+        window.print();
+        resetPrintStatus(3000);
+      } else {
+        setPrintStatus('not_connected');
+        setToast({ message: t('No printer assigned for bills. Please add a receipt printer in Printer Routing settings.'), type: 'error' });
+        resetPrintStatus(4000);
+      }
     } catch (unexpectedErr) {
       setPrintStatus('failed');
       setToast({ message: `${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, type: 'error' });
@@ -586,33 +581,33 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     if (bType === 'Delivery') {
       header = customerName
         ? `🛵 Dear *${customerName}*, thank you for ordering delivery with us!\n🧾 *Delivery e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `🛵 *HOME DELIVERY E-BILL* 🛵\nðŸ  *${restName.toUpperCase()}* | Bill #${billNo}`;
+      : `🛵 *HOME DELIVERY E-BILL* 🛵\n🏠 *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU FOR YOUR DELIVERY ORDER! ENJOY YOUR MEAL ***';
     } else if (bType === 'Takeaway') {
       header = customerName
-        ? `ðŸ›ï¸ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `ðŸ›ï¸ *TAKEAWAY E-BILL RECEIPT* ðŸ›ï¸\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
+      ? `🛍️ Dear *${customerName}*, thank you for your takeaway order!\n🧾 *Takeaway e-Bill #${billNo}* | *${restName.toUpperCase()}*`
+      : `🛍️ *TAKEAWAY E-BILL RECEIPT* 🛍️\n📦 *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU FOR ORDERING TAKEAWAY! VISIT AGAIN ***';
     } else {
       header = customerName
         ? `👋 Dear *${customerName}*, thank you for dining with us!\n🧾 *e-Bill #${billNo}* | *${restName.toUpperCase()}*`
-        : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\nðŸ¨ *${restName.toUpperCase()}* | Bill #${billNo}`;
+      : `🧾 *DIGITAL E-BILL RECEIPT* 🧾\n🍽️ *${restName.toUpperCase()}* | Bill #${billNo}`;
       if (!footerMessage) footerMessage = '*** THANK YOU! VISIT AGAIN ***';
     }
 
     return `${header}\n${READ_MORE}\n` +
-      (s.address ? `ðŸ“ ${s.address.split('\n')[0]}\n` : '') +
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      (s.address ? `📍 ${s.address.split('\n')[0]}\n` : '') +
+      `----------------------------------------\n` +
       `*Bill No:* #${billNo}\n` +
       `*Date & Time:* ${dateStr}, ${timeStr}\n` +
       `*Order Type:* ${tableInfo}\n` +
       (customerName ? `*Customer:* ${customerName}\n` : '') +
       (bill?.customerPhone || whatsappPhone ? `*Phone:* ${bill?.customerPhone || whatsappPhone}\n` : '') +
       (bill?.tokenNumber ? `*Token No:* ${bill.tokenNumber}\n` : '') +
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `----------------------------------------\n` +
       `🛒 *ITEMS ORDERED (${totalQty} Qty):*\n` +
       `${itemsList}\n` +
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `----------------------------------------\n` +
       `• *Subtotal:* ₹${subtotal}` +
       discount +
       taxBreakdown +
@@ -622,12 +617,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       `\n• *GRAND TOTAL:* *₹${total}*\n` +
       `• *Payment Mode:* ${paymentInfo}\n` +
       (s.whatsappShowQr !== false && s.upiId ? `• *Pay via UPI:* ${s.upiId.trim()}\n` : '') +
-      `â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n` +
+      `----------------------------------------\n` +
       `_${footerMessage}_`;
   };
 
   const handleSendWhatsAppBill = async (targetPhone = null, overrideName = null, forceResend = false) => {
-    // Note: isAlreadySent guard removed â€” user can click Resend (â†º) button which
+    // Note: isAlreadySent guard removed - user can click Resend (↻) button which
     // resets isAlreadySent to false before calling this function.
 
     const numToSend = (targetPhone !== null ? targetPhone : (whatsappPhone || bill?.customerPhone || '')).trim();
@@ -765,7 +760,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     }
 
     if (!imageBase64) {
-      console.warn('[eBill] âŒ Receipt image capture failed â€” ABORTING send to guarantee bill photo requirement.');
+      console.warn('[eBill] -ÂÅ’ Receipt image capture failed -â‚¬â€ ABORTING send to guarantee bill photo requirement.');
       setToast({ message: t('Receipt photo capture failed. WhatsApp e-Bill requires bill receipt image.'), type: 'error' });
       setSendingAutomated(false);
       return;
@@ -790,8 +785,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       ]);
 
       if (res && res.success) {
-        console.log(`[eBill] âœ… Bill sent successfully to +${cleanPhone}`);
-        setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! âœ“")}`, type: 'success' });
+        console.log(`[eBill] ✅ Bill sent successfully to +${cleanPhone}`);
+        setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setIsAlreadySent(true);
         if (bill?.billNumber) {
           try { sessionStorage.setItem(`ms_wa_sent_${bill.billNumber}`, 'true'); } catch (e) { }
@@ -806,7 +801,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
       }
     } catch (err) {
       if (err?.response?.status === 409 || err?.response?.data?.alreadySent) {
-        // 409 means DB says it was sent before â€” but user says customer didn't receive it.
+        // 409 means DB says it was sent before - but user says customer didn't receive it.
         // DO NOT silently mark as sent. Show a warning and let user resend.
         setToast({
           message: t("System shows bill was sent before, but customer may not have received it. Click WhatsApp e-Bill again to resend."),
@@ -816,7 +811,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         setSendingAutomated(false);
         return;
       }
-      console.error('[eBill] âŒ WhatsApp send FAILED:', err?.message);
+      console.error('[eBill] -ÂÅ’ WhatsApp send FAILED:', err?.message);
       const errorMsg = err?.response?.data?.error || err?.message || t('Failed to send WhatsApp e-Bill');
       setToast({ message: `WhatsApp: ${errorMsg}`, type: 'error' });
     } finally {
@@ -834,7 +829,6 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
     }
   }, [bill?.customerPhone, bill?.customerName]);
 
-  // â”€â”€â”€ Auto-send WhatsApp e-Bill with original receipt image on mount if autoSendWhatsApp is enabled â”€â”€â”€
   const autoSendTriggeredRef = React.useRef(false);
   useEffect(() => {
     if (!autoSendWhatsApp || isAlreadySent || autoSendTriggeredRef.current) return;
@@ -845,7 +839,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
     if (cleanPhone.length >= 10) {
       autoSendTriggeredRef.current = true;
-      console.log(`[Invoice] âš¡ Auto-sending WhatsApp bill for ${cleanPhone}...`);
+      console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill for ${cleanPhone}...`);
       // Two rAF passes let React flush the invoice DOM paint first,
       // then we wait a short idle gap before html2canvas captures.
       // This keeps the invoice preview visually instant (no main-thread block on open).
@@ -879,8 +873,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         {`
           @media print {
             @page {
-              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
-              margin: 0 !important;
+              size: auto;
+              margin: 0mm;
             }
             html, body {
               margin: 0 !important;
@@ -918,12 +912,12 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               className="flex items-center gap-1.5 px-3.5 py-2 text-white font-bold text-xs sm:text-sm select-none"
               title={t("e-Bill sent via WhatsApp this session")}
             >
-              <span className="text-white text-sm font-black leading-none">âœ“</span>
+              <span className="text-white text-sm font-black leading-none">✓</span>
               <span>{t("WhatsApp Sent")}</span>
             </div>
             <button
               onClick={() => {
-                // Allow resend â€” customer may not have received it
+                // Allow resend - customer may not have received it
                 setIsAlreadySent(false);
                 if (bill?.billNumber) {
                   try { sessionStorage.removeItem(`ms_wa_sent_${bill.billNumber}`); } catch (e) { }
@@ -934,7 +928,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 setToast({ message: t("Ready to resend. Click WhatsApp e-Bill to send again."), type: 'info' });
               }}
               className="px-2 py-2 text-emerald-200 hover:text-white hover:bg-emerald-600 border-l border-emerald-600/60 transition-colors cursor-pointer"
-              title={t("Resend â€” customer didn't receive it?")}
+              title={t("Resend -â‚¬â€ customer didn't receive it?")}
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 .49-4" />
@@ -1001,7 +995,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             {!printStatus && <Printer size={16} className={activeReceiptPrinter ? "text-emerald-600 shrink-0" : "text-gray-900 shrink-0"} />}
             <span>
               {printStatus === 'printing' ? t('Printing...')
-                : printStatus === 'success' ? t('Printed! âœ“')
+                : printStatus === 'success' ? t('Printed! ✓')
                   : printStatus === 'failed' ? t('Print Failed')
                     : printStatus === 'not_connected' ? t('Not Connected')
                       : activeReceiptPrinter ? `${t("Print")} (${activeReceiptPrinter.name})` : t("Print Bill")}
@@ -1189,7 +1183,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 {sendingAutomated ? (
                   <><Loader2 size={16} className="animate-spin" /><span className="animate-pulse">{t("Sending...")}</span></>
                 ) : isAlreadySent ? (
-                  <><span className="font-bold">âœ“</span><span>{t("Already Sent")}</span></>
+                  <><span className="font-bold">✓</span><span>{t("Already Sent")}</span></>
                 ) : (
                   <><svg className="w-4 h-4 fill-current shrink-0" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" /></svg><span>{t("Send e-Bill")}</span></>
                 )}
@@ -1278,7 +1272,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                 type="button"
                 onClick={() => setShowCustomerEditModal(false)}
                 className="w-full py-2.5 bg-orange-600 hover:bg-orange-500 text-gray-900 rounded-xl font-bold text-sm transition-all shadow-md shadow-orange-500/20 cursor-pointer active:scale-95">
-                âœ“ {t('Apply')}
+                ✓ {t('Apply')}
               </button>
             </div>
           </div>
@@ -1319,6 +1313,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               <div style={{ fontSize: fontMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
                 {activeSettings.restaurantName || 'MSBILLINGS'}
               </div>
+              {activeSettings.restaurantType && (
+                <div style={{ fontSize: fontMetrics.detailSize, fontWeight: 600, marginTop: '2px', lineHeight: '1.2' }}>
+                  {activeSettings.restaurantType}
+                </div>
+              )}
               <div style={{ fontSize: fontMetrics.detailSize, marginTop: '2px', lineHeight: '1.25' }}>
                 {(activeSettings.address || '').split('\n').map((line, i) => (
                   <div key={i}>{line}</div>
@@ -1397,7 +1396,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
                         {item.name || 'Unknown Item'}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.detailSize, marginTop: '1.5px' }}>
-                        <span>[{Number(item.price || 0).toFixed(2)}] Ã— {activeQty}</span>
+                        <span>[{Number(item.price || 0).toFixed(2)}] × {activeQty}</span>
                         <span style={{ fontWeight: 750 }}>{(item.price * activeQty).toFixed(2)}</span>
                       </div>
                       {item.hsnCode && (
@@ -1555,7 +1554,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const roundedTotal = Math.round(finalTotal);
 
               return (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 750, margin: '3px 0' }}>
+                <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', fontSize: fontMetrics.grandTotalSize, fontWeight: 750, margin: '3px 0' }}>
                   <span>{t('Grand Total')}</span>
                   <span>{currencySymbol}{roundedTotal.toFixed(2)}</span>
                 </div>
@@ -1590,7 +1589,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               }
             })()}
 
-            {/* QR Code (if enabled) â€” for WhatsApp capture, respects separate whatsappShowQr toggle completely independently */}
+            {/* QR Code (if enabled) -â‚¬â€ for WhatsApp capture, respects separate whatsappShowQr toggle completely independently */}
             {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
               const pa = (activeSettings.upiId || '').trim();
               if (!pa) return null;
@@ -1651,6 +1650,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               <div align="center" style={{ fontSize: fontMetrics.headingSize, lineHeight: '1.15', marginBottom: '4px', fontWeight: 'bold', textAlign: 'center', width: '100%', display: 'block' }}>
                 {(activeSettings.restaurantName || 'MSBILLINGS').toUpperCase()}
               </div>
+              {activeSettings.restaurantType && (
+                <div align="center" style={{ fontSize: fontMetrics.detailSize, fontWeight: 600, marginBottom: '4px', textAlign: 'center', width: '100%', display: 'block' }}>
+                  {activeSettings.restaurantType}
+                </div>
+              )}
               <div align="center" style={{ fontSize: fontMetrics.detailSize, lineHeight: '1.25', fontWeight: 'normal', textAlign: 'center', width: '100%', display: 'block' }}>
                 {(activeSettings.address || '').split('\n').map((line, i) =>
                   <div key={i} align="center" style={{ textAlign: 'center', width: '100%', display: 'block' }}>{line}</div>
@@ -1962,7 +1966,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               return null;
             })()}
 
-            {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) â€” respects whatsappShowQr toggle completely independently during WhatsApp capture */}
+            {/* UPI Scan to Pay QR Code on Invoice (Encodes exact UPI amount) -â‚¬â€ respects whatsappShowQr toggle completely independently during WhatsApp capture */}
             {(activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false) && (() => {
               const pa = (activeSettings.upiId || '').trim();
               if (!pa) return null;

@@ -65,14 +65,7 @@
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "msbillings",
-        "repo": "Restaurant-billing",
-        "releaseType": "release"
-      }
-    ]
+    "publish": null
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

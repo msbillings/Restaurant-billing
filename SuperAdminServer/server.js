@@ -1,6 +1,9 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+// Initialize Redis Client
+import './services/redisClient.js';
+
 import dns from 'dns';
 try {
   dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);

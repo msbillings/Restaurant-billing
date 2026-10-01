@@ -3,7 +3,8 @@ import BillDefault from '../models/Bill.js';
 import SettingDefault from '../models/Setting.js';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import { sendRawToNetworkPrinter, sendRawToUSBPrinter, getAvailableUSBAndCOMPorts, scanNetworkThermalPrinters, generateESCPOSTestReceipt, printBillToPrinters, generateKOTESCPOSBuffer } from '../services/printerService.js';
-import { checkNetworkConnectivity, scanBluetoothDevices, sendRawToBluetoothPrinter, getPrinterBatteryStatus } from '../services/usbPrinterService.js';
+import { checkNetworkConnectivity } from '../services/print/connections/lan.js';
+import { scanBluetoothDevices, sendRawToBluetoothPrinter, getPrinterBatteryStatus } from '../services/print/connections/bluetooth.js';
 import { emitSocketEvent } from '../utils/socket.js';
 
 // Get all printer configs

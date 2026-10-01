@@ -362,7 +362,9 @@ const KOT = ({ order, onClose }) => {
           setPrintStatus('success');
           showToast(t('KOT sent to system printer!'), 'success');
         } else {
-          window.print();
+          if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            window.print();
+          }
           setPrintStatus('success');
         }
         resetPrintStatus(3000);
@@ -454,7 +456,11 @@ const KOT = ({ order, onClose }) => {
               setPrintStatus('failed');
               showToast(t('Printer did not respond. Opening system print...'), 'warning');
               setTimeout(() => {
-                window.print();
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                  window.print();
+                } else {
+                  console.log('Skipping native print popup on localhost testing.');
+                }
                 resetPrintStatus(3000);
               }, 600);
               return;
@@ -463,16 +469,20 @@ const KOT = ({ order, onClose }) => {
         } catch (netErr) {
           const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
           setPrintStatus('failed');
-          showToast(`${t('Print note')}: ${errMsg}. Opening system print...`, 'warning');
+          showToast(`${t('Print note')}: ${errMsg}.`, 'warning');
           setTimeout(() => {
             setPrintStatus('success');
-            window.print();
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+              window.print();
+            }
             resetPrintStatus(3000);
           }, 600);
           return;
         }
         setPrintStatus('success');
-        window.print();
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          window.print();
+        }
         resetPrintStatus(3000);
       }
     } catch (unexpectedErr) {
@@ -613,14 +623,23 @@ const KOT = ({ order, onClose }) => {
                   anySuccess = true;
                 }
               } catch (singleErr) {
-                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
+                const errMsg = singleErr.response?.data?.message || singleErr.message || 'Printer offline';
+                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, errMsg);
+                showToast(`⚠️ Print failed on ${targetBackendPrinter.name}: ${errMsg}`, 'error');
               }
             }));
-            if (!anySuccess) {
-              window.print();
+            if (anySuccess) {
+              const names = targetPrinters.map(p => p.name).join(', ');
+              showToast(`✅ KOT sent to ${names}`, 'success');
+            } else {
+              if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.print();
+              }
             }
           } else {
-            window.print();
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+              window.print();
+            }
           }
         }
       } catch (err) {
@@ -647,8 +666,8 @@ const KOT = ({ order, onClose }) => {
         {`
           @media print {
             @page {
-              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
-              margin: 0 !important;
+              size: auto;
+              margin: 0mm;
             }
             html, body {
               margin: 0 !important;
