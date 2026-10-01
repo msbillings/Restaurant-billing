@@ -5,8 +5,10 @@ import mongoose from 'mongoose';
 
 const router = express.Router();
 
+import { requireTrustedWebhook } from '../middleware/webhookAuth.js';
+
 // Endpoint for Zomato/Swiggy to push new orders
-router.post('/webhook', webhookLimiter, receiveOnlineOrder);
+router.post('/webhook', webhookLimiter, requireTrustedWebhook, receiveOnlineOrder);
 
 router.post('/settings', webhookLimiter, async (req, res) => {
   try {

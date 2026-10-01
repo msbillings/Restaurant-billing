@@ -88,7 +88,12 @@ export const webhookLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => `${req.tenantDb || 'unknown'}:${req.ip}`,
+  keyGenerator: (req) => {
+    if (req.webhookVerifiedTenant) {
+      return `webhook:${req.webhookVerifiedTenant}:${req.ip}`;
+    }
+    return `webhook:unverified:${req.ip}`;
+  },
   store: createRedisStore('ratelimit:webhook:tenant:'),
   passOnStoreError: true, // FAIL OPEN
 });

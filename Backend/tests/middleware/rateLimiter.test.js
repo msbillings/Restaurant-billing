@@ -24,15 +24,16 @@ redisManager.client = {
   }
 };
 
-const { 
-  authLimiter, 
-  publicLimiter, 
-  tenantApiLimiter, 
-  adminLimiter, 
-  webhookLimiter, 
+const {
+  authLimiter,
+  publicLimiter,
+  tenantApiLimiter,
+  adminLimiter,
+  webhookLimiter,
   healthLimiter,
-  handleRateLimitError 
+  handleRateLimitError
 } = await import('../../middleware/rateLimiter.js');
+const { requireTrustedWebhook } = await import('../../middleware/webhookAuth.js');
 
 // Setup mock app
 const app = express();
@@ -54,12 +55,12 @@ const mockAuth = (req, res, next) => {
     req.user = { id: 'admin_1' };
     req.tenantDb = 'tenantA';
   }
-  
+
   // Spoofed tenant header
   if (req.headers['x-tenant-db'] && !req.tenantDb) {
     req.tenantDb = req.headers['x-tenant-db'];
   }
-  
+
   next();
 };
 
@@ -72,6 +73,18 @@ app.get('/api/tenant', tenantApiLimiter, (req, res) => res.json({ ok: true }));
 app.post('/api/admin', adminLimiter, (req, res) => res.json({ ok: true }));
 app.post('/api/webhook', webhookLimiter, (req, res) => res.json({ ok: true }));
 app.get('/health', healthLimiter, (req, res) => res.json({ ok: true }));
+
+// Mock pushOrder GET to verify tenantApiLimiter
+app.get('/api/push-orders', tenantApiLimiter, (req, res) => res.json({ ok: true }));
+
+// Mock secure webhook (fails closed without verified identity)
+app.post('/api/webhook_secure', webhookLimiter, requireTrustedWebhook, (req, res) => res.json({ ok: true }));
+
+// Mock webhook with verified identity (simulates successful mapping)
+app.post('/api/webhook_valid', (req, res, next) => {
+  req.webhookVerifiedTenant = 'trusted_tenant';
+  next();
+}, webhookLimiter, (req, res) => res.json({ ok: true }));
 
 app.use(handleRateLimitError);
 
@@ -180,7 +193,7 @@ describe('Rate Limiter Middleware', () => {
     // Should be blocked because token resolves to tenantA
     const resBlocked = await request(app).get('/api/tenant').set('Authorization', 'Bearer valid_token').set('X-Tenant-DB', 'tenantB');
     expect(resBlocked.status).toBe(429);
-    
+
     // Check if the mock stored it under tenantA
     expect(store.get('ratelimit:api:tenant:tenantA:user_123')).toBe(301);
   });
@@ -287,5 +300,35 @@ describe('Rate Limiter Middleware', () => {
     }
     const resOver = await request(app).get('/health');
     expect(resOver.status).toBe(429);
+  });
+
+  // 21. pushOrder GET has tenantApiLimiter
+  it('should enforce tenantApiLimiter on pushOrder GET', async () => {
+    for (let i = 0; i < 300; i++) {
+      await request(app).get('/api/push-orders').set('Authorization', 'Bearer valid_token');
+    }
+    const resOver = await request(app).get('/api/push-orders').set('Authorization', 'Bearer valid_token');
+    expect(resOver.status).toBe(429);
+  });
+
+  // 22. A webhook without trusted provider identity is rejected/fails closed
+  it('should fail closed for webhook without trusted provider identity', async () => {
+    const res = await request(app).post('/api/webhook_secure').set('X-Tenant-DB', 'tenantA');
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('Provider-specific webhook authentication/mapping is a prerequisite');
+  });
+
+  // 23. A valid trusted webhook identity resolves to the correct tenant and limits correctly
+  it('should allow valid trusted webhook and limit based on trusted identity, ignoring spoof attempts', async () => {
+    // We send X-Tenant-DB: attacker_tenant, but the route sets webhookVerifiedTenant = 'trusted_tenant'
+    for (let i = 0; i < 500; i++) {
+      await request(app).post('/api/webhook_valid').set('X-Tenant-DB', 'attacker_tenant').set('X-Forwarded-For', '1.1.1.1');
+    }
+    const resOver = await request(app).post('/api/webhook_valid').set('X-Tenant-DB', 'attacker_tenant').set('X-Forwarded-For', '1.1.1.1');
+    expect(resOver.status).toBe(429);
+
+    // Check if the mock stored it under trusted_tenant, NOT attacker_tenant
+    expect(store.get('ratelimit:webhook:tenant:webhook:trusted_tenant:1.1.1.1')).toBe(501);
+    expect(store.get('ratelimit:webhook:tenant:webhook:attacker_tenant:1.1.1.1')).toBeUndefined();
   });
 });
