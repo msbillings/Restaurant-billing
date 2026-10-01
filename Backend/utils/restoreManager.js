@@ -3,35 +3,58 @@ import crypto from 'crypto';
 import { getTenantModels } from './tenantManager.js';
 import { decryptBackup } from './cryptoUtil.js';
 import mongoose from 'mongoose';
+import BackupLog from '../models/BackupLog.js';
+import Client from '../models/Client.js';
+import { getObject } from './storageProvider.js';
 
 /**
  * Restores a tenant backup into a target database.
  * 
- * @param {string} backupFilePath - Absolute path to the .enc backup file.
- * @param {string} targetDb - Target database name (prefer test DBs for safety).
+ * @param {string} source - Absolute path to the .enc backup file OR a backupId string.
+ * @param {string} targetDb - Target database name.
  * @param {Object} options - Restore options.
  * @param {string[]} options.collections - Array of collection names to restore (defaults to all).
  * @param {boolean} options.force - If true, bypass existing data check (DANGEROUS).
  */
-export const restoreTenant = async (backupFilePath, targetDb, options = {}) => {
+export const restoreTenant = async (source, targetDb, options = {}) => {
   const { collections = null, force = false } = options;
 
   console.log(`[Restore] RESTORE_STARTED for target database: ${targetDb}`);
 
-  if (!fs.existsSync(backupFilePath)) {
-    throw new Error(`Backup file not found: ${backupFilePath}`);
+  let encryptedBuffer;
+  let backupLogRecord = null;
+
+  // 1. Locate backup & Obtain payload
+  if (fs.existsSync(source)) {
+    encryptedBuffer = fs.readFileSync(source);
+  } else {
+    // Treat source as a backupId
+    backupLogRecord = await BackupLog.findOne({ backupId: source }).exec();
+    if (!backupLogRecord) {
+      throw new Error(`Backup source not found locally and not found in BackupLog: ${source}`);
+    }
+    if (backupLogRecord.status !== 'COMPLETED') {
+      throw new Error(`Backup is not in COMPLETED state. Current state: ${backupLogRecord.status}`);
+    }
+    if (!backupLogRecord.objectKey) {
+      throw new Error(`BackupLog is missing objectKey for backupId: ${source}`);
+    }
+    try {
+      encryptedBuffer = await getObject(backupLogRecord.objectKey);
+    } catch (err) {
+      throw new Error(`Failed to download backup object from storage: ${err.message}`);
+    }
   }
 
-  // 1. Read and Decrypt Payload
+  // 2. Decrypt Payload
   let decryptedString;
   try {
-    const encryptedBuffer = fs.readFileSync(backupFilePath);
     decryptedString = decryptBackup(encryptedBuffer);
   } catch (err) {
     throw new Error(`Failed to decrypt backup: ${err.message}`);
   }
 
-  // 2. Parse JSON
+  // 3. Parse JSON
   let parsed;
   try {
     parsed = JSON.parse(decryptedString);
@@ -44,14 +67,29 @@ export const restoreTenant = async (backupFilePath, targetDb, options = {}) => {
     throw new Error('Invalid backup format: Missing metadata or data payload');
   }
 
-  // 3. Verify Checksum
+  // 4. Verify Checksum
   const payloadString = JSON.stringify(data);
   const checksum = crypto.createHash('sha256').update(payloadString).digest('hex');
   if (checksum !== metadata.checksum) {
     throw new Error(`Checksum mismatch! Backup is corrupted. Expected: ${metadata.checksum}, Got: ${checksum}`);
   }
 
-  // 4. Resolve Target Models
+  // 5. Verify Tenant Boundary (Zero-write Validation)
+  if (metadata.tenantId !== targetDb) {
+    throw new Error("Backup tenant identity does not match the restore target.");
+  }
+
+  if (backupLogRecord && backupLogRecord.tenantId !== targetDb) {
+    throw new Error("Backup tenant identity does not match the restore target.");
+  }
+
+  // Verify targetDb is a legitimate tenant database
+  const clientRecord = await Client.findOne({ databaseName: targetDb, status: 'Active' }).lean().exec();
+  if (!clientRecord) {
+    throw new Error("Backup tenant identity does not match the restore target.");
+  }
+
+  // 6. Resolve Target Models (Only after all validations pass)
   const models = await getTenantModels(targetDb);
   
   const collectionsToRestore = collections && collections.length > 0 
@@ -64,7 +102,7 @@ export const restoreTenant = async (backupFilePath, targetDb, options = {}) => {
     details: []
   };
 
-  // 5. Check for Existing Data and Restore
+  // 7. Check for Existing Data and Restore
   for (const modelName of collectionsToRestore) {
     if (!data[modelName]) {
       console.warn(`[Restore] Collection ${modelName} not found in backup data.`);

@@ -43,7 +43,8 @@ jest.unstable_mockModule('../../utils/tenantManager.js', () => ({
         activeSessions: [{ accessToken: 'mockToken' }] // Added to fix 'some' error in auth.js
       }))
     }
-  }))
+  })),
+  getMasterModels: jest.fn(async () => ({}))
 }));
 
 const { default: Report } = await import('../../models/Report.js');

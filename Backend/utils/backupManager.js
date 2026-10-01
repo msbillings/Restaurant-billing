@@ -5,19 +5,11 @@ import cron from 'node-cron';
 import mongoose from 'mongoose';
 import { getTenantModels } from './tenantManager.js';
 import Client from '../models/Client.js';
+import BackupLog from '../models/BackupLog.js';
 import { encryptBackup, decryptBackup } from './cryptoUtil.js';
+import { isStorageEnabled, putObject, headObject, deleteObject } from './storageProvider.js';
 
 const RETENTION_LIMIT = 7;
-
-// Setup Backup Directory
-const getBackupDir = () => {
-  const baseDir = process.env.APP_USER_DATA_PATH || process.cwd();
-  const backupDir = path.join(baseDir, 'backups');
-  if (!fs.existsSync(backupDir)) {
-    fs.mkdirSync(backupDir, { recursive: true });
-  }
-  return backupDir;
-};
 
 // Target Collections verified in Phase 4.1 Audit
 const TARGET_COLLECTIONS = [
@@ -30,124 +22,138 @@ const TARGET_COLLECTIONS = [
 ];
 
 /**
- * Perform a backup for a single tenant database
- * @param {string} databaseName - the tenant database name
- * @param {string} cluster - the tenant cluster name
- * @param {string} backupDir - directory to save the backup
+ * Perform a backup for a single tenant database to durable storage
  */
-const backupTenant = async (databaseName, cluster, backupDir) => {
-  const models = await getTenantModels(databaseName);
+const backupTenantToStorage = async (databaseName, cluster) => {
   const backupId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
+  const datePrefix = createdAt.split('T')[0];
+  const objectKey = `backups/${datePrefix}/${backupId}.enc`;
 
-  const payloadData = {};
-  const metadataCollections = {};
-
-  // Extract Data
-  for (const modelName of TARGET_COLLECTIONS) {
-    if (models[modelName]) {
-      const Model = models[modelName];
-      const docs = await Model.find({}).lean().exec();
-      payloadData[modelName] = docs;
-      metadataCollections[modelName] = { count: docs.length };
-    }
-  }
-
-  // Checksum
-  const payloadString = JSON.stringify(payloadData);
-  const checksum = crypto.createHash('sha256').update(payloadString).digest('hex');
-
-  // Metadata
-  const metadata = {
-    version: "1.0",
+  const log = new BackupLog({
     backupId,
-    createdAt,
     tenantId: databaseName,
-    cluster,
-    collections: metadataCollections,
-    checksum
-  };
+    objectKey,
+    status: 'STARTED',
+    storageProvider: 's3'
+  });
+  await log.save();
 
-  // Construct full JSON payload
-  const fullPayload = JSON.stringify({ metadata, data: payloadData });
-
-  // Encrypt
-  const encryptedBuffer = encryptBackup(fullPayload);
-
-  const tmpFilename = `backup_${backupId}.enc.tmp`;
-  const finalFilename = `backup_${backupId}.enc`;
-  const tmpPath = path.join(backupDir, tmpFilename);
-  const finalPath = path.join(backupDir, finalFilename);
-
-  // Atomic Write
   try {
-    fs.writeFileSync(tmpPath, encryptedBuffer);
+    log.status = 'GENERATING';
+    await log.save();
 
-    // In Node.js, fs.renameSync on the same volume is atomic
-    fs.renameSync(tmpPath, finalPath);
+    const models = await getTenantModels(databaseName);
+    const payloadData = {};
+    const metadataCollections = {};
+
+    // Extract Data
+    for (const modelName of TARGET_COLLECTIONS) {
+      if (models[modelName]) {
+        const Model = models[modelName];
+        const docs = await Model.find({}).lean().exec();
+        payloadData[modelName] = docs;
+        metadataCollections[modelName] = { count: docs.length };
+      }
+    }
+
+    // Checksum (over plaintext data)
+    const payloadString = JSON.stringify(payloadData);
+    const checksum = crypto.createHash('sha256').update(payloadString).digest('hex');
+    log.checksum = checksum;
+
+    // Metadata
+    const metadata = {
+      version: "1.0",
+      backupId,
+      createdAt,
+      tenantId: databaseName,
+      cluster,
+      collections: metadataCollections,
+      checksum
+    };
+
+    const fullPayload = JSON.stringify({ metadata, data: payloadData });
+
+    log.status = 'ENCRYPTED';
+    await log.save();
+
+    // Encrypt
+    const encryptedBuffer = encryptBackup(fullPayload);
+    log.size = encryptedBuffer.length;
+
+    log.status = 'UPLOADING';
+    await log.save();
+
+    try {
+      await putObject(objectKey, encryptedBuffer);
+    } catch (err) {
+      log.status = 'FAILED_UPLOAD';
+      log.failureReason = err.message;
+      await log.save();
+      throw err;
+    }
+
+    log.status = 'VERIFIED';
+    await log.save();
+
+    try {
+      await headObject(objectKey);
+    } catch (err) {
+      log.status = 'FAILED_VERIFICATION';
+      log.failureReason = err.message;
+      await log.save();
+      throw err;
+    }
+
+    log.status = 'COMPLETED';
+    log.completedAt = new Date();
+    await log.save();
 
     return {
       backupId,
-      filename: finalFilename,
+      objectKey,
       status: 'SUCCESS'
     };
   } catch (err) {
-    if (fs.existsSync(tmpPath)) {
-      fs.unlinkSync(tmpPath);
+    if (!log.status.startsWith('FAILED_')) {
+      log.status = 'FAILED_GENERATION';
+      log.failureReason = err.message;
+      await log.save();
     }
     throw err;
   }
 };
 
 /**
- * Applies retention policy per tenant
- * @param {string} backupDir - Backup directory
+ * Applies retention policy per tenant using BackupLog and StorageProvider
  */
-const applyRetentionPolicy = (backupDir) => {
-  const files = fs.readdirSync(backupDir).filter(f => f.startsWith('backup_') && f.endsWith('.enc'));
+const applyRetentionPolicy = async () => {
+  const activeClients = await Client.find({ status: 'Active' }).lean().exec();
 
-  const backupsByTenant = {};
+  for (const client of activeClients) {
+    if (!client.databaseName) continue;
 
-  for (const file of files) {
-    const filePath = path.join(backupDir, file);
-    try {
-      const buffer = fs.readFileSync(filePath);
-      const decryptedString = decryptBackup(buffer);
-      const parsed = JSON.parse(decryptedString);
-      const metadata = parsed.metadata;
+    // Find all COMPLETED backups for this tenant, sorted newest first
+    const completedBackups = await BackupLog.find({
+      tenantId: client.databaseName,
+      status: 'COMPLETED'
+    }).sort({ createdAt: -1 }).exec();
 
-      if (!metadata || !metadata.tenantId || !metadata.createdAt) {
-        continue; // Invalid/unparsable backup metadata
-      }
+    if (completedBackups.length > RETENTION_LIMIT) {
+      const candidatesForDeletion = completedBackups.slice(RETENTION_LIMIT);
 
-      if (!backupsByTenant[metadata.tenantId]) {
-        backupsByTenant[metadata.tenantId] = [];
-      }
-
-      backupsByTenant[metadata.tenantId].push({
-        file,
-        filePath,
-        createdAt: new Date(metadata.createdAt)
-      });
-    } catch (e) {
-      // Failed to decrypt or parse - leave it alone (fail-safe cleanup)
-      console.warn(`[Backup] Retention warning: Could not validate metadata for ${file}`);
-    }
-  }
-
-  // Clean up older files
-  for (const [tenantId, backups] of Object.entries(backupsByTenant)) {
-    // Sort descending by creation date (newest first)
-    backups.sort((a, b) => b.createdAt - a.createdAt);
-
-    if (backups.length > RETENTION_LIMIT) {
-      const toDelete = backups.slice(RETENTION_LIMIT);
-      for (const oldBackup of toDelete) {
+      for (const log of candidatesForDeletion) {
         try {
-          fs.unlinkSync(oldBackup.filePath);
-          console.log(`[Backup] Retention cleanup: Removed old backup ${oldBackup.file}`);
+          if (log.objectKey) {
+            await deleteObject(log.objectKey);
+          }
+          // Only delete log if object deletion was successful (or didn't exist)
+          await BackupLog.deleteOne({ _id: log._id });
+          console.log(`[Backup] Retention cleanup: Removed old backup ${log.backupId}`);
         } catch (err) {
-          console.error(`[Backup] Failed to remove old backup ${oldBackup.file}`);
+          console.error(`[Backup] Retention cleanup failed for ${log.backupId}: ${err.message}`);
+          // Preserve BackupLog if deletion failed
         }
       }
     }
@@ -170,12 +176,16 @@ export const performBackup = async () => {
       return summary;
     }
 
+    if (!isStorageEnabled()) {
+      console.log('[Backup] Storage not configured. Failing safely.');
+      throw new Error('Object storage is not configured.');
+    }
+
     // Ensure encryption key is valid before starting anything
     if (!process.env.BACKUP_ENCRYPTION_KEY || process.env.BACKUP_ENCRYPTION_KEY.length !== 64) {
       throw new Error("BACKUP_ENCRYPTION_KEY missing or invalid");
     }
 
-    const backupDir = getBackupDir();
     const activeClients = await Client.find({ status: 'Active' }).lean().exec();
     summary.discovered = activeClients.length;
 
@@ -187,7 +197,7 @@ export const performBackup = async () => {
       }
 
       try {
-        const result = await backupTenant(client.databaseName, client.cluster || 'cluster0', backupDir);
+        const result = await backupTenantToStorage(client.databaseName, client.cluster || 'cluster0');
         summary.successful++;
         summary.results.push({
           tenantId: client.databaseName,
@@ -207,7 +217,7 @@ export const performBackup = async () => {
     }
 
     try {
-      applyRetentionPolicy(backupDir);
+      await applyRetentionPolicy();
     } catch (err) {
       console.error('[Backup] Failed to apply retention policy:', err.message);
     }
