@@ -1,8 +1,10 @@
 name: CI Verification
 
 on:
+  push:
+    branches: [ "phase-**" ]
   pull_request:
-    branches: [ "main", "phase-*" ]
+    branches: [ "main", "phase-**" ]
 
 jobs:
   verify:
