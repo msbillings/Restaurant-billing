@@ -5,20 +5,24 @@ import { authenticateToken } from '../../middleware/auth.js';
 import { tenantMiddleware } from '../../middleware/tenant.js';
 import { setupDatabase } from '../../controllers/configController.js';
 
-// Mock dependencies
-jest.unstable_mockModule('mongoose', () => ({
-  default: {
-    connection: {
-      readyState: 1,
-      db: { databaseName: 'mscurechain' },
-      useDb: jest.fn().mockReturnValue({ readyState: 1, models: {}, model: jest.fn().mockReturnValue({}) }),
-      collection: jest.fn().mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) })
-    },
-    createConnection: jest.fn().mockReturnValue({ readyState: 1, asPromise: jest.fn().mockResolvedValue(true) })
-  }
-}));
+// Mock mongoose connection methods to prevent real network calls in CI
+jest.spyOn(mongoose, 'createConnection').mockReturnValue({
+  readyState: 1,
+  asPromise: jest.fn().mockResolvedValue(true),
+  useDb: jest.fn().mockReturnValue({ readyState: 1, models: {}, model: jest.fn().mockReturnValue({}) }),
+  db: { admin: jest.fn().mockReturnValue({ listDatabases: jest.fn().mockRejectedValue(new Error('mock')) }) }
+});
+
+mongoose.connection.readyState = 1;
+mongoose.connection.db = { databaseName: 'mscurechain', collection: jest.fn().mockReturnValue({ findOne: jest.fn().mockResolvedValue(null) }) };
+mongoose.connection.useDb = jest.fn().mockReturnValue({ readyState: 1, models: {}, model: jest.fn().mockReturnValue({}) });
 
 describe('Tenant Manager Phase 2 Security', () => {
+  afterAll(async () => {
+    await mongoose.disconnect();
+    jest.restoreAllMocks();
+  });
+
   describe('getTenantModels Boundary Enforcement', () => {
     it('A. getTenantModels(undefined) -> throw TENANT_NOT_RESOLVED', async () => {
       await expect(getTenantModels(undefined)).rejects.toThrow(/TENANT_NOT_RESOLVED|Invalid tenant database name/);
