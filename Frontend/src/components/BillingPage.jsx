@@ -160,6 +160,24 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     }
   });
 
+  const [directPrintConfigs, setDirectPrintConfigs] = useState({
+    kot: localStorage.getItem('msbillings_direct_kot') !== 'false',
+    save: localStorage.getItem('msbillings_direct_save') !== 'false',
+    settle: localStorage.getItem('msbillings_direct_settle') !== 'false'
+  });
+
+  useEffect(() => {
+    const handlePrintConfigChange = () => {
+      setDirectPrintConfigs({
+        kot: localStorage.getItem('msbillings_direct_kot') !== 'false',
+        save: localStorage.getItem('msbillings_direct_save') !== 'false',
+        settle: localStorage.getItem('msbillings_direct_settle') !== 'false'
+      });
+    };
+    window.addEventListener('printConfigChanged', handlePrintConfigChange);
+    return () => window.removeEventListener('printConfigChanged', handlePrintConfigChange);
+  }, []);
+
   const [rightPanelWidth, setRightPanelWidth] = useState(() => {
     try {
       const saved = localStorage.getItem('ms_billing_right_panel_width');
@@ -2379,7 +2397,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       splitPayments: paymentData.splitPayments,
       amountPaid: paymentData.amountPaid,
       upiApp: paymentData.upiApp,
-      walletRedemption: paymentData.walletRedemption || 0,
+
       showLogo: (() => {
         try {
           const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
@@ -3207,6 +3225,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
               try { sessionStorage.setItem(`ms_wa_sent_${id}`, 'true'); } catch (e) { }
             }}
             autoSendWhatsApp={autoSendWhatsAppToInvoice}
+            isDirectPrint={billToShow.status === 'Paid' ? directPrintConfigs.settle : directPrintConfigs.save}
+            onGlobalToast={showToast}
           />
         );
       })()}
@@ -3214,6 +3234,8 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       {showKOT && activeKOTData &&
         <KOT
           order={activeKOTData}
+          isDirectPrint={directPrintConfigs.kot}
+          onGlobalToast={showToast}
           onClose={() => {
             setShowKOT(false);
             setActiveKOTData(null);

@@ -33,32 +33,48 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
 
     const activePrinters = await PrinterConfig.find({ isActive: true });
     if (!activePrinters || activePrinters.length === 0) {
+      emitNotification(req, '🖨️ No Printers Configured', 'You tried to print, but no printers are configured in the system. Please go to Settings > Printer & Kitchen Routing and add your printer.', 'warning', ['Admin', 'Captain', 'Manager', 'Cashier']);
       return;
     }
 
     const kotPrinters = activePrinters.filter(p => p.type === 'kot' || p.type === 'general' || p.type === 'both');
     if (kotPrinters.length === 0) {
+      emitNotification(req, '🖨️ No KOT Printers', 'You tried to print a KOT, but no KOT printers are configured. Please assign a printer for KOTs in Settings.', 'warning', ['Admin', 'Captain', 'Manager', 'Cashier']);
       return;
     }
 
-    const tenantDb = req?.tenantDb || req?.headers?.['x-tenant-db'] || req?.headers?.['X-Tenant-DB'] || 'default';
-    const cachedMap = categoryMapCache.get(tenantDb);
     let categoryMap = {};
+    let itemTypeMap = {};
 
-    if (cachedMap && (Date.now() - cachedMap.time < 120000)) {
-      categoryMap = cachedMap.map;
-    } else {
-      try {
-        const menuList = await Menu.find({}, { name: 1, category: 1 }).populate('category', 'name').maxTimeMS(400).lean();
-        menuList.forEach(m => {
-          if (m.name) {
-            categoryMap[m.name.toLowerCase()] = (m.category?.name || '').toLowerCase();
+    try {
+      const menuList = await Menu.find({}, { name: 1, category: 1, type: 1, variants: 1 }).populate('category', 'name').lean();
+      menuList.forEach(m => {
+        if (m.name) {
+          const baseName = m.name.toLowerCase();
+          const catName = (m.category?.name || '').toLowerCase();
+          const itemType = m.type ? m.type.toLowerCase() : null;
+          
+          categoryMap[baseName] = catName;
+          if (itemType) itemTypeMap[baseName] = itemType;
+
+          if (m.variants && Array.isArray(m.variants)) {
+            m.variants.forEach(v => {
+              if (v.name) {
+                const varName = `${m.name} (${v.name})`.toLowerCase();
+                const varName2 = `${m.name} - ${v.name}`.toLowerCase();
+                categoryMap[varName] = catName;
+                categoryMap[varName2] = catName;
+                if (itemType) {
+                  itemTypeMap[varName] = itemType;
+                  itemTypeMap[varName2] = itemType;
+                }
+              }
+            });
           }
-        });
-        categoryMapCache.set(tenantDb, { map: categoryMap, time: Date.now() });
-      } catch (e) {
-        console.warn('[PrinterService] Could not load menu categories for routing:', e.message);
-      }
+        }
+      });
+    } catch (e) {
+      console.warn('[PrinterService] Could not load menu categories for routing:', e.message);
     }
 
     const Floor = getTenantModel(req, 'Floor', FloorDefault);
@@ -117,7 +133,8 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
 
       let targetItems = kotItems;
       const isItemMode = printer.assignmentMode === 'item' && Array.isArray(printer.assignedItems) && printer.assignedItems.length > 0;
-      const isCatMode = Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0;
+      const isItemTypeMode = printer.assignmentMode === 'itemType' && Array.isArray(printer.assignedItemTypes) && printer.assignedItemTypes.length > 0;
+      const isCatMode = (!printer.assignmentMode || printer.assignmentMode === 'category') && Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0;
       const assignedDept = (printer.assignTo || '').trim().toLowerCase();
       const printerName = (printer.name || '').trim().toLowerCase();
       const isDeptFilter = assignedDept !== '' && assignedDept !== 'all' && assignedDept !== 'general' && assignedDept !== printerName;
@@ -125,11 +142,22 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       if (isItemMode) {
         const itemSet = new Set(printer.assignedItems.map(it => it.trim().toLowerCase()));
         targetItems = kotItems.filter(item => itemSet.has((item.name || '').trim().toLowerCase()));
+      } else if (isItemTypeMode) {
+        const typeSet = new Set(printer.assignedItemTypes.map(it => it.trim().toLowerCase()));
+        targetItems = kotItems.filter(item => {
+          const itemLower = (item.name || '').toLowerCase();
+          const dbItemType = itemTypeMap[itemLower];
+          const rawType = (item.type || item.foodType || dbItemType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+          return rawType && typeSet.has(rawType);
+        });
       } else if (isCatMode) {
         const catSet = new Set(printer.assignedCategories.map(c => c.trim().toLowerCase()));
         targetItems = kotItems.filter(item => {
           const itemLower = (item.name || '').toLowerCase();
           const catLower = categoryMap[itemLower] || (item.category?.name || item.category || '').toLowerCase();
+          if (!catLower) {
+            throw new Error(`Category not found in database for item: "${item.name}". Please assign a Category in Menu settings.`);
+          }
           return catSet.has(catLower);
         });
       } else if (isDeptFilter) {
@@ -137,11 +165,14 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
         targetItems = kotItems.filter(item => {
           const itemLower = (item.name || '').toLowerCase();
           const catLower = categoryMap[itemLower] || (item.category?.name || item.category || '').toLowerCase();
+          if (!catLower && !itemLower) {
+            throw new Error(`Category/Department not found in database for item: "${item.name}".`);
+          }
           return deptTokens.some(token => catLower.includes(token) || itemLower.includes(token));
         });
       }
 
-      const hasSpecificFilter = isItemMode || isCatMode || isDeptFilter;
+      const hasSpecificFilter = isItemMode || isItemTypeMode || isCatMode || isDeptFilter;
       if (targetItems.length === 0 && hasSpecificFilter) return;
 
       const itemsToPrint = targetItems.length > 0 ? targetItems : kotItems;
@@ -150,7 +181,7 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       const is58mm = printer.paperWidth === '58mm' || s.printFormat === '58mm';
       
       let buffer;
-      if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
+      if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string' && !hasSpecificFilter) {
         buffer = Buffer.from(rasterBufferBase64, 'base64');
       } else {
         buffer = is58mm 
@@ -192,7 +223,14 @@ export const printKOTToPrinters = async (req, bill, kotNumber, kotItems, queueNu
       }
     });
 
-    await Promise.allSettled(printPromises);
+    const results = await Promise.allSettled(printPromises);
+    results.forEach(res => {
+      if (res.status === 'rejected') {
+        const errorMsg = res.reason?.message || res.reason;
+        console.error('[PrinterService] Routing/Printing rejected:', errorMsg);
+        emitNotification(req, '🖨️ KOT Routing Error', errorMsg, 'error', ['Admin', 'Captain', 'Manager']);
+      }
+    });
   } catch (error) {
     console.error('[PrinterService] Critical error during multi-printer routing:', error.message);
   }
@@ -218,6 +256,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
 
     const receiptPrinters = await PrinterConfig.find(query);
     if (!receiptPrinters || receiptPrinters.length === 0) {
+      emitNotification(req, '🖨️ No Receipt Printers', 'You tried to print a receipt, but no receipt printers are configured. Please go to Settings > Printer & Kitchen Routing and add your printer.', 'warning', ['Admin', 'Captain', 'Manager', 'Cashier']);
       return { success: false, message: 'No active Receipt printer configured.' };
     }
 
@@ -228,6 +267,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
     );
 
     if (targetPrinters.length === 0) {
+      emitNotification(req, '🖨️ Receipt Printers Misconfigured', 'A receipt printer exists, but it has no valid IP, USB Port, or Bluetooth address. Please edit the printer in Settings.', 'warning', ['Admin', 'Captain', 'Manager']);
       return { success: false, message: 'No receipt printers are correctly configured.' };
     }
 
@@ -286,7 +326,7 @@ export const printBillToPrinters = async (req, bill, specificPrinterId = null, r
       const is58mm = printer.paperWidth === '58mm' || s.printFormat === '58mm';
       
       let buffer;
-      if (!isBluetooth && rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
+      if (rasterBufferBase64 && typeof rasterBufferBase64 === 'string') {
         buffer = Buffer.from(rasterBufferBase64, 'base64');
       } else {
         buffer = is58mm 

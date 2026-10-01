@@ -143,6 +143,27 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
     throw new Error('Empty print buffer data');
   }
 
+  // --- Strict physical connectivity check for USB/COM on Windows ---
+  if (process.platform === 'win32') {
+    const availablePorts = await getAvailableUSBAndCOMPorts();
+    const cleanTargetPort = portName.trim().replace(/[:\\/]/g, '').toUpperCase();
+    const cleanTargetName = (printerName || '').trim().replace(/[:\\/]/g, '').toUpperCase();
+    
+    const isPhysicallyConnected = availablePorts.some(p => {
+      const pPort = (p.port || '').replace(/[:\\/]/g, '').toUpperCase();
+      const pName = (p.printerName || '').replace(/[:\\/]/g, '').toUpperCase();
+      return (pPort && pPort === cleanTargetPort) || 
+             (pName && pName === cleanTargetName && cleanTargetName !== '') ||
+             (pPort && pPort === cleanTargetName && cleanTargetName !== '') ||
+             (pName && pName === cleanTargetPort && cleanTargetPort !== '');
+    });
+    
+    if (!isPhysicallyConnected) {
+      throw new Error(`Printer is not physically connected (${portName}).`);
+    }
+  }
+  // --- End strict check ---
+
   if (process.platform === 'win32') {
     const tempDir = path.join(os.tmpdir(), 'msbillings_print');
     if (!fs.existsSync(tempDir)) {

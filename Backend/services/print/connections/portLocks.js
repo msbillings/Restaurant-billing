@@ -35,7 +35,11 @@ export const execPromise = (cmd, opts) => {
       if (isDone) return;
       isDone = true;
       clearTimeout(timer);
-      if (error) return reject(error);
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        return reject(error);
+      }
       resolve({ stdout, stderr });
     });
   });
@@ -56,7 +60,11 @@ export const execFilePromise = (exe, args, opts) => {
       if (isDone) return;
       isDone = true;
       clearTimeout(timer);
-      if (error) return reject(error);
+      if (error) {
+        error.stdout = stdout;
+        error.stderr = stderr;
+        return reject(error);
+      }
       resolve({ stdout, stderr });
     });
   });

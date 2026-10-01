@@ -27,6 +27,9 @@ export const usePrinter = () => {
     if (connection === 'usb' || window.electronAPI) {
       if (!element) throw new Error("DOM Element required for USB Desktop printing.");
       
+      console.log('--- USB Print Timing Started ---');
+      const startTotal = performance.now();
+      
       let rasterData;
       if (type === 'kot') {
         rasterData = size === '58mm' ? await renderKOT58mm(element) : await renderKOT80mm(element);
@@ -34,7 +37,17 @@ export const usePrinter = () => {
         rasterData = size === '58mm' ? await renderBill58mm(element) : await renderBill80mm(element);
       }
       
-      return await triggerUSBPrint(rasterData);
+      const renderEnd = performance.now();
+      console.log(`[Timer] Raster Render Time: ${(renderEnd - startTotal).toFixed(2)} ms`);
+      
+      const printResult = await triggerUSBPrint(rasterData);
+      
+      const printEnd = performance.now();
+      console.log(`[Timer] triggerUSBPrint Time: ${(printEnd - renderEnd).toFixed(2)} ms`);
+      console.log(`[Timer] Total USB Print Time: ${(printEnd - startTotal).toFixed(2)} ms`);
+      console.log('--------------------------------');
+
+      return printResult;
     }
 
     throw new Error("No suitable printing connection found.");

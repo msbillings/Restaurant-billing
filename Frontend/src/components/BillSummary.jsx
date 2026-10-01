@@ -1678,6 +1678,60 @@ const BillSummary = ({
         </button>
       </div>
 
+      {/* Direct Print Configuration Dropdown - Small Settings Gear */}
+      <div className="px-2 py-1 bg-white border-t border-gray-100 flex justify-end">
+        <div className="relative group">
+          <button 
+            type="button" 
+            className="text-[10px] text-gray-500 hover:text-gray-800 flex items-center gap-1 bg-gray-50 px-2 py-1 rounded border border-gray-200 cursor-pointer"
+          >
+            ⚙️ {t("Print Config")} <ChevronDown size={10} />
+          </button>
+          <div className="absolute bottom-full right-0 mb-1 w-48 bg-white shadow-xl border border-gray-200 rounded-lg p-2 hidden group-hover:block z-50 animate-in slide-in-from-bottom-2 duration-200">
+            <div className="text-[10px] font-bold text-gray-700 mb-2 border-b border-gray-100 pb-1">{t("Direct Print Settings")}</div>
+            <label className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer mb-2 hover:bg-gray-50 p-1 rounded">
+              <input 
+                type="checkbox" 
+                className="w-3 h-3 accent-primary cursor-pointer"
+                defaultChecked={localStorage.getItem('msbillings_direct_kot') !== 'false'}
+                onChange={(e) => {
+                  localStorage.setItem('msbillings_direct_kot', e.target.checked);
+                  window.dispatchEvent(new CustomEvent('printConfigChanged'));
+                }} 
+              />
+              {t("Direct Print KOT")}
+            </label>
+            <label className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer hover:bg-gray-50 p-1 rounded">
+              <input 
+                type="checkbox" 
+                className="w-3 h-3 accent-primary cursor-pointer"
+                defaultChecked={localStorage.getItem('msbillings_direct_save') !== 'false'}
+                onChange={(e) => {
+                  localStorage.setItem('msbillings_direct_save', e.target.checked);
+                  window.dispatchEvent(new CustomEvent('printConfigChanged'));
+                }} 
+              />
+              {t("Direct Print on Save")}
+            </label>
+            <label className="flex items-center gap-2 text-[11px] text-gray-700 cursor-pointer hover:bg-gray-50 p-1 rounded">
+              <input 
+                type="checkbox" 
+                className="w-3 h-3 accent-primary cursor-pointer"
+                defaultChecked={localStorage.getItem('msbillings_direct_settle') !== 'false'}
+                onChange={(e) => {
+                  localStorage.setItem('msbillings_direct_settle', e.target.checked);
+                  window.dispatchEvent(new CustomEvent('printConfigChanged'));
+                }} 
+              />
+              {t("Direct Print on Settle")}
+            </label>
+            <div className="text-[9px] text-gray-400 mt-1 leading-tight px-1">
+              {t("If ON, prints silently in background. If OFF, shows preview modal.")}
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       {showPaxModal && typeof document !== 'undefined' && createPortal(
         <div 

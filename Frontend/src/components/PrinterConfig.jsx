@@ -212,9 +212,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
     type: 'kot',
     assignTo: '',
     location: '',
-    assignmentMode: 'category', // 'category' | 'item'
+    assignmentMode: 'category', // 'category' | 'item' | 'itemType'
     assignedCategories: [],
     assignedItems: [],
+    assignedItemTypes: [],
     ipAddress: '',
     bluetoothAddress: '',
     deviceName: '',
@@ -319,6 +320,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
   const existingAssignments = useMemo(() => {
     const catMap = {}; // categoryName (lowercase) -> printer label
     const itemMap = {}; // itemName (lowercase) -> printer label
+    const itemTypeMap = {}; // type (lowercase) -> printer label
 
     configs.forEach(cfg => {
       // Exclude current printer being edited
@@ -331,6 +333,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
         cfg.assignedItems.forEach(it => {
           if (it) itemMap[it.trim().toLowerCase()] = printerLabel;
         });
+      } else if (cfg.assignmentMode === 'itemType' && Array.isArray(cfg.assignedItemTypes)) {
+        cfg.assignedItemTypes.forEach(type => {
+          if (type) itemTypeMap[type.trim().toLowerCase()] = printerLabel;
+        });
       } else if (Array.isArray(cfg.assignedCategories) && cfg.assignedCategories.length > 0) {
         cfg.assignedCategories.forEach(cat => {
           if (cat) catMap[cat.trim().toLowerCase()] = printerLabel;
@@ -340,7 +346,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       }
     });
 
-    return { catMap, itemMap };
+    return { catMap, itemMap, itemTypeMap };
   }, [configs, editingConfig]);
 
   // Group menu items by category for Item-Based mode
@@ -365,6 +371,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       assignmentMode: 'category',
       assignedCategories: [],
       assignedItems: [],
+      assignedItemTypes: [],
       ipAddress: '',
       bluetoothAddress: '',
       deviceName: '',
@@ -393,9 +400,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
       type: config.type || 'kot',
       assignTo: config.name || config.assignTo || '',
       location: config.location || '',
-      assignmentMode: config.assignmentMode || (config.assignedItems?.length > 0 ? 'item' : 'category'),
+      assignmentMode: config.assignmentMode || (config.assignedItems?.length > 0 ? 'item' : (config.assignedItemTypes?.length > 0 ? 'itemType' : 'category')),
       assignedCategories: config.assignedCategories || [],
       assignedItems: config.assignedItems || [],
+      assignedItemTypes: config.assignedItemTypes || [],
       ipAddress: config.ipAddress || '',
       bluetoothAddress: config.bluetoothAddress || (config.ipAddress && config.ipAddress.includes(':') ? config.ipAddress : ''),
       deviceName: config.deviceName || '',
@@ -480,6 +488,21 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    // Prevent duplicate routing assignments
+    if (formData.type === 'kot' || formData.type === 'both') {
+      if (formData.assignmentMode === 'category') {
+        const dup = formData.assignedCategories.find(c => existingAssignments.catMap[c.toLowerCase()]);
+        if (dup) return alert(`Category "${dup}" is already assigned to ${existingAssignments.catMap[dup.toLowerCase()]}. Please remove it first.`);
+      } else if (formData.assignmentMode === 'item') {
+        const dup = formData.assignedItems.find(i => existingAssignments.itemMap[i.toLowerCase()]);
+        if (dup) return alert(`Item "${dup}" is already assigned to ${existingAssignments.itemMap[dup.toLowerCase()]}. Please remove it first.`);
+      } else if (formData.assignmentMode === 'itemType') {
+        const dup = formData.assignedItemTypes.find(type => existingAssignments.itemTypeMap[type.toLowerCase()]);
+        if (dup) return alert(`Item type "${dup === 'veg' ? 'Veg' : 'Non-Veg'}" is already assigned to ${existingAssignments.itemTypeMap[dup.toLowerCase()]}. Please remove it first.`);
+      }
+    }
+
     setIsSaving(true);
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
@@ -630,8 +653,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                     const isKot = config.type === 'kot';
                     const isBoth = config.type === 'both';
                     const isItemMode = config.assignmentMode === 'item';
+                    const isItemTypeMode = config.assignmentMode === 'itemType';
                     const cats = config.assignedCategories || [];
                     const items = config.assignedItems || [];
+                    const itemTypes = config.assignedItemTypes || [];
 
                     return (
                       <tr key={config._id} className="hover:bg-gray-50/80 transition-colors">
@@ -716,6 +741,18 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                                 {items.slice(0, 3).join(', ')}{items.length > 3 ? ` +${items.length - 3} more` : ''}
                               </div>
                             </div>
+                          ) : isItemTypeMode && itemTypes.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1 max-w-md">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-xs font-bold rounded-md border border-green-200 mr-1 shrink-0">
+                                <Layers size={11} />
+                                {itemTypes.length} {itemTypes.length === 1 ? 'Type' : 'Types'}
+                              </span>
+                              {itemTypes.map((c, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 text-[11px] font-semibold rounded border border-gray-200 whitespace-nowrap">
+                                  {c === 'veg' ? 'Veg' : 'Non-Veg'}
+                                </span>
+                              ))}
+                            </div>
                           ) : cats.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-1 max-w-md">
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 text-xs font-bold rounded-md border border-purple-200 mr-1 shrink-0">
@@ -788,8 +825,10 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                   const isKot = config.type === 'kot';
                   const isBoth = config.type === 'both';
                   const isItemMode = config.assignmentMode === 'item';
+                  const isItemTypeMode = config.assignmentMode === 'itemType';
                   const cats = config.assignedCategories || [];
                   const items = config.assignedItems || [];
+                  const itemTypes = config.assignedItemTypes || [];
 
                   return (
                     <div key={config._id} className="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs space-y-3.5 flex flex-col justify-between">
@@ -869,7 +908,7 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                             <span>{t("Assigned Routing")}:</span>
                             {(isKot || isBoth) && (
                               <span className="font-bold text-gray-700 normal-case">
-                                {isItemMode ? t("Item-Based") : t("Category-Based")}
+                                {isItemMode ? t("Item-Based") : isItemTypeMode ? t("Item Type-Based") : t("Category-Based")}
                               </span>
                             )}
                           </div>
@@ -891,6 +930,20 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                                 {items.length > 10 && (
                                   <span className="text-[10px] text-gray-500 font-bold self-center">+{items.length - 10} more</span>
                                 )}
+                              </div>
+                            </div>
+                          ) : isItemTypeMode && itemTypes.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-700 text-[10px] font-bold rounded-md border border-green-200">
+                                <Layers size={10} />
+                                {itemTypes.length} {itemTypes.length === 1 ? 'Type' : 'Types'} assigned
+                              </span>
+                              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                                {itemTypes.map((c, i) => (
+                                  <span key={i} className="px-2 py-0.5 bg-gray-100 text-gray-700 text-[10px] sm:text-[11px] font-semibold rounded border border-gray-200 whitespace-nowrap">
+                                    {c === 'veg' ? 'Veg' : 'Non-Veg'}
+                                  </span>
+                                ))}
                               </div>
                             </div>
                           ) : cats.length > 0 ? (
@@ -1049,7 +1102,6 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       <option value="kot">{t("KOT (Kitchen Order Ticket)")}</option>
                       <option value="receipt">{t("Receipt (Cashier Bill)")}</option>
                       <option value="both">{t("Both (Bill Receipt & KOT)")}</option>
-                      <option value="general">{t("General Reports")}</option>
                     </select>
                   </div>
                   <div>
@@ -1486,28 +1538,39 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                       </div>
 
                       {/* MODE TOGGLE: Category-Based vs Item-Based */}
-                      <div className="inline-flex p-1 bg-gray-200 rounded-xl w-full sm:w-auto justify-center">
+                      <div className="inline-flex p-1 bg-gray-200 rounded-xl w-full sm:w-auto justify-center flex-wrap sm:flex-nowrap">
                         <button
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, assignmentMode: 'category' }))}
-                          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
                             formData.assignmentMode === 'category'
                               ? 'bg-white text-red-600 shadow-sm'
                               : 'text-gray-600 hover:text-gray-900'
                           }`}>
-                          <Layers size={13} />
-                          <span>{t("Category-Based")}</span>
+                          <Layers size={12} />
+                          <span>{t("Category")}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, assignmentMode: 'item' }))}
-                          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
                             formData.assignmentMode === 'item'
                               ? 'bg-white text-red-600 shadow-sm'
                               : 'text-gray-600 hover:text-gray-900'
                           }`}>
-                          <Utensils size={13} />
-                          <span>{t("Item-Based")}</span>
+                          <Utensils size={12} />
+                          <span>{t("Item")}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, assignmentMode: 'itemType' }))}
+                          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                            formData.assignmentMode === 'itemType'
+                              ? 'bg-white text-red-600 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}>
+                          <Layers size={12} />
+                          <span>{t("Item Type")}</span>
                         </button>
                       </div>
                     </div>
@@ -1706,6 +1769,78 @@ const PrinterConfig = ({ onNavigate, onGoBack }) => {
                               );
                             })
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VIEW 3: ITEM-TYPE-BASED SELECTOR */}
+                    {formData.assignmentMode === 'itemType' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-xs text-gray-500 font-medium px-1">
+                          <span>
+                            {t("Select item types assigned to this station")} ({formData.assignedItemTypes.length} {t("selected")})
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, assignedItemTypes: ['veg', 'non-veg'] }));
+                              }}
+                              className="text-xs font-bold text-red-600 hover:underline cursor-pointer">
+                              {t("Select All")}
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, assignedItemTypes: [] }))}
+                              className="text-xs font-bold text-gray-500 hover:underline cursor-pointer">
+                              {t("Clear All")}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-1">
+                          {['veg', 'non-veg'].map(type => {
+                            const isSelected = formData.assignedItemTypes.includes(type);
+                            const assignedOther = existingAssignments.itemTypeMap?.[type];
+                            return (
+                              <div
+                                key={type}
+                                onClick={() => {
+                                  setFormData(prev => {
+                                    const exists = prev.assignedItemTypes.includes(type);
+                                    const newTypes = exists
+                                      ? prev.assignedItemTypes.filter(t => t !== type)
+                                      : [...prev.assignedItemTypes, type];
+                                    return { ...prev, assignedItemTypes: newTypes };
+                                  });
+                                }}
+                                className={`relative p-3 rounded-xl border text-xs font-bold flex flex-col justify-between transition-all cursor-pointer select-none ${
+                                  isSelected
+                                    ? 'bg-red-50/70 border-red-500 text-red-900 shadow-sm'
+                                    : assignedOther
+                                      ? 'bg-amber-50/50 border-amber-300 text-gray-700'
+                                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                }`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate">{type === 'veg' ? t("Veg") : t("Non-Veg")}</span>
+                                  <div className={`w-4 h-4 rounded-md flex items-center justify-center shrink-0 border ${
+                                    isSelected ? 'bg-red-600 border-red-600 text-white' : 'border-gray-300 bg-white'
+                                  }`}>
+                                    {isSelected && <Check size={11} strokeWidth={3} />}
+                                  </div>
+                                </div>
+                                
+                                {/* Duplicate Prevention Badge */}
+                                {assignedOther && (
+                                  <div className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100/70 px-1.5 py-0.5 rounded">
+                                    <AlertTriangle size={10} className="shrink-0 text-amber-600" />
+                                    <span className="truncate">Assigned: {assignedOther}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

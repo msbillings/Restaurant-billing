@@ -109,6 +109,9 @@ export const generateKOTESCPOSBuffer58mm = (bill, items, kotNumber, printerConfi
     const cancelQty = item.cancelledQuantity || item.quantity || 1;
     const qtyNum = isCancelled ? `-${cancelQty}` : `${item.quantity || 0}`;
     let itemName = (item.name || item.itemName || 'Item').trim();
+    const rawType = (item.type || item.foodType || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+    if (rawType === 'veg') itemName += ' [V]';
+    else if (rawType === 'non-veg') itemName += ' [NV]';
     if (isCancelled) itemName += ' [CANCEL]';
     else if (isReduced) itemName += ` [-${item.reducedQuantity}x]`;
 

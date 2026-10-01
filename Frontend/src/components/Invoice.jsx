@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useLanguage } from '../context/LanguageContext';
 import { Printer, ArrowLeft, Save, Download, X, Smartphone, Loader2, UserRound, ChevronDown, ChevronUp, Phone } from 'lucide-react';
@@ -11,7 +11,7 @@ import { formatTime12 } from '../utils/timeFormat';
 import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
 import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBottom } from '../utils/escposRaster';
 
-const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false }) => {
+const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, autoSendWhatsApp = false, isHistoryView = false, isDirectPrint = false, onGlobalToast }) => {
   const { t } = useLanguage();
   const currencySymbol = localStorage.getItem('primaryCurrency') === 'USD' ? '$' : '₹';
   const primaryCurrency = localStorage.getItem('primaryCurrency') || 'INR';
@@ -62,7 +62,19 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState(() => bill?.customerPhone || '');
   const [whatsappCustomerName, setWhatsappCustomerName] = useState(() => bill?.customerName || '');
-  const [toast, setToast] = useState(null);
+  const [toast, setToastState] = useState(null);
+
+  const setToast = useCallback((toastObj) => {
+    if (toastObj === null) {
+      setToastState(null);
+      return;
+    }
+    if (onGlobalToast) onGlobalToast(toastObj.message, toastObj.type || 'info');
+    setToastState(toastObj);
+    if (toastObj.message) {
+      setTimeout(() => setToastState(null), 4000);
+    }
+  }, [onGlobalToast]);
   const [sendingAutomated, setSendingAutomated] = useState(false);
   const [showCustomerEditModal, setShowCustomerEditModal] = useState(false);
   const [msgExpanded, setMsgExpanded] = useState(false);
@@ -239,6 +251,21 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   const billDateTime = bill?.settledAt || bill?.billedAt || bill?.createdAt || Date.now();
   const [printerConfigs, setPrinterConfigs] = useState([]);
 
+  // ─── Auto-print for Direct Print Mode ─────────────────────────────────────────
+  const hasAutoPrintedRef = useRef(false);
+  useEffect(() => {
+    if (isDirectPrint && !hasAutoPrintedRef.current && !isPrinting && bill) {
+      hasAutoPrintedRef.current = true;
+      const autoPrint = async () => {
+        // Allow a small delay for React DOM to render the printable area
+        await new Promise(r => setTimeout(r, 400));
+        await handlePrint();
+        if (onClose) onClose();
+      };
+      autoPrint();
+    }
+  }, [isDirectPrint, isPrinting, bill, onClose]);
+
   useEffect(() => {
     const fetchPrinters = async () => {
       try {
@@ -302,6 +329,13 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         if (!htmlContent) throw new Error("Invoice receipt element not found in DOM");
         const isSilent = (currentActivePrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
         let printResult = { success: true };
+        const targetPrinter = activeSettings.billingPrinter || '';
+        if (!targetPrinter) {
+          setPrintStatus('not_connected');
+          setToast({ message: t('Printer is not physically connected or assigned to Bill.'), type: 'error' });
+          resetPrintStatus(4000);
+          return;
+        }
         if (isSilent && activeSettings.billingPrinter) {
           printResult = await window.electronAPI.silentPrint(htmlContent, activeSettings.billingPrinter, true);
         } else {
@@ -417,19 +451,33 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           let anySuccess = false;
 
+          const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
+          const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
+          let rasterData = null;
+
+          if (receiptNode) {
+            try {
+              rasterData = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+            } catch (err) {
+              console.warn("Failed to generate raster data, falling back to text mode:", err);
+            }
+          }
+
           await Promise.all(receiptPrinters.map(async (rp) => {
             try {
               const response = await api.post('/printer-configs/print-bill', {
                 bill: billPayload,
                 billId: bill?._id,
                 printerId: rp._id,
-                rasterBufferBase64: null
+                rasterBufferBase64: rasterData
               });
               if (response.data && (response.data.success || response.data.relayed)) {
                 anySuccess = true;
               }
             } catch (err) {
-              console.warn(`Failed to print bill to ${rp.name}:`, err);
+              const errMsg = err.response?.data?.message || err.message || 'Printer offline';
+              console.warn(`Failed to print bill to ${rp.name}:`, errMsg);
+              setToast({ message: `⚠️ Print failed on ${rp.name}: ${errMsg}`, type: 'error' });
             }
           }));
 
@@ -440,41 +488,23 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
             return;
           } else {
             setPrintStatus('failed');
-            setToast({ message: `Failed to print to ${names}. Opening system print...`, type: 'warning' });
-            setTimeout(() => {
-              if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-                window.print();
-              } else {
-                console.log('Skipping native print popup on localhost testing.');
-              }
-              resetPrintStatus(3000);
-            }, 600);
+            // Toast already shown in catch block for each printer
+            resetPrintStatus(3000);
             return;
           }
         }
       } catch (netErr) {
         const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
         setPrintStatus('failed');
-        setToast({ message: `⚠️ ${errMsg}. Opening system print...`, type: 'warning' });
-        setTimeout(() => {
-          if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-            window.print();
-          }
-          resetPrintStatus(3000);
-        }, 600);
+        setToast({ message: `⚠️ ${errMsg}.`, type: 'error' });
+        resetPrintStatus(3000);
         return;
       }
 
-      // 6. Default Fallback: Browser Native Print Dialog (only if no direct thermal printer configured)
-      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        setPrintStatus('success');
-        window.print();
-        resetPrintStatus(3000);
-      } else {
-        setPrintStatus('not_connected');
-        setToast({ message: t('No printer assigned for bills. Please add a receipt printer in Printer Routing settings.'), type: 'error' });
-        resetPrintStatus(4000);
-      }
+      // 6. Default Fallback: No printer configured
+      setPrintStatus('not_connected');
+      setToast({ message: t('Printer is not physically connected or assigned to Bill.'), type: 'error' });
+      resetPrintStatus(4000);
     } catch (unexpectedErr) {
       setPrintStatus('failed');
       setToast({ message: `${t('Print error')}: ${unexpectedErr.message || 'Unknown error'}`, type: 'error' });
@@ -868,7 +898,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   };
 
   return (
-    <div id="invoice-print-area" className="invoice-container fixed inset-0 bg-black/30 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full">
+    <div id="invoice-print-area" className={isDirectPrint ? "fixed inset-0 z-[-50] opacity-0 pointer-events-none" : "invoice-container fixed inset-0 bg-black/30 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-4 print:p-0 print:block print:w-full print:h-full"}>
       <style>
         {`
           @media print {

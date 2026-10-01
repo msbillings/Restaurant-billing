@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execPromise, btComPortCache } from './portLocks.js';
+import { execPromise, execFilePromise, btComPortCache } from './portLocks.js';
 
 export async function getPrinterBatteryStatus(address) {
   return { success: false, message: 'Battery polling over Desktop SPP is not supported by printer hardware.' };
@@ -124,29 +124,35 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
     if (btComPortCache.has(cacheKey)) {
       const cachedPort = btComPortCache.get(cacheKey);
       try {
-        const fastScript = `
-          $ErrorActionPreference = 'Stop'
-          $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
-          $sp = New-Object System.IO.Ports.SerialPort '${cachedPort}', 115200, 'None', 8, 'One'
-          $sp.WriteTimeout = 6000
-          $sp.ReadTimeout = 500
-          try {
-            $sp.Open()
-            $chunkSize = 512
-            for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
-              $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
-              $sp.Write($rawBytes, $offset, $count)
-              Start-Sleep -Milliseconds 10
+        const sidecarPath = path.resolve(process.cwd(), '../Desktop/native/windows/FastPrinter.exe');
+        if (fs.existsSync(sidecarPath)) {
+          const { stdout, stderr } = await execFilePromise(sidecarPath, [cachedPort, tempBin], { timeout: 10000 });
+          const outStr = (stdout || stderr || '').trim();
+          if (outStr.includes('ERROR:')) throw new Error(outStr);
+        } else {
+          const fastScript = `
+            $ErrorActionPreference = 'Stop'
+            try {
+              $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
+              $sp = New-Object System.IO.Ports.SerialPort '${cachedPort}', 115200, 'None', 8, 'One'
+              $sp.WriteTimeout = 6000
+            $sp.ReadTimeout = 500
+            try {
+              $sp.Open()
+              $sp.Write($rawBytes, 0, $rawBytes.Length)
+              Start-Sleep -Milliseconds 200
+              $sp.Close()
+            } catch {
+              if ($null -ne $sp -and $sp.IsOpen) { $sp.Close() }
+              Write-Output "ERROR: $($_.Exception.Message)"
+              exit 1
             }
-            Start-Sleep -Milliseconds 200
-            $sp.Close()
-          } catch {
-            if ($sp.IsOpen) { $sp.Close() }
-            throw $_
-          }
-        `;
-        const encodedFast = Buffer.from(fastScript, 'utf16le').toString('base64');
-        await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedFast}`, { timeout: 45000 });
+          `;
+          const encodedFast = Buffer.from(fastScript, 'utf16le').toString('base64');
+          const { stdout } = await execPromise(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedFast}`, { timeout: 45000 });
+          const outStr = (stdout || '').trim();
+          if (outStr.includes('ERROR:')) throw new Error(outStr);
+        }
         try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) { }
         return { success: true, message: `Printed instantly to Bluetooth via ${cachedPort}` };
       } catch (fastErr) {
@@ -182,18 +188,13 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
         exit 1
       }
 
-      $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
-      $sp = New-Object System.IO.Ports.SerialPort $matchedPort, 115200, 'None', 8, 'One'
-      $sp.WriteTimeout = 6000
-      $sp.ReadTimeout = 500
       try {
+        $rawBytes = [System.IO.File]::ReadAllBytes('${tempBinEscaped}')
+        $sp = New-Object System.IO.Ports.SerialPort $matchedPort, 115200, 'None', 8, 'One'
+        $sp.WriteTimeout = 6000
+        $sp.ReadTimeout = 500
         $sp.Open()
-        $chunkSize = 512
-        for ($offset = 0; $offset -lt $rawBytes.Length; $offset += $chunkSize) {
-          $count = [Math]::Min($chunkSize, $rawBytes.Length - $offset)
-          $sp.Write($rawBytes, $offset, $count)
-          Start-Sleep -Milliseconds 10
-        }
+        $sp.Write($rawBytes, 0, $rawBytes.Length)
         Start-Sleep -Milliseconds 200
         $sp.Close()
         Write-Output "SUCCESS:$matchedPort"
@@ -222,7 +223,7 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
       return { success: true, message: out || `Printed to Bluetooth port for ${addressOrName}` };
     } catch (err) {
       try { if (fs.existsSync(tempBin)) fs.unlinkSync(tempBin); } catch (_) { }
-      const rawMsg = (err.stderr || err.stdout || err.message || '');
+      const rawMsg = `${err.stdout || ''}\n${err.stderr || ''}\n${err.message || ''}`;
 
       const offlineMatch = rawMsg.match(/PRINTER_OFFLINE:\s*(.+)/i);
       if (offlineMatch) throw new Error(offlineMatch[1].trim());
@@ -239,9 +240,11 @@ export async function sendRawToBluetoothPrinter(addressOrName, buffer) {
           !/^\+/i.test(l) &&
           !/FullyQualifiedErrorId/i.test(l) &&
           !/CategoryInfo/i.test(l) &&
-          !/powershell/i.test(l)
+          !/powershell/i.test(l) &&
+          !/^#< CLIXML/i.test(l)
         )
         .join(' ')
+        .replace(/<[^>]*>?/gm, '') // Strip remaining XML tags if any
         .trim();
 
       throw new Error(cleaned || `Bluetooth printer '${addressOrName}' is not connected or not responding.`);
