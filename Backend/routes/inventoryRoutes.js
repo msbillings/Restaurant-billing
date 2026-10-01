@@ -14,6 +14,7 @@ import {
   staffWithdraw
 } from '../controllers/inventoryController.js';
 
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();

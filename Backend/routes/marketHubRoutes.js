@@ -1,4 +1,5 @@
 import express from 'express';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as adminProtect } from '../middleware/auth.js';
 import { 
   getProducts, 

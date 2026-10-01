@@ -1,5 +1,6 @@
 import express from 'express';
 import { addExpense, getExpenses, deleteExpense, updateExpense } from '../controllers/expenseController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
 

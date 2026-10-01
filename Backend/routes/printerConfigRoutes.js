@@ -1,6 +1,7 @@
 import express from 'express';
 import { getPrinterConfigs, createPrinterConfig, updatePrinterConfig, deletePrinterConfig, testPrinter, printBill, printKOT, getAvailablePorts, getAvailableNetworkPrinters, getNetworkStatus, getBluetoothDevices, getBluetoothBattery, checkPrinterStatus } from '../controllers/printerConfigController.js';
 
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as admin } from '../middleware/auth.js';
 
 const router = express.Router();

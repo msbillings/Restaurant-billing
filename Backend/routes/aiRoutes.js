@@ -1,6 +1,7 @@
 import express from 'express';
 import { processWhatsAppOrder, parseOnly, runFraudAnalysis } from '../controllers/aiController.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect } from '../middleware/auth.js';
 
 const router = express.Router();

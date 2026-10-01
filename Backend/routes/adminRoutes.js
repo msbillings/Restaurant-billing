@@ -1,5 +1,6 @@
 import express from 'express';
 import { getUsers, createUser, updateUser, deleteUser } from '../controllers/adminController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as admin } from '../middleware/auth.js';
 
 const router = express.Router();

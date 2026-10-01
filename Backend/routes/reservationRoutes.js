@@ -6,6 +6,7 @@ import {
   deleteReservation,
   sendManualReservationWhatsApp
 } from '../controllers/reservationController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as admin } from '../middleware/auth.js';
 
 const router = express.Router();

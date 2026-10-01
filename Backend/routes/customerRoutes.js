@@ -1,6 +1,7 @@
 import express from 'express';
 import { getCustomerInfo, getAllCustomers, createOrUpdateCustomer, updateCustomerType, searchCustomers } from '../controllers/customerController.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();

@@ -1,6 +1,7 @@
 import express from 'express';
 import { getStaff, addStaff, updateStaff, deleteStaff, clockInOut, getPublicStaff } from '../controllers/staffController.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();

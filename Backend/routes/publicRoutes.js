@@ -1,3 +1,4 @@
+import { publicLimiter } from '../middleware/rateLimiter.js';
 import express from 'express';
 import os from 'os';
 import mongoose from 'mongoose';
@@ -304,7 +305,7 @@ export const formatPublicBillPayload = (bill, taxSettings) => {
 
 // Public endpoint to fetch categories and active menu items
 // Public endpoint to fetch categories and active menu items with high-speed in-memory caching
-router.get('/menu', async (req, res) => {
+router.get('/menu', publicLimiter, async (req, res) => {
   try {
     const tenantKey = req.tenantDb || req.headers['x-tenant-db'] || req.query?.tenant || 'default';
     const cached = publicMenuCache.get(tenantKey);
@@ -368,7 +369,7 @@ router.get('/menu', async (req, res) => {
 });
 
 // Public endpoint to submit an order from a customer with ultra-low latency response
-router.post('/order', async (req, res) => {
+router.post('/order', publicLimiter, async (req, res) => {
   try {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const Reservation = getTenantModel(req, 'Reservation', ReservationDefault);
@@ -611,7 +612,7 @@ router.post('/order', async (req, res) => {
 });
 
 // Public endpoint to request service (Call Waiter, Water, Bill)
-router.post('/request-service', async (req, res) => {
+router.post('/request-service', publicLimiter, async (req, res) => {
   try {
     const { tableNumber, requestType } = req.body;
 
@@ -647,7 +648,7 @@ router.post('/request-service', async (req, res) => {
 });
 
 // Public endpoint to get order status for a table
-router.get('/order-status', async (req, res) => {
+router.get('/order-status', publicLimiter, async (req, res) => {
   try {
     const { tableNo } = req.query;
     if (!tableNo) {
@@ -672,7 +673,7 @@ router.get('/order-status', async (req, res) => {
 });
 
 // Public endpoint to request item cancellation
-router.post('/request-item-cancel', async (req, res) => {
+router.post('/request-item-cancel', publicLimiter, async (req, res) => {
   try {
     const { orderId, itemId, tableNo, cancelQty } = req.body;
     if (!orderId || !itemId) {
@@ -739,7 +740,7 @@ router.post('/request-item-cancel', async (req, res) => {
 });
 
 // Public endpoint for shortened review link redirect
-router.get('/r/:encodedDbName', async (req, res) => {
+router.get('/r/:encodedDbName', publicLimiter, async (req, res) => {
   try {
     const encodedDbName = req.params.encodedDbName;
     const tenantDb = Buffer.from(encodedDbName, 'base64url').toString('utf-8');
@@ -780,7 +781,7 @@ router.get('/r/:encodedDbName', async (req, res) => {
 });
 
 // Public endpoint to withdraw item cancellation request
-router.post('/withdraw-item-cancel', async (req, res) => {
+router.post('/withdraw-item-cancel', publicLimiter, async (req, res) => {
   try {
     const { orderId, itemId, tableNo } = req.body;
     if (!orderId || !itemId) {
@@ -853,7 +854,7 @@ router.post('/withdraw-item-cancel', async (req, res) => {
   }
 });
 
-router.get('/system-ip', (req, res) => {
+router.get('/system-ip', publicLimiter, (req, res) => {
   const interfaces = os.networkInterfaces();
   let localIP = 'localhost';
   let candidateIPs = [];
@@ -883,7 +884,7 @@ router.get('/system-ip', (req, res) => {
 let cachedPlatformStats = null;
 let lastStatsFetchTimestamp = 0;
 
-router.get('/platform-stats', async (req, res) => {
+router.get('/platform-stats', publicLimiter, async (req, res) => {
   try {
     const now = Date.now();
     // Cache for 30 seconds for live dynamic updates

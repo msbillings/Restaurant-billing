@@ -1,5 +1,6 @@
 import express from 'express';
 import { getTaxes, createTax, updateTax, deleteTax } from '../controllers/taxController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as admin } from '../middleware/auth.js';
 
 const router = express.Router();

@@ -13,6 +13,7 @@ import {
   generateOtp,
   verifyOtp
 } from '../controllers/loyaltyController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect, requireAdmin as admin, optionalAuthenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();

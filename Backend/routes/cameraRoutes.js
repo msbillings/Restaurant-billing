@@ -1,13 +1,14 @@
 import express from 'express';
 import { getTenantModel } from '../utils/tenantHelper.js';
 import CameraDefault from '../models/Camera.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { startCameraStream, stopCameraStream } from '../services/StreamManager.js';
 
 const router = express.Router();
 
 // Get all cameras
-router.get('/', authenticateToken, async (req, res) => {
+router.get('/', authenticateToken, tenantApiLimiter, async (req, res) => {
   try {
     const Camera = getTenantModel(req, 'Camera', CameraDefault);
     const cameras = await Camera.find().sort({ createdAt: -1 });
@@ -19,7 +20,7 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Add a new camera
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, tenantApiLimiter, async (req, res) => {
   console.log('Received POST /api/cameras with body:', req.body);
   try {
     const { name, rtspUrl, location, status } = req.body;
@@ -41,7 +42,7 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Delete a camera
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', authenticateToken, tenantApiLimiter, async (req, res) => {
   try {
     const Camera = getTenantModel(req, 'Camera', CameraDefault);
     await Camera.findByIdAndDelete(req.params.id);
@@ -53,7 +54,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 });
 
 // Update camera status/details
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', authenticateToken, tenantApiLimiter, async (req, res) => {
   try {
     const Camera = getTenantModel(req, 'Camera', CameraDefault);
     const updated = await Camera.findByIdAndUpdate(
@@ -69,7 +70,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Start RTSP stream for a camera
-router.get('/:id/stream', authenticateToken, async (req, res) => {
+router.get('/:id/stream', authenticateToken, tenantApiLimiter, async (req, res) => {
   try {
     const Camera = getTenantModel(req, 'Camera', CameraDefault);
     const camera = await Camera.findById(req.params.id);

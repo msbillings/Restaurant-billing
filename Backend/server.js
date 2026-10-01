@@ -115,7 +115,6 @@ app.use((req, res, next) => {
 
 // Security Middleware Imports
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import sanitize from 'mongo-sanitize';
 import xss from 'xss-clean';
 import hpp from 'hpp';
@@ -149,14 +148,7 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" } // Required to allow frontend dev server to read API responses
 }));
 
-// 2. Limit requests from same API (Rate Limiting)
-const limiter = rateLimit({
-  max: 10000, // Safe limit for busy restaurants
-  windowMs: 60 * 60 * 1000,
-  message: 'Too many requests from this IP, please try again in an hour!'
-});
-app.use('/api', limiter);
-
+// Rate limiting is now applied per-route or per-group below instead of globally
 app.use(express.json({ limit: '10mb' })); // Body limit is increased to support base64 images
 
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -338,8 +330,10 @@ app.use(hpp());
 
 
 
+import { healthLimiter, handleRateLimitError } from './middleware/rateLimiter.js';
+
 // Health check route
-app.get('/', (req, res) => {
+app.get('/', healthLimiter, (req, res) => {
   res.status(200).json({
     status: 'OK',
     message: 'Your restaurant billing backend is running perfect!..!',
@@ -348,7 +342,7 @@ app.get('/', (req, res) => {
 });
 
 // APK connectivity test — used by LicenseScreen to verify server is reachable before saving IP
-app.get('/api/health', (req, res) => {
+app.get('/api/health', healthLimiter, (req, res) => {
   res.status(200).json({
     status: 'OK',
     service: 'MS Billing Backend',
@@ -357,11 +351,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // Required infrastructure health endpoints
-app.get('/health', (req, res) => {
+app.get('/health', healthLimiter, (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-app.get('/ready', (req, res) => {
+app.get('/ready', healthLimiter, (req, res) => {
   // Check dependency readiness (MongoDB)
   const isMongoReady = mongoose.connection.readyState === 1;
   // TODO: Check Redis readiness here once Redis is fully integrated for HA
@@ -545,6 +539,7 @@ app.use('/api/contact', contactRoutes);
 
 // --- GLOBAL ERROR HANDLER ---
 // Must be placed after all API route definitions
+app.use(handleRateLimitError);
 app.use(globalErrorHandler);
 
 // Serve AI Face Detection models statically over HTTP with CORS

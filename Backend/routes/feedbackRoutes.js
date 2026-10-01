@@ -1,5 +1,6 @@
 import express from 'express';
 import { getFeedback, getFeedbackStats, createFeedback } from '../controllers/feedbackController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken as protect } from '../middleware/auth.js';
 
 const router = express.Router();

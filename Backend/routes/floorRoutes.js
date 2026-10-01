@@ -1,5 +1,6 @@
 import express from 'express';
 import { getFloors, saveFloors, updateTableStatus } from '../controllers/floorController.js';
+import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
 

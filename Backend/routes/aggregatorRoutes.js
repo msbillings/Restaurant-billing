@@ -1,3 +1,4 @@
+import { webhookLimiter } from '../middleware/rateLimiter.js';
 import express from 'express';
 import { receiveOnlineOrder } from '../controllers/aggregatorController.js';
 import mongoose from 'mongoose';
@@ -5,9 +6,9 @@ import mongoose from 'mongoose';
 const router = express.Router();
 
 // Endpoint for Zomato/Swiggy to push new orders
-router.post('/webhook', receiveOnlineOrder);
+router.post('/webhook', webhookLimiter, receiveOnlineOrder);
 
-router.post('/settings', async (req, res) => {
+router.post('/settings', webhookLimiter, async (req, res) => {
   try {
     const { zomatoId, swiggyId } = req.body;
     const tenantId = req.tenantId;
@@ -36,7 +37,7 @@ router.post('/settings', async (req, res) => {
   }
 });
 
-router.get('/settings', async (req, res) => {
+router.get('/settings', webhookLimiter, async (req, res) => {
   try {
     const tenantId = req.tenantId;
     const AggregatorMapping = mongoose.connection.collection('aggregatorMappings');
