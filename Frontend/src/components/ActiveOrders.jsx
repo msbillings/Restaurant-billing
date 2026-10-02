@@ -65,6 +65,20 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Takeaway', 'Delivery'
 
+  // Compute filtered + per-type counts early so the header badge is always dynamic
+  const filteredOrders = orders.filter((o) => {
+    if (!o) return false;
+    if (filterType === 'All') return true;
+    return getOrderCategory(o) === filterType;
+  });
+
+  const typeCounts = {
+    'All': orders.length,
+    'Dine-In': orders.filter(o => o && getOrderCategory(o) === 'Dine-In').length,
+    'Takeaway': orders.filter(o => o && getOrderCategory(o) === 'Takeaway').length,
+    'Delivery': orders.filter(o => o && getOrderCategory(o) === 'Delivery').length,
+  };
+
   useEffect(() => {
     // 1. Instant Cache Load (0ms delay) for immediate UI rendering
     getCachedOpenOrders().then((cached) => {
@@ -182,13 +196,6 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
       </div>
     </div>);
 
-
-  const filteredOrders = orders.filter((o) => {
-    if (!o) return false;
-    if (filterType === 'All') return true;
-    return getOrderCategory(o) === filterType;
-  });
-
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="p-2 sm:p-3 border-b border-border bg-gradient-to-r from-primary/5 to-accent/5">
@@ -201,7 +208,7 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
               <UtensilsCrossed className="text-primary" size={20} />{t("Active Orders")}
 
               <span className="bg-primary/10 text-primary text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full font-mono font-bold">
-                {orders.length}
+                {filteredOrders.length}{filterType !== 'All' && <span className="text-primary/50"> / {orders.length}</span>}
               </span>
             </h2>
 
@@ -223,18 +230,25 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
           </div>
 
           <div className="flex bg-surface p-1 rounded-lg border border-border self-start lg:self-auto gap-1">
-            {['All', 'Dine-In', 'Takeaway', 'Delivery'].map((type) =>
-            <button
-              key={type}
-              onClick={() => setFilterType(type)}
-              className={`px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-all ${filterType === type ?
-              'bg-primary text-white shadow-sm' :
-              'text-text-muted hover:text-text-main hover:bg-surface-hover'}`
-              }>
-              
+            {['All', 'Dine-In', 'Takeaway', 'Delivery'].map((type) => {
+              const count = typeCounts[type];
+              return (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={`px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${filterType === type ?
+                'bg-primary text-white shadow-sm' :
+                'text-text-muted hover:text-text-main hover:bg-surface-hover'}`
+                }>
                 {t(type)}
+                {count > 0 && (
+                  <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-full leading-none min-w-[18px] text-center ${
+                    filterType === type ? 'bg-white/25 text-white' : 'bg-primary/10 text-primary'
+                  }`}>{count}</span>
+                )}
               </button>
-            )}
+              );
+            })}
           </div>
         </div>
       </div>

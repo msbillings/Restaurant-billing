@@ -1758,13 +1758,37 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                   const diff = Math.abs(toMins(settings.autoSendTime || '14:30') - toMins(settings.autoSendTime2 || '22:30'));
                   return (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100 gap-2">
-                        <div className="min-w-0"><p className="text-xs font-bold truncate">🌤️ {t('Afternoon Report')}</p><p className="text-[10px] text-text-muted">{t('Default: 2:30 PM')}</p></div>
-                        <CustomTimePicker value={settings.autoSendTime || '14:30'} onChange={(val) => { if (Math.abs(toMins(val) - toMins(settings.autoSendTime2 || '22:30')) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime', val); }} />
+                      {/* Afternoon Report Row */}
+                      <div className={`flex items-center justify-between rounded-xl px-3 py-2 border gap-2 transition-all ${(settings.autoSendAfternoon !== false) ? 'bg-emerald-50/60 border-emerald-100' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">🌤️ {t('Afternoon Report')}</p>
+                          <p className="text-[10px] text-text-muted">{t('Default: 2:30 PM')}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className={`transition-all ${(settings.autoSendAfternoon !== false) ? '' : 'pointer-events-none opacity-40'}`}>
+                            <CustomTimePicker value={settings.autoSendTime || '14:30'} onChange={(val) => { if (Math.abs(toMins(val) - toMins(settings.autoSendTime2 || '22:30')) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime', val); }} />
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input type="checkbox" className="sr-only peer" checked={settings.autoSendAfternoon !== false} onChange={(e) => handleInputChange('autoSendAfternoon', e.target.checked)} />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#25D366]"></div>
+                          </label>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100 gap-2">
-                        <div className="min-w-0"><p className="text-xs font-bold truncate">🌙 {t('Night Report')}</p><p className="text-[10px] text-text-muted">{t('Default: 10:30 PM')}</p></div>
-                        <CustomTimePicker value={settings.autoSendTime2 || '22:30'} onChange={(val) => { if (Math.abs(toMins(settings.autoSendTime || '14:30') - toMins(val)) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime2', val); }} />
+                      {/* Night Report Row */}
+                      <div className={`flex items-center justify-between rounded-xl px-3 py-2 border gap-2 transition-all ${(settings.autoSendNight !== false) ? 'bg-emerald-50/60 border-emerald-100' : 'bg-gray-50 border-gray-100 opacity-60'}`}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold truncate">🌙 {t('Night Report')}</p>
+                          <p className="text-[10px] text-text-muted">{t('Default: 10:30 PM')}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className={`transition-all ${(settings.autoSendNight !== false) ? '' : 'pointer-events-none opacity-40'}`}>
+                            <CustomTimePicker value={settings.autoSendTime2 || '22:30'} onChange={(val) => { if (Math.abs(toMins(settings.autoSendTime || '14:30') - toMins(val)) < 60) { setToast({ message: 'Times must be at least 1 hour apart.', type: 'error' }); return; } handleInputChange('autoSendTime2', val); }} />
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input type="checkbox" className="sr-only peer" checked={settings.autoSendNight !== false} onChange={(e) => handleInputChange('autoSendNight', e.target.checked)} />
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#25D366]"></div>
+                          </label>
+                        </div>
                       </div>
                       {diff < 60 && <p className="text-[11px] text-red-600 font-semibold">⚠️ Times too close — minimum 1 hour gap required.</p>}
                     </div>

@@ -497,7 +497,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      const result = await this.sock.sendMessage(jid, messagePayload);
+      const result = await this.sock.sendMessage(jid, { text: String(text) });
       return result;
     } catch (sendErr) {
       console.warn('[WhatsApp Diagnostics] Send message warning:', sendErr?.message || sendErr);

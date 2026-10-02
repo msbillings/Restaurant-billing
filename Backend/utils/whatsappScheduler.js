@@ -728,8 +728,9 @@ export const startWhatsAppScheduler = () => {
 
           let settingsChanged = false;
 
-          // ── Check Slot 1 ──
-          if (timesValid && validTimeStrings.has(slot1Time)) {
+          // ── Check Slot 1 (Afternoon) ──
+          const afternoonEnabled = settings.autoSendAfternoon !== false && settings.autoSendAfternoon !== 'false';
+          if (afternoonEnabled && timesValid && validTimeStrings.has(slot1Time)) {
             if (settings.lastAutoDayBookSentDate !== todayDateStr) {
               console.log(`[WhatsApp Scheduler] Afternoon slot match (${slot1Time}) for ${dbName}. Sending...`);
               const res = await triggerAutoDayBookForTenant(dbName);
@@ -740,8 +741,9 @@ export const startWhatsAppScheduler = () => {
             }
           }
 
-          // ── Check Slot 2 ──
-          if (timesValid && validTimeStrings.has(slot2Time)) {
+          // ── Check Slot 2 (Night) ──
+          const nightEnabled = settings.autoSendNight !== false && settings.autoSendNight !== 'false';
+          if (nightEnabled && timesValid && validTimeStrings.has(slot2Time)) {
             if (settings.lastAutoDayBookSentDate2 !== todayDateStr) {
               console.log(`[WhatsApp Scheduler] Night slot match (${slot2Time}) for ${dbName}. Sending...`);
               const res = await triggerAutoDayBookForTenant(dbName);

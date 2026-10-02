@@ -1677,7 +1677,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
-              const showNormally = activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false;
+              const showNormally = activeSettings.enableQrPayment !== false;
 
               return (
                 <div className="receipt-qr-wrapper" style={{ display: showNormally ? 'block' : 'none', textAlign: 'center', margin: '5px 0' }}>
@@ -2060,7 +2060,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
-              const showNormally = activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false;
+              const showNormally = activeSettings.enableQrPayment !== false;
 
               return (
                 <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>

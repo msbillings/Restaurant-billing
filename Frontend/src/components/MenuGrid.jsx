@@ -626,7 +626,7 @@ const MenuGrid = ({
           return (
             <button
               key={cat}
-              onClick={() => setCategory(cat)}
+              onClick={() => { setCategory(cat); if (onSearchChange) onSearchChange(''); }}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap shrink-0 transition-all shadow-xs ${isSelected
                   ? 'bg-gradient-to-r from-red-600 to-orange-500 text-white shadow-sm'
                   : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
@@ -661,7 +661,7 @@ const MenuGrid = ({
                 <button
                   key={cat}
                   className={`w-full text-left px-4 py-3 text-[15px] transition-all flex items-center justify-between group ${bgClass}`}
-                  onClick={() => setCategory(cat)}>
+                  onClick={() => { setCategory(cat); if (onSearchChange) onSearchChange(''); }}>
                   <div className="flex items-center gap-3 flex-1 min-w-0 pr-1 truncate">
                     {getCategoryIcon(cat, isSelected)}
                     <span className="truncate font-medium">{cat === '⭐ Favourites' ? t('Favorite Items') : t(cat.replace('⭐ ', ''))}</span>
@@ -741,7 +741,7 @@ const MenuGrid = ({
           {/* Mobile Favorite Items Toggle Button (Left side on mobile) */}
           <button
             type="button"
-            onClick={() => setCategory(category === '⭐ Favourites' ? 'All' : '⭐ Favourites')}
+            onClick={() => { setCategory(category === '⭐ Favourites' ? 'All' : '⭐ Favourites'); if (onSearchChange) onSearchChange(''); }}
             className={`flex sm:hidden items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all shrink-0 border cursor-pointer ${category === '⭐ Favourites'
                 ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
                 : 'bg-white text-gray-700 hover:bg-gray-100 border-gray-200 shadow-xs'

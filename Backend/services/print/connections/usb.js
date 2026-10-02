@@ -143,26 +143,12 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
     throw new Error('Empty print buffer data');
   }
 
-  // --- Strict physical connectivity check for USB/COM on Windows ---
-  if (process.platform === 'win32') {
-    const availablePorts = await getAvailableUSBAndCOMPorts();
-    const cleanTargetPort = portName.trim().replace(/[:\\/]/g, '').toUpperCase();
-    const cleanTargetName = (printerName || '').trim().replace(/[:\\/]/g, '').toUpperCase();
-    
-    const isPhysicallyConnected = availablePorts.some(p => {
-      const pPort = (p.port || '').replace(/[:\\/]/g, '').toUpperCase();
-      const pName = (p.printerName || '').replace(/[:\\/]/g, '').toUpperCase();
-      return (pPort && pPort === cleanTargetPort) || 
-             (pName && pName === cleanTargetName && cleanTargetName !== '') ||
-             (pPort && pPort === cleanTargetName && cleanTargetName !== '') ||
-             (pName && pName === cleanTargetPort && cleanTargetPort !== '');
-    });
-    
-    if (!isPhysicallyConnected) {
-      throw new Error(`Printer is not physically connected (${portName}).`);
-    }
-  }
-  // --- End strict check ---
+  // --- Bypassed strict physical connectivity check for lightning speed ---
+  // If the printer is offline, RawPrinter.exe or raw write will naturally fail in a few ms.
+  // if (process.platform === 'win32') {
+  //   const availablePorts = await getAvailableUSBAndCOMPorts(); // This takes 2-3 seconds!
+  //   ...
+  // }
 
   if (process.platform === 'win32') {
     const tempDir = path.join(os.tmpdir(), 'msbillings_print');
@@ -172,8 +158,6 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
 
     const tempBin = path.join(tempDir, `print_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.bin`);
     fs.writeFileSync(tempBin, buffer);
-
-    const psScriptPath = path.join(__dirname, '..', '..', '..', 'utils', 'rawPrint.ps1');
 
     try {
       let cleanPort = portName.trim().replace(/[:\\/]/g, '');

@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { execPromise, execFilePromise, btComPortCache } from './portLocks.js';
 
-export async function getPrinterBatteryStatus(address) {
+export async function getPrinterBatteryStatus() {
   return { success: false, message: 'Battery polling over Desktop SPP is not supported by printer hardware.' };
 }
 
