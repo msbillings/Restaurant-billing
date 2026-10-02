@@ -66,7 +66,7 @@ export const getApiUrl = () => {
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanApiUrl(envUrl);
         }
-        return 'https://msbillings-backend-x9qw.onrender.com/api';
+        throw new Error("FATAL: VITE_API_URL is missing in Vercel environment. Production fallback is disabled for safety.");
     }
 
     // 4. Capacitor APK/IPA native mobile app without a stored IP — fallback to cloud URL
@@ -75,7 +75,7 @@ export const getApiUrl = () => {
         if (envUrl && envUrl.startsWith('https://')) {
             return cleanApiUrl(envUrl);
         }
-        return 'https://msbillings-backend-x9qw.onrender.com/api';
+        throw new Error("FATAL: VITE_API_URL is missing in Capacitor build. Production fallback is disabled for safety.");
     }
 
     // 5. Local development or local LAN Wi-Fi IP
@@ -107,8 +107,12 @@ export const getSuperadminApiUrl = () => {
         return 'http://localhost:4001';
     }
 
-    // Default: Live production cloud SuperAdmin server
-    return 'https://msbillings-backend-x9qw.onrender.com';
+    // Default: Must have VITE_API_URL for SuperAdmin
+    let envUrl = import.meta.env.VITE_API_URL;
+    if (envUrl) {
+        return cleanSuperadminUrl(envUrl);
+    }
+        throw new Error("FATAL: VITE_API_URL is missing for SuperAdmin. Production fallback is disabled for safety.");
 };
 
 export const getSocketUrl = () => {

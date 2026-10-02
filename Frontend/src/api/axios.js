@@ -209,8 +209,12 @@ api.interceptors.response.use(
 
     if (isNetworkOrTimeout && isLanDeviceIp && !originalRequest._fallbackToCloud && !isWhatsAppEndpoint) {
       originalRequest._fallbackToCloud = true;
-      originalRequest.baseURL = 'https://msbillings-backend-x9qw.onrender.com/api';
-      return api(originalRequest);
+      const fallbackUrl = import.meta.env.VITE_API_URL;
+      if (fallbackUrl && fallbackUrl.startsWith('http')) {
+        originalRequest.baseURL = fallbackUrl.endsWith('/api') ? fallbackUrl : `${fallbackUrl}/api`;
+        return api(originalRequest);
+      }
+      return Promise.reject(error);
     }
 
     // 2. TRANSIENT RETRY for GET requests (cold start / momentary network glitch)
