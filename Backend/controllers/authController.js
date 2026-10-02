@@ -326,23 +326,23 @@ export const register = async (req, res) => {
   try {
     let User;
     try { User = getTenantModel(req, 'User', UserDefault); } catch (err) { return handleTenantError(err, res); }
-    const user = new User({ 
-      username, 
-      password, 
+    const user = new User({
+      username,
+      password,
       role: role || 'Cashier',
       assignedDepartment: assignedDepartment || 'All',
       assignedKitchenId: assignedKitchenId || null
     });
     await user.save();
-    res.status(201).json({ 
-      message: 'User created successfully', 
-      user: { 
-        id: user._id, 
-        username: user.username, 
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: user._id,
+        username: user.username,
         role: user.role,
         assignedDepartment: user.assignedDepartment,
         assignedKitchenId: user.assignedKitchenId
-      } 
+      }
     });
   } catch (error) {
     res.status(400).json({ message: error.message });

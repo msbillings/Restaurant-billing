@@ -569,8 +569,8 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
                       </td>
                       <td className="px-3 py-2.5 text-text-muted whitespace-nowrap">
                         <div className="flex flex-col text-xs">
-                          <span className="font-semibold text-text-main">{new Date(bill.updatedAt || bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
-                          <span className="font-mono text-text-muted text-[11px]">{formatTime12(bill.updatedAt || bill.createdAt)}</span>
+                          <span className="font-semibold text-text-main">{new Date(bill.createdAt).toLocaleDateString('en-GB').replace(/\//g, '/')}</span>
+                          <span className="font-mono text-text-muted text-[11px]">{formatTime12(bill.createdAt)}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
@@ -732,7 +732,7 @@ const BillHistory = ({ onNavigate, onGoBack }) => {
 
                 <div className="flex items-center justify-between text-xs text-text-muted">
                   <span className="font-mono">
-                    {new Date(bill.updatedAt || bill.createdAt).toLocaleDateString()} {formatTime12(bill.updatedAt || bill.createdAt)}
+                    {new Date(bill.createdAt).toLocaleDateString()} {formatTime12(bill.createdAt)}
                   </span>
                   <div>
                     {renderPaymentCell(bill)}

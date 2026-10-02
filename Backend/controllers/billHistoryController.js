@@ -94,7 +94,7 @@ export const getBills = async (req, res) => {
     const [bills, total] = await Promise.all([
       Bill.find(query)
         .select('billNumber tableNo billType paymentMode splitPayments upiApp amountPaid changeAmount subtotal tax taxBreakdown discount discountType discountValue deliveryCharge containerCharge total orderSource status customerName customerPhone items billedAt settledAt createdAt updatedAt whatsappSent whatsappSentAt')
-        .sort({ updatedAt: -1, createdAt: -1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),

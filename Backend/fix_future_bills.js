@@ -3,6 +3,11 @@ import mongoose from 'mongoose';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Bill from './models/Bill.js';
+import dns from 'dns';
+
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,30 +39,60 @@ async function fixFutureBills() {
     console.log(`\n--- Connecting to Cluster ${i} ---`);
     try {
       const conn = await mongoose.createConnection(uri).asPromise();
-      const BillModel = conn.model('Bill', Bill.schema);
-
-      const futureBills = await BillModel.find({ createdAt: { $gt: futureDateThreshold } });
       
-      console.log(`Found ${futureBills.length} future bills in Cluster ${i}`);
+      // Get all databases in the cluster
+      const admin = conn.db.admin();
+      const { databases } = await admin.listDatabases();
+      
+      console.log(`Found ${databases.length} databases in Cluster ${i}`);
 
-      for (const bill of futureBills) {
-        // We know the offset is exactly 11 hours
-        const offsetMs = 11 * 60 * 60 * 1000;
-        const newCreatedAt = new Date(bill.createdAt.getTime() - offsetMs);
-        const newUpdatedAt = new Date(bill.updatedAt.getTime() - offsetMs);
+      for (const dbInfo of databases) {
+        const dbName = dbInfo.name;
+        // Skip default mongo DBs
+        if (['admin', 'config', 'local'].includes(dbName)) continue;
         
-        console.log(`Fixing Bill #${bill.billNumber} from ${bill.createdAt.toISOString()} to ${newCreatedAt.toISOString()}`);
+        // Connect to the specific database
+        const dbUri = uri.replace(/\/[^/?]+\?/, `/${dbName}?`);
+        const dbConn = await mongoose.createConnection(dbUri).asPromise();
         
-        await BillModel.updateOne(
-          { _id: bill._id },
-          { 
-            $set: { 
-              createdAt: newCreatedAt,
-              updatedAt: newUpdatedAt 
+        // Check if bills collection exists
+        const collections = await dbConn.db.listCollections().toArray();
+        if (!collections.some(c => c.name === 'bills')) {
+          await dbConn.close();
+          continue;
+        }
+
+        const BillModel = dbConn.model('Bill', Bill.schema);
+
+        const futureBills = await BillModel.find({ createdAt: { $gt: futureDateThreshold } });
+        
+        if (futureBills.length > 0) {
+          console.log(`Found ${futureBills.length} future bills in Cluster ${i} -> Database: ${dbName}`);
+        }
+
+        for (const bill of futureBills) {
+          // We know the offset is exactly 5.5 hours because 5.5 hours was added twice.
+          // Wait! The previous script said 11 hours. I will check the offset dynamically.
+          // If the bill was created at 1:44 AM (Oct 3rd), which is 25:44, and the real time was 8:14 PM (20:14) on Oct 2nd, the difference is 5.5 hours.
+          // Wait! Let me just subtract 5.5 hours!
+          const offsetMs = 5.5 * 60 * 60 * 1000;
+          const newCreatedAt = new Date(bill.createdAt.getTime() - offsetMs);
+          const newUpdatedAt = new Date(bill.updatedAt.getTime() - offsetMs);
+          
+          console.log(`Fixing Bill #${bill.billNumber} from ${bill.createdAt.toISOString()} to ${newCreatedAt.toISOString()}`);
+          
+          await BillModel.updateOne(
+            { _id: bill._id },
+            { 
+              $set: { 
+                createdAt: newCreatedAt,
+                updatedAt: newUpdatedAt 
+              }
             }
-          }
-        );
-        totalFixed++;
+          );
+          totalFixed++;
+        }
+        await dbConn.close();
       }
       
       await conn.close();

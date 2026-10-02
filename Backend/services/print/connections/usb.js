@@ -143,14 +143,10 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
     throw new Error('Empty print buffer data');
   }
 
-  // --- Bypassed strict physical connectivity check for lightning speed ---
-  // If the printer is offline, RawPrinter.exe or raw write will naturally fail in a few ms.
-  // if (process.platform === 'win32') {
-  //   const availablePorts = await getAvailableUSBAndCOMPorts(); // This takes 2-3 seconds!
-  //   ...
-  // }
-
   if (process.platform === 'win32') {
+    let cleanPort = portName.trim().replace(/[:\\/]/g, '');
+    const cleanPrinterName = (printerName || '').trim();
+
     const tempDir = path.join(os.tmpdir(), 'msbillings_print');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
@@ -160,8 +156,6 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
     fs.writeFileSync(tempBin, buffer);
 
     try {
-      let cleanPort = portName.trim().replace(/[:\\/]/g, '');
-      const cleanPrinterName = (printerName || '').trim();
 
       return await withPrinterLock(cleanPrinterName || cleanPort, async () => {
         const exePath = path.join(__dirname, '..', '..', '..', 'utils', 'RawPrinter.exe');
@@ -194,7 +188,7 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
             if (stdout) {
               const lines = stdout.trim().split(/\r?\n/);
               const foundName = lines[lines.length - 1].trim();
-              if (foundName) {
+              if (foundName && !foundName.includes('#< CLIXML')) {
                 targetSpoolerName = foundName;
                 usbPrinterCache.set(cleanPort, foundName);
               }
@@ -217,7 +211,11 @@ export async function sendRawToUSBPrinter(portName, buffer, printerName = '') {
             throw new Error(stderr || stdout || 'Unknown error from RawPrinter.exe');
           } catch (fastErr) {
             console.warn('[USBPrinterService] Native print failed:', fastErr.message);
-            throw new Error(`Failed to print to ${targetSpoolerName}: ` + fastErr.message);
+            let errMsg = fastErr.message;
+            if (errMsg.includes('#< CLIXML') || errMsg.includes('CLIXML')) {
+              errMsg = 'Printer offline, not connected, or spooler queue failed.';
+            }
+            throw new Error(`Failed to print to ${targetSpoolerName}: ` + errMsg);
           }
         }
 
