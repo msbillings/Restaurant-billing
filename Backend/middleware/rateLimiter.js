@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import redisManager from '../utils/redisClient.js';
 
@@ -44,7 +44,7 @@ export const publicLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => `${req.tenantDb || 'unknown'}:${req.ip}`,
+  keyGenerator: (req, res) => `${req.tenantDb || 'unknown'}:${ipKeyGenerator(req.ip)}`,
   store: createRedisStore('ratelimit:public:tenant:'),
   passOnStoreError: true, // FAIL OPEN
 });
@@ -56,9 +56,9 @@ export const tenantApiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => {
+  keyGenerator: (req, res) => {
     // Authenticated routes have req.user from JWT
-    const userId = req.user && req.user.id ? req.user.id : (req.user && req.user.username ? req.user.username : req.ip);
+    const userId = req.user && req.user.id ? req.user.id : (req.user && req.user.username ? req.user.username : ipKeyGenerator(req.ip));
     return `${req.tenantDb || 'unknown'}:${userId}`;
   },
   store: createRedisStore('ratelimit:api:tenant:'),
@@ -72,8 +72,8 @@ export const adminLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => {
-    const userId = req.user && req.user.id ? req.user.id : req.ip;
+  keyGenerator: (req, res) => {
+    const userId = req.user && req.user.id ? req.user.id : ipKeyGenerator(req.ip);
     return `${req.tenantDb || 'unknown'}:${userId}`;
   },
   store: createRedisStore('ratelimit:admin:tenant:'),
@@ -87,11 +87,11 @@ export const webhookLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => {
+  keyGenerator: (req, res) => {
     if (req.webhookVerifiedTenant) {
-      return `webhook:${req.webhookVerifiedTenant}:${req.ip}`;
+      return `webhook:${req.webhookVerifiedTenant}:${ipKeyGenerator(req.ip)}`;
     }
-    return `webhook:unverified:${req.ip}`;
+    return `webhook:unverified:${ipKeyGenerator(req.ip)}`;
   },
   store: createRedisStore('ratelimit:webhook:tenant:'),
   passOnStoreError: true, // FAIL OPEN
@@ -104,7 +104,7 @@ export const healthLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req, res) => ipKeyGenerator(req.ip),
   store: createRedisStore('ratelimit:health:ip:'),
   passOnStoreError: true, // FAIL OPEN
 });
