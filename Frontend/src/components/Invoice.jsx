@@ -230,9 +230,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   // For bills viewed from history (isHistoryView=true), check if the bill explicitly has showLogo saved.
   // If so, use it exactly as it was when the bill was generated/settled.
   // Otherwise fallback to the active settings toggle.
-  const shouldShowLogo = bill?.showLogo !== undefined
-    ? bill.showLogo
-    : (activeSettings.showLogo !== false);
+  // Always show logo on screen if a logo URL is set in settings.
+  // bill.showLogo only gates history-view snapshots, not live previews.
+  const shouldShowLogo = activeSettings.logo && activeSettings.logo !== '[logo_stored]'
+    ? (bill?.showLogo !== undefined ? bill.showLogo : activeSettings.showLogo !== false)
+    : false;
   const activeTaxSettings = bill?.restaurantDetails?.taxSettings || {
     enableCgst: activeSettings.enableCgst !== false,
     enableSgst: activeSettings.enableSgst !== false,
@@ -329,7 +331,24 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         if (!htmlContent) throw new Error("Invoice receipt element not found in DOM");
         const isSilent = (currentActivePrinter?.silentPrinting ?? activeSettings.silentPrinting) !== false;
         let printResult = { success: true };
-        const targetPrinter = activeSettings.billingPrinter || '';
+        let targetPrinter = activeSettings.billingPrinter || '';
+
+        // STRICT ROUTING CHECK: If advanced printer configs exist, strictly require a Bill printer
+        if (Array.isArray(printerConfigs) && printerConfigs.length > 0) {
+          const activeReceiptPrinters = printerConfigs.filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill & KOT'));
+          if (activeReceiptPrinters.length === 0) {
+            setPrintStatus('not_connected');
+            setToast({ message: t('No Bill printer configured. Please add one in Printer & Kitchen Routing.'), type: 'error' });
+            resetPrintStatus(4000);
+            return;
+          }
+          // Prefer the explicitly configured USB/system printer name from advanced configs
+          const targetUsbPrinter = activeReceiptPrinters.find(p => p.connectionType === 'usb' && (p.usbPort || p.name));
+          if (targetUsbPrinter) {
+            targetPrinter = targetUsbPrinter.usbPort || targetUsbPrinter.name || targetPrinter;
+          }
+        }
+
         if (!targetPrinter) {
           setPrintStatus('not_connected');
           setToast({ message: t('Printer is not physically connected or assigned to Bill.'), type: 'error' });
@@ -734,12 +753,26 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               });
 
               // 3.5 Show/Hide QR code explicitly for WhatsApp based on whatsappShowQr setting
-              const showInWhatsapp = activeSettings.whatsappShowQr !== false;
+              const showInWhatsapp = activeSettings.whatsappShowQr === true;
               const qrWrappers = clonedDoc.querySelectorAll('.receipt-qr-wrapper');
               qrWrappers.forEach(w => {
-                const isFlex = w.style.flexDirection === 'column';
-                w.style.setProperty('display', showInWhatsapp ? (isFlex ? 'flex' : 'block') : 'none', 'important');
+                if (!showInWhatsapp) {
+                  w.remove();
+                } else {
+                  const isFlex = w.style.flexDirection === 'column';
+                  w.style.setProperty('display', isFlex ? 'flex' : 'block', 'important');
+                }
               });
+
+              // 3.6 Show/Hide Logo explicitly for WhatsApp based on whatsappShowLogo setting
+              const showLogoInWhatsapp = activeSettings.whatsappShowLogo === true;
+              const logoImg = clonedDoc.querySelector('.receipt-print img[alt="Logo"]');
+              if (logoImg) {
+                const logoContainer = logoImg.parentElement;
+                if (!showLogoInWhatsapp && logoContainer) {
+                   logoContainer.remove();
+                }
+              }
 
               // 4. Style the receipt container
               const el = clonedDoc.querySelector('.receipt-print');
@@ -814,7 +847,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         new Promise((_, reject) => setTimeout(() => reject(new Error(t("WhatsApp server timed out. Please check connection."))), 45000))
       ]);
 
-      if (res && res.success) {
+      if (res && res.success && !res.queued) {
         console.log(`[eBill] ✅ Bill sent successfully to +${cleanPhone}`);
         setToast({ message: `${t("e-Bill sent to")} +${cleanPhone} ${t("via WhatsApp! ✓")}`, type: 'success' });
         setIsAlreadySent(true);
@@ -825,6 +858,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
           try { sessionStorage.setItem(`ms_wa_sent_${bill._id}`, 'true'); } catch (e) { }
         }
         if (onWhatsAppSent) onWhatsAppSent(bill?.billNumber || bill?._id);
+        setShowWhatsAppModal(false);
+      } else if (res && res.queued) {
+        // NOT delivered — first attempt failed, retrying in background
+        console.warn(`[eBill] ⏳ First attempt failed, retrying in background for +${cleanPhone}`);
+        setToast({ message: t('WhatsApp send failed — retrying in background. Customer may receive it shortly.'), type: 'warning' });
         setShowWhatsAppModal(false);
       } else {
         throw new Error(res?.error || t('Failed to send WhatsApp e-Bill'));
@@ -863,16 +901,24 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
   useEffect(() => {
     if (!autoSendWhatsApp || isAlreadySent || autoSendTriggeredRef.current) return;
 
+    const billKey = bill?.billNumber || bill?._id;
+    if (!billKey) return;
+
+    // sessionStorage flag survives Invoice remounts (e.g. reopens after settle)
+    const storageKey = `ms_wa_autosend_${billKey}`;
+    if (sessionStorage.getItem(storageKey) === 'true') {
+      autoSendTriggeredRef.current = true;
+      return; // Already triggered for this bill — do NOT send again
+    }
+
     const targetPhone = (whatsappPhone || bill?.customerPhone || '').trim();
     const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
     const custName = (whatsappCustomerName || bill?.customerName || '').trim();
 
     if (cleanPhone.length >= 10) {
       autoSendTriggeredRef.current = true;
+      try { sessionStorage.setItem(storageKey, 'true'); } catch (e) {}
       console.log(`[Invoice] ⚡ Auto-sending WhatsApp bill for ${cleanPhone}...`);
-      // Two rAF passes let React flush the invoice DOM paint first,
-      // then we wait a short idle gap before html2canvas captures.
-      // This keeps the invoice preview visually instant (no main-thread block on open).
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setTimeout(() => {
@@ -881,11 +927,11 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         });
       });
     } else {
-      // Auto-send is on, but phone is missing. Prompt the user!
       autoSendTriggeredRef.current = true;
       setShowWhatsAppModal(true);
     }
   }, [autoSendWhatsApp, isAlreadySent, whatsappPhone, bill?.customerPhone, bill?.billNumber]);
+
 
 
   const getFormatClasses = () => {
@@ -1631,7 +1677,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
-              const showNormally = activeSettings.enableQrPayment !== false;
+              const showNormally = activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false;
 
               return (
                 <div className="receipt-qr-wrapper" style={{ display: showNormally ? 'block' : 'none', textAlign: 'center', margin: '5px 0' }}>
@@ -2014,7 +2060,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               const noteText = bill.billNumber ? `Bill #${bill.billNumber} - Rs ${am}` : `Payment Rs ${am}`;
               const qrUri = `upi://pay?pa=${pa}&pn=${encodeURIComponent(pn)}&am=${am}&cu=INR`;
 
-              const showNormally = activeSettings.enableQrPayment !== false;
+              const showNormally = activeSettings.enableQrPayment !== false || activeSettings.whatsappShowQr !== false;
 
               return (
                 <div className="receipt-qr-wrapper my-2 text-center flex flex-col items-center justify-center" style={{ display: showNormally ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%', margin: '8px auto' }}>

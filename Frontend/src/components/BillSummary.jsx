@@ -1704,7 +1704,7 @@ const BillSummary = ({
               <input 
                 type="checkbox" 
                 className="w-3 h-3 accent-primary cursor-pointer"
-                defaultChecked={localStorage.getItem('msbillings_direct_kot') !== 'false'}
+                defaultChecked={localStorage.getItem('msbillings_direct_kot') === 'true'}
                 onChange={(e) => {
                   localStorage.setItem('msbillings_direct_kot', e.target.checked);
                   window.dispatchEvent(new CustomEvent('printConfigChanged'));
@@ -1716,7 +1716,7 @@ const BillSummary = ({
               <input 
                 type="checkbox" 
                 className="w-3 h-3 accent-primary cursor-pointer"
-                defaultChecked={localStorage.getItem('msbillings_direct_save') !== 'false'}
+                defaultChecked={localStorage.getItem('msbillings_direct_save') === 'true'}
                 onChange={(e) => {
                   localStorage.setItem('msbillings_direct_save', e.target.checked);
                   window.dispatchEvent(new CustomEvent('printConfigChanged'));
@@ -1728,7 +1728,7 @@ const BillSummary = ({
               <input 
                 type="checkbox" 
                 className="w-3 h-3 accent-primary cursor-pointer"
-                defaultChecked={localStorage.getItem('msbillings_direct_settle') !== 'false'}
+                defaultChecked={localStorage.getItem('msbillings_direct_settle') === 'true'}
                 onChange={(e) => {
                   localStorage.setItem('msbillings_direct_settle', e.target.checked);
                   window.dispatchEvent(new CustomEvent('printConfigChanged'));

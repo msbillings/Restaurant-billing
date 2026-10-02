@@ -5,63 +5,55 @@ import { getTenantModel } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
 import { uploadImage } from '../utils/cloudinary.js';
 
+// Tracks bills being processed — key stays in Set until ALL retries complete
 const processingBills = new Set();
 
+async function processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt = 1, lockKey = null) {
+  const releaseLock = () => { if (lockKey) processingBills.delete(lockKey); };
 
-async function processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt = 1) {
-  // Before trying, ensure it wasn't already sent by another process or previous successful retry that timed out locally
-  if (attempt > 1 && BillModel && (billId || billNumber)) {
-     try {
-       const query = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
-       const existing = await BillModel.findOne(query).select('whatsappSent').lean();
-       if (existing && existing.whatsappSent) {
-          console.log('[Queue] 🛑 Bill ' + (billNumber||billId) + ' already marked as sent in DB. Stopping retries to prevent duplicate WhatsApp messages.');
-          return { success: true };
-       }
-     } catch(e) {}
+  // ── DB guard: check if already sent before EVERY attempt (including attempt 1) ──
+  if (BillModel && (billId || billNumber)) {
+    try {
+      const query = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      const existing = await BillModel.findOne(query).select('whatsappSent').lean();
+      if (existing && existing.whatsappSent) {
+        console.log('[Queue] 🛑 Bill ' + (billNumber||billId) + ' already marked as sent in DB (attempt ' + attempt + '). Stopping to prevent duplicate.');
+        releaseLock();
+        return { success: true };
+      }
+    } catch(e) {}
   }
+
   try {
-    await whatsappService.sendBillMedia(phone, payload);
-    // Success! Update DB.
+    // Mark in DB BEFORE sending — so if Baileys times out locally but message was delivered,
+    // the next retry's DB check above will catch it and NOT send again.
     if (BillModel && (billId || billNumber)) {
-      const updateQuery = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
-      await BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e=>console.error(e));
+      const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      await BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e => console.error('[Queue] DB pre-mark error:', e));
     }
+
+    await whatsappService.sendBillMedia(phone, payload);
     console.log('[Queue] ✅ Successfully sent bill to ' + phone + ' on attempt ' + attempt);
+    releaseLock();
     return { success: true };
   } catch (error) {
-    // If the error implies the message might have actually reached WhatsApp server but Baileys timed out locally waiting for an ack, we should be extremely careful about retrying!
-    // But we check DB at the top of the next retry anyway.
-    if (attempt < 5) {
-      console.warn('[Queue] Send failed for ' + phone + ' (Attempt ' + attempt + '/5): ' + error.message + '. Retrying in 8 seconds...');
+    // Roll back the DB flag since the send failed locally (might still be in-flight on WA servers)
+    if (BillModel && (billId || billNumber)) {
+      const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      BillModel.updateOne(updateQuery, { $set: { whatsappSent: false } }).catch(() => {});
+    }
+
+    if (attempt < 3) {
+      // Reduced to max 3 retries to reduce duplicate risk
+      console.warn('[Queue] Send failed for ' + phone + ' (Attempt ' + attempt + '/3): ' + error.message + '. Retrying in 10 seconds...');
       setTimeout(() => {
-        processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt + 1);
-      }, 8000);
+        processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt + 1, lockKey);
+      }, 10000);
+      // Lock stays in processingBills — do NOT release yet
       return { success: false, queued: true, error: error.message };
     } else {
-      console.error('[Queue] ❌ Send permanently failed for ' + phone + ' after 5 attempts!');
-      // Try Cloud Gateway as last resort on 5th failure
-      const isCloud = process.env.RENDER || process.env.VERCEL;
-      if (!isCloud) {
-        console.warn('[Queue] Fallback to 24/7 Cloud Gateway...');
-        try {
-          const cloudUrl = 'https://msbillings-backend-x9qw.onrender.com/api/whatsapp/send-bill';
-          const fetchParams = {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-tenant-db': tenantId },
-            body: JSON.stringify({ phone, imageBase64: payload.imageBase64, pdfBase64: payload.pdfBase64, documentBase64: payload.documentBase64, mimetype: payload.mimetype, billText: payload.caption, fileName: payload.fileName, billId, billNumber, forceResend: true })
-          };
-          fetch(cloudUrl, fetchParams).then(r => r.json()).then(cloudData => {
-             if (cloudData && cloudData.success) {
-                console.log('[Queue] ✅ Cloud Gateway fallback succeeded!');
-                if (BillModel && (billId || billNumber)) {
-                  const updateQuery = billId && require('mongoose').Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
-                  BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e=>{});
-                }
-             }
-          }).catch(e => console.error('[Queue] Cloud gateway fallback error:', e.message));
-        } catch(e) {}
-      }
+      console.error('[Queue] ❌ Send permanently failed for ' + phone + ' after 3 attempts!');
+      releaseLock();
       return { success: false, queued: false };
     }
   }
@@ -306,20 +298,18 @@ export const sendBill = async (req, res) => {
       };
       
       // Do not block the request. Send the first attempt and handle retries asynchronously.
-      const initialAttempt = await processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, 1);
+      // lockKey is passed so it stays locked through ALL retries — preventing duplicate sends.
+      const initialAttempt = await processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, 1, !forceResend ? lockKey : null);
       
-      cleanupLock();
+      // Note: cleanupLock() is NO longer called here — the retry function releases the lock itself
       if (initialAttempt && initialAttempt.success) {
           return res.json({ success: true, message: 'e-Bill sent successfully via WhatsApp!' });
       } else {
-          cleanupLock();
-          // It failed on the first attempt, but it's now dynamically in the queue!
-          // We return an error so the frontend knows it hasn't successfully sent YET, 
-          // but we do NOT stop the background retries.
-          return res.json({ 
-              success: true,
+          // First attempt failed — retrying in background (lock still held to block duplicate requests).
+          return res.status(202).json({ 
+              success: false,
               queued: true,
-              message: 'WhatsApp e-Bill queued for background delivery (will retry 5 times).'
+              message: 'WhatsApp send failed on first attempt. Retrying in background. Customer may receive it shortly.'
           });
       }
   } catch (error) {

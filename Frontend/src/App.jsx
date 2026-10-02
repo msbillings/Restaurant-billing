@@ -76,7 +76,7 @@ import { clearCategoryCache } from './api/category';
 import { clearAllOfflineData } from './db/offlineDb';
 import { logoutUser } from './api/auth';
 
-import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, BarChart2, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat, Send, Edit } from 'lucide-react';
+import { LogOut, LayoutDashboard, History, User, UtensilsCrossed, ClipboardList, BarChart3, BarChart2, LayoutGrid, Home, Settings as SettingsIcon, Truck, ShoppingBag, Wallet, Printer, BookOpen, Lock, ShieldAlert, CalendarClock, X, Phone, Menu, Receipt, Clock, Package, WifiOff, RefreshCw, Users as UsersIcon, QrCode, UserCheck, Radio, Search, Calculator, Bell, Power, PhoneCall, ChevronDown, ChevronRight, MoreVertical, MoreHorizontal, Eye, EyeOff, Loader2, AlertTriangle, CheckCircle, ChefHat, Send, Edit } from 'lucide-react';
 
 import { getOpenOrders } from './api/billing';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -129,7 +129,7 @@ function App() {
     if (!isNative && view === 'landing' && window.location.pathname !== '/' && window.location.pathname !== '') {
       try {
         window.history.replaceState(null, '', '/');
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [view]);
 
@@ -181,7 +181,7 @@ function App() {
   }, []);
   const navTimeStr = liveTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   const navDateStr = liveTime.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const navDayStr  = liveTime.toLocaleDateString(undefined, { weekday: 'long' });
+  const navDayStr = liveTime.toLocaleDateString(undefined, { weekday: 'long' });
 
   // Keyboard shortcut for Calculator (Alt + C or Ctrl + Alt + C)
   useEffect(() => {
@@ -200,6 +200,28 @@ function App() {
 
   // Search Bill
   const [searchBillNo, setSearchBillNo] = useState('');
+  const [backendConnected, setBackendConnected] = useState(false);
+
+  useEffect(() => {
+    const handleConnect = () => setBackendConnected(true);
+    const handleDisconnect = () => setBackendConnected(false);
+
+    const socket = realtimeService.init();
+    if (socket && socket.connected) {
+      setBackendConnected(true);
+    }
+
+    const unsubConnect = realtimeService.subscribe('connect', handleConnect);
+    const unsubReconnect = realtimeService.subscribe('reconnect', handleConnect);
+    const unsubDisconnect = realtimeService.subscribe('disconnect', handleDisconnect);
+
+    return () => {
+      unsubConnect();
+      unsubReconnect();
+      unsubDisconnect();
+    };
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchBillNo.trim().length > 0) {
@@ -237,7 +259,7 @@ function App() {
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
     return null;
   });
 
@@ -662,11 +684,11 @@ function App() {
     const fetchSuperAdminConfig = async () => {
       try {
         const licenseKey = localStorage.getItem('resto_license');
-        const isSyntheticKey = !licenseKey || 
-                               licenseKey === 'ACCOUNT-LOGIN' || 
-                               licenseKey.startsWith('ACCOUNT-') || 
-                               licenseKey.startsWith('MSBILL-DEMO') || 
-                               licenseKey.startsWith('LOCAL-');
+        const isSyntheticKey = !licenseKey ||
+          licenseKey === 'ACCOUNT-LOGIN' ||
+          licenseKey.startsWith('ACCOUNT-') ||
+          licenseKey.startsWith('MSBILL-DEMO') ||
+          licenseKey.startsWith('LOCAL-');
 
         if (licenseKey && !isSyntheticKey) {
           const SUPERADMIN_API_URL = getSuperadminApiUrl();
@@ -1026,12 +1048,12 @@ function App() {
         const resolvedLogo = (newSettings?.logo && newSettings.logo !== '[logo_stored]')
           ? newSettings.logo
           : (s.logo && s.logo !== '[logo_stored]' ? s.logo : '');
-        const updated = { 
-          ...s, 
-          ...newSettings, 
+        const updated = {
+          ...s,
+          ...newSettings,
           logo: resolvedLogo,
-          requireMasterPin: s.requireMasterPin, 
-          customLocks: s.customLocks 
+          requireMasterPin: s.requireMasterPin,
+          customLocks: s.customLocks
         };
         localStorage.setItem('restaurantSettings', JSON.stringify(updated));
         setSettingsUpdateTicker(prev => prev + 1);
@@ -1160,14 +1182,14 @@ function App() {
   if (!isNative && view === 'landing') {
     return (
       <Suspense fallback={<div className="flex items-center justify-center h-screen bg-slate-900 text-white font-medium">{t("Loading MS Billings...")}</div>}>
-        <LandingPage 
+        <LandingPage
           isLoggedIn={!!user}
           onLaunchApp={(targetView = 'floor') => {
             setView(targetView);
             try {
               window.history.pushState(null, '', `/${targetView === 'floor' ? 'floor' : targetView}`);
-            } catch (e) {}
-          }} 
+            } catch (e) { }
+          }}
         />
       </Suspense>
     );
@@ -1329,12 +1351,12 @@ function App() {
                     </span>
                   )}
                   <span className="text-[10px] text-gray-400 ml-auto shrink-0 font-medium">
-                    {new Date(toastNotifInfo.createdAt || Date.now()).toLocaleTimeString('en-US', { 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        hour12: true,
-                        timeZone: 'Asia/Kolkata'
-                      })}
+                    {new Date(toastNotifInfo.createdAt || Date.now()).toLocaleTimeString('en-US', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true,
+                      timeZone: 'Asia/Kolkata'
+                    })}
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 leading-snug line-clamp-2">
@@ -1419,6 +1441,9 @@ function App() {
           <span className={`relative z-[99] ml-1 sm:ml-2 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold shadow-sm border whitespace-nowrap ${onlineStatus?.isOnline ? 'bg-green-50 text-green-700 border-green-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
             {onlineStatus?.isOnline ? '● Online' : '● Offline'}
           </span>
+          <div className="flex items-center justify-center ml-1 sm:ml-2 shrink-0" title={backendConnected ? t('Backend Server: Connected') : t('Backend Server: Disconnected')}>
+            <span className={`w-2.5 h-2.5 rounded-full transition-colors ${backendConnected ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-red-500 shadow-[0_0_6px_#ef4444] animate-pulse'}`}></span>
+          </div>
         </div>
 
         {/* Desktop / Tablet Search & Actions */}
@@ -1516,268 +1541,268 @@ function App() {
 
           {/* Notifications Bell */}
           <div className="relative">
-            <button
-              onClick={() => {
-                setShowNotifications(!showNotifications);
-                // NOTE: Do NOT call markAllAsRead() here — that would persist all IDs
-                // to localStorage and make NotificationCenter show everything as "Read"
-                // without the user having actually read them.
-                // Unread count is reset only via explicit mark-as-read in NotificationCenter.
-              }}
-              className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
-                }`}>
-              <Bell size={18} />
-              {totalUnreadCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[9px] rounded-full h-3.5 min-w-[14px] px-1 flex items-center justify-center font-bold">
-                  {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  // NOTE: Do NOT call markAllAsRead() here — that would persist all IDs
+                  // to localStorage and make NotificationCenter show everything as "Read"
+                  // without the user having actually read them.
+                  // Unread count is reset only via explicit mark-as-read in NotificationCenter.
+                }}
+                className={`p-1.5 rounded-lg transition-colors relative touch-target flex items-center justify-center ${view === 'kds' ? 'text-slate-300 hover:bg-slate-800' : 'text-gray-600 hover:text-text-main hover:bg-surface-hover'
+                  }`}>
+                <Bell size={18} />
+                {totalUnreadCount > 0 && (
+                  <span className="absolute top-0.5 right-0.5 bg-red-500 text-white text-[9px] rounded-full h-3.5 min-w-[14px] px-1 flex items-center justify-center font-bold">
+                    {totalUnreadCount > 9 ? '9+' : totalUnreadCount}
+                  </span>
+                )}
+              </button>
 
-            {/* Notifications Dropdown — always fixed, never overflows any screen */}
-            {showNotifications && (
-              <>
-                {/* Backdrop — closes panel on outside click */}
-                <div className="fixed inset-0 z-[140]" onClick={() => setShowNotifications(false)} />
+              {/* Notifications Dropdown — always fixed, never overflows any screen */}
+              {showNotifications && (
+                <>
+                  {/* Backdrop — closes panel on outside click */}
+                  <div className="fixed inset-0 z-[140]" onClick={() => setShowNotifications(false)} />
 
-                {/* Panel — fixed to viewport, always visible, never overflows */}
-                <div
-                  className="fixed z-[150] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-                  style={{
-                    /* Position: just below the top navbar (~60px) */
-                    top: '68px',
-                    /* Right-align to screen edge with a small margin */
-                    right: '8px',
-                    /* Mobile: stretch to near-full-width; desktop: fixed 320px */
-                    left: 'max(8px, calc(100vw - 336px))',
-                    /* Height: never exceed 60% of the viewport */
-                    maxHeight: 'min(60vh, calc(100vh - 88px))',
-                    /* Minimum reasonable width */
-                    minWidth: '260px',
-                  }}
-                >
-                  {/* Header */}
-                  <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0 rounded-t-2xl">
-                    <span className="font-bold text-gray-800 text-sm">{t("Notifications")}</span>
-                    <span
-                      onClick={() => { setShowNotifications(false); handleViewChange('notification'); }}
-                      className="text-xs bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200 active:scale-95 transition-transform select-none"
-                    >
-                      {t("View All")}
-                    </span>
-                  </div>
+                  {/* Panel — fixed to viewport, always visible, never overflows */}
+                  <div
+                    className="fixed z-[150] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                    style={{
+                      /* Position: just below the top navbar (~60px) */
+                      top: '68px',
+                      /* Right-align to screen edge with a small margin */
+                      right: '8px',
+                      /* Mobile: stretch to near-full-width; desktop: fixed 320px */
+                      left: 'max(8px, calc(100vw - 336px))',
+                      /* Height: never exceed 60% of the viewport */
+                      maxHeight: 'min(60vh, calc(100vh - 88px))',
+                      /* Minimum reasonable width */
+                      minWidth: '260px',
+                    }}
+                  >
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0 rounded-t-2xl">
+                      <span className="font-bold text-gray-800 text-sm">{t("Notifications")}</span>
+                      <span
+                        onClick={() => { setShowNotifications(false); handleViewChange('notification'); }}
+                        className="text-xs bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full font-bold cursor-pointer hover:bg-red-200 active:scale-95 transition-transform select-none"
+                      >
+                        {t("View All")}
+                      </span>
+                    </div>
 
-                  {/* Scrollable list — grows to fill space, scrolls internally */}
-                  <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-gray-50 min-h-0">
-                    {notifications.length === 0 ? (
-                      <div className="px-4 py-10 text-center text-xs text-gray-400 font-medium">
-                        {t("No new notifications")}
-                      </div>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          onClick={() => {
-                            if (n.isBroadcast) {
-                              markAsRead(n.id);
-                            }
-                          }}
-                          className={`px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start ${n.isBroadcast ? 'bg-purple-50/30 hover:bg-purple-50/60' : ''
-                            }`}
-                        >
-                          {/* Colour dot or Broadcast icon */}
-                          {n.isBroadcast ? (
-                            <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
-                              <Radio size={11} className="text-purple-600" />
-                            </div>
-                          ) : (
-                            <div
-                              className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' :
+                    {/* Scrollable list — grows to fill space, scrolls internally */}
+                    <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-gray-50 min-h-0">
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-10 text-center text-xs text-gray-400 font-medium">
+                          {t("No new notifications")}
+                        </div>
+                      ) : (
+                        notifications.map((n) => (
+                          <div
+                            key={n.id}
+                            onClick={() => {
+                              if (n.isBroadcast) {
+                                markAsRead(n.id);
+                              }
+                            }}
+                            className={`px-3 py-2.5 hover:bg-gray-50 active:bg-gray-100 transition-colors flex gap-2.5 items-start ${n.isBroadcast ? 'bg-purple-50/30 hover:bg-purple-50/60' : ''
+                              }`}
+                          >
+                            {/* Colour dot or Broadcast icon */}
+                            {n.isBroadcast ? (
+                              <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
+                                <Radio size={11} className="text-purple-600" />
+                              </div>
+                            ) : (
+                              <div
+                                className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${n.type === 'warning' ? 'bg-amber-500' :
                                   n.type === 'success' ? 'bg-green-500' :
                                     n.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
-                                }`}
-                            />
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-1.5 mb-0.5">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <p className="text-xs font-bold text-gray-800 leading-snug truncate">{n.title}</p>
-                                {n.isBroadcast && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 uppercase tracking-wider shrink-0">
-                                    Broadcast
-                                  </span>
-                                )}
-                              </div>
-                              {/* Generation Timestamp */}
-                              <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap shrink-0 ml-1">
-                                {formatNotifTime(n)}
-                              </span>
-                            </div>
-
-                            <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed break-words">{n.message}</p>
-
-                            {/* Broadcast Media/Image Preview */}
-                            {n.isBroadcast && n.imageUrl && (
-                              <div className="mt-2 w-full h-24 rounded-lg bg-gray-100 overflow-hidden relative border border-purple-100 shadow-2xs">
-                                <img src={n.imageUrl} alt="" className="w-full h-full object-cover" />
-                              </div>
+                                  }`}
+                              />
                             )}
 
-                            {/* Inline Broadcast Reply Box / Sent Reply Display */}
-                            {n.isBroadcast && (() => {
-                              const rawId = n.broadcastId || n.data?.broadcastId || n.id || '';
-                              const bId = String(rawId).replace(/^broadcast_/, '');
-                              const tenantDb = localStorage.getItem('resto_db_name') || 'default';
-                              const savedReply = n.myReply || sentReplies[bId] ||
-                                (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
-                              const isEditing = Boolean(editingReplyId[bId]);
-                              const currentText = broadcastReplies[bId] !== undefined ? broadcastReplies[bId] : (savedReply || '');
-
-                              if (savedReply && !isEditing) {
-                                return (
-                                  <div className="mt-2.5 pt-2 border-t border-purple-100/70 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1">
-                                        <CheckCircle size={11} className="text-emerald-500" />
-                                        {t("Your Reply")}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setBroadcastReplies(prev => ({ ...prev, [bId]: savedReply }));
-                                          setEditingReplyId(prev => ({ ...prev, [bId]: true }));
-                                        }}
-                                        className="text-[10px] font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 transition-colors"
-                                      >
-                                        <Edit size={10} />
-                                        {t("Edit")}
-                                      </button>
-                                    </div>
-                                    <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3 py-1.5 text-xs text-gray-800 break-words font-medium">
-                                      "{savedReply}"
-                                    </div>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div className="mt-2 pt-1.5 border-t border-purple-100 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                  {broadcastReplySuccess[bId] ? (
-                                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl">
-                                      <CheckCircle size={12} className="text-emerald-600" />
-                                      <span>{t("Reply sent to Super-Admin!")}</span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="text"
-                                        value={currentText}
-                                        onChange={(e) => setBroadcastReplies(prev => ({ ...prev, [bId]: e.target.value }))}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            handleSendBroadcastReply(e, n);
-                                          }
-                                        }}
-                                        placeholder={t("Reply to super admin...")}
-                                        className="flex-1 min-w-0 bg-white border border-purple-200 focus:border-purple-500 rounded-xl px-2.5 py-1 text-xs text-gray-800 placeholder-gray-400 focus:outline-none shadow-2xs"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={(e) => handleSendBroadcastReply(e, n)}
-                                        disabled={submittingBroadcastReply[bId] || !(currentText.trim())}
-                                        className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${submittingBroadcastReply[bId] || !(currentText.trim())
-                                            ? 'bg-purple-200 text-purple-400 cursor-not-allowed'
-                                            : 'bg-purple-600 hover:bg-purple-700 active:scale-95 text-white cursor-pointer shadow-xs'
-                                          }`}
-                                      >
-                                        {submittingBroadcastReply[bId] ? (
-                                          <Loader2 size={11} className="animate-spin" />
-                                        ) : (
-                                          <Send size={11} />
-                                        )}
-                                        <span>{savedReply ? t("Update") : t("Reply")}</span>
-                                      </button>
-                                      {isEditing && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setEditingReplyId(prev => ({ ...prev, [bId]: false }))}
-                                          className="text-xs text-gray-400 hover:text-gray-600 p-1 cursor-pointer font-bold"
-                                          title={t("Cancel")}
-                                        >
-                                          ✕
-                                        </button>
-                                      )}
-                                    </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1.5 mb-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <p className="text-xs font-bold text-gray-800 leading-snug truncate">{n.title}</p>
+                                  {n.isBroadcast && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 uppercase tracking-wider shrink-0">
+                                      Broadcast
+                                    </span>
                                   )}
                                 </div>
-                              );
-                            })()}
-
-                            {/* Accept / Reject for cancel-item requests */}
-                            {n.data?.type === 'cancel_item_request' && (
-                              <div className="mt-2 flex flex-wrap gap-2 items-center">
-                                {resolvingCancelIds[n.id] === 'accept' ? (
-                                  <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
-                                    <Loader2 size={12} className="animate-spin" />
-                                    {t("Accepting...")}
-                                  </span>
-                                ) : resolvingCancelIds[n.id] === 'reject' ? (
-                                  <span className="flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
-                                    <Loader2 size={12} className="animate-spin" />
-                                    {t("Rejecting...")}
-                                  </span>
-                                ) : resolvingCancelIds[n.id] === 'accept_done' ? (
-                                  <span className="flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold">
-                                    ✓ {t("Accepted")}
-                                  </span>
-                                ) : resolvingCancelIds[n.id] === 'reject_done' ? (
-                                  <span className="flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold">
-                                    ✕ {t("Rejected")}
-                                  </span>
-                                ) : (
-                                  <>
-                                    <button
-                                      onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
-                                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                                    >
-                                      ✓ {t("Accept")}
-                                    </button>
-                                    <button
-                                      onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
-                                      className="bg-rose-500 hover:bg-rose-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                                    >
-                                      ✕ {t("Reject")}
-                                    </button>
-                                  </>
-                                )}
+                                {/* Generation Timestamp */}
+                                <span className="text-[10px] text-gray-400 font-medium whitespace-nowrap shrink-0 ml-1">
+                                  {formatNotifTime(n)}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
 
-                  {/* Footer — always visible at bottom */}
-                  <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center shrink-0 rounded-b-2xl">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        rtClearNotification('ALL');
-                        if (isAdmin || isManager) {
-                          clearAllBroadcasts();
-                        }
-                        setShowNotifications(false);
-                      }}
-                      className="text-xs font-bold text-red-600 hover:text-red-700 active:scale-95 transition-transform py-1 px-3 cursor-pointer"
-                    >
-                      {t("Clear All")}
-                    </button>
+                              <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed break-words">{n.message}</p>
+
+                              {/* Broadcast Media/Image Preview */}
+                              {n.isBroadcast && n.imageUrl && (
+                                <div className="mt-2 w-full h-24 rounded-lg bg-gray-100 overflow-hidden relative border border-purple-100 shadow-2xs">
+                                  <img src={n.imageUrl} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              )}
+
+                              {/* Inline Broadcast Reply Box / Sent Reply Display */}
+                              {n.isBroadcast && (() => {
+                                const rawId = n.broadcastId || n.data?.broadcastId || n.id || '';
+                                const bId = String(rawId).replace(/^broadcast_/, '');
+                                const tenantDb = localStorage.getItem('resto_db_name') || 'default';
+                                const savedReply = n.myReply || sentReplies[bId] ||
+                                  (bId ? localStorage.getItem(`broadcast_sent_reply_${bId}_${tenantDb}`) : null);
+                                const isEditing = Boolean(editingReplyId[bId]);
+                                const currentText = broadcastReplies[bId] !== undefined ? broadcastReplies[bId] : (savedReply || '');
+
+                                if (savedReply && !isEditing) {
+                                  return (
+                                    <div className="mt-2.5 pt-2 border-t border-purple-100/70 flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[10px] font-extrabold text-purple-700 uppercase tracking-wider flex items-center gap-1">
+                                          <CheckCircle size={11} className="text-emerald-500" />
+                                          {t("Your Reply")}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setBroadcastReplies(prev => ({ ...prev, [bId]: savedReply }));
+                                            setEditingReplyId(prev => ({ ...prev, [bId]: true }));
+                                          }}
+                                          className="text-[10px] font-bold text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1 cursor-pointer bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 transition-colors"
+                                        >
+                                          <Edit size={10} />
+                                          {t("Edit")}
+                                        </button>
+                                      </div>
+                                      <div className="bg-purple-50/70 border border-purple-100 rounded-xl px-3 py-1.5 text-xs text-gray-800 break-words font-medium">
+                                        "{savedReply}"
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div className="mt-2 pt-1.5 border-t border-purple-100 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    {broadcastReplySuccess[bId] ? (
+                                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl">
+                                        <CheckCircle size={12} className="text-emerald-600" />
+                                        <span>{t("Reply sent to Super-Admin!")}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <input
+                                          type="text"
+                                          value={currentText}
+                                          onChange={(e) => setBroadcastReplies(prev => ({ ...prev, [bId]: e.target.value }))}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              handleSendBroadcastReply(e, n);
+                                            }
+                                          }}
+                                          placeholder={t("Reply to super admin...")}
+                                          className="flex-1 min-w-0 bg-white border border-purple-200 focus:border-purple-500 rounded-xl px-2.5 py-1 text-xs text-gray-800 placeholder-gray-400 focus:outline-none shadow-2xs"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleSendBroadcastReply(e, n)}
+                                          disabled={submittingBroadcastReply[bId] || !(currentText.trim())}
+                                          className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 ${submittingBroadcastReply[bId] || !(currentText.trim())
+                                            ? 'bg-purple-200 text-purple-400 cursor-not-allowed'
+                                            : 'bg-purple-600 hover:bg-purple-700 active:scale-95 text-white cursor-pointer shadow-xs'
+                                            }`}
+                                        >
+                                          {submittingBroadcastReply[bId] ? (
+                                            <Loader2 size={11} className="animate-spin" />
+                                          ) : (
+                                            <Send size={11} />
+                                          )}
+                                          <span>{savedReply ? t("Update") : t("Reply")}</span>
+                                        </button>
+                                        {isEditing && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingReplyId(prev => ({ ...prev, [bId]: false }))}
+                                            className="text-xs text-gray-400 hover:text-gray-600 p-1 cursor-pointer font-bold"
+                                            title={t("Cancel")}
+                                          >
+                                            ✕
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Accept / Reject for cancel-item requests */}
+                              {n.data?.type === 'cancel_item_request' && (
+                                <div className="mt-2 flex flex-wrap gap-2 items-center">
+                                  {resolvingCancelIds[n.id] === 'accept' ? (
+                                    <span className="flex items-center gap-1.5 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
+                                      <Loader2 size={12} className="animate-spin" />
+                                      {t("Accepting...")}
+                                    </span>
+                                  ) : resolvingCancelIds[n.id] === 'reject' ? (
+                                    <span className="flex items-center gap-1.5 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold animate-pulse">
+                                      <Loader2 size={12} className="animate-spin" />
+                                      {t("Rejecting...")}
+                                    </span>
+                                  ) : resolvingCancelIds[n.id] === 'accept_done' ? (
+                                    <span className="flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1 rounded-lg text-xs font-bold">
+                                      ✓ {t("Accepted")}
+                                    </span>
+                                  ) : resolvingCancelIds[n.id] === 'reject_done' ? (
+                                    <span className="flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-300 px-3 py-1 rounded-lg text-xs font-bold">
+                                      ✕ {t("Rejected")}
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={(e) => handleResolveCancelItem(e, n, 'accept')}
+                                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                                      >
+                                        ✓ {t("Accept")}
+                                      </button>
+                                      <button
+                                        onClick={(e) => handleResolveCancelItem(e, n, 'reject')}
+                                        className="bg-rose-500 hover:bg-rose-600 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                                      >
+                                        ✕ {t("Reject")}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Footer — always visible at bottom */}
+                    <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center shrink-0 rounded-b-2xl">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          rtClearNotification('ALL');
+                          if (isAdmin || isManager) {
+                            clearAllBroadcasts();
+                          }
+                          setShowNotifications(false);
+                        }}
+                        className="text-xs font-bold text-red-600 hover:text-red-700 active:scale-95 transition-transform py-1 px-3 cursor-pointer"
+                      >
+                        {t("Clear All")}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
           </div>
 
           {/* Chef-only KOT Page / History Icon in Top Navbar - visible on all chef views */}
@@ -1785,8 +1810,8 @@ function App() {
             <button
               onClick={() => handleViewChange('kothistory')}
               className={`p-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all flex items-center gap-1.5 font-bold text-xs cursor-pointer ${view === 'kothistory'
-                  ? 'bg-amber-500 text-white shadow-md'
-                  : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30'
+                ? 'bg-amber-500 text-white shadow-md'
+                : 'bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30'
                 }`}
               title={t("KOT Page / History")}
             >
@@ -1804,15 +1829,18 @@ function App() {
             <User size={18} />
           </button>
 
-          {/* Mobile Quick Action Dropdown Trigger */}
+        </div>
+
+        {/* Absolutely Centered Quick Action Dropdown Trigger (Hanging below navbar on Mobile) */}
+        <div className="absolute top-full left-1/2 -translate-x-1/2 flex sm:hidden z-[100] -mt-[1px]">
           <button
             onClick={() => setShowMobileQuickActions(!showMobileQuickActions)}
-            className={`sm:hidden w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 shadow-sm border -mr-0.5 ${view === 'kds' ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
+            className="w-10 h-[18px] bg-white border border-gray-200 border-t-0 rounded-b-xl flex items-center justify-center shadow-[0_2px_4px_rgba(0,0,0,0.05)] text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
             title="More Actions">
-            <MoreVertical size={16} strokeWidth={2.5} />
+            <MoreHorizontal size={18} strokeWidth={3} />
           </button>
         </div>
+
 
         {/* Mobile Profile Dropdown (Desktop) */}
         {profileOpen && (

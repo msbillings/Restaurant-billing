@@ -710,7 +710,7 @@ Thank you for visiting!`;
     try {
       const timeoutMs = isImage ? 35000 : 40000;
       console.log(`[sendBillMedia] Calling sock.sendMessage | timeoutMs=${timeoutMs}...`);
-      const result = await this.sock.sendMessage(jid, { text: String(text) });
+      const result = await this.sock.sendMessage(jid, messagePayload);
       console.log(`[sendBillMedia] ✅ sock.sendMessage succeeded! messageID=${result?.key?.id || 'N/A'}`);
       return result;
     } catch (sendErr) {

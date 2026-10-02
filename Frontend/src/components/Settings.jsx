@@ -1814,18 +1814,43 @@ const Settings = ({ user, setUser, onNavigate, onGoBack }) => {
                     <p className="text-xs text-text-muted mt-0.5">{t("Include UPI QR code in the WhatsApp receipt image sent to customers")}</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input type="checkbox" className="sr-only peer" checked={settings.whatsappShowQr !== false} onChange={(e) => handleInputChange('whatsappShowQr', e.target.checked)} />
+                    <input type="checkbox" className="sr-only peer" checked={settings.whatsappShowQr === true} onChange={(e) => handleInputChange('whatsappShowQr', e.target.checked)} />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div>
                   </label>
                 </div>
-                {settings.whatsappShowQr !== false && settings.upiId && (
+                {settings.whatsappShowQr === true && settings.upiId && (
                   <div className="flex items-center gap-2 bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
                     <span className="text-xs text-emerald-800 font-medium">{t("QR will scan to:")} <span className="font-mono font-bold">{settings.upiId}</span></span>
                   </div>
                 )}
-                {settings.whatsappShowQr !== false && !settings.upiId && (
+                {settings.whatsappShowQr === true && !settings.upiId && (
                   <p className="text-xs text-orange-600 bg-orange-50/60 rounded-xl px-3 py-2 border border-orange-100">⚠️ {t("No UPI ID set — add it in Billing & Payment settings first")}</p>
+                )}
+              </div>
+              {/* WhatsApp Logo Toggle */}
+              <div className="p-3.5 sm:p-4 bg-surface rounded-2xl border border-border space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <label className="text-sm font-bold flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      <span>{t("Show Logo in WhatsApp e-Bill")}</span>
+                    </label>
+                    <p className="text-xs text-text-muted mt-0.5">{t("Include restaurant logo in the WhatsApp receipt image (independent from printed bill logo setting)")}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input type="checkbox" className="sr-only peer" checked={settings.whatsappShowLogo === true} onChange={(e) => handleInputChange('whatsappShowLogo', e.target.checked)} />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#25D366]"></div>
+                  </label>
+                </div>
+                {settings.whatsappShowLogo === true && !settings.logo && (
+                  <p className="text-xs text-orange-600 bg-orange-50/60 rounded-xl px-3 py-2 border border-orange-100">⚠️ {t("No logo uploaded — add one in Restaurant Information above")}</p>
+                )}
+                {settings.whatsappShowLogo === true && settings.logo && settings.logo !== '[logo_stored]' && (
+                  <div className="flex items-center gap-2 bg-emerald-50/60 rounded-xl px-3 py-2 border border-emerald-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600 shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span className="text-xs text-emerald-800 font-medium">{t("Logo will appear at top of WhatsApp e-Bill image")}</span>
+                  </div>
                 )}
               </div>
               {/* CRM Win-Back */}

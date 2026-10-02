@@ -627,12 +627,16 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // Mount offscreen bill for canvas capture
     setOffscreenBill(bill);
 
-    // Yield frames so React mounts DOM element
-    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        // Yield frames so React mounts DOM element reliably
+    let el = null;
+    for (let i = 0; i < 20; i++) {
+       await new Promise(r => setTimeout(r, 50));
+       el = document.getElementById('wa-offscreen-receipt');
+       if (el) break;
+    }
 
     let imageBase64 = null;
     try {
-      const el = document.getElementById('wa-offscreen-receipt');
       if (el) {
         // Wait for images inside el (like logo) to finish loading
         const imgs = Array.from(el.querySelectorAll('img'));
@@ -700,18 +704,18 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       if (res && res.success) {
         markBillAlreadySent(billNo);
           window.dispatchEvent(new CustomEvent('whatsappSent', { detail: { billNumber: billNo } }));
-          if (res.queued) {
-            console.log(`[Instant WhatsApp Auto-Send] ⏳ Queued for background delivery to +${cleanPhone}`);
-            setToast({ message: `WhatsApp e-Bill queued for background delivery (will retry up to 5 times) ⏳`, type: 'info' });
-          } else {
-            console.log(`[Instant WhatsApp Auto-Send] ✅ Receipt Image & Message delivered to +${cleanPhone} successfully!`);
-            setToast({ message: `e-Bill & Receipt Image sent to +${cleanPhone} via WhatsApp! ✓`, type: 'success' });
-          }
+          console.log(`[Instant WhatsApp Auto-Send] ✅ Receipt Image & Message delivered to +${cleanPhone} successfully!`);
+          setToast({ message: `e-Bill & Receipt Image sent to +${cleanPhone} via WhatsApp! ✓`, type: 'success' });
+        } else if (res && res.queued) {
+          // First attempt failed — retrying in background. Do NOT mark as sent.
+          console.log(`[Instant WhatsApp Auto-Send] ⏳ Queued for background retry for +${cleanPhone}`);
+          setToast({ message: `WhatsApp send failed — retrying in background. Customer may receive it shortly.`, type: 'warning' });
+          window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
         } else {
-        console.warn(`[Instant WhatsApp Auto-Send] ⚠️ API returned error:`, res?.error);
-        setToast({ message: `WhatsApp send failed: ${res?.error || 'Bot not connected'}`, type: 'error' });
-        window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
-      }
+          console.warn(`[Instant WhatsApp Auto-Send] ⚠️ API returned error:`, res?.error);
+          setToast({ message: `WhatsApp send failed: ${res?.error || 'Bot not connected'}`, type: 'error' });
+          window.dispatchEvent(new CustomEvent('whatsappFailed', { detail: { billNumber: billNo } }));
+        }
     }).catch(err => {
       const errMsg = err?.response?.data?.error || err?.message || 'WhatsApp send failed';
       console.warn('[Instant WhatsApp Auto-Send] ❌ Dispatch error:', errMsg);
@@ -2608,6 +2612,26 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
       const kotData = response.kot || (response.bill?.kots ? response.bill.kots[response.bill.kots.length - 1] : null) || (response._offline ? { items: cart, createdAt: new Date(), kotNumber: 'OFFLINE-SYNC' } : null);
       const queueNo = response.queueNumber || response.bill?.queueNumber || 1;
 
+      // Enrich KOT items with food type/category from cart so preview splits Veg/Non-Veg correctly
+      if (kotData && kotData.items) {
+        kotData.items = kotData.items.map(kotItem => {
+          const cartMatch = cart.find(c =>
+            (c.name || '').trim().toLowerCase() === (kotItem.name || '').trim().toLowerCase()
+          );
+          if (cartMatch) {
+            return {
+              ...kotItem,
+              type: kotItem.type || cartMatch.type || cartMatch.foodType || '',
+              foodType: kotItem.foodType || cartMatch.foodType || cartMatch.type || '',
+              isVeg: kotItem.isVeg !== undefined ? kotItem.isVeg : cartMatch.isVeg,
+              category: kotItem.category || cartMatch.category || '',
+              department: kotItem.department || cartMatch.department || ''
+            };
+          }
+          return kotItem;
+        });
+      }
+
       setActiveKOTData({
         ...kotData,
         tableNo: response.bill?.tableNo || tableNo,
@@ -3452,9 +3476,10 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         >
           {/* Header */}
           <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-            {(() => {
+                        {(() => {
               const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
-              return Boolean(s.logo && s.logo !== '[logo_stored]') ? (
+              const showLogo = s.whatsappShowLogo === true;
+              return Boolean(showLogo && s.logo && s.logo !== '[logo_stored]') ? (
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
                   <img src={s.logo} alt="Logo" style={{ maxHeight: '45px', maxWidth: '140px', objectFit: 'contain' }} />
                 </div>
@@ -3555,9 +3580,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
           </div>
 
           {/* QR Code */}
-          {(() => {
-            const upi = JSON.parse(localStorage.getItem('restaurantSettings') || '{}').upiId;
-            return upi ? (
+                    {(() => {
+            const s = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
+            const upi = s.upiId;
+            const showQr = s.whatsappShowQr === true;
+            return (upi && showQr) ? (
               <div style={{ textAlign: 'center', marginTop: '10px' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold' }}>SCAN TO PAY VIA UPI</div>
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>

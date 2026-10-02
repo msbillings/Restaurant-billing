@@ -156,8 +156,8 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
 
     const map = new Map();
 
-    // Fallback general printer for unassigned items
-    const fallbackPrinter = activePrinters.find(p => (!p.assignedCategories || p.assignedCategories.length === 0) && (!p.assignedItems || p.assignedItems.length === 0) && (!p.assignedItemTypes || p.assignedItemTypes.length === 0)) || activePrinters[0] || null;
+    // Fallback general printer for unassigned items. ONLY use a printer as fallback if it has NO specific routing assignments.
+    const fallbackPrinter = activePrinters.find(p => (!p.assignedCategories || p.assignedCategories.length === 0) && (!p.assignedItems || p.assignedItems.length === 0) && (!p.assignedItemTypes || p.assignedItemTypes.length === 0)) || null;
 
     order.items.forEach(item => {
       const itemLower = (item.name || '').trim().toLowerCase();
@@ -229,7 +229,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
     });
 
     return Array.from(map.values());
-  }, [order?.items, printerConfigs]);
+  }, [order?.items, printerConfigs, getMenuType, cachedMenu]);
 
   const activeStationGroup = useMemo(() => {
     if (selectedDept === 'ALL') return null;
