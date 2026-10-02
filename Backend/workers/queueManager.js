@@ -13,6 +13,7 @@ export const connection = new Redis(REDIS_URI, {
 // 1. WhatsApp Dispatch Queue
 // Handles sending PDFs/Images over WhatsApp via Baileys
 export const WhatsAppQueue = new Queue('WhatsAppQueue', {
+  prefix: process.env.BULLMQ_PREFIX || 'bull',
   connection,
   defaultJobOptions: {
     attempts: 5,
@@ -34,6 +35,7 @@ export const WhatsAppQueue = new Queue('WhatsAppQueue', {
 // 2. Report Generation Queue
 // Handles heavy CPU tasks like generating CSVs, Excel, or PDF reports
 export const ReportQueue = new Queue('ReportQueue', {
+  prefix: process.env.BULLMQ_PREFIX || 'bull',
   connection,
   defaultJobOptions: {
     attempts: 3,

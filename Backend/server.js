@@ -331,6 +331,7 @@ app.use(hpp());
 
 
 import { healthLimiter, handleRateLimitError } from './middleware/rateLimiter.js';
+import redisManager from './utils/redisClient.js';
 
 // Health check route
 app.get('/', healthLimiter, (req, res) => {
@@ -352,18 +353,28 @@ app.get('/api/health', healthLimiter, (req, res) => {
 
 // Required infrastructure health endpoints
 app.get('/health', healthLimiter, (req, res) => {
-  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    commit: process.env.RENDER_GIT_COMMIT || process.env.COMMIT_SHA || 'unknown'
+  });
 });
 
 app.get('/ready', healthLimiter, (req, res) => {
-  // Check dependency readiness (MongoDB)
+  // Check dependency readiness (MongoDB & Redis)
   const isMongoReady = mongoose.connection.readyState === 1;
-  // TODO: Check Redis readiness here once Redis is fully integrated for HA
+  const isRedisReady = redisManager.isConnected;
 
-  if (isMongoReady) {
-    res.status(200).json({ status: 'ready', dependencies: { mongodb: 'up' } });
+  if (isMongoReady && isRedisReady) {
+    res.status(200).json({ status: 'ready', dependencies: { mongodb: 'up', redis: 'up' } });
   } else {
-    res.status(503).json({ status: 'not ready', dependencies: { mongodb: 'down' } });
+    res.status(503).json({ 
+      status: 'not ready', 
+      dependencies: { 
+        mongodb: isMongoReady ? 'up' : 'down',
+        redis: isRedisReady ? 'up' : 'down'
+      } 
+    });
   }
 });
 
@@ -618,20 +629,7 @@ if (staticFrontendDir) {
 const isServerless = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
 
 if (!isServerless) {
-  // Start background session cleanup job
-  startSessionCleanupJob();
-
-  // Start data vault backup job (Daily at 3:00 AM)
-  startBackupCron();
-
-  // Start EOD Report job (Daily at 11:59 PM)
-  // EOD reporting is now handled via ReportQueue and reportWorker.js
-  startSecureReportCleanupJob();
-
-  // Start WhatsApp Scheduler
-  startWhatsAppScheduler();
-
-  // Start Realtime Metrics Ingester
+  // Start Realtime Metrics Ingester (must run in API process as it uses app.locals.io)
   startMetricsIngester(app.locals.io);
 }
 

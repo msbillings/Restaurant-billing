@@ -54,8 +54,8 @@ if (process.platform === 'win32') {
 }
 
 // Copy Backend (Ignore node_modules, session data, uploads, reports, logs)
-console.log('Copying Backend...');
-copySync(backendSrc, desktopBackend, ['node_modules', '.git', 'auth_info_baileys', 'reports', 'uploads', 'dist', 'logs']);
+console.log('Skipping Backend copy (Windows exe is client only)');
+fs.mkdirSync(desktopBackend, { recursive: true });
 
 // Explicitly ensure .env is bundled for packaged Desktop builds (.exe / .dmg)
 const envSrc = path.join(backendSrc, '.env');
@@ -109,28 +109,9 @@ if('serviceWorker' in navigator) {
   }
 });
 
-// Fix for Desktop app: Ensure it connects to localhost instead of the hardcoded IP from Vite build
-console.log('Patching API URLs for Desktop (localhost)...');
-[desktopFrontend, desktopBackendFrontend].forEach(targetDir => {
-  const assetsDir = path.join(targetDir, 'assets');
-  if (fs.existsSync(assetsDir)) {
-    const files = fs.readdirSync(assetsDir);
-    files.forEach(file => {
-      if (file.endsWith('.js')) {
-        const filePath = path.join(assetsDir, file);
-        try {
-          let content = fs.readFileSync(filePath, 'utf8');
-          content = content.replace(/https:\/\/msbillings-backend-x9qw\.onrender\.com\/api/g, 'http://127.0.0.1:5002/api');
-          content = content.replace(/http:\/\/192\.168\.\d+\.\d+:5002/g, 'http://127.0.0.1:5002');
-          content = content.replace(/http:\/\/localhost:5002/g, 'http://127.0.0.1:5002');
-          fs.writeFileSync(filePath, content);
-        } catch (err) {
-          console.warn(`[Build] Warning patching ${file}:`, err.message);
-        }
-      }
-    });
-  }
-});
+// Patching API URLs to localhost has been removed.
+// The Windows .exe is a client and must point to the production server.
+console.log('Skipping API URL patching for Desktop (using production URL)...');
 
 // Copy AI Face Detection Models to Backend public folder for local server serving
 console.log('Copying AI models to Backend...');

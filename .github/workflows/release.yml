@@ -26,11 +26,11 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install || npm install || npm install
+        run: npm ci
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -38,11 +38,11 @@ jobs:
 
       - name: 📦 Install Backend Dependencies
         working-directory: ./Backend
-        run: npm install --omit=dev
+        run: npm ci --omit=dev
 
       - name: 📦 Install Desktop Dependencies
         working-directory: ./Desktop
-        run: npm install
+        run: npm ci
 
       - name: 📝 Create Backend .env File
         working-directory: ./Backend
@@ -79,7 +79,7 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: ☕ Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -89,7 +89,7 @@ jobs:
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install || npm install || npm install
+        run: npm ci
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -145,11 +145,11 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install || npm install || npm install
+        run: npm ci
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend
@@ -157,11 +157,11 @@ jobs:
 
       - name: 📦 Install Backend Dependencies
         working-directory: ./Backend
-        run: npm install --omit=dev
+        run: npm ci --omit=dev
 
       - name: 📦 Install Desktop Dependencies
         working-directory: ./Desktop
-        run: npm install
+        run: npm ci
 
       - name: 📝 Create Backend .env File
         working-directory: ./Backend
@@ -195,11 +195,11 @@ jobs:
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: 📦 Install Frontend Dependencies
         working-directory: ./Frontend
-        run: npm install || npm install || npm install
+        run: npm ci
 
       - name: 🏗️ Build Frontend
         working-directory: ./Frontend

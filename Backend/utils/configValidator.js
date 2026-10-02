@@ -8,6 +8,7 @@
 export const validateConfig = () => {
   const requiredEnvVars = [
     'MONGO_URI',
+    'REDIS_URI',
     'JWT_SECRET',
     'PORT'
   ];

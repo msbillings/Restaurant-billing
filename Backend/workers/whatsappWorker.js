@@ -94,6 +94,7 @@ export const processWhatsAppJob = async (job) => {
 
 export const startWhatsAppWorker = () => {
   const worker = new Worker('WhatsAppQueue', processWhatsAppJob, {
+    prefix: process.env.BULLMQ_PREFIX || 'bull',
     connection,
     concurrency: 5 // Process up to 5 WhatsApp messages simultaneously
   });

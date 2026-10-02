@@ -12,6 +12,7 @@
     "test:load": "node tests/load/check-server.js && artillery run tests/load/load-test.yml",
     "test:all": "npm run test:unit && npm run test:integration",
     "start": "node server.js",
+    "worker": "node worker.js",
     "dev": "nodemon server.js",
     "generate-test-data": "node test-data-generator.js"
   },

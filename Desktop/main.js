@@ -244,6 +244,8 @@ let backendRestartCount = 0;
 const MAX_BACKEND_RESTARTS = 3;
 
 function startBackend() {
+  console.log('[Backend] Disabled: Windows .exe is a client and connects to the production backend.');
+  return;
   const { fork } = require('child_process');
 
   // Check if app is packaged

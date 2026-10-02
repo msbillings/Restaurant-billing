@@ -246,6 +246,7 @@ export const startReportWorker = () => {
       throw error;
     }
   }, { 
+    prefix: process.env.BULLMQ_PREFIX || 'bull',
     connection,
     concurrency: 2 // Reports are CPU intensive, keep concurrency low
   });
