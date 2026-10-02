@@ -18,6 +18,13 @@ const createRedisStore = (prefix) => {
   return new RedisStore({
     sendCommand: async (...args) => {
       if (!redisManager.isConnected || !redisManager.client) {
+        // Anti-fragility fix: If express-rate-limit calls SCRIPT LOAD before Redis connects,
+        // it permanently breaks the store's internal loadedPromise. By returning a dummy SHA,
+        // we force it to try EVALSHA later. When it does, Redis will return NOSCRIPT, and
+        // rate-limit-redis will automatically heal itself by re-running SCRIPT LOAD on the fly.
+        if (args[0] === 'SCRIPT' && args[1] === 'LOAD') {
+          return 'dummy_sha';
+        }
         throw new Error('RateLimiterStoreError');
       }
       return await redisManager.client.sendCommand(args);
