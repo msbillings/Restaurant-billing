@@ -79,7 +79,27 @@ const clientSchema = new mongoose.Schema({
     lastUpdated: Date,
     ip: String,
     mapsUrl: String
+  },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Client'
+  },
+  referrerRewardDays: {
+    type: Number
+  },
+  refereeRewardDays: {
+    type: Number
+  },
+  referralStatus: {
+    type: String,
+    enum: ['Completed', 'Revoked'],
+    default: 'Completed'
   }
 });
 
-export default mongoose.model('Client', clientSchema);
+export default mongoose.models.Client || mongoose.model('Client', clientSchema);

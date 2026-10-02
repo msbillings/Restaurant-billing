@@ -39,7 +39,6 @@ dotenv.config();
 // Phase 3: Immediate Configuration Validation (Fail fast if missing secrets)
 import { validateConfig } from './utils/configValidator.js';
 validateConfig();
-
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT EXCEPTION]', err);
 });
@@ -98,7 +97,7 @@ app.use((req, res, next) => {
     if (chunk) {
       resBytes += Buffer.byteLength(chunk);
     }
-    
+
     // Request is fully handled, record metrics
     if (req.tenantDb) {
       const reqBytes = req.socket?.bytesRead || parseInt(req.headers['content-length'] || 0, 10);
@@ -106,7 +105,7 @@ app.use((req, res, next) => {
       const isError = res.statusCode >= 400;
       recordMetrics(req.tenantDb, reqBytes, resBytes, latency, isError);
     }
-    
+
     return originalEnd.apply(this, arguments);
   };
 
@@ -175,6 +174,7 @@ const setupRedisAdapter = async () => {
   }
 };
 setupRedisAdapter();
+
 
 app.locals.io = io;
 
@@ -676,14 +676,14 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
                 console.warn(`[Server] Force terminating occupying PID ${pid} on port ${PORT}...`);
                 try {
                   execSync(`taskkill /F /PID ${pid}`);
-                } catch (_) {}
+                } catch (_) { }
               }
             }
           }
         } else {
           try {
             execSync(`fuser -k ${PORT}/tcp`);
-          } catch (_) {}
+          } catch (_) { }
         }
       } catch (e) {
         console.error(`[Server] Could not automatically kill process on port ${PORT}:`, e.message);
@@ -724,7 +724,7 @@ if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
         } catch (e) {
           console.warn('[Desktop] Could not update client-config.json cluster:', e.message);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     startListening();

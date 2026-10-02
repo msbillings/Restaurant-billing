@@ -102,12 +102,12 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
-    // Default: Live production cloud SuperAdmin server
-    let envUrl = import.meta.env.VITE_SUPERADMIN_API_URL;
-    if (envUrl && envUrl.startsWith('https://')) {
-        return cleanSuperadminUrl(envUrl);
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    if (host === 'localhost' || host === '127.0.0.1') {
+        return 'http://localhost:4001';
     }
 
+    // Default: Live production cloud SuperAdmin server
     return 'https://msbillings-backend-x9qw.onrender.com';
 };
 

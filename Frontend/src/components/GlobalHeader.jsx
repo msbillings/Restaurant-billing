@@ -1,4 +1,4 @@
-import { useLanguage } from "../context/LanguageContext";import React, { useState } from 'react';
+import { useLanguage } from "../context/LanguageContext";import React, { useState, useEffect } from 'react';
 import { Menu, Search, Calculator, Bell, User, Power, Phone } from 'lucide-react';
 import useBroadcasts from '../hooks/useBroadcasts';
 import useNotifications from '../hooks/useNotifications';
@@ -15,6 +15,16 @@ const GlobalHeader = ({
   userRole = 'Admin'
 }) => {const { t } = useLanguage();
   const [searchBillNo, setSearchBillNo] = useState('');
+
+  // Live system clock (uses OS locale & timezone automatically)
+  const [liveTime, setLiveTime] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setLiveTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const timeStr = liveTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+  const dateStr = liveTime.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const dayStr  = liveTime.toLocaleDateString(undefined, { weekday: 'long' });
 
   // Fetch broadcasts and real-time notifications unread count
   const { unreadCount: broadcastUnread } = useBroadcasts(userRole);
@@ -102,6 +112,13 @@ const GlobalHeader = ({
 
       {/* Right section: Support & Icons */}
       <div className="flex items-center gap-2 sm:gap-5 shrink-0">
+        {/* Live Date/Time/Day — ultra compact on mobile */}
+        <div className="flex flex-col items-center justify-center px-1.5 sm:px-2.5 py-0.5 sm:py-1 bg-surface border border-border rounded-lg leading-none shrink-0 min-w-0">
+          <span className="text-primary font-extrabold text-[10px] sm:text-[12px] tracking-tight whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>{timeStr}</span>
+          <span className="text-text-muted font-semibold text-[7px] sm:text-[8px] uppercase tracking-tight whitespace-nowrap leading-tight">{dayStr}</span>
+          <span className="text-text-muted font-medium text-[7px] sm:text-[8px] whitespace-nowrap leading-none">{dateStr}</span>
+        </div>
+
         <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-surface border border-border rounded-lg">
           <div className="bg-red-100 p-1 rounded-full text-danger">
             <Phone size={14} />

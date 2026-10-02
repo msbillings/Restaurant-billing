@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 import { getAllCategories, getAllCategoriesAdmin, createCategory, updateCategory, deleteCategory } from '../controllers/categoryController.js';
 import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
-import { authenticateToken, requireAdmin, adminLimiter, optionalAuthenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin, optionalAuthenticateToken } from '../middleware/auth.js';
 
 // Get all categories - with tenant authentication
 router.get('/', optionalAuthenticateToken, getAllCategories);

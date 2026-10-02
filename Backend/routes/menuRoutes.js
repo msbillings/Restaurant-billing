@@ -2,7 +2,7 @@ import express from 'express';
 const router = express.Router();
 import { getAllMenuItems, addMenuItem, bulkAddMenuItems, updateMenuItem, deleteMenuItem, deleteAllMenuItems } from '../controllers/menuController.js';
 import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
-import { authenticateToken, requireAdmin, adminLimiter, optionalAuthenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireAdmin, optionalAuthenticateToken } from '../middleware/auth.js';
 
 // GET menu items - public/POS with tenant authentication
 router.get('/', optionalAuthenticateToken, getAllMenuItems);

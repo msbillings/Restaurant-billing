@@ -1,7 +1,7 @@
 {
   "name": "restaurant-billing-desktop",
   "productName": "MS Billings POS",
-  "version": "6.0.100",
+  "version": "6.0.102",
   "description": "Professional Restaurant Management Desktop Application, Billing Software",
   "main": "main.js",
   "scripts": {
@@ -65,14 +65,7 @@
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "msbillings",
-        "repo": "Restaurant-billing",
-        "releaseType": "release"
-      }
-    ]
+    "publish": null
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

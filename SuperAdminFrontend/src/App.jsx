@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff, Server, ShoppingCart } from 'lucide-react';
+import { Shield, Key, Users, RefreshCw, AlertTriangle, Search, Activity, Power, Edit3, TrendingUp, LogOut, Fingerprint, Globe, MapPin, Radio, Plus, Trash2, CheckCircle, XCircle, Upload, ExternalLink, MessageSquare, Loader2, ChevronLeft, ChevronRight, Calendar, X, Eye, EyeOff, Server, ShoppingCart, Gift } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import Login from './Login';
 import VendorLogin from './VendorLogin';
 import MarketHubManager from './MarketHubManager';
 import VendorManager from './VendorManager';
 import RealtimeAnalytics from './components/RealtimeAnalytics';
+import ReferralsManager from './components/ReferralsManager';
 import { startRegistration } from '@simplewebauthn/browser';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
@@ -40,6 +41,19 @@ axios.interceptors.request.use((config) => {
 }, (error) => {
   return Promise.reject(error);
 });
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.warn('Session expired or unauthorized. Logging out...');
+      localStorage.removeItem('superadmin_token');
+      localStorage.removeItem('superadmin_user');
+      window.location.reload();
+    }
+    return Promise.reject(error);
+  }
+);
 
 const getClusterBadge = (cluster) => {
   const norm = (cluster || 'cluster0').toLowerCase();
@@ -165,7 +179,7 @@ function App() {
   const CLIENTS_PER_PAGE = 10;
   const [currentTab, setCurrentTab] = useState(() => {
     const hash = window.location.hash.replace('#', '');
-    const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime'];
+    const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime', 'Referrals'];
     const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
     return tabMatch || 'Dashboard';
   });
@@ -177,7 +191,7 @@ function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime'];
+      const validTabs = ['Dashboard', 'Insights', 'Broadcasts', 'MarketHub', 'Vendors', 'Realtime', 'Referrals'];
       const tabMatch = validTabs.find(t => t.toLowerCase() === hash.toLowerCase());
       if (tabMatch && tabMatch !== currentTab) {
         setCurrentTab(tabMatch);
@@ -1077,6 +1091,13 @@ function App() {
               <ShoppingCart size={18} />
               Market Hub
             </button>
+            <button 
+              onClick={() => setCurrentTab('Referrals')}
+              className={`px-4 py-2 font-bold transition-colors flex items-center gap-2 ${currentTab === 'Referrals' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Gift size={18} />
+              Referrals & Rewards
+            </button>
           </div>
         </div>
       )}
@@ -1094,6 +1115,10 @@ function App() {
 
         {adminUser?.role !== 'Vendor' && currentTab === 'Vendors' && (
           <VendorManager />
+        )}
+
+        {adminUser?.role !== 'Vendor' && currentTab === 'Referrals' && (
+          <ReferralsManager />
         )}
 
         {adminUser?.role !== 'Vendor' && currentTab === 'Dashboard' && (

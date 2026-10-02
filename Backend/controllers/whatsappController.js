@@ -5,6 +5,60 @@ import { getTenantModel, isCloud } from '../utils/tenantHelper.js';
 import BillDefault from '../models/Bill.js';
 import { uploadImage } from '../utils/cloudinary.js';
 
+// Tracks bills being processed — key stays in Set until ALL retries complete
+const processingBills = new Set();
+
+async function processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt = 1, lockKey = null) {
+  const releaseLock = () => { if (lockKey) processingBills.delete(lockKey); };
+
+  // ── DB guard: check if already sent before EVERY attempt (including attempt 1) ──
+  if (BillModel && (billId || billNumber)) {
+    try {
+      const query = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      const existing = await BillModel.findOne(query).select('whatsappSent').lean();
+      if (existing && existing.whatsappSent) {
+        console.log('[Queue] 🛑 Bill ' + (billNumber||billId) + ' already marked as sent in DB (attempt ' + attempt + '). Stopping to prevent duplicate.');
+        releaseLock();
+        return { success: true };
+      }
+    } catch(e) {}
+  }
+
+  try {
+    // Mark in DB BEFORE sending — so if Baileys times out locally but message was delivered,
+    // the next retry's DB check above will catch it and NOT send again.
+    if (BillModel && (billId || billNumber)) {
+      const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      await BillModel.updateOne(updateQuery, { $set: { whatsappSent: true, whatsappSentAt: new Date() } }).catch(e => console.error('[Queue] DB pre-mark error:', e));
+    }
+
+    await whatsappService.sendBillMedia(phone, payload);
+    console.log('[Queue] ✅ Successfully sent bill to ' + phone + ' on attempt ' + attempt);
+    releaseLock();
+    return { success: true };
+  } catch (error) {
+    // Roll back the DB flag since the send failed locally (might still be in-flight on WA servers)
+    if (BillModel && (billId || billNumber)) {
+      const updateQuery = billId && mongoose.Types.ObjectId.isValid(billId) ? { _id: billId } : { billNumber: billNumber || billId };
+      BillModel.updateOne(updateQuery, { $set: { whatsappSent: false } }).catch(() => {});
+    }
+
+    if (attempt < 3) {
+      // Reduced to max 3 retries to reduce duplicate risk
+      console.warn('[Queue] Send failed for ' + phone + ' (Attempt ' + attempt + '/3): ' + error.message + '. Retrying in 10 seconds...');
+      setTimeout(() => {
+        processSendBillMediaWithRetries(whatsappService, phone, payload, tenantId, billId, billNumber, BillModel, attempt + 1, lockKey);
+      }, 10000);
+      // Lock stays in processingBills — do NOT release yet
+      return { success: false, queued: true, error: error.message };
+    } else {
+      console.error('[Queue] ❌ Send permanently failed for ' + phone + ' after 3 attempts!');
+      releaseLock();
+      return { success: false, queued: false };
+    }
+  }
+}
+
 export const resolveTenantInfo = async (req) => {
   let tenantId = req.user?.db || req.tenantDb || req.headers?.['x-tenant-db'] || req.headers?.['X-Tenant-DB'] || req.query?.tenant || req.body?.tenant || req.models?.connection?.name;
 
@@ -179,7 +233,14 @@ export const sendBill = async (req, res) => {
     const { tenantId, whatsappService } = await resolveTenantInfo(req);
 
     // --- Prevent duplicate WhatsApp sends for the same bill ---
-    // Skip duplicate check if user explicitly requested a resend (e.g. customer didn't receive it)
+    const lockKey = `${tenantId}_${billId || billNumber}`;
+    if (!forceResend) {
+      if (processingBills.has(lockKey)) {
+        return res.status(409).json({ error: 'This bill is currently being sent.', alreadySent: true });
+      }
+      processingBills.add(lockKey);
+    }
+    
     let models = null;
     try {
       models = req.models || (tenantId === 'default' ? await getMasterModels() : await getTenantModels(tenantId));
@@ -204,6 +265,7 @@ export const sendBill = async (req, res) => {
         console.warn('[WhatsApp sendBill] Duplicate check warning:', checkErr?.message);
       }
     }
+
 
     if (!imageBase64 && !pdfBase64 && !documentBase64) {
       console.error(`[WhatsApp sendBill] ❌ No receipt photo image provided — aborting. Bill image is mandatory. tenantId=${tenantId}`);

@@ -866,3 +866,96 @@ export const deleteStaffAccount = async (req, res) => {
     res.status(500).json({ message: 'Error deleting staff account', error: error.message });
   }
 };
+
+// Public Registration Flow for self-service signups (with Referral Support)
+export const registerClient = async (req, res) => {
+  try {
+    const { restaurantName, ownerName, email, password, referralCode } = req.body;
+
+    if (!restaurantName || !ownerName || !email || !password) {
+      return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
+
+    // Check if client already exists
+    const existingClient = await Client.findOne({ email });
+    if (existingClient) {
+      return res.status(400).json({ success: false, message: 'An account with this email already exists' });
+    }
+
+    // Generate unique referral code for this new user
+    const newRefCode = 'REF-' + crypto.randomBytes(3).toString('hex').toUpperCase();
+
+    // Prepare client document
+    const newClientData = {
+      restaurantName,
+      ownerName,
+      email,
+      plainTextPassword: password, // As requested in the architecture
+      referralCode: newRefCode
+    };
+
+    let referrerClient = null;
+    let globalSettings = null;
+
+    // Handle Referral Logic
+    if (referralCode) {
+      referrerClient = await Client.findOne({ referralCode });
+      if (referrerClient) {
+        // Fetch Admin Settings for referral rewards
+        const Admin = (await import('../models/Admin.js')).default;
+        globalSettings = await Admin.findOne({ role: 'SuperAdmin' });
+        
+        const refRewardDays = globalSettings?.refereeRewardDays || 7;
+        const referrerRewardDays = globalSettings?.referrerRewardDays || 7;
+
+        newClientData.referredBy = referrerClient._id;
+        newClientData.refereeRewardDays = refRewardDays;
+        newClientData.referrerRewardDays = referrerRewardDays;
+      }
+    }
+
+    // Create Client
+    const newClient = await Client.create(newClientData);
+
+    // Create License with appropriate trial days (Default 14 days + Referee Reward Days if referred)
+    const trialDays = 14 + (newClientData.refereeRewardDays || 0);
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + trialDays);
+    
+    // Generate standard license key format
+    const licenseKey = `MSB-${crypto.randomBytes(4).toString('hex').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+
+    await License.create({
+      key: licenseKey,
+      client: newClient._id,
+      plan: 'Trial',
+      validUntil
+    });
+    
+    newClient.licenseKey = licenseKey;
+    await newClient.save();
+
+    // Apply reward to Referrer (add days to their current license)
+    if (referrerClient && globalSettings) {
+      const referrerLicense = await License.findOne({ client: referrerClient._id });
+      if (referrerLicense) {
+        referrerLicense.validUntil = new Date(referrerLicense.validUntil.getTime() + (newClientData.referrerRewardDays * 24 * 60 * 60 * 1000));
+        await referrerLicense.save();
+      }
+    }
+
+    // Ensure tenant DB is provisioned
+    await provisionTenantUsers(newClient, password);
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Registration successful', 
+      clientId: newClient._id,
+      licenseKey: licenseKey,
+      databaseName: newClient.databaseName
+    });
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ success: false, message: 'Server error during registration', error: error.message });
+  }
+};

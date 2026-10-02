@@ -12,7 +12,8 @@ import {
   deleteClient,
   addStaffAccount,
   updateStaffAccount,
-  deleteStaffAccount
+  deleteStaffAccount,
+  registerClient
 } from '../controllers/clientController.js';
 import { getClientBroadcasts } from '../controllers/broadcastController.js';
 
@@ -35,6 +36,7 @@ router.put('/:id/staff/:staffId', protect, updateStaffAccount);
 router.delete('/:id/staff/:staffId', protect, deleteStaffAccount);
 
 // PUBLIC ROUTES (For POS Client Software)
+router.post('/register', registerClient);
 router.post('/validate', validateLicense);
 router.post('/login', loginClient);
 router.get('/license/:key', getLicenseInfo);

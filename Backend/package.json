@@ -54,7 +54,6 @@
     "redis": "^6.3.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "usb": "^3.1.0",
     "xss": "^1.0.15",
     "xss-clean": "^0.1.4"
   },

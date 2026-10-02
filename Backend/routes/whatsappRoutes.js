@@ -14,7 +14,8 @@ import {
   saveTemplates
 } from '../controllers/whatsappController.js';
 import { tenantApiLimiter, adminLimiter } from '../middleware/rateLimiter.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, optionalAuthenticateToken } from '../middleware/auth.js';
+import { sendReferralInvite } from '../controllers/referralWhatsAppController.js';
 
 const router = express.Router();
 
@@ -30,6 +31,9 @@ router.post('/campaign/log', authenticateToken, tenantApiLimiter, logCampaign);
 router.get('/campaign/history', authenticateToken, tenantApiLimiter, getCampaignHistory);
 router.get('/templates', authenticateToken, tenantApiLimiter, getTemplates);
 router.post('/templates', authenticateToken, tenantApiLimiter, saveTemplates);
+
+// Preserve main's referral route but add rate limiting
+router.post('/send-referral', optionalAuthenticateToken, tenantApiLimiter, sendReferralInvite);
 
 export default router;
 

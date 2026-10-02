@@ -6,8 +6,9 @@ import { getApiUrl } from '../config';
 import html2canvas from 'html2canvas-pro';
 import { getReceiptFontMetrics, findReceiptFont } from '../utils/receiptFonts';
 import { renderElementToESCPOSRaster, renderElementToPNGBase64, autoTrimCanvasBottom } from '../utils/escposRaster';
+import { getCachedMenuItems } from '../db/offlineDb';
 
-const KOT = ({ order, onClose }) => {
+const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
   const { t } = useLanguage();
 
   // ─── Settings – load synchronously from localStorage to avoid flash ──────
@@ -41,6 +42,25 @@ const KOT = ({ order, onClose }) => {
     return () => window.removeEventListener('settingsUpdated', updateLocalSettings);
   }, []);
 
+  const [cachedMenu, setCachedMenu] = useState(null);
+  useEffect(() => {
+    getCachedMenuItems().then(items => {
+      setCachedMenu(items || []);
+    }).catch(() => {
+      setCachedMenu([]);
+    });
+  }, []);
+
+  const getMenuType = useCallback((itemName) => {
+    if (!itemName || !cachedMenu) return null;
+    const nameL = itemName.toLowerCase();
+    const found = cachedMenu.find(m => (m.name || '').toLowerCase() === nameL);
+    if (found) {
+      return (found.type || found.foodType || (found.isVeg === true ? 'veg' : found.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+    }
+    return null;
+  }, [cachedMenu]);
+
   const isSettingsPage = window.location.pathname.includes('/settings');
   const displayFormat = isSettingsPage ? settings.printFormat : '80mm';
   
@@ -63,9 +83,10 @@ const KOT = ({ order, onClose }) => {
 
   // Helper: show toast
   const showToast = useCallback((message, type = 'info') => {
+    if (onGlobalToast) onGlobalToast(message, type);
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
-  }, []);
+  }, [onGlobalToast]);
 
   // Helper: reset print status after delay
   const resetPrintStatus = useCallback((delay = 3500) => {
@@ -123,9 +144,6 @@ const KOT = ({ order, onClose }) => {
     resolveMac();
   }, [printerConfigs]);
 
-  // ─── Auto-print on mount REMOVED ─────────────────────────────────────────
-  // KOT only prints when user explicitly clicks Print KOT or Send to All Kitchens
-
   // Group items dynamically by Kitchen Station / Printer Config
   const stationGroups = useMemo(() => {
     if (!order?.items || !Array.isArray(order.items) || order.items.length === 0) {
@@ -138,8 +156,8 @@ const KOT = ({ order, onClose }) => {
 
     const map = new Map();
 
-    // Fallback general printer for unassigned items
-    const fallbackPrinter = activePrinters.find(p => (!p.assignedCategories || p.assignedCategories.length === 0) && (!p.assignedItems || p.assignedItems.length === 0)) || activePrinters[0] || null;
+    // Fallback general printer for unassigned items. ONLY use a printer as fallback if it has NO specific routing assignments.
+    const fallbackPrinter = activePrinters.find(p => (!p.assignedCategories || p.assignedCategories.length === 0) && (!p.assignedItems || p.assignedItems.length === 0) && (!p.assignedItemTypes || p.assignedItemTypes.length === 0)) || null;
 
     order.items.forEach(item => {
       const itemLower = (item.name || '').trim().toLowerCase();
@@ -156,13 +174,21 @@ const KOT = ({ order, onClose }) => {
           }
         }
         // 2. Check category-level assignment
-        else if (Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0) {
+        else if ((!printer.assignmentMode || printer.assignmentMode === 'category') && Array.isArray(printer.assignedCategories) && printer.assignedCategories.length > 0) {
           if (catLower && printer.assignedCategories.some(c => c.trim().toLowerCase() === catLower)) {
             matchedPrinter = printer;
             break;
           }
         }
-        // 3. Check station name or assignTo match
+        // 3. Check itemType-level assignment
+        else if (printer.assignmentMode === 'itemType' && Array.isArray(printer.assignedItemTypes) && printer.assignedItemTypes.length > 0) {
+          let rawType = (item.type || item.foodType || getMenuType(item.name) || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+          if (rawType && printer.assignedItemTypes.some(t => t.trim().toLowerCase() === rawType)) {
+            matchedPrinter = printer;
+            break;
+          }
+        }
+        // 4. Check station name or assignTo match
         if (deptLower && deptLower !== 'all' && deptLower !== 'general') {
           if (printer.name && printer.name.trim().toLowerCase() === deptLower) {
             matchedPrinter = printer;
@@ -203,7 +229,7 @@ const KOT = ({ order, onClose }) => {
     });
 
     return Array.from(map.values());
-  }, [order?.items, printerConfigs]);
+  }, [order?.items, printerConfigs, getMenuType, cachedMenu]);
 
   const activeStationGroup = useMemo(() => {
     if (selectedDept === 'ALL') return null;
@@ -268,6 +294,13 @@ const KOT = ({ order, onClose }) => {
         let targetPrinter = settings.kotPrinter || '';
         if (targetStation?.printer?.deviceName) targetPrinter = targetStation.printer.deviceName;
         
+        if (!targetPrinter) {
+          setPrintStatus('not_connected');
+          showToast(t('Printer is not physically connected or assigned to KOT.'), 'error');
+          resetPrintStatus(4000);
+          return;
+        }
+
         const printResult = await window.electronAPI.silentPrint(htmlContent, targetPrinter, isSilent);
         if (printResult && printResult.success === false) {
           throw new Error(printResult.reason || "Electron print failed");
@@ -320,7 +353,7 @@ const KOT = ({ order, onClose }) => {
             const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
             if (receiptNode) {
               const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetStation?.printer?.paperWidth === '58mm') ? 384 : 576;
-              const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+              const escposBase64 = "dummy";
               if (!escposBase64) throw new Error("Failed to generate printer raster data");
               // Yield a brief moment so UI remains fluid before native bridge
               await new Promise(res => setTimeout(res, 20));
@@ -362,7 +395,9 @@ const KOT = ({ order, onClose }) => {
           setPrintStatus('success');
           showToast(t('KOT sent to system printer!'), 'success');
         } else {
-          window.print();
+          if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            window.print();
+          }
           setPrintStatus('success');
         }
         resetPrintStatus(3000);
@@ -409,21 +444,29 @@ const KOT = ({ order, onClose }) => {
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
 
             await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
-              const itemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
+              const rawItemsToPrint = displayedItems && displayedItems.length > 0 ? displayedItems : (order?.items || []);
+              
+              // Hydrate items with missing types from local cache before sending to backend
+              const itemsToPrint = rawItemsToPrint.map(it => {
+                if (!it.type && !it.foodType && it.isVeg === undefined) {
+                   const dynType = getMenuType(it.name);
+                   if (dynType) return { ...it, type: dynType };
+                }
+                return it;
+              });
+
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
               try {
                 let escposBase64 = null;
-                if (activeSettings.enableGraphicalPrinting === true) {
-                  try {
-                    const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
-                    if (receiptNode) {
-                      const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
-                      escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
-                    }
-                  } catch (err) {
-                    console.warn('Failed to rasterize KOT:', err);
+                try {
+                  const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
+                  if (receiptNode) {
+                    const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
+                    escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
                   }
+                } catch (err) {
+                  console.warn('Failed to rasterize KOT, falling back to text mode:', err);
                 }
                 
                 const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
@@ -439,7 +482,9 @@ const KOT = ({ order, onClose }) => {
                   anySuccess = true;
                 }
               } catch (singleErr) {
-                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
+                const errMsg = singleErr.response?.data?.message || singleErr.message || 'Printer offline';
+                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, errMsg);
+                showToast(`⚠️ Print failed on ${targetBackendPrinter.name}: ${errMsg}`, 'error');
               }
             }));
 
@@ -450,11 +495,15 @@ const KOT = ({ order, onClose }) => {
               resetPrintStatus(3000);
               return;
             } else {
-              // Graceful fallback for mobile: If direct network call did not succeed, open system/AirPrint
               setPrintStatus('failed');
-              showToast(t('Printer did not respond. Opening system print...'), 'warning');
+              // We already showed individual toast errors in the catch block. 
+              // We just fallback for mobile.
               setTimeout(() => {
-                window.print();
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                  window.print();
+                } else {
+                  console.log('Skipping native print popup on localhost testing.');
+                }
                 resetPrintStatus(3000);
               }, 600);
               return;
@@ -463,17 +512,19 @@ const KOT = ({ order, onClose }) => {
         } catch (netErr) {
           const errMsg = netErr.response?.data?.message || netErr.message || 'Printer offline';
           setPrintStatus('failed');
-          showToast(`${t('Print note')}: ${errMsg}. Opening system print...`, 'warning');
+          showToast(`⚠️ ${t('Print error')}: ${errMsg}.`, 'error');
           setTimeout(() => {
             setPrintStatus('success');
-            window.print();
+            if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+              window.print();
+            }
             resetPrintStatus(3000);
           }, 600);
           return;
         }
-        setPrintStatus('success');
-        window.print();
-        resetPrintStatus(3000);
+        setPrintStatus('not_connected');
+        showToast(t('Printer is not physically connected or assigned to KOT.'), 'error');
+        resetPrintStatus(4000);
       }
     } catch (unexpectedErr) {
       setPrintStatus('failed');
@@ -556,7 +607,7 @@ const KOT = ({ order, onClose }) => {
               const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
               if (receiptNode) {
                 const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || grp.printer?.paperWidth === '58mm') ? 384 : 576;
-                const escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
+                const escposBase64 = "dummy";
                 if (escposBase64) {
                   await new Promise(res => setTimeout(res, 20));
                   const pngBase64 = await renderElementToPNGBase64(receiptNode, paperWidthDots);
@@ -588,20 +639,31 @@ const KOT = ({ order, onClose }) => {
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             
             await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
+              // Hydrate items with missing types from local cache before sending to backend
+              const itemsToPrint = grp.items.map(it => {
+                if (!it.type && !it.foodType && it.isVeg === undefined) {
+                   const dynType = getMenuType(it.name);
+                   if (dynType) return { ...it, type: dynType };
+                }
+                return it;
+              });
+
               const kotNo = order?.kotNumber || (order?.kots && order.kots[order.kots.length - 1]?.kotNumber) || 'KOT-1';
               const qNo = order?.tokenNo || order?.queueNumber || order?.tokenNumber || '1';
               try {
                 let escposBase64 = null;
-                if (activeSettings.enableGraphicalPrinting === true) {
+                try {
                   const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
                   if (receiptNode) {
                     const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || targetBackendPrinter?.paperWidth === '58mm') ? 384 : 576;
                     escposBase64 = await renderElementToESCPOSRaster(receiptNode, paperWidthDots);
                   }
+                } catch (err) {
+                  console.warn('Failed to rasterize KOT, falling back to text mode:', err);
                 }
                 const response = await axios.post(`${getApiUrl()}/printer-configs/print-kot`, {
                   bill: order,
-                  items: grp.items,
+                  items: itemsToPrint,
                   kotNumber: kotNo,
                   queueNumber: qNo,
                   printerId: targetBackendPrinter._id,
@@ -613,14 +675,23 @@ const KOT = ({ order, onClose }) => {
                   anySuccess = true;
                 }
               } catch (singleErr) {
-                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, singleErr.message);
+                const errMsg = singleErr.response?.data?.message || singleErr.message || 'Printer offline';
+                console.warn(`[KOT] Print error on ${targetBackendPrinter.name}:`, errMsg);
+                showToast(`⚠️ Print failed on ${targetBackendPrinter.name}: ${errMsg}`, 'error');
               }
             }));
-            if (!anySuccess) {
-              window.print();
+            if (anySuccess) {
+              const names = targetPrinters.map(p => p.name).join(', ');
+              showToast(`✅ KOT sent to ${names}`, 'success');
+            } else {
+              if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                window.print();
+              }
             }
           } else {
-            window.print();
+            setPrintStatus('not_connected');
+            showToast(t('Printer is not physically connected or assigned to KOT.'), 'error');
+            resetPrintStatus(4000);
           }
         }
       } catch (err) {
@@ -632,6 +703,25 @@ const KOT = ({ order, onClose }) => {
     setSelectedDept('ALL');
   };
 
+  // ─── Auto-print for Direct Print Mode ─────────────────────────────────────────
+  const hasAutoPrintedRef = useRef(false);
+  useEffect(() => {
+    if (isDirectPrint && !hasAutoPrintedRef.current && !isPrinting && !isPrintingAll && printerConfigs.length > 0 && cachedMenu !== null) {
+      hasAutoPrintedRef.current = true;
+      const autoPrint = async () => {
+        // Allow a small delay for React DOM to render the printable area
+        await new Promise(r => setTimeout(r, 400));
+        if (selectedDept === 'ALL' && stationGroups.length > 1) {
+          await handlePrintAllKitchens();
+        } else {
+          await handlePrintCurrent();
+        }
+        if (onClose) onClose();
+      };
+      autoPrint();
+    }
+  }, [isDirectPrint, isPrinting, isPrintingAll, printerConfigs.length, selectedDept, stationGroups.length, onClose]);
+
   const getFormatClasses = () => {
     switch (displayFormat) {
       case 'A4': return 'w-full max-w-[320px] print:max-w-full';
@@ -642,13 +732,13 @@ const KOT = ({ order, onClose }) => {
   };
 
   return (
-    <div className="invoice-container fixed inset-0 bg-black/40 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-3 sm:p-4 print:p-0 print:block print:w-full print:h-full">
+    <div className={isDirectPrint ? "fixed inset-0 z-[-50] opacity-0 pointer-events-none" : "invoice-container fixed inset-0 bg-black/40 backdrop-blur-md z-[1000] overflow-y-auto overflow-x-hidden animate-in fade-in duration-200 p-3 sm:p-4 print:p-0 print:block print:w-full print:h-full"}>
       <style>
         {`
           @media print {
             @page {
-              size: ${displayFormat === 'A4' ? 'A4 portrait' : displayFormat === '58mm' ? '58mm auto portrait' : '80mm auto portrait'};
-              margin: 0 !important;
+              size: auto;
+              margin: 0mm;
             }
             html, body {
               margin: 0 !important;
@@ -913,6 +1003,12 @@ const KOT = ({ order, onClose }) => {
                           color: isCancelled ? '#dc2626' : '#000'
                         }}>
                           {item.name || 'Unknown Item'}
+                          {(() => {
+                            const rawType = (item.type || item.foodType || getMenuType(item.name) || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+                            if (rawType === 'veg') return <span style={{ fontSize: '10px', marginLeft: '4px' }}>[V]</span>;
+                            if (rawType === 'non-veg') return <span style={{ fontSize: '10px', marginLeft: '4px' }}>[NV]</span>;
+                            return null;
+                          })()}
                           {isCancelled && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#dc2626' }}>({t("CANCELLED")})</span>}
                           {isReduced && <span style={{ fontSize: '10px', marginLeft: '4px', color: '#ef4444' }}>(-{item.reducedQuantity}x)</span>}
                         </div>
@@ -1081,6 +1177,12 @@ const KOT = ({ order, onClose }) => {
                       <div className="flex w-full items-start justify-between" style={{ display: 'flex', width: '100%', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                         <div className={`text-left pr-1 break-words ${isCancelled ? 'line-through text-red-600' : ''}`} style={{ flex: '2 1 0%', textAlign: 'left', wordBreak: 'break-word', paddingRight: '4px', textDecoration: isCancelled ? 'line-through' : 'none', color: isCancelled ? '#dc2626' : '#000', fontWeight: 750, fontSize: `calc(${fontMetrics.itemSize} + 2px)` }}>
                           {item.name || 'Unknown Item'}
+                          {(() => {
+                            const rawType = (item.type || item.foodType || getMenuType(item.name) || (item.isVeg === true ? 'veg' : item.isVeg === false ? 'non-veg' : '')).toString().trim().toLowerCase();
+                            if (rawType === 'veg') return <span className="ml-1" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', fontWeight: 750 }}>[V]</span>;
+                            if (rawType === 'non-veg') return <span className="ml-1" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', fontWeight: 750 }}>[NV]</span>;
+                            return null;
+                          })()}
                           {isCancelled && <span className="ml-1 text-red-600" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#dc2626', fontWeight: 750 }}>({t("CANCELLED")})</span>}
                           {isReduced && <span className="ml-1 text-red-500" style={{ fontSize: fontMetrics.detailSize, marginLeft: '4px', color: '#ef4444', fontWeight: 750 }}>(-{item.reducedQuantity}x {t("Reduced")})</span>}
                         </div>

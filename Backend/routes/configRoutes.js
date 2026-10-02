@@ -1,5 +1,5 @@
 import express from 'express';
-import { setupDatabase, resetLicense, getRestaurantInfo, updateRestaurantInfo, syncUsersFromSuperAdmin, getSecuritySettings, updateSecuritySettings, verifyPin } from '../controllers/configController.js';
+import { setupDatabase, resetLicense, getRestaurantInfo, updateRestaurantInfo, syncUsersFromSuperAdmin, getSecuritySettings, updateSecuritySettings, verifyPin, getReferralHistory } from '../controllers/configController.js';
 
 const router = express.length ? express.Router() : express.Router();
 
@@ -21,6 +21,9 @@ router.post('/info', authenticateToken, tenantApiLimiter, updateRestaurantInfo);
 router.get('/security', authenticateToken, tenantApiLimiter, getSecuritySettings);
 router.post('/security', authenticateToken, tenantApiLimiter, updateSecuritySettings);
 router.post('/verify-pin', authenticateToken, tenantApiLimiter, verifyPin);
+
+// Referral History
+router.get('/referrals/history', authenticateToken, getReferralHistory);
 
 // Sync users and passwords silently from SuperAdmin in the background
 router.post('/sync-users', authenticateToken, tenantApiLimiter, syncUsersFromSuperAdmin);

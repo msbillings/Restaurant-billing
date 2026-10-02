@@ -19,6 +19,7 @@ const billSchema = new mongoose.Schema({
   items: [{
     name: String,
     category: { type: mongoose.Schema.Types.Mixed },
+    type: { type: String },
     price: { type: Number, min: [0, 'Price cannot be negative'] },
     quantity: { type: Number, min: [0, 'Quantity cannot be negative'] },
     printedQuantity: {

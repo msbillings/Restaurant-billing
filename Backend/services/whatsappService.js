@@ -497,10 +497,7 @@ class WhatsAppService {
     let jid = `${cleanPhone}@s.whatsapp.net`;
 
     try {
-      const result = await Promise.race([
-        this.sock.sendMessage(jid, { text: String(text) }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Message send timed out on WhatsApp server')), 15000))
-      ]);
+      const result = await this.sock.sendMessage(jid, { text: String(text) });
       return result;
     } catch (sendErr) {
       console.warn('[WhatsApp Diagnostics] Send message warning:', sendErr?.message || sendErr);
@@ -523,10 +520,7 @@ class WhatsAppService {
           await this.ensureConnection(true);
           await new Promise(r => setTimeout(r, 1500));
           if (this.sock && isSocketOpen(this.sock)) {
-            return await Promise.race([
-              this.sock.sendMessage(jid, { text: String(text) }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Message send timed out on retry')), 20000))
-            ]);
+            return await this.sock.sendMessage(jid, { text: String(text) });
           }
         } catch (retryErr) {
           console.warn('[WhatsApp Diagnostics] Retry text send error:', retryErr?.message);
@@ -716,10 +710,7 @@ Thank you for visiting!`;
     try {
       const timeoutMs = isImage ? 35000 : 40000;
       console.log(`[sendBillMedia] Calling sock.sendMessage | timeoutMs=${timeoutMs}...`);
-      const result = await Promise.race([
-        this.sock.sendMessage(jid, messagePayload),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Media send timed out on WhatsApp server')), timeoutMs))
-      ]);
+      const result = await this.sock.sendMessage(jid, messagePayload);
       console.log(`[sendBillMedia] ✅ sock.sendMessage succeeded! messageID=${result?.key?.id || 'N/A'}`);
       return result;
     } catch (sendErr) {
@@ -762,28 +753,14 @@ Thank you for visiting!`;
           if (this.sock && isSocketOpen(this.sock)) {
             const retryTimeoutMs = isImage ? 40000 : 50000;
             console.log(`[sendBillMedia] Retry attempt | retryTimeoutMs=${retryTimeoutMs}...`);
-            const retryResult = await Promise.race([
-              this.sock.sendMessage(jid, messagePayload),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Media send timed out on retry')), retryTimeoutMs))
-            ]);
+            const retryResult = await this.sock.sendMessage(jid, messagePayload);
             console.log(`[sendBillMedia] ✅ Retry succeeded! messageID=${retryResult?.key?.id || 'N/A'}`);
             return retryResult;
-          } else if (caption) {
-            console.warn('[sendBillMedia] Socket not open for media retry — attempting fallback text bill send...');
-            return await this.sendMessage(rawPhone, caption);
           } else {
             throw new Error('WhatsApp socket not ready after reconnect. Please try again in a few seconds.');
           }
         } catch (retryErr) {
           console.error(`[sendBillMedia] ❌ Retry FAILED: ${retryErr?.message}`);
-          if (caption) {
-            console.warn('[sendBillMedia] Media retry errored — attempting fallback text bill send...');
-            try {
-              return await this.sendMessage(rawPhone, caption);
-            } catch (fallbackErr) {
-              console.error('[sendBillMedia] Text fallback also failed:', fallbackErr?.message);
-            }
-          }
           throw retryErr;
         }
       }

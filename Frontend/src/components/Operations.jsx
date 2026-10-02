@@ -4,7 +4,7 @@ import {
   LayoutGrid, RefreshCw, HelpCircle, MonitorPlay, IndianRupee, Languages, UserCog,
   MessageSquarePlus, Truck, Monitor, Smartphone,
   UtensilsCrossed, Printer, Percent, Tags, MonitorSmartphone, Settings as SettingsIcon,
-  Globe, ToggleLeft, Clock, ListChecks, Shield, Lock, Award, LineChart, Search, X, SearchX, Store } from
+  Globe, ToggleLeft, Clock, ListChecks, Shield, Lock, Award, LineChart, Search, X, SearchX, Store, Gift } from
 'lucide-react';
 import BackButton from './common/BackButton';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
@@ -55,6 +55,7 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
   { id: 'menu-toggle', name: t('Menu Item On Off'), icon: ToggleLeft },
   { id: 'renewal', name: t('Service Renewal'), icon: Clock },
   { id: 'custom-status', name: t('Custom Order Status'), icon: ListChecks },
+  { id: 'refer-and-earn', name: t('Refer & Earn'), icon: Gift },
   { id: 'security', name: t('Security & PINs'), icon: Lock }];
 
 
@@ -64,7 +65,7 @@ const Operations = ({ onNavigate, onGoBack, userRole }) => {const { t } = useLan
       return;
     }
     // Navigate to actual pages if they exist, otherwise just ignore or show coming soon
-    const implementedRoutes = ['billing', 'kothistory', 'crm', 'daybook', 'expenses', 'inventory', 'floor', 'staff', 'delivery', 'kds', 'menu', 'settings', 'tax', 'discount', 'withdrawal', 'cash-topup', 'due-payment', 'reservation', 'feedback', 'push-orders', 'bill-print', 'online-config', 'zomato-swiggy', 'online-orders', 'sync', 'admin', 'notification', 'help', 'live-view', 'language', 'currency', 'billing-screen', 'menu-toggle', 'renewal', 'custom-status', 'loyalty', 'forecasting', 'security'];
+    const implementedRoutes = ['billing', 'kothistory', 'crm', 'daybook', 'expenses', 'inventory', 'floor', 'staff', 'delivery', 'kds', 'menu', 'settings', 'tax', 'discount', 'withdrawal', 'cash-topup', 'due-payment', 'reservation', 'feedback', 'push-orders', 'bill-print', 'online-config', 'zomato-swiggy', 'online-orders', 'sync', 'admin', 'notification', 'help', 'live-view', 'language', 'currency', 'billing-screen', 'menu-toggle', 'renewal', 'custom-status', 'loyalty', 'forecasting', 'security', 'refer-and-earn'];
     if (implementedRoutes.includes(id)) {
       onNavigate(id);
     } else {

@@ -21,7 +21,7 @@ const printerConfigSchema = new mongoose.Schema({
   },
   assignmentMode: {
     type: String,
-    enum: ['category', 'item'],
+    enum: ['category', 'item', 'itemType'],
     default: 'category'
   },
   assignedCategories: [{
@@ -29,6 +29,10 @@ const printerConfigSchema = new mongoose.Schema({
     trim: true
   }],
   assignedItems: [{
+    type: String,
+    trim: true
+  }],
+  assignedItemTypes: [{
     type: String,
     trim: true
   }],

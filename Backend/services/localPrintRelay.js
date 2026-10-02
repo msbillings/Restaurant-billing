@@ -10,7 +10,7 @@
  */
 import { io } from 'socket.io-client';
 import { sendRawToNetworkPrinter, sendRawToUSBPrinter, generateKOTESCPOSBuffer, generateESCPOSBillReceipt } from './printerService.js';
-import { sendRawToBluetoothPrinter } from './usbPrinterService.js';
+import { sendRawToBluetoothPrinter } from './print/connections/bluetooth.js';
 
 // Cache recent job IDs to prevent duplicate prints
 const recentJobs = new Set();

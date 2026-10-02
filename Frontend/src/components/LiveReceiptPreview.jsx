@@ -173,7 +173,7 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               backgroundColor: '#ffffff'
             }}>
             {/* Logo */}
-            {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false) && (
+            {Boolean(settings.logo && settings.logo !== '[logo_stored]' && settings.showLogo !== false && fmt !== '58mm') && (
               <div className="flex justify-center mb-1">
                 <img
                   src={settings.logo}
@@ -190,6 +190,11 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               <div style={{ fontSize: previewMetrics.headingSize, fontWeight: 'bold', lineHeight: '1.15', textTransform: 'uppercase' }}>
                 {settings.restaurantName || 'ANAND\'S RESTAURANT'}
               </div>
+              {settings.restaurantType && (
+                <div style={{ fontSize: previewMetrics.detailSize, fontWeight: 600, marginTop: '2px', lineHeight: '1.2' }}>
+                  {settings.restaurantType}
+                </div>
+              )}
               <div style={{ fontSize: previewMetrics.detailSize, marginTop: '2px', lineHeight: '1.25', color: '#000000' }}>
                 {(settings.address || '123, Flavor Avenue, Banjara Hills, Hyderabad, Telangana 500034').split('\n').map((line, i) => (
                   <div key={i}>{line}</div>
@@ -307,7 +312,7 @@ const LiveReceiptPreview = ({ settings, previewTab, t, user, menuPreviewItems, o
               {t("Paid via Cash")}
             </div>
 
-            {settings.enableQrPayment !== false && (settings.upiId || '').trim() && (
+            {settings.enableQrPayment !== false && (settings.upiId || '').trim() && fmt !== '58mm' && (
               <div style={{ textAlign: 'center', margin: '5px 0' }}>
                 <div style={{ fontSize: '10px', fontWeight: 'bold', marginBottom: '2px' }}>
                   {t("SCAN TO PAY VIA UPI")}
