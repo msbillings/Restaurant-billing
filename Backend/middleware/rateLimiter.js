@@ -33,7 +33,6 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler,
-  keyGenerator: (req) => req.ip,
   store: createRedisStore('ratelimit:auth:ip:'),
   passOnStoreError: false, // FAIL CLOSED
 });
