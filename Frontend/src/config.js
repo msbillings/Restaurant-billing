@@ -42,12 +42,6 @@ export const cleanSuperadminUrl = (url) => {
 };
 
 export const getApiUrl = () => {
-    // 1. Electron Desktop EXE — always use localhost backend
-    if (isElectronApp()) {
-        return 'http://127.0.0.1:5002/api';
-    }
-
-    // 2. If a local server IP is stored (for Android APK / iOS IPA / LAN devices on Wi-Fi)
     const storedIp = typeof localStorage !== 'undefined' ? localStorage.getItem('resto_server_ip') : null;
     if (storedIp && storedIp.trim()) {
         const cleanIp = storedIp.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
@@ -57,29 +51,35 @@ export const getApiUrl = () => {
         return cleanApiUrl(`http://${cleanIp}:5002`);
     }
 
-    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    const isVercelHost = typeof window !== 'undefined' && host && host.includes('vercel.app');
+    const envUrl = import.meta.env.VITE_API_URL;
 
-    // 3. If running directly on Vercel cloud domain
-    if (isVercelHost) {
-        let envUrl = import.meta.env.VITE_API_URL;
-        if (envUrl && envUrl.startsWith('https://')) {
+    // 1. Electron Desktop EXE
+    if (isElectronApp()) {
+        if (envUrl) {
             return cleanApiUrl(envUrl);
         }
-        throw new Error("FATAL: VITE_API_URL is missing in Vercel environment. Production fallback is disabled for safety.");
+        return 'http://127.0.0.1:5002/api';
     }
 
-    // 4. Capacitor APK/IPA native mobile app without a stored IP — fallback to cloud URL
+    // 2. Capacitor APK/IPA native mobile app
     if (isCapacitorApp()) {
-        let envUrl = import.meta.env.VITE_API_URL;
-        if (envUrl && envUrl.startsWith('https://')) {
+        if (envUrl) {
             return cleanApiUrl(envUrl);
         }
         throw new Error("FATAL: VITE_API_URL is missing in Capacitor build. Production fallback is disabled for safety.");
     }
 
-    // 5. Local development or local LAN Wi-Fi IP
-    let envUrl = import.meta.env.VITE_API_URL;
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isVercelHost = typeof window !== 'undefined' && host && host.includes('vercel.app');
+
+    // 3. Web Environment
+    if (isVercelHost) {
+        if (envUrl) {
+            return cleanApiUrl(envUrl);
+        }
+        throw new Error("FATAL: VITE_API_URL is missing in Vercel environment. Production fallback is disabled for safety.");
+    }
+
     if (envUrl) {
         if (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')) {
             if (host && host !== 'localhost' && host !== '127.0.0.1') {
@@ -102,8 +102,16 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
+    const envUrl = import.meta.env.VITE_API_URL;
+
     if (isElectronApp() || isCapacitorApp()) {
-        return 'https://msbillings-backend-x9qw.onrender.com';
+        if (envUrl) {
+            return cleanSuperadminUrl(envUrl);
+        }
+        if (isElectronApp()) {
+            return 'http://127.0.0.1:4001';
+        }
+        throw new Error("FATAL: VITE_API_URL is missing for SuperAdmin in mobile build. Production fallback is disabled for safety.");
     }
 
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
@@ -111,12 +119,11 @@ export const getSuperadminApiUrl = () => {
         return 'http://localhost:4001';
     }
 
-    // Default: Must have VITE_API_URL for SuperAdmin
-    let envUrl = import.meta.env.VITE_API_URL;
     if (envUrl) {
         return cleanSuperadminUrl(envUrl);
     }
-        throw new Error("FATAL: VITE_API_URL is missing for SuperAdmin. Production fallback is disabled for safety.");
+
+    throw new Error("FATAL: VITE_API_URL is missing for SuperAdmin. Production fallback is disabled for safety.");
 };
 
 export const getSocketUrl = () => {
