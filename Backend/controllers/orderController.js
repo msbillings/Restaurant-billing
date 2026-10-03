@@ -46,11 +46,11 @@ export const generateUniqueBillNumber = async (BillModel) => {
   try {
     const result = await BillModel.aggregate([
       { $match: { billNumber: /^ms\d+$/i } },
-      { 
-        $project: { 
+      {
+        $project: {
           billNumber: 1,
           strLen: { $strLenCP: "$billNumber" }
-        } 
+        }
       },
       // Sort by length first (MS1000 > MS999), then lexically for ties
       { $sort: { strLen: -1, billNumber: -1 } },
@@ -64,7 +64,7 @@ export const generateUniqueBillNumber = async (BillModel) => {
         maxNum = BigInt(digits);
       }
     }
-    
+
     return `MS${(maxNum + 1n).toString().padStart(4, '0')}`;
   } catch (err) {
     console.error('Error in generateUniqueBillNumber aggregation:', err);
@@ -74,7 +74,7 @@ export const generateUniqueBillNumber = async (BillModel) => {
         { billNumber: /^ms\d+$/i },
         { billNumber: 1 }
       ).lean();
-      
+
       let maxNum = 0n;
       for (const b of candidateBills) {
         if (b && b.billNumber) {
@@ -606,7 +606,7 @@ export const saveOrder = async (req, res) => {
 
       if (!order.queueNumber) {
         try {
-          const activeCount = await Bill.countDocuments({ 
+          const activeCount = await Bill.countDocuments({
             status: { $in: ['Open', 'Billed'] },
             'kots.0': { $exists: true }
           });
@@ -1166,84 +1166,57 @@ export const settleBill = async (req, res) => {
       order.billNumber = await generateUniqueBillNumber(Bill);
     }
 
-    // Save the bill with version retry protection & duplicate key retry protection
+    // Save the bill with atomic conditional state transition protection
     let saveSuccess = false;
-    let attempts = 0;
-    while (!saveSuccess && attempts < 15) { // Increased max attempts to 15
-      attempts++;
-      try {
-        await order.save();
-        saveSuccess = true;
-      } catch (saveErr) {
-        const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
-        if (isDupKey && attempts < 15) { // Increased attempts to handle multiple skips
-          console.warn(`[settleBill] Duplicate billNumber ${order.billNumber} detected (attempt ${attempts}), regenerating...`);
-          const numMatch = (order.billNumber || '').match(/^MS(\d+)$/i);
-          if (numMatch) {
-             const nextNum = parseInt(numMatch[1], 10) + 1;
-             order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
-          } else {
-             order.billNumber = `MS${Date.now().toString().slice(-6)}`; // Fallback to timestamp if pattern fails
-          }
-          continue;
-        }
 
-        if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document found')) {
-          console.warn('[settleBill] VersionError caught, retrying on fresh document...');
-          const freshOrder = await Bill.findById(order._id);
-          if (freshOrder) {
-            freshOrder.status = paymentMode === 'Unpaid' ? 'Unpaid' : 'Paid';
-            freshOrder.paymentMode = paymentMode === 'Unpaid' ? undefined : paymentMode;
-            if (upiApp) freshOrder.upiApp = upiApp;
-            if (amountPaid !== undefined) {
-              freshOrder.amountPaid = Number(amountPaid) || 0;
-              freshOrder.changeAmount = changeAmount !== undefined ? Number(changeAmount) || 0 : Math.max(0, (Number(amountPaid) || 0) - (freshOrder.total || 0));
+    if (order.isNew) {
+      let attempts = 0;
+      while (!saveSuccess && attempts < 15) {
+        attempts++;
+        try {
+          await order.save();
+          saveSuccess = true;
+        } catch (saveErr) {
+          const isDupKey = saveErr.code === 11000 || saveErr.message?.includes('E11000') || saveErr.message?.includes('duplicate key');
+          if (isDupKey && attempts < 15) {
+            console.warn(`[settleBill] Duplicate billNumber ${order.billNumber} detected, regenerating...`);
+            const numMatch = (order.billNumber || '').match(/^MS(\d+)$/i);
+            if (numMatch) {
+               const nextNum = parseInt(numMatch[1], 10) + 1;
+               order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
+            } else {
+               order.billNumber = `MS${Date.now().toString().slice(-6)}`;
             }
-            if (paymentMode === 'Mixed' && splitPayments) {
-              freshOrder.splitPayments = {
-                cash: Number(splitPayments.cash) || 0,
-                upi: Number(splitPayments.upi) || 0,
-                card: Number(splitPayments.card) || 0
-              };
-            }
-            if (walletRedemption !== undefined) {
-              freshOrder.walletRedemption = Math.max(0, Number(walletRedemption) || 0);
-            }
-            freshOrder.updatedAt = new Date();
-            if (!freshOrder.billNumber) freshOrder.billNumber = order.billNumber;
-            if (order.restaurantDetails && !freshOrder.restaurantDetails) {
-              freshOrder.restaurantDetails = order.restaurantDetails;
-            }
-            if (order.settledAt && !freshOrder.settledAt) {
-              freshOrder.settledAt = order.settledAt;
-            }
-            if (order.billedAt && !freshOrder.billedAt) {
-              freshOrder.billedAt = order.billedAt;
-            }
-            try {
-              await freshOrder.save();
-              order = freshOrder;
-              saveSuccess = true;
-            } catch (freshSaveErr) {
-              const freshDup = freshSaveErr.code === 11000 || freshSaveErr.message?.includes('E11000') || freshSaveErr.message?.includes('duplicate key');
-              if (freshDup && attempts < 15) { // Increased attempts
-                console.warn(`[settleBill] Duplicate billNumber on retry ${freshOrder.billNumber}, regenerating...`);
-                const numMatch = (freshOrder.billNumber || '').match(/^MS(\d+)$/i);
-                if (numMatch) {
-                   const nextNum = parseInt(numMatch[1], 10) + 1;
-                   order.billNumber = `MS${nextNum.toString().padStart(4, '0')}`;
-                } else {
-                   order.billNumber = `MS${Date.now().toString().slice(-6)}`;
-                }
-                continue;
-              }
-              throw freshSaveErr;
-            }
+            continue;
           }
-        } else {
           throw saveErr;
         }
       }
+    } else {
+      // ATOMIC CLAIM: Ensure bill is still unsettled before claiming it
+      const $set = {};
+      const modifiedPaths = order.modifiedPaths();
+      for (const path of modifiedPaths) {
+        $set[path] = order.get(path);
+      }
+
+      const updatedOrder = await Bill.findOneAndUpdate(
+        { _id: order._id, status: { $in: ['Open', 'Billed'] } },
+        { $set },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedOrder) {
+        // Claim failed! Either it was deleted or settled by another request.
+        const freshOrder = await Bill.findById(order._id);
+        if (freshOrder && (freshOrder.status === 'Paid' || freshOrder.status === 'Unpaid')) {
+          console.log(`[settleBill] Bill ${freshOrder.billNumber} already settled by concurrent request. Skipping duplicate settlement.`);
+          return res.json(freshOrder);
+        }
+        return res.status(409).json({ message: 'Order was modified concurrently and could not be settled.' });
+      }
+      order = updatedOrder;
+      saveSuccess = true;
     }
 
     // ---- KHATA (CREDIT) LOGIC ----
@@ -1252,27 +1225,28 @@ export const settleBill = async (req, res) => {
         const CreditAccount = getTenantModel(req, 'CreditAccount', CreditAccountDefault);
         const finalPhone = order.customerPhone || customerPhone;
         const finalName = order.customerName || customerName || 'Unknown Customer';
-        
-        let account = await CreditAccount.findOne({ phoneNumber: finalPhone });
-        
-        if (!account) {
-          account = new CreditAccount({
-            customerName: finalName,
-            phoneNumber: finalPhone,
-            balance: 0,
-            transactions: []
-          });
-        }
-        
-        account.transactions.push({
-          type: 'credit',
-          amount: order.total || 0,
-          billId: order._id,
-          note: `Unpaid Bill #${order.billNumber || ''}`
-        });
-        
-        account.balance += (order.total || 0);
-        await account.save();
+
+        // CRITICAL DATA CONSISTENCY FIX: Use atomic findOneAndUpdate instead of save() to prevent concurrent double deductions
+        await CreditAccount.findOneAndUpdate(
+          { phoneNumber: finalPhone },
+          {
+            $setOnInsert: {
+              customerName: finalName,
+              phoneNumber: finalPhone
+            },
+            $inc: { balance: order.total || 0 },
+            $push: {
+              transactions: {
+                type: 'credit',
+                amount: order.total || 0,
+                billId: order._id,
+                note: `Unpaid Bill #${order.billNumber || ''}`,
+                date: new Date()
+              }
+            }
+          },
+          { upsert: true, new: true }
+        );
         console.log(`[Khata] Added ${order.total} to ${finalPhone}'s account.`);
       } catch (err) {
         console.error('[Khata] Error updating Credit Account:', err);
@@ -1513,7 +1487,7 @@ export const reopenOrder = async (req, res) => {
     }
 
     bill.status = 'Open';
-    // Clear the bill number so it's regenerated when they finalize? 
+    // Clear the bill number so it's regenerated when they finalize?
     // No, standard POS practice is to keep the same bill number and just update the amount.
 
     await bill.save();
@@ -1587,7 +1561,7 @@ export const clearUnpaidBill = async (req, res) => {
     const Bill = getTenantModel(req, 'Bill', BillDefault);
     const { id } = req.params;
     const { paymentMode, splitPayments, upiApp, amountPaid, changeAmount } = req.body;
-    
+
     if (!paymentMode) {
       return res.status(400).json({ message: 'Payment mode is required to clear an unpaid bill.' });
     }
@@ -1606,7 +1580,7 @@ export const clearUnpaidBill = async (req, res) => {
     if (upiApp) order.upiApp = upiApp;
     if (amountPaid !== undefined) order.amountPaid = amountPaid;
     if (changeAmount !== undefined) order.changeAmount = changeAmount;
-    
+
     order.clearedAt = new Date();
     order.updatedAt = new Date();
 

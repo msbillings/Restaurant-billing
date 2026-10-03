@@ -993,28 +993,23 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     };
     window.addEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
 
-    // 5-Second polling to guarantee real-time bill summary UI updates.
-    // Uses refs for modal state so the interval is NOT torn down on every modal open/close.
-    const pollInterval = setInterval(() => {
-      // Pause polling if the user is currently viewing the invoice or payment modal
-      if (showInvoiceRef.current || showPaymentRef.current || isViewingInvoiceRef.current) return;
-
+    // Socket.IO Reconnect State Reconciliation
+    // Ensures UI doesn't become stale after a network drop/sleep, replacing the need for aggressive 5-second polling.
+    const unsubReconnect = realtimeService.subscribe('reconnect', () => {
+      console.log('[BillingPage] Socket reconnected — reconciling state...');
+      fetchOpenOrdersList();
       if (activeTable) {
-        // If user has unsaved cart items or pending local edits, NEVER fetch or overwrite activeTable!
         const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
         if (!hasLocalCart) {
           fetchActiveOrder(activeTable, false, true);
         }
       }
-      fetchOpenOrdersList();
-    }, 5000);
+    });
 
     return () => {
       window.removeEventListener('remoteOrderUpdated', handleRemoteOrderUpdate);
-      clearInterval(pollInterval);
+      unsubReconnect();
     };
-    // Note: showInvoice/showPayment intentionally removed from deps — refs are used instead
-    // to prevent the interval from being torn down and causing a loading flash on modal toggle.
   }, [activeTable]);
 
   useEffect(() => {

@@ -108,5 +108,7 @@ menuSchema.index({ isAvailable: 1 });
 menuSchema.index({ category: 1 });
 menuSchema.index({ name: 1 });
 menuSchema.index({ isAvailable: 1, category: 1 });
+menuSchema.index({ createdAt: -1, updatedAt: -1 }); // Optimizes menuController's un-indexed sort
+
 
 export default mongoose.model('Menu', menuSchema);
