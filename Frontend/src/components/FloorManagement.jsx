@@ -412,6 +412,15 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
     localStorage.setItem('msbillings_spaces', JSON.stringify(floors));
   }, [floors]);
 
+  // Debounce timer for Socket.IO realtime event request coalescing
+  const realtimeDebounceTimer = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (realtimeDebounceTimer.current) clearTimeout(realtimeDebounceTimer.current);
+    };
+  }, []);
+
   useEffect(() => {
     // 1. Instant Cache Load (0ms delay)
     getCachedOpenOrders().then((cached) => {
@@ -483,8 +492,11 @@ const FloorManagement = ({ onNavigate, onGoBack }) => {
           });
         }
       }
-      fetchOrders();
-      syncSpaces();
+      if (realtimeDebounceTimer.current) clearTimeout(realtimeDebounceTimer.current);
+      realtimeDebounceTimer.current = setTimeout(() => {
+        fetchOrders();
+        syncSpaces();
+      }, 250);
     };
 
     const handleBillSettledEvent = (data) => {

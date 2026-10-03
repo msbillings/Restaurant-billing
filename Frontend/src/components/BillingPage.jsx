@@ -236,6 +236,31 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   const showInvoiceRef = useRef(false);
   const showPaymentRef = useRef(false);
 
+  // Debounce timers for Socket.IO realtime event request coalescing
+  const openOrdersDebounceTimer = useRef(null);
+  const activeOrderDebounceTimer = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (openOrdersDebounceTimer.current) clearTimeout(openOrdersDebounceTimer.current);
+      if (activeOrderDebounceTimer.current) clearTimeout(activeOrderDebounceTimer.current);
+    };
+  }, []);
+
+  const triggerDebouncedOpenOrdersFetch = () => {
+    if (openOrdersDebounceTimer.current) clearTimeout(openOrdersDebounceTimer.current);
+    openOrdersDebounceTimer.current = setTimeout(() => {
+      fetchOpenOrdersList();
+    }, 250);
+  };
+
+  const triggerDebouncedActiveOrderFetch = (table, forceReset, isBackground) => {
+    if (activeOrderDebounceTimer.current) clearTimeout(activeOrderDebounceTimer.current);
+    activeOrderDebounceTimer.current = setTimeout(() => {
+      fetchActiveOrder(table, forceReset, isBackground);
+    }, 250);
+  };
+
   useEffect(() => {
     // Instant cache load (0ms delay)
     getCachedOpenOrders().then((cached) => {
@@ -249,7 +274,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
 
     // Listen for real-time events via singleton RealtimeService
     const handleRealtimeUpdate = (data) => {
-      fetchOpenOrdersList();
+      triggerDebouncedOpenOrdersFetch();
       if (data && data.tableNo) {
         window.dispatchEvent(new CustomEvent('remoteOrderUpdated', { detail: data }));
       } else {
@@ -262,11 +287,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     const unsubItemCancellationReq = realtimeService.subscribe('itemCancellationRequested', handleRealtimeUpdate);
     const unsubKotUpdated = realtimeService.subscribe('kotUpdated', handleRealtimeUpdate);
     const unsubPrepTimeUpdated = realtimeService.subscribe('prepTimeUpdated', handleRealtimeUpdate);
-    const unsubBillSettled = realtimeService.subscribe('billSettled', fetchOpenOrdersList);
-    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', fetchOpenOrdersList);
+    const unsubBillSettled = realtimeService.subscribe('billSettled', triggerDebouncedOpenOrdersFetch);
+    const unsubTableStatusChanged = realtimeService.subscribe('tableStatusChanged', triggerDebouncedOpenOrdersFetch);
     const unsubNewKOT = realtimeService.subscribe('newKOT', handleRealtimeUpdate);
     const unsubReservationUpdated = realtimeService.subscribe('reservationUpdated', () => {
-      fetchOpenOrdersList();
+      triggerDebouncedOpenOrdersFetch();
       fetchReservations();
     });
 
@@ -997,11 +1022,11 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
     // Ensures UI doesn't become stale after a network drop/sleep, replacing the need for aggressive 5-second polling.
     const unsubReconnect = realtimeService.subscribe('reconnect', () => {
       console.log('[BillingPage] Socket reconnected — reconciling state...');
-      fetchOpenOrdersList();
+      triggerDebouncedOpenOrdersFetch();
       if (activeTable) {
         const hasLocalCart = hasPendingLocalChanges.current || (cartRef.current && cartRef.current.length > 0);
         if (!hasLocalCart) {
-          fetchActiveOrder(activeTable, false, true);
+          triggerDebouncedActiveOrderFetch(activeTable, false, true);
         }
       }
     });
@@ -1037,7 +1062,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
             })
           );
         }
-        fetchActiveOrder(activeTable, false, true);
+        triggerDebouncedActiveOrderFetch(activeTable, false, true);
       }
     };
 

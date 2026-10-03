@@ -65,6 +65,14 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('All'); // 'All', 'Dine-In', 'Takeaway', 'Delivery'
 
+  // Debounce timer for Socket.IO realtime event request coalescing
+  const realtimeDebounceTimer = useRef(null);
+  useEffect(() => {
+    return () => {
+      if (realtimeDebounceTimer.current) clearTimeout(realtimeDebounceTimer.current);
+    };
+  }, []);
+
   // Compute filtered + per-type counts early so the header badge is always dynamic
   const filteredOrders = orders.filter((o) => {
     if (!o) return false;
@@ -115,7 +123,10 @@ const ActiveOrders = ({ onSelectOrder, onNavigate, onGoBack }) => {
           return [data.order, ...prev];
         });
       }
-      fetchOrders(true);
+      if (realtimeDebounceTimer.current) clearTimeout(realtimeDebounceTimer.current);
+      realtimeDebounceTimer.current = setTimeout(() => {
+        fetchOrders(true);
+      }, 250);
     };
 
     const unsubOrderUpdated = realtimeService.subscribe('orderUpdated', handleRealtimeOrders);
