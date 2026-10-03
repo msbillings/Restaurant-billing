@@ -494,6 +494,7 @@ import clientRoutes from './routes/clientRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import calculatorRoutes from './routes/calculatorRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
 import startSessionCleanupJob from './utils/sessionCleanup.js';
 import { startBackupCron } from './utils/backupManager.js';
 import { startReportCron } from './utils/reportGenerator.js';
@@ -538,6 +539,7 @@ app.use('/api/broadcasts', broadcastRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // WhatsApp sessions are lazily initialized via WhatsAppManager in whatsappController.js
 
