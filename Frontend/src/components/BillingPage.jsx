@@ -161,17 +161,17 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
   });
 
   const [directPrintConfigs, setDirectPrintConfigs] = useState({
-    kot: localStorage.getItem('msbillings_direct_kot') !== 'false',
-    save: localStorage.getItem('msbillings_direct_save') !== 'false',
-    settle: localStorage.getItem('msbillings_direct_settle') !== 'false'
+    kot: localStorage.getItem('msbillings_direct_kot') === 'true',
+    save: localStorage.getItem('msbillings_direct_save') === 'true',
+    settle: localStorage.getItem('msbillings_direct_settle') === 'true'
   });
 
   useEffect(() => {
     const handlePrintConfigChange = () => {
       setDirectPrintConfigs({
-        kot: localStorage.getItem('msbillings_direct_kot') !== 'false',
-        save: localStorage.getItem('msbillings_direct_save') !== 'false',
-        settle: localStorage.getItem('msbillings_direct_settle') !== 'false'
+        kot: localStorage.getItem('msbillings_direct_kot') === 'true',
+        save: localStorage.getItem('msbillings_direct_save') === 'true',
+        settle: localStorage.getItem('msbillings_direct_settle') === 'true'
       });
     };
     window.addEventListener('printConfigChanged', handlePrintConfigChange);
@@ -3260,7 +3260,7 @@ const BillingPage = ({ initialTable, onOrderUpdate, onNavigate, onGoBack, userRo
         };
         return (
           <Invoice
-            key={billToShow?.billNumber || billToShow?._id || 'active_invoice'}
+            key="invoice_modal"
             bill={billToShow}
             onClose={() => {
               setAutoSendWhatsAppToInvoice(false);

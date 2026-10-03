@@ -285,7 +285,23 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
         (c.connectionType === 'bluetooth' && (c.bluetoothAddress || c.deviceName || c.name))
       ));
 
+      // STRICT ROUTING CHECK: Industry Standard (No Fallbacks)
+      if (!list || list.length === 0) {
+        setPrintStatus('not_connected');
+        showToast(t('No printers configured! Please map a printer in Printer & Kitchen Routing.'), 'error');
+        resetPrintStatus(4000);
+        return;
+      }
+
+      if (!hasBackendKOTPrinter && !targetStation?.printer) {
+        setPrintStatus('not_connected');
+        showToast(t('No KOT printer configured. Please add one in Printer & Kitchen Routing.'), 'error');
+        resetPrintStatus(4000);
+        return;
+      }
+
       if (window.electronAPI && !targetStation?.printer && !hasBackendKOTPrinter) {
+        // Unreachable now due to strict check above, keeping block structure to avoid big diffs
         const receiptNode = document.querySelector('#kot-receipt-slip') || document.querySelector('.receipt-print');
         const printAreaNode = document.getElementById('kot-receipt-slip');
         const htmlContent = receiptNode?.outerHTML || printAreaNode?.outerHTML || '';
@@ -440,7 +456,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
 
           if (targetPrinters.length > 0) {
             let anySuccess = false;
-            
+            let successNames = [];
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
 
             await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
@@ -480,6 +496,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
                 }, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || localStorage.getItem('token')}` } });
                 if (response.data && (response.data.success || response.data.relayed)) {
                   anySuccess = true;
+                  successNames.push(targetBackendPrinter.name);
                 }
               } catch (singleErr) {
                 const errMsg = singleErr.response?.data?.message || singleErr.message || 'Printer offline';
@@ -491,7 +508,8 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
             if (anySuccess) {
               await new Promise(res => setTimeout(res, 1500));
               setPrintStatus('success');
-              showToast(t('KOT sent to printer(s)!'), 'success');
+              const names = successNames.join(', ');
+              showToast(`✅ KOT sent to ${names}`, 'success');
               resetPrintStatus(3000);
               return;
             } else {
@@ -636,6 +654,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
 
           if (targetPrinters.length > 0) {
             let anySuccess = false;
+            let successNames = [];
             const activeSettings = JSON.parse(localStorage.getItem('restaurantSettings') || '{}');
             
             await Promise.all(targetPrinters.map(async (targetBackendPrinter) => {
@@ -673,6 +692,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
                 
                 if (response.data && (response.data.success || response.data.relayed)) {
                   anySuccess = true;
+                  successNames.push(targetBackendPrinter.name);
                 }
               } catch (singleErr) {
                 const errMsg = singleErr.response?.data?.message || singleErr.message || 'Printer offline';
@@ -681,7 +701,7 @@ const KOT = ({ order, onClose, isDirectPrint = false, onGlobalToast }) => {
               }
             }));
             if (anySuccess) {
-              const names = targetPrinters.map(p => p.name).join(', ');
+              const names = successNames.join(', ');
               showToast(`✅ KOT sent to ${names}`, 'success');
             } else {
               if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {

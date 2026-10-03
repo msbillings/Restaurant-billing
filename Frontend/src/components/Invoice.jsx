@@ -333,20 +333,26 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
         let printResult = { success: true };
         let targetPrinter = activeSettings.billingPrinter || '';
 
-        // STRICT ROUTING CHECK: If advanced printer configs exist, strictly require a Bill printer
-        if (Array.isArray(printerConfigs) && printerConfigs.length > 0) {
-          const activeReceiptPrinters = printerConfigs.filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill & KOT'));
-          if (activeReceiptPrinters.length === 0) {
-            setPrintStatus('not_connected');
-            setToast({ message: t('No Bill printer configured. Please add one in Printer & Kitchen Routing.'), type: 'error' });
-            resetPrintStatus(4000);
-            return;
-          }
-          // Prefer the explicitly configured USB/system printer name from advanced configs
-          const targetUsbPrinter = activeReceiptPrinters.find(p => p.connectionType === 'usb' && (p.usbPort || p.name));
-          if (targetUsbPrinter) {
-            targetPrinter = targetUsbPrinter.usbPort || targetUsbPrinter.name || targetPrinter;
-          }
+        // STRICT ROUTING CHECK: Industry Standard (No Fallbacks)
+        if (!list || list.length === 0) {
+          setPrintStatus('not_connected');
+          setToast({ message: t('No printers configured! Please map a printer in Printer & Kitchen Routing.'), type: 'error' });
+          resetPrintStatus(4000);
+          return;
+        }
+
+        const activeReceiptPrinters = list.filter(c => c.isActive && (c.type === 'receipt' || c.type === 'general' || c.type === 'both' || c.type === 'Bill & KOT'));
+        if (activeReceiptPrinters.length === 0) {
+          setPrintStatus('not_connected');
+          setToast({ message: t('No Bill printer configured. Please add one in Printer & Kitchen Routing.'), type: 'error' });
+          resetPrintStatus(4000);
+          return;
+        }
+
+        // Prefer the explicitly configured USB/system printer name from advanced configs
+        const targetUsbPrinter = activeReceiptPrinters.find(p => p.connectionType === 'usb' && (p.usbPort || p.name));
+        if (targetUsbPrinter) {
+          targetPrinter = targetUsbPrinter.usbPort || targetUsbPrinter.name || targetPrinter;
         }
 
         if (!targetPrinter) {
@@ -469,6 +475,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
           const billPayload = { ...bill, restaurantDetails: activeSettings };
           let anySuccess = false;
+          let successNames = [];
 
           const receiptNode = document.querySelector('#invoice-print-area .receipt-print') || document.getElementById('invoice-print-area');
           const paperWidthDots = ((isSettingsPage && displayFormat === '58mm') || activeSettings.paperWidth === '58mm') ? 384 : 576;
@@ -492,6 +499,7 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
               });
               if (response.data && (response.data.success || response.data.relayed)) {
                 anySuccess = true;
+                successNames.push(rp.name);
               }
             } catch (err) {
               const errMsg = err.response?.data?.message || err.message || 'Printer offline';
@@ -502,7 +510,8 @@ const Invoice = ({ bill, onClose, onSave, whatsappBillSentIds, onWhatsAppSent, a
 
           if (anySuccess) {
             setPrintStatus('success');
-            setToast({ message: `✅ ${t("Bill printed to")} ${names}!`, type: 'success' });
+            const finalNames = successNames.join(', ');
+            setToast({ message: `✅ ${t("Bill printed to")} ${finalNames}!`, type: 'success' });
             resetPrintStatus(3000);
             return;
           } else {

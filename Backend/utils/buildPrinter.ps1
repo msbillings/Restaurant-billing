@@ -2,6 +2,7 @@ $Source = @"
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Printing;
 public class RawPrinterHelper {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     public class DOCINFOA {
@@ -31,6 +32,24 @@ public class RawPrinterHelper {
         }
         string printerName = args[0];
         string filePath = args[1];
+
+        // 1. Zero-latency check using Windows Spooler Cache (Industry Standard)
+        try {
+            using (var server = new LocalPrintServer()) {
+                var queue = server.GetPrintQueue(printerName.Normalize().Trim());
+                queue.Refresh();
+                
+                // If the physical cable is unplugged, Windows Spooler instantly flags it as Offline
+                if (queue.IsOffline || queue.IsOutOfPaper || queue.IsInError || queue.IsNotAvailable) {
+                    Console.WriteLine("ERROR: PRINTER_OFFLINE_OR_ERROR");
+                    return;
+                }
+            }
+        } catch (Exception) {
+            Console.WriteLine("ERROR: PRINTER_NOT_FOUND");
+            return;
+        }
+
         try {
             byte[] bytes = File.ReadAllBytes(filePath);
             IntPtr hPrinter = new IntPtr(0);
@@ -64,4 +83,4 @@ public class RawPrinterHelper {
     }
 }
 "@
-Add-Type -TypeDefinition $Source -OutputAssembly "RawPrinter.exe" -OutputType ConsoleApplication
+Add-Type -TypeDefinition $Source -OutputAssembly "RawPrinter.exe" -OutputType ConsoleApplication -ReferencedAssemblies "System.Printing","ReachFramework"

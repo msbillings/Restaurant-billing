@@ -38,7 +38,7 @@ export const setupDatabase = async (req, res) => {
       try {
         const clientDoc = await mongoose.connection.db?.collection('clients')?.findOne({ databaseName }, { projection: { cluster: 1 } });
         if (clientDoc && clientDoc.cluster) clientCluster = clientDoc.cluster;
-      } catch (e) {}
+      } catch (e) { }
 
       // Write config for local desktop POS app so it remembers the DB on restart
       const configDir = process.env.APP_USER_DATA_PATH || process.cwd();
@@ -275,12 +275,12 @@ export const updateRestaurantInfo = async (req, res) => {
           existingSettings = {};
         }
       }
-      
+
       // CRITICAL FIX: If client sent dummy '[logo_stored]', never overwrite the existing stored logo
       if (settingsToSave.logo === '[logo_stored]') {
         delete settingsToSave.logo;
       }
-      
+
       mergedSettings = { ...existingSettings, ...settingsToSave };
       if (settingsToSave.vipVisitThreshold !== undefined && settingsToSave.vipVisitThreshold !== null && settingsToSave.vipVisitThreshold !== '') {
         mergedSettings.vipVisitThreshold = Math.max(1, Number(settingsToSave.vipVisitThreshold));
@@ -293,7 +293,7 @@ export const updateRestaurantInfo = async (req, res) => {
       }
       updatePromises.push(Setting.findOneAndUpdate({ key: 'restaurantSettings' }, { value: mergedSettings }, { upsert: true, new: true, setDefaultsOnInsert: true }).maxTimeMS(3000));
     }
-    
+
     if (spaces) {
       updatePromises.push(Setting.findOneAndUpdate({ key: 'spaces' }, { value: spaces }, { upsert: true }).maxTimeMS(3000));
     }

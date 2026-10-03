@@ -102,6 +102,10 @@ export const getSuperadminApiUrl = () => {
         return cleanSuperadminUrl(`http://${storedIp.trim()}:4001`);
     }
 
+    if (isElectronApp() || isCapacitorApp()) {
+        return 'https://msbillings-backend-x9qw.onrender.com';
+    }
+
     const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     if (host === 'localhost' || host === '127.0.0.1') {
         return 'http://localhost:4001';
